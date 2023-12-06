@@ -2,3 +2,5 @@ dbdatamongo
 editorlocal
 pgdata
 uilocal
+.gitconfig.pers
+**/node_modules/**
