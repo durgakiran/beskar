@@ -1,5 +1,6 @@
 import * as pkg from './package.json';
 import path from 'path';
+import cssInjectedByJsPlugin from 'vite-plugin-css-injected-by-js';
 
 
 const NODE_ENV = process.argv.mode || 'development';
@@ -20,7 +21,6 @@ export default {
     },
     server: {
         port: 3303,
-        open: true,
     },  
-    plugins: [] 
+    plugins: [cssInjectedByJsPlugin()] 
 }
