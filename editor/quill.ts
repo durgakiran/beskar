@@ -1,4 +1,5 @@
 import Quill from 'quill';
+import './editor.css';
 
 const toolbarOptions = [
     ['bold', 'italic', 'underline', 'strike'],        // toggled buttons
