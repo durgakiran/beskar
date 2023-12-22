@@ -1,5 +1,6 @@
 import Quill from 'quill';
 import './editor.css';
+import { Shortcut, ShortcutConfig } from './src/shortcut/shortcut';
 
 const toolbarOptions = [
     ['bold', 'italic', 'underline', 'strike'],        // toggled buttons
@@ -21,10 +22,52 @@ const toolbarOptions = [
     ['clean']                                         // remove formatting button
   ];
 
+// short cuts to the body of the document
+const shortcutOptions: ShortcutConfig[] = [{ text: 'header', image: ''  }];
+const shortcuts = new Shortcut(shortcutOptions);
+document.body.appendChild(shortcuts.render());
+
 const editor = new Quill('#editor', {
     modules: { toolbar: toolbarOptions},
     theme: 'snow',
 });
+
+// editor.on('text-change', (delta, oldContents) => { 
+//     console.log(delta, oldContents);
+//     const editorElement = document.getElementById('editor');
+//     if (editorElement) {
+//         const editorBounds = editorElement.getBoundingClientRect();
+//         console.log(editorBounds);
+//         for (const d of delta.ops) {
+//             if (d.insert && d.insert === '/') {
+//                 // TODO: getLine method instead of oldContents to get current line upto selected index
+//                 for (const o of oldContents.ops) {
+//                     if (o.insert && typeof o.insert === 'string' && /\s*\n$/.test(o.insert)) {
+//                         const id = shortcuts.getId();
+//                         const element = document.getElementById(id);
+//                         const range = editor.getSelection();
+//                         if (range) {
+//                             const [line, offset] = editor.getLine(range?.index);
+//                             if (line) {
+//                                 const lineContents = editor.getContents(offset, line.length());
+//                                 console.log(lineContents);
+//                               }
+//                             const bounds = editor.getBounds(range.index);
+//                             console.log(bounds);
+//                             if (element) {
+//                                 // TODO: compare with viewport height before adding position style to place top to the element or bottom to the element
+//                                 element.style.left = editorBounds.left + bounds.left + 'px';
+//                                 element.style.top = editorBounds.top + bounds.top + 'px';
+//                                 element.style.setProperty('--styled-overlay-visibility', 'visible');
+//                             }
+//                         }
+    
+//                     }
+//                 }
+//             }
+//         }
+//     }
+// });
 
 // When the user types space...
 editor.keyboard.addBinding({ key: ' ' }, {

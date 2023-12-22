@@ -1,0 +1,146 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext"
+    xmlns:pro="http://www.liquibase.org/xml/ns/pro"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd
+        http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd
+        http://www.liquibase.org/xml/ns/pro http://www.liquibase.org/xml/ns/pro/liquibase-pro-latest.xsd">
+
+    
+        <changeSet id="1-create-auth-schema" author="Kiran Kumar">
+            <comment>Create auth schema</comment>
+            <sql>
+                <![CDATA[ 
+                    CREATE SCHEMA IF NOT EXISTS auth;
+                ]]>
+            </sql>
+            <rollback></rollback>
+        </changeSet>
+    
+        <changeSet id="2-create-accounts-table" author="Kiran Kumar">
+            <preConditions onFail="MARK_RAN">
+                <sqlCheck expectedResult="0">
+                    SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'accounts';
+                </sqlCheck>
+            </preConditions>
+            <comment>Create accounts table</comment>
+            <createTable tableName="accounts" schemaName="auth">
+                <column name="id" type="UUID" defaultValueComputed="gen_random_uuid()">
+                    <constraints primaryKey="true" nullable="false"/>
+                </column>
+                <column name="type" type="text">
+                    <constraints nullable="false"/>
+                </column>
+                <column name="provider" type="text">
+                    <constraints nullable="false"/>
+                </column>
+                <column name="providerAccountId" type="text">
+                    <constraints nullable="false"/>
+                </column>
+                <column name="refresh_token" type="text">
+                </column>
+                <column name="access_token" type="text">
+                </column>
+                <column name="expires_at" type="text">
+                </column>
+                <column name="token_type" type="text">
+                </column>
+                <column name="scope" type="text">
+                </column>
+                <column name="id_token" type="text">
+                </column>
+                <column name="session_state" type="text">
+                </column>
+                <column name="oauth_token_secret" type="text">
+                </column>
+                <column name="oauth_token" type="text">
+                </column>
+                <column name="userId" type="uuid">
+                    <constraints nullable="false"/>
+                </column>
+                <column name="refresh_token_expires_in" type="integer">
+                </column>
+            </createTable>
+        </changeSet>
+
+        <changeSet id="3-create-sessions-table" author="Kiran Kumar">
+            <preConditions onFail="MARK_RAN">
+                <sqlCheck expectedResult="0">
+                    SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'sessions';
+                </sqlCheck>
+            </preConditions>
+            <comment>Create sessions table</comment>
+            <createTable tableName="sessions" schemaName="auth">
+                <column name="id" type="UUID" defaultValueComputed="gen_random_uuid()">
+                    <constraints primaryKey="true" nullable="false"/>
+                </column>
+                <column name="sessionToken" type="text">
+                    <constraints nullable="false"/>
+                </column>
+                <column name="userId" type="uuid">
+                    <constraints nullable="false"/>
+                </column>
+                <column name="expires" type="timestamp with time zone">
+                    <constraints nullable="false"/>
+                </column>
+            </createTable>
+        </changeSet>
+
+        <changeSet id="4-create-users-table" author="Kiran Kumar">
+            <preConditions onFail="MARK_RAN">
+                <sqlCheck expectedResult="0">
+                    SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'users';
+                </sqlCheck>
+            </preConditions>
+            <comment>Create users table</comment>
+            <createTable tableName="users" schemaName="auth">
+                <column name="id" type="UUID" defaultValueComputed="gen_random_uuid()">
+                    <constraints primaryKey="true" nullable="false"/>
+                </column>
+                <column name="name" type="text">
+                    <constraints nullable="false"/>
+                </column>
+                <column name="email" type="uuid">
+                    <constraints nullable="false" unique="true"/>
+                </column>
+                <column name="emailVerified" type="timestamp with time zone">
+                    <constraints nullable="false"/>
+                </column>
+                <column name="image" type="uuid">
+                    <constraints nullable="false"/>
+                </column>
+            </createTable>
+        </changeSet>
+
+        <changeSet id="5-create-verification_tokens-table" author="Kiran Kumar">
+            <preConditions onFail="MARK_RAN">
+                <sqlCheck expectedResult="0">
+                    SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'verification_tokens';
+                </sqlCheck>
+            </preConditions>
+            <comment>Create verification_tokens table</comment>
+            <createTable tableName="verification_tokens" schemaName="auth">
+                <column name="token" type="text">
+                    <constraints primaryKey="true" nullable="false"/>
+                </column>
+                <column name="identifier" type="uuid">
+                    <constraints nullable="false"/>
+                </column>
+                <column name="expires" type="timestamp with time zone">
+                    <constraints nullable="false"/>
+                </column>
+            </createTable>
+        </changeSet>
+
+        <changeSet id="6-accounts_userId_fkey" author="users">
+            <addForeignKeyConstraint baseTableSchemaName="auth" referencedTableSchemaName="auth" baseTableName="accounts" baseColumnNames="userId" constraintName="accounts_userId_fkey" referencedTableName="users" referencedColumnNames="id" deleteCascade="true" onUpdate="RESTRICT" />
+        </changeSet>
+
+        <changeSet id="6-sessions_userId_fkey" author="">
+            <addForeignKeyConstraint baseTableSchemaName="auth" referencedTableSchemaName="auth" baseTableName="sessions" baseColumnNames="userId" constraintName="sessions_userId_fkey" referencedTableName="users" referencedColumnNames="id" deleteCascade="true" onUpdate="RESTRICT" />
+        </changeSet>
+
+</databaseChangeLog>

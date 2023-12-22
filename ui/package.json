@@ -1,0 +1,37 @@
+{
+  "name": "ui",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@auth/hasura-adapter": "^0.2.11",
+    "@primer/react": "^36.4.0",
+    "@supabase/supabase-js": "^2.39.1",
+    "graphql": "^16.8.1",
+    "graphql-request": "^6.1.0",
+    "hasura-cli": "^2.36.1",
+    "install": "^0.13.0",
+    "jsonwebtoken": "^9.0.2",
+    "next": "^14.0.4",
+    "next-auth": "^4.24.5",
+    "npm": "^10.2.5",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "styled-components": "^5.3.11"
+  },
+  "devDependencies": {
+    "@types/jsonwebtoken": "^9.0.5",
+    "@types/node": "20.10.5",
+    "@types/react": "18.2.45",
+    "typescript": "^5.3.3"
+  }
+}

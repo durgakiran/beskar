@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext"
+    xmlns:pro="http://www.liquibase.org/xml/ns/pro"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd
+        http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd
+        http://www.liquibase.org/xml/ns/pro http://www.liquibase.org/xml/ns/pro/liquibase-pro-latest.xsd">
+
+    
+        <changeSet author="kiran kumar" id="1-pgcrypto-extension">
+            <preConditions onFail="MARK_RAN">
+                <sqlCheck expectedResult="0">
+                    SELECT count(*) FROM pg_extension WHERE extname = 'pgcrypto';
+                </sqlCheck>
+            </preConditions>
+            <comment>Create extension and server for foreign data wrapper for successmaker db</comment>
+            <sql>
+                CREATE EXTENSION IF NOT EXISTS pgcrypto;
+            </sql>
+            <rollback>
+                <sql>
+                    DROP EXTENSION pgcrypto;
+                </sql>
+            </rollback>
+        </changeSet>
+
+</databaseChangeLog>

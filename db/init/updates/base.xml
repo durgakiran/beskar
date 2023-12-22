@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext"
+    xmlns:pro="http://www.liquibase.org/xml/ns/pro"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd
+        http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd
+        http://www.liquibase.org/xml/ns/pro http://www.liquibase.org/xml/ns/pro/liquibase-pro-latest.xsd">
+
+    
+        <changeSet id="1-${database_name}-create-db" author="kiran kumar">
+            <preConditions onFail="MARK_RAN">
+                <sqlCheck expectedResult="0">
+                    SELECT COUNT(1) FROM pg_catalog.pg_database WHERE lower(datname)=lower('${database_name}')
+                </sqlCheck>
+            </preConditions>
+            <comment>Create database </comment>
+            <executeCommand executable="bash" >
+                <arg value="-c"/>
+                <arg value="export PGPASSWORD=&quot;${postgres_user_pwd}&quot;; psql -h ${db_host} -p ${db_port} -U ${postgres_user} -d postgres -c &quot;CREATE DATABASE ${database_name}&quot;"/>
+            </executeCommand>
+            <rollback></rollback>
+        </changeSet>
+
+        <changeSet id="2-${admin_user}" author="Kiran Kumar">
+            <preConditions onFail="MARK_RAN">
+                <sqlCheck expectedResult="0">
+                     SELECT count(rolname) FROM pg_roles WHERE rolname='${admin_user}'
+                </sqlCheck>
+            </preConditions>
+            <comment>Create beskar admin user</comment>
+            <sql>
+                <![CDATA[ 
+                    CREATE USER ${admin_user} WITH PASSWORD '${admin_user_pwd}' CREATEROLE;
+                ]]>
+            </sql>
+            <rollback> <!--don't do anything --> </rollback>
+        </changeSet>
+        
+        <changeSet id="3-${app_user}" author="Kiran Kumar">
+            <preConditions onFail="MARK_RAN">
+                <sqlCheck expectedResult="0">
+                     SELECT count(rolname) FROM pg_roles WHERE rolname='${app_user}'
+                </sqlCheck>
+            </preConditions>
+            <comment>Create beskar app user</comment>
+            <sql>
+                <![CDATA[ 
+                    CREATE USER ${app_user} WITH PASSWORD '${app_user_pwd}';
+                ]]>
+            </sql>
+            <rollback> <!--don't do anything --> </rollback>
+        </changeSet>
+
+        <changeSet id="${database_name}-grant-permission-1" author="VHINDMA">
+            <preConditions>
+                <sqlCheck expectedResult="1">
+                    SELECT count(1) FROM pg_roles WHERE rolname = '${admin_user}';
+                </sqlCheck>
+                <sqlCheck expectedResult="1">
+                    SELECT COUNT(1) FROM pg_catalog.pg_database WHERE lower(datname) = lower('${database_name}')
+                </sqlCheck>
+            </preConditions>
+            <comment>grant all on database to ${admin_user}</comment>
+            <sql>
+                GRANT ALL ON DATABASE ${database_name} TO ${admin_user};
+            </sql>
+            <rollback> <!--don't do anything --> </rollback>
+        </changeSet>
+        
+        <changeSet id="${database_name}-grant-permission-2" author="VHINDMA">
+            <preConditions>
+                <sqlCheck expectedResult="1">
+                    SELECT count(1) FROM pg_roles WHERE rolname = '${admin_user}';
+                </sqlCheck>
+                <sqlCheck expectedResult="1">
+                    SELECT COUNT(1) FROM pg_catalog.pg_database WHERE lower(datname) = lower('${database_name}')
+                </sqlCheck>
+            </preConditions>
+            <comment>grant all on database to ${admin_user}</comment>
+            <sql>
+                GRANT CREATE ON DATABASE ${database_name} TO ${admin_user};
+           </sql>
+            <rollback> <!--don't do anything --> </rollback>
+        </changeSet>
+
+        <changeSet author="kiran kumar" id="${database_name}-create-admin-schema" runOnChange="false" failOnError="true">
+            <comment>Create admin Schema</comment>
+            <executeCommand executable="bash" >
+                <arg value="-c"/>
+                <arg value="export PGPASSWORD=&quot;${admin_user_pwd}&quot;; psql -h ${db_host} -p ${db_port} -U ${admin_user} -d ${database_name} -c &quot;CREATE SCHEMA admin&quot;"/>
+            </executeCommand>
+        </changeSet>
+
+</databaseChangeLog>
