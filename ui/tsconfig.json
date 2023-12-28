@@ -2,7 +2,7 @@
   "compilerOptions": {
     "baseUrl": ".",
     "paths": {
-      "@/core/*": ["./core/*"],
+      "@http": ["./app/core/http/index.ts"],
       "@components/*": ["./app/components/*"]
     },
     "lib": [

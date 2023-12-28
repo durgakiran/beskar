@@ -1,11 +1,25 @@
 "use client"
+import { get } from "@http";
 import { signIn, signOut, useSession } from "next-auth/react";
+import { useRouter } from "next/navigation";
+import { useEffect } from "react";
 
 export default function Login() {
     const { data: session } = useSession()
-    // useEffect(() => {
-    //     signInWithGithub();
-    // });
+    const router = useRouter();
+    
+    useEffect(() => {
+      (async () => {
+        try {
+          const data = await get('/api/protected');
+          localStorage.setItem('access_token', data.data.token);
+          router.push('/space');
+        } catch(e) {
+          console.error(e);
+        }
+
+      })();
+    }, [session]);
 
     if (session) {
         return (
