@@ -43,4 +43,18 @@
             </createTable>
         </changeSet>
 
+        <changeSet id="3-add-user-id-column" author="Kiran Kumar">
+            <preConditions onFail="HALT">
+                <sqlCheck expectedResult="1">
+                    SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'space';
+                </sqlCheck>
+            </preConditions>
+            <comment>Add user_id to space table</comment>
+            <addColumn tableName="space" schemaName="core">
+                <column name="user_id" type="UUID">
+                    <constraints nullable="false" />
+                </column>
+            </addColumn>
+        </changeSet>
+
 </databaseChangeLog>
