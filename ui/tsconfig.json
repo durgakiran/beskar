@@ -3,7 +3,8 @@
     "baseUrl": ".",
     "paths": {
       "@http": ["./app/core/http/index.ts"],
-      "@components/*": ["./app/components/*"]
+      "@components/*": ["./app/components/*"],
+      "@queries/space": ["./app/core/queries/space/index.ts"]
     },
     "lib": [
       "dom",

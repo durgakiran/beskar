@@ -57,4 +57,57 @@
             </addColumn>
         </changeSet>
 
+        <changeSet id="4-space-url-table" author="Kiran Kumar">
+            <preConditions onFail="MARK_RAN">
+                <sqlCheck expectedResult="0">
+                    SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'space_url';
+                </sqlCheck>
+            </preConditions>
+            <comment>Create space_url table</comment>
+            <createTable tableName="space_url" schemaName="core">
+                <column name="id" type="BIGINT" autoIncrement="true">
+                    <constraints primaryKey="true" nullable="false"/>
+                </column>
+                <column name="slug" type="text" >
+                    <constraints nullable="false" />
+                </column>
+                <column name="space_id" type="UUID">
+                    <constraints nullable="false" validateForeignKey="true" foreignKeyName="space_url_space_fkey" referencedTableName="space"  referencedColumnNames="id" referencedTableSchemaName="core" deleteCascade="true" />
+                </column>
+                <column defaultValueComputed="now()" name="date_updated" type="TIMESTAMP WITH TIME ZONE">
+                    <constraints nullable="false"/>
+                </column>
+            </createTable>
+        </changeSet>
+
+        <changeSet id="5-space-url-trigger-function" runOnChange="true" author="Kiran Kumar">
+            <comment>Create space url mapping function</comment>
+            <createProcedure>
+                <![CDATA[ 
+                    CREATE OR REPLACE FUNCTION core.space_url_trigger_function()
+                        RETURNS TRIGGER AS 
+                        $$
+                        BEGIN
+                            INSERT INTO core.space_url (space_id, slug) VALUES ( NEW.id, NEW.name);
+                            RETURN NEW;
+                        END;
+                        $$
+                    LANGUAGE plpgsql;
+                ]]>
+            </createProcedure>
+            <rollback></rollback>
+        </changeSet>
+
+        <changeSet id="6-space-url-trigger" runOnChange="true" author="Kiran Kumar">
+            <comment>Attach space url mappng trigger</comment>
+            <sql>
+                <![CDATA[ 
+                    CREATE OR REPLACE TRIGGER insert_space_url_trigger AFTER INSERT ON core.space
+                    FOR EACH ROW
+                    EXECUTE FUNCTION core.space_url_trigger_function();
+                ]]>
+            </sql>
+            <rollback></rollback>
+        </changeSet>
+
 </databaseChangeLog>

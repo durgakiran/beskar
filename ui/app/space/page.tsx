@@ -1,12 +1,16 @@
 'use client'
-import { Box, Button, Dialog, FormControl, TextInput } from "@primer/react";
-import { MouseEvent, useCallback, useEffect, useState } from "react";
-import { client, post } from "@http";
+import { Box, Button, Link, Spinner } from "@primer/react";
+import { Column, DataTable, Table } from "@primer/react/drafts"
+import {  useEffect, useState } from "react";
+import { client } from "@http";
 import styled from 'styled-components';
-import { ApolloProvider, gql, useQuery } from "@apollo/client";
+import {  useQuery } from "@apollo/client";
+import {  GRAPHQL_GET_SPACES } from "@queries/space";
+import AddSpace from "@components/addSpace";
+import Slate from "@components/slate";
 
 const Container = styled.div`
-    text-align: center;
+    padding: 16px;
 `;
 
 const CenteredButton = styled(Button)`
@@ -24,63 +28,57 @@ const Footer = styled.div`
     margin-top: 1rem;
 `;
 
-const GRAPHQL_GET_SPACES = gql`
-    query GetSpace {
-        core_space {
-            name
-            date_created
-            date_updated
-            id
-        }
+interface Data {
+    name: string;
+    id: string;
+    slug: string;
+}
+
+const columns: Array<Column<Data>> = [
+    {
+        header: 'Space Name',
+        field: 'name',
+        rowHeader: true,
+        renderCell: (row) => <Link href={`/space/${row.slug}`}>{row.name}</Link>
     }
-`;
+];
+
+const BLANK_STATE_HEADING = 'No Spaces, Please create one';
+const BLANK_STATE_BTN_TEXT = 'Create a space';
 
 export default function Page() {
-
     const [isOpen, setIsOpen] = useState(false);
-    const [name, setName] = useState('');
-    const { loading, error, data } = useQuery(GRAPHQL_GET_SPACES, { client: client });
-
-    const onDialogClose = useCallback(() => {
-        setIsOpen(false);
-    }, []);
-
-    const handleInput = useCallback((value: string) => {
-        setName(value);
-    }, []);
-
-    const handleSubmit  = useCallback(async (ev: MouseEvent<HTMLButtonElement>) => {
-        console.log(name);
-    }, [name]);
+    const [tableData, setTableData] = useState([]);
+    const { loading, error, data, refetch } = useQuery(GRAPHQL_GET_SPACES, { client: client });
 
     useEffect(() => {
-        console.log(error);
-        console.log(data);
-    }, [loading])
+        if (data && data.core_space) {
+            console.log(data.core_space);
+            const newData = data.core_space.map((datum, i) => {return { id: datum.id, slug: datum.space_urls[0].id ?? '#' , name: datum.name}});
+            console.log(newData);
+            setTableData(newData);
+        }
+    }, [data]);
 
     return (
         <Container>
-            <Box>
-
-            </Box>
-            <h1>Create Spaces</h1>
-            <CenteredButton size="large" onClick={() => { setIsOpen(true)}}>+ Space</CenteredButton>
-            <Dialog isOpen={isOpen} width="small" onDismiss={onDialogClose}>
-                <Dialog.Header>
-                    Add Space
-                </Dialog.Header>
-                <Box as="form" p="3">
-                    <FormControl>
-                        <FormControl.Label>Name of space</FormControl.Label>
-                        <TextInput value={name} onInput={(ev) => handleInput((ev.target as HTMLInputElement).value)} placeholder="Enter space name..." />
-                    </FormControl>
-                    <Footer>
-                        <Button onClick={handleSubmit}>
-                            Add
-                        </Button>
-                    </Footer>
-                </Box>
-            </Dialog>
+            {
+                loading ? <Box sx={{textAlign: 'center'}}><Spinner size="large" /></Box> :
+                (!loading && tableData.length === 0 ) ? <Slate title={BLANK_STATE_HEADING} primaryActionText={BLANK_STATE_BTN_TEXT} primaryAction={() => setIsOpen(true)} /> : 
+                <Table.Container>
+                    <Table.Title as="h2" id="spaces">
+                        All Spaces
+                    </Table.Title>
+                    <Table.Subtitle as="p" id="space-subtitle">
+                        Organize your content across spaces
+                    </Table.Subtitle>
+                    <Table.Actions>
+                        <Button size="small"onClick={() => { setIsOpen(true)}} >+ Space</Button>
+                    </Table.Actions>
+                    <DataTable aria-labelledby="spaces" aria-describedby="space-subtitle" data={tableData} columns={columns} />
+                </Table.Container>
+            }
+            <AddSpace isOpen={isOpen} setIsOpen={(open: boolean) => {setIsOpen(open); refetch();}} />
         </Container>
     )
 }
