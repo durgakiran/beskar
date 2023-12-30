@@ -3,6 +3,7 @@
     "baseUrl": ".",
     "paths": {
       "@http": ["./app/core/http/index.ts"],
+      "@editor": ["./app/core/editor/index.ts"],
       "@components/*": ["./app/components/*"],
       "@queries/space": ["./app/core/queries/space/index.ts"]
     },

@@ -1,16 +1,12 @@
 import { useQuery } from "@apollo/client";
 import { client } from "@http";
-import { Box, Heading, IconButton, NavList, Spinner } from "@primer/react";
+import { Box, Heading, NavList, Spinner } from "@primer/react";
 import { GRAPHQL_GET_PAGES } from "@queries/space";
-import { useEffect } from "react"
-import { HomeIcon, GearIcon, PlusIcon } from '@primer/octicons-react';
+import { HomeIcon, GearIcon } from '@primer/octicons-react';
 
 
 export default function SideNav({ id }: { id: string }) {
     const { data, loading, error, refetch } = useQuery(GRAPHQL_GET_PAGES, { client: client, variables: { id } });
-    useEffect(() => {
-
-    }, [id]);
 
     if (loading) {
         return <Spinner size="small" />;
