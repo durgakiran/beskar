@@ -13,7 +13,7 @@ export default function Page() {
     // }, [quillObj])
 
     return (
-        <div style={{ width: 500, height: 300 }}>
+        <div style={{height: 300 }}>
             {/* <div ref={onRefChange} ></div> */}
             <TipTap />
         </div>

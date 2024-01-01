@@ -1,41 +1,60 @@
 import { useQuery } from "@apollo/client";
 import { client } from "@http";
-import { Box, Heading, NavList, Spinner } from "@primer/react";
+import { Box, Heading, IconButton, NavList, Spinner } from "@primer/react";
 import { GRAPHQL_GET_PAGES } from "@queries/space";
-import { HomeIcon, GearIcon } from '@primer/octicons-react';
+import { HomeIcon, GearIcon, PlusIcon } from '@primer/octicons-react';
+import { useCallback } from "react";
+import { useSelectedLayoutSegment } from "next/navigation";
 
 
-export default function SideNav({ id }: { id: string }) {
-    const { data, loading, error, refetch } = useQuery(GRAPHQL_GET_PAGES, { client: client, variables: { id } });
+interface Props {
+    id: string;
+}
+
+export default function SideNav(param: Props) {
+    const { data, loading, error, refetch } = useQuery(GRAPHQL_GET_PAGES, { client: client, variables: { id: param.id } });
+    const pathName = useSelectedLayoutSegment();
+
+    const activeItem = useCallback((path: string) => {
+        if (pathName === path) {
+            return 'true';
+        }
+
+        return 'false'
+    }, [pathName]);
 
     if (loading) {
         return <Spinner size="small" />;
     }
 
+    
     if (data) {
         return (
             <>
-                <NavList aria-aria-labelledby="workflows-heading" >
-                    <Heading as="h3" id="workflows-heading" sx={{fontSize: 2}}>
-                        {data.core_space_url[0].space.name.toUpperCase()}
-                    </Heading>
+                <Heading as="h2" id="workflows-heading" sx={{fontSize: 2}}>
+                    {data.core_space_url[0].space.name.toUpperCase()}
+                </Heading>
+                <NavList aria-labelledby="workflows-heading" >
                     <Box sx={{pt: 2, pb: 4}}>
-                        <NavList.Item  href={`/space/${id}`} aria-current="page">
+                        <NavList.Item  href={`/space/${param.id}`} aria-current={activeItem(null)}>
                             <NavList.LeadingVisual>
                                 <HomeIcon />
                             </NavList.LeadingVisual>
                             overview
                         </NavList.Item>
-                        <NavList.Item href={`/space/${id}/settings`}>
+                        <NavList.Item href={`/space/${param.id}/settings`} aria-current={activeItem('settings')}>
                             <NavList.LeadingVisual>
                                 <GearIcon />
                             </NavList.LeadingVisual>
                             settings
                         </NavList.Item>
                     </Box>
-                    <Heading as="h3" id="content-heading" sx={{fontSize: 1}}>
-                        Content
-                    </Heading>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }} >
+                        <Heading as="h3" id="content-heading" sx={{fontSize: 1}}>
+                            Content
+                        </Heading>
+                        <IconButton variant="invisible"  aria-label="Add a page" size="small" icon={PlusIcon} />
+                    </Box>
                     <NavList.Divider></NavList.Divider>
                     <Box sx={{pt: 2, pb: 4}}>
 

@@ -11,6 +11,9 @@ import TextStyle from '@tiptap/extension-placeholder'
 import Color from '@tiptap/extension-placeholder'
 import Collaboration from '@tiptap/extension-collaboration'
 import CollaborationCursor from '@tiptap/extension-collaboration-cursor'
+import TaskList from '@tiptap/extension-task-list'
+import TaskItem from '@tiptap/extension-task-item'
+import CodeBlock from '@tiptap/extension-code-block'
 import { WebrtcProvider } from 'y-webrtc'
 import * as Y from 'yjs'
 import { EXAMPLE_JSON } from "@editor";
@@ -24,7 +27,7 @@ const provider = new WebrtcProvider('tiptap-collaboration-cursor-extension', ydo
 
 const extensions = [
     StarterKit.configure({
-        history: false
+        history: false,
     }),
     Typography,
     Paragraph,
@@ -46,7 +49,11 @@ const extensions = [
           color: '#f783ac',
         },
     }),
-    
+    TaskList,
+    TaskItem.configure({
+        nested: true,
+    }),
+    CodeBlock
 ];
 
 const content = EXAMPLE_JSON;
@@ -58,6 +65,37 @@ const StyledEditorContent = styled(EditorContent)`
         margin-top: 0.75em;
         padding: 1rem;
         box-sizing: border-box;
+    };
+    ul[data-type="taskList"] {
+        list-style: none;
+        padding: 0;
+      
+        p {
+          margin: 0;
+        }
+      
+        li {
+            display: flex;
+        
+            > label {
+                flex: 0 0 auto;
+                margin-right: 0.5rem;
+                user-select: none;
+            }
+        
+            > div {
+                flex: 1 1 auto;
+            }
+            
+            ul li,
+            ol li {
+                display: list-item;
+            }
+        
+            ul[data-type="taskList"] > li {
+                display: flex;
+            }
+        }
     }
 `;
 
