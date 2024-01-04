@@ -110,4 +110,67 @@
             <rollback></rollback>
         </changeSet>
 
+        <changeSet id="7-page-table" author="kiran kumar">
+            <preConditions onFail="MARK_RAN">
+                <sqlCheck expectedResult="0">
+                    SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'page';
+                </sqlCheck>
+            </preConditions>
+            <comment>Create Page table</comment>
+            <createTable tableName="page" schemaName="core">
+                <column name="id" type="BIGINT" autoIncrement="true" >
+                    <constraints primaryKey="true" nullable="false" />
+                </column>
+                <column name="draft" type="SMALLINT" defaultValue="1" >
+                    <constraints nullable="false" />
+                </column>
+                <column name="space_id" type="UUID" />
+                <column name="owner_id" type="UUID" />
+                <column name="parent_id" type="BIGINT" />
+                <column name="date_created" type="TIMESTAMP WITH TIMEZONE" defaultValueComputed="now()">
+                    <constraints nullable="false"/>
+                </column>
+                <column name="status" type="SMALLINT"></column>
+            </createTable>
+        </changeSet>
+
+        <changeSet id="8-doc-table" author="kiran kumar">
+            <preConditions onFail="MARK_RAN">
+                <sqlCheck expectedResult="0">
+                    SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'doc';
+                </sqlCheck>
+            </preConditions>
+            <comment>Create doc table</comment>
+            <createTable tableName="doc" schemaName="core">
+                <column name="id" type="BIGINT" autoIncrement="true"  >
+                    <constraints primaryKey="true" nullable="false" />
+                </column>
+                <column name="page_id" type="BIGINT"></column>
+                <column name="version" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="now()"></column>
+                <column name="data" type="JSON" >
+                    <constraints nullable="false" />
+                </column>
+                <column name="title" type="Text" >
+                    <constraints nullable="false" />
+                </column>
+                <column name="owner" type="UUID" >
+                    <constraints nullable="false" />
+                </column>
+                <column name="date_updated" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="now()" >
+                    <constraints nullable="false" />
+                </column>
+                <column name="draft" type="SMALLINT" defaultValue="1">
+                    <constraints nullable="false" />
+                </column>
+            </createTable>
+        </changeSet>
+
+        <changeSet id="9-doc-page-id-fkey" author="Kiran Kumar">
+            <addForeignKeyConstraint baseTableSchemaName="core" referencedTableSchemaName="core" baseTableName="doc" baseColumnNames="page_id" constraintName="doc_page_id_fkey" referencedTableName="page" referencedColumnNames="id" deleteCascade="true" />
+        </changeSet>
+
+        <changeSet id="10-page-space-id-fkey" author="Kiran Kumar">
+            <addForeignKeyConstraint baseTableSchemaName="core" referencedTableSchemaName="core" baseTableName="page" baseColumnNames="space_id" constraintName="page_space_id_fkey" referencedTableName="space" referencedColumnNames="id" deleteCascade="true" />
+        </changeSet>
+
 </databaseChangeLog>
