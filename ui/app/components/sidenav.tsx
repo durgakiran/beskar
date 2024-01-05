@@ -41,8 +41,8 @@ interface Props {
 export default function SideNav(param: Props) {
     const [isOpen, setIsOpen] = useState(false);
     const router = useRouter();
-    const { data, loading, error, refetch } = useQuery<SpaceData>(GRAPHQL_GET_PAGES, { client: client, variables: { id: param.id } });
-    const [mutateFunction] = useMutation(GRAPHQL_DELETE_PAGE, { client: client} )
+    const { data, loading, error, refetch } = useQuery<SpaceData>(GRAPHQL_GET_PAGES, { client: client(), variables: { id: param.id } });
+    const [mutateFunction] = useMutation(GRAPHQL_DELETE_PAGE, { client: client()} )
     const pathName = useSelectedLayoutSegment();
 
 
@@ -109,6 +109,7 @@ export default function SideNav(param: Props) {
                                                 <Box as="div" onClick={(ev) => {ev.stopPropagation(); ev.preventDefault();}} sx={{ display: 'flex', alignItems: 'center', zIndex: 100 }}>
                                                     <ActionMenu>
                                                         <ActionMenu.Button variant="invisible" size="small" icon={KebabHorizontalIcon}>
+                                                            <></>
                                                         </ActionMenu.Button>
                                                         <ActionMenu.Overlay sx={{paddingTop: '1rem', paddingBottom: '1rem'}} width="small">
                                                             <ActionList.Item onClick={() => editePage(value.id)}>

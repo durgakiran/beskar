@@ -1,8 +1,8 @@
 import { Inter, Noto_Color_Emoji } from 'next/font/google';
 import './global.css';
 
-export const notoColorEmoji = Noto_Color_Emoji({ weight: "400", subsets: ['emoji'] })
-export const inter = Inter({ subsets: ['latin'] });
+const notoColorEmoji = Noto_Color_Emoji({ weight: "400", subsets: ['emoji'] })
+const inter = Inter({ subsets: ['latin'] });
 
 export const metadata = {
   title: 'Next.js',

@@ -1,3 +1,4 @@
+'use client'
 import { Box, Heading, Text } from "@primer/react";
 import styled from 'styled-components';
 

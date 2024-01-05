@@ -49,7 +49,7 @@ const BLANK_STATE_BTN_TEXT = 'Create a space';
 export default function Page() {
     const [isOpen, setIsOpen] = useState(false);
     const [tableData, setTableData] = useState([]);
-    const { loading, error, data, refetch } = useQuery(GRAPHQL_GET_SPACES, { client: client });
+    const { loading, error, data, refetch } = useQuery(GRAPHQL_GET_SPACES, { client: client() });
 
     useEffect(() => {
         if (data && data.core_space) {

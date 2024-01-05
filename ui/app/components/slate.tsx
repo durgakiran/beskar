@@ -1,3 +1,4 @@
+'use client'
 import { Blankslate } from "@primer/react/drafts";
 import { BookIcon } from '@primer/octicons-react';
 import { Button } from "@primer/react";

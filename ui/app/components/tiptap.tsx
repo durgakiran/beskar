@@ -1,3 +1,4 @@
+'use client'
 import { EditorContent, BubbleMenu,  useEditor } from "@tiptap/react";
 import styled from 'styled-components';
 import Typography from '@tiptap/extension-typography'
@@ -921,7 +922,7 @@ export default function TipTap({ content, pageId, id, editable = true }: { conte
     const [editedData, setEditedData] = useState(null);
     const debouncedValue = useDebounce(editedData, 10000);
     const [updated, setUpdated] = useState(false)
-    const [mutateFunction, { data, loading, error }] = useMutation(GRAPHQL_UPDATE_DOC_DATA, { client: client });
+    const [mutateFunction, { data, loading, error }] = useMutation(GRAPHQL_UPDATE_DOC_DATA, { client: client() });
 
 
 

@@ -30,7 +30,7 @@ interface IData {
 
 export default function Page({ params }: { params: { slug: string[] } }) {
     const  [editorData, setEditorData] = useState({});
-    const { data, loading, error, refetch } = useQuery<IData>(GRAPHQL_GET_PAGE, { client, variables: { pageId: params.slug[0] } });
+    const { data, loading, error, refetch } = useQuery<IData>(GRAPHQL_GET_PAGE, { client: client(), variables: { pageId: params.slug[0] } });
 
     useEffect(() => {
         try {
