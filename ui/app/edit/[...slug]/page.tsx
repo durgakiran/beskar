@@ -1,16 +1,19 @@
-'use client'
+"use client";
 import { useQuery } from "@apollo/client";
-import TipTap from "@components/tiptap";
+import { TipTap } from "@editor";
+import { CollaboratorProps, CollaboratorsContext } from "@editor/context/collaborators";
+import { Editorheader } from "@editor/header";
 import { client } from "@http";
-import { Box, Heading, Spinner } from "@primer/react";
+import { Box, Heading, PageLayout, Spinner } from "@primer/react";
 import { GRAPHQL_GET_PAGE } from "@queries/space";
+import { useSession } from "next-auth/react";
 import { useEffect, useState } from "react";
 
 interface IDoc {
     data: any;
     id: number;
     title: string;
-    version: Date
+    version: Date;
 }
 
 interface IPage {
@@ -21,47 +24,63 @@ interface IPage {
     parent_id: string | null;
     space_id: string;
     status: string | null;
-    docs: Array<IDoc>
+    docs: Array<IDoc>;
 }
 
 interface IData {
-    core_page: Array<IPage>
+    core_page: Array<IPage>;
 }
 
 export default function Page({ params }: { params: { slug: string[] } }) {
-    const  [editorData, setEditorData] = useState({});
-    const { data, loading, error, refetch } = useQuery<IData>(GRAPHQL_GET_PAGE, { client: client(), variables: { pageId: params.slug[0] } });
+    const [editorData, setEditorData] = useState({});
+    const { data: sessionData, status } = useSession();
+    const [collaborators, setCollaborators] = useState<CollaboratorProps[]>();
+    const { data, loading, error, refetch } = useQuery<IData>(GRAPHQL_GET_PAGE, { client: client, variables: { pageId: params.slug[0] } });
 
     useEffect(() => {
         try {
             if (data) {
-                const eData = typeof data.core_page[0].docs[0].data === 'string' ? JSON.parse(data.core_page[0].docs[0].data) : data.core_page[0].docs[0].data;
+                const eData = typeof data.core_page[0].docs[0].data === "string" ? JSON.parse(data.core_page[0].docs[0].data) : data.core_page[0].docs[0].data;
                 setEditorData(eData);
             }
-        } catch (e){
+        } catch (e) {
             // console.log(e);
         }
     }, [data, error]);
 
+    useEffect(() => {
+        if (status === "authenticated" && sessionData.user) {
+            console.log("setting value", sessionData.user);
+            const user = { name: sessionData.user.name, image: sessionData.user.image, id: sessionData.user.id };
+            setCollaborators([user]);
+        }
+    }, [status]);
+
     if (loading) {
-        <Box sx={{textAlign: "center"}}>
+        <Box sx={{ textAlign: "center" }}>
             <Spinner size="medium" />
-        </Box>
+        </Box>;
     }
 
     return (
-        <div style={{height: 300 }}>
-            {
-                data && (
-                    <>
-                        <Box sx={{padding: '4rem 2rem 0rem 5rem'}}>
-                            <Heading as="h1">{data.core_page[0].docs[0].title}</Heading>
-                        </Box>
-                        <TipTap content={editorData} pageId={params.slug[0]} id={data.core_page[0].docs[0].id} />
-                    </>
-                )
-            }
-            
+        <div style={{ minHeight: 300 }}>
+            {data && (
+                <Box data-testid="editor-window">
+                    <Box as="header" data-testid="sticky-header" sx={{ position: "sticky", zIndex: 1, top: 0, padding: "2em 1em", display: "grid", placeItems: "center", backgroundColor: "white" }}>
+                        <CollaboratorsContext.Provider value={collaborators}>
+                            <Editorheader />
+                        </CollaboratorsContext.Provider>
+                    </Box>
+                    <PageLayout>
+                        <PageLayout.Content sx={{ maxWidth: "1024px", margin: "auto" }}>
+                            <Box>
+                                <Heading as="h1">{data.core_page[0].docs[0].title}</Heading>
+                            </Box>
+                            <TipTap content={editorData} pageId={params.slug[0]} id={data.core_page[0].docs[0].id} />
+                        </PageLayout.Content>
+                    </PageLayout>
+                </Box>
+            )}
         </div>
-    )
+    );
 }

@@ -1,10 +1,9 @@
-'use client'
+"use client";
 import Header from "@components/menuBar";
-import { BaseStyles, ThemeProvider } from "@primer/react";
+import { BaseStyles, ThemeProvider, theme } from "@primer/react";
 import { SessionProvider, useSession } from "next-auth/react";
 
-export default function Layout({children}: {children: React.ReactNode}) {
-
+export default function Layout({ children }: { children: React.ReactNode }) {
     return (
         <SessionProvider>
             <ThemeProvider>
@@ -14,6 +13,5 @@ export default function Layout({children}: {children: React.ReactNode}) {
                 </BaseStyles>
             </ThemeProvider>
         </SessionProvider>
-    )
-    
+    );
 }

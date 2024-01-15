@@ -3,7 +3,9 @@
     "baseUrl": ".",
     "paths": {
       "@http": ["./app/core/http/index.ts"],
+      "@tiptap": ["./app/core/tiptap/*"],
       "@editor": ["./app/core/editor/index.ts"],
+      "@editor/*": ["./app/core/editor/*"],
       "@components/*": ["./app/components/*"],
       "@queries/space": ["./app/core/queries/space/index.ts"]
     },

@@ -1,6 +1,6 @@
 'use client'
 import { useQuery } from "@apollo/client";
-import TipTap from "@components/tiptap";
+import { TipTap } from "@editor";
 import { client } from "@http";
 import { Box, Heading, Spinner } from "@primer/react";
 import { GRAPHQL_GET_PAGE } from "@queries/space";
@@ -30,7 +30,7 @@ interface IData {
 
 export default function Page({ params }: { params: { page: string } }) {
     const  [editorData, setEditorData] = useState({});
-    const { data, loading, error, refetch } = useQuery<IData>(GRAPHQL_GET_PAGE, { client: client(), variables: { pageId: params.page } });
+    const { data, loading, error, refetch } = useQuery<IData>(GRAPHQL_GET_PAGE, { client: client, variables: { pageId: params.page } });
 
     useEffect(() => {
         try {
