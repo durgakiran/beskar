@@ -1,7 +1,8 @@
 "use client";
-import { EditorContent, useEditor } from "@tiptap/react";
+import { Editor, EditorContent, useEditor } from "@tiptap/react";
 import styled from "styled-components";
 import Typography from "@tiptap/extension-typography";
+import TextAlign from "@tiptap/extension-text-align";
 import Paragraph from "@tiptap/extension-paragraph";
 import Text from "@tiptap/extension-text";
 import Document from "@tiptap/extension-document";
@@ -41,6 +42,10 @@ const extensions = [
         history: false,
     }),
     Typography,
+    TextAlign.configure({
+        types: ["heading", "paragraph"],
+        alignments: ["left", "right", "center", "justify"],
+    }),
     Paragraph,
     Text,
     Document,
@@ -68,7 +73,15 @@ const extensions = [
     Underline,
 ];
 
-export function TipTap({ content, pageId, id, editable = true }: { content: Object; pageId: string; id: number; editable?: boolean }) {
+interface TipTapProps {
+    setEditorContext: (editorContext: Editor) => void;
+    content: Object;
+    pageId: string;
+    id: number;
+    editable?: boolean;
+}
+
+export function TipTap({ setEditorContext, content, pageId, id, editable = true }: TipTapProps) {
     const [editedData, setEditedData] = useState(null);
     const debouncedValue = useDebounce(editedData, 10000);
     const [updated, setUpdated] = useState(false);
@@ -89,6 +102,10 @@ export function TipTap({ content, pageId, id, editable = true }: { content: Obje
             editor.commands.setContent(content);
         }
     }, [content, editor]);
+
+    useEffect(() => {
+        setEditorContext(editor);
+    }, [editor]);
 
     useEffect(() => {
         if (updated) {

@@ -2,10 +2,12 @@
 import { useQuery } from "@apollo/client";
 import { TipTap } from "@editor";
 import { CollaboratorProps, CollaboratorsContext } from "@editor/context/collaborators";
+import { EditorContext } from "@editor/context/editorContext";
 import { Editorheader } from "@editor/header";
 import { client } from "@http";
 import { Box, Heading, PageLayout, Spinner } from "@primer/react";
 import { GRAPHQL_GET_PAGE } from "@queries/space";
+import { Editor } from "@tiptap/react";
 import { useSession } from "next-auth/react";
 import { useEffect, useState } from "react";
 
@@ -35,6 +37,7 @@ export default function Page({ params }: { params: { slug: string[] } }) {
     const [editorData, setEditorData] = useState({});
     const { data: sessionData, status } = useSession();
     const [collaborators, setCollaborators] = useState<CollaboratorProps[]>();
+    const [editorContext, setEditorContext] = useState<Editor>();
     const { data, loading, error, refetch } = useQuery<IData>(GRAPHQL_GET_PAGE, { client: client, variables: { pageId: params.slug[0] } });
 
     useEffect(() => {
@@ -67,16 +70,18 @@ export default function Page({ params }: { params: { slug: string[] } }) {
             {data && (
                 <Box data-testid="editor-window">
                     <Box as="header" data-testid="sticky-header" sx={{ position: "sticky", zIndex: 1, top: 0, padding: "2em 1em", display: "grid", placeItems: "center", backgroundColor: "white" }}>
-                        <CollaboratorsContext.Provider value={collaborators}>
-                            <Editorheader />
-                        </CollaboratorsContext.Provider>
+                        <EditorContext.Provider value={editorContext}>
+                            <CollaboratorsContext.Provider value={collaborators}>
+                                <Editorheader />
+                            </CollaboratorsContext.Provider>
+                        </EditorContext.Provider>
                     </Box>
                     <PageLayout>
                         <PageLayout.Content sx={{ maxWidth: "1024px", margin: "auto" }}>
                             <Box>
                                 <Heading as="h1">{data.core_page[0].docs[0].title}</Heading>
                             </Box>
-                            <TipTap content={editorData} pageId={params.slug[0]} id={data.core_page[0].docs[0].id} />
+                            <TipTap setEditorContext={(editorContext: Editor) =>  {setEditorContext(editorContext)} } content={editorData} pageId={params.slug[0]} id={data.core_page[0].docs[0].id} />
                         </PageLayout.Content>
                     </PageLayout>
                 </Box>
