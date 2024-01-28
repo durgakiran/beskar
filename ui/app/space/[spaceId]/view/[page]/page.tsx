@@ -54,10 +54,10 @@ export default function Page({ params }: { params: { page: string } }) {
             {
                 data && (
                     <Box>
-                        <Box sx={{paddingLeft: '2rem'}}>
+                        <Box>
                             <Heading as="h1">{data.core_page[0].docs[0].title}</Heading>
                         </Box>
-                        <TipTap editable={false} content={editorData} pageId={params.page} id={data.core_page[0].docs[0].id} />
+                        <TipTap setEditorContext={() => {}} editable={false} content={editorData} pageId={params.page} id={data.core_page[0].docs[0].id} />
                     </Box>
                 )
             }

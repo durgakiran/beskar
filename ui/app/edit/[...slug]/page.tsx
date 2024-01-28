@@ -81,7 +81,7 @@ export default function Page({ params }: { params: { slug: string[] } }) {
                             <Box>
                                 <Heading as="h1">{data.core_page[0].docs[0].title}</Heading>
                             </Box>
-                            <TipTap setEditorContext={(editorContext: Editor) =>  {setEditorContext(editorContext)} } content={editorData} pageId={params.slug[0]} id={data.core_page[0].docs[0].id} />
+                            <TipTap setEditorContext={(editorContext: Editor) =>  setEditorContext(editorContext) } content={editorData} pageId={params.slug[0]} id={data.core_page[0].docs[0].id} />
                         </PageLayout.Content>
                     </PageLayout>
                 </Box>

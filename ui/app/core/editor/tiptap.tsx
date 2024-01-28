@@ -105,7 +105,7 @@ export function TipTap({ setEditorContext, content, pageId, id, editable = true 
 
     useEffect(() => {
         setEditorContext(editor);
-    }, [editor]);
+    }, [editor, setEditorContext]);
 
     useEffect(() => {
         if (updated) {
