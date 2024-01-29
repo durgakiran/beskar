@@ -57,7 +57,7 @@ export default function Page({ params }: { params: { page: string } }) {
                         <Box>
                             <Heading as="h1">{data.core_page[0].docs[0].title}</Heading>
                         </Box>
-                        <TipTap setEditorContext={() => {}} editable={false} content={editorData} pageId={params.page} id={data.core_page[0].docs[0].id} />
+                        <TipTap title={data.core_page[0].docs[0].title} setEditorContext={() => {}} editable={false} content={editorData} pageId={params.page} id={data.core_page[0].docs[0].id} />
                     </Box>
                 )
             }

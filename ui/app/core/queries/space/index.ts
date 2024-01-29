@@ -94,6 +94,17 @@ export const GRAPHQL_UPDATE_DOC_DATA = gql`
     }
 `;
 
+export const GRAPHQL_UPDATE_DOC_TITLE = gql`
+    mutation UpdateDocTitle($id: bigint, $pageId: bigint, $title: String ) {
+        update_core_doc(where: {id: {_eq: $id}, page_id: {_eq: $pageId}}, _set: {title: $title}) {
+            affected_rows
+            returning {
+                id
+            }
+        }
+    }
+`
+
 export const GRAPHQL_DELETE_PAGE = gql`
     mutation deletePage($pgId: bigint) {
         delete_core_page(where: {id: {_eq: $pgId}}) {

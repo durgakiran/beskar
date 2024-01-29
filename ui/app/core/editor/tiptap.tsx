@@ -23,7 +23,7 @@ import CodeBlock from "@tiptap/extension-code-block";
 import { Button, ButtonGroup, IconButton, Tooltip } from "@primer/react";
 import { useDebounce } from "app/core/hooks/debounce";
 import { useEffect, useState } from "react";
-import { GRAPHQL_UPDATE_DOC_DATA } from "@queries/space";
+import { GRAPHQL_UPDATE_DOC_DATA, GRAPHQL_UPDATE_DOC_TITLE } from "@queries/space";
 import { client } from "@http";
 import { useMutation } from "@apollo/client";
 import { BubbleMenu } from "./bubbleMenu/bubbleMenu";
@@ -79,13 +79,16 @@ interface TipTapProps {
     pageId: string;
     id: number;
     editable?: boolean;
+    title: string;
 }
 
-export function TipTap({ setEditorContext, content, pageId, id, editable = true }: TipTapProps) {
+export function TipTap({ setEditorContext, content, pageId, id, editable = true, title }: TipTapProps) {
     const [editedData, setEditedData] = useState(null);
     const debouncedValue = useDebounce(editedData, 10000);
+    const debouncedTitle = useDebounce(title, 10000);
     const [updated, setUpdated] = useState(false);
     const [mutateFunction, { data, loading, error }] = useMutation(GRAPHQL_UPDATE_DOC_DATA, { client: client });
+    const [mutateTitleFn, {  data: titleData, loading: titleLoading, error: TitleError }] = useMutation(GRAPHQL_UPDATE_DOC_TITLE, { client: client });
 
     const editor = useEditor({
         extensions: extensions,
@@ -109,11 +112,18 @@ export function TipTap({ setEditorContext, content, pageId, id, editable = true 
 
     useEffect(() => {
         if (updated) {
-            mutateFunction({ variables: { id: id, pageId: pageId, data: debouncedValue, title: "Fifth Page" } })
+            mutateFunction({ variables: { id: id, pageId: pageId, data: debouncedValue, title: debouncedTitle } })
                 .then((data) => console.log(data))
                 .catch((error) => console.log(error));
         }
     }, [debouncedValue]);
+
+
+    useEffect(() => {
+        mutateTitleFn({ variables: { id: id, pageId: pageId, title: debouncedTitle } })
+            .then((data) => console.log(data))
+            .catch((error) => console.log(error));
+    }, [debouncedTitle]);
 
     return (
         <>

@@ -4,6 +4,7 @@ import { TipTap } from "@editor";
 import { CollaboratorProps, CollaboratorsContext } from "@editor/context/collaborators";
 import { EditorContext } from "@editor/context/editorContext";
 import { Editorheader } from "@editor/header";
+import TextArea from "@editor/textarea/TextArea";
 import { client } from "@http";
 import { Box, Heading, PageLayout, Spinner } from "@primer/react";
 import { GRAPHQL_GET_PAGE } from "@queries/space";
@@ -39,12 +40,14 @@ export default function Page({ params }: { params: { slug: string[] } }) {
     const [collaborators, setCollaborators] = useState<CollaboratorProps[]>();
     const [editorContext, setEditorContext] = useState<Editor>();
     const { data, loading, error, refetch } = useQuery<IData>(GRAPHQL_GET_PAGE, { client: client, variables: { pageId: params.slug[0] } });
+    const [title, setTitle] = useState<string>();
 
     useEffect(() => {
         try {
             if (data) {
                 const eData = typeof data.core_page[0].docs[0].data === "string" ? JSON.parse(data.core_page[0].docs[0].data) : data.core_page[0].docs[0].data;
                 setEditorData(eData);
+                setTitle(data.core_page[0].docs[0].title);
             }
         } catch (e) {
             // console.log(e);
@@ -80,8 +83,9 @@ export default function Page({ params }: { params: { slug: string[] } }) {
                         <PageLayout.Content sx={{ maxWidth: "1024px", margin: "auto" }}>
                             <Box>
                                 <Heading as="h1">{data.core_page[0].docs[0].title}</Heading>
+                                <TextArea value={title} handleInput={(value: string) => setTitle(value)} />
                             </Box>
-                            <TipTap setEditorContext={(editorContext: Editor) =>  setEditorContext(editorContext) } content={editorData} pageId={params.slug[0]} id={data.core_page[0].docs[0].id} />
+                            <TipTap title={title} setEditorContext={(editorContext: Editor) =>  setEditorContext(editorContext) } content={editorData} pageId={params.slug[0]} id={data.core_page[0].docs[0].id} />
                         </PageLayout.Content>
                     </PageLayout>
                 </Box>
