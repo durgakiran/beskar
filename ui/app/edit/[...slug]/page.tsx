@@ -11,6 +11,7 @@ import { GRAPHQL_GET_PAGE } from "@queries/space";
 import { Editor } from "@tiptap/react";
 import { useSession } from "next-auth/react";
 import { useEffect, useState } from "react";
+import "./styles.css";
 
 interface IDoc {
     data: any;
@@ -82,7 +83,7 @@ export default function Page({ params }: { params: { slug: string[] } }) {
                     <PageLayout>
                         <PageLayout.Content sx={{ maxWidth: "1024px", margin: "auto" }}>
                             <Box>
-                                <Heading as="h1">{data.core_page[0].docs[0].title}</Heading>
+                                {/* <Heading as="h1">{data.core_page[0].docs[0].title}</Heading> */}
                                 <TextArea value={title} handleInput={(value: string) => setTitle(value)} />
                             </Box>
                             <TipTap title={title} setEditorContext={(editorContext: Editor) =>  setEditorContext(editorContext) } content={editorData} pageId={params.slug[0]} id={data.core_page[0].docs[0].id} />

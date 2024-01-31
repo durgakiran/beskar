@@ -68,6 +68,9 @@ const extensions = [
     TaskList,
     TaskItem.configure({
         nested: true,
+        onReadOnlyChecked: (node, checked) => {
+            return false;
+        },
     }),
     CodeBlock,
     Underline,
