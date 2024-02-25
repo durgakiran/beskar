@@ -32,13 +32,16 @@ services:
       HASURA_GRAPHQL_ENABLED_LOG_TYPES: startup, http-log, webhook-log, websocket-log, query-log
       ## uncomment next line to run console offline (i.e load console assets from server instead of CDN)
       # HASURA_GRAPHQL_CONSOLE_ASSETS_DIR: /srv/console-assets
-      HASURA_GRAPHQL_JWT_SECRET: '{ "type": "HS256", "key": ${NEXTAUTH_SECRET} }'
+      # HASURA_GRAPHQL_JWT_SECRET: '{ "type": "HS256", "key": "3aa52dfd53ea35e6fcc9cc38c3167aff" }'
+      HASURA_GRAPHQL_JWT_SECRET: '{ "jwk_url": "http://shield:8080/realms/beskar/protocol/openid-connect/certs" }'
       ## uncomment next line to set an admin secret
       HASURA_GRAPHQL_ADMIN_SECRET: ${HASURA_ADMIN_SECRET}
       HASURA_GRAPHQL_METADATA_DEFAULTS: '{"backend_configs":{"dataconnector":{"athena":{"uri":"http://data-connector-agent:8081/api/v1/athena"},"mariadb":{"uri":"http://data-connector-agent:8081/api/v1/mariadb"},"mysql8":{"uri":"http://data-connector-agent:8081/api/v1/mysql"},"oracle":{"uri":"http://data-connector-agent:8081/api/v1/oracle"},"snowflake":{"uri":"http://data-connector-agent:8081/api/v1/snowflake"}}}}'
     depends_on:
       data-connector-agent:
         condition: service_healthy
+      shield:
+        condition: service_started
     networks:
       - local
   data-connector-agent:
@@ -71,6 +74,24 @@ services:
       - ./dbdatamongo:/data/db
     networks:
       - local
+  shield:
+    image: quay.io/keycloak/keycloak:23.0.6
+    container_name: keycloak_auth
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/auth
+      KC_DB_USERNAME: beskar_admin
+      KC_DB_PASSWORD: beskar_admin_pwd
+    ports:
+      - "8083:8080"
+    command:
+      - start-dev
+    networks:
+      - local
+    depends_on:
+      - postgres
 
 networks:
   local:
