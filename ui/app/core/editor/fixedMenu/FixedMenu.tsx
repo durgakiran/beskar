@@ -11,12 +11,12 @@ import FormatTypePicker from "@editor/menus/formatTypePicker/formatTypePicker";
 import ContentAlignPicker from "@editor/menus/contentAlignTypePicker/contentAlignPicker";
 
 export default function FixedMenu() {
-    const collaborators = useContext(CollaboratorsContext);
+    // const collaborators = useContext(CollaboratorsContext);
     const editor = useContext(EditorContext);
 
-    useEffect(() => {
-        console.log(collaborators);
-    }, [collaborators]);
+    // useEffect(() => {
+    //     console.log(collaborators);
+    // }, [collaborators]);
 
     if (!editor) {
         return <>Loading header ....</>;
@@ -103,9 +103,9 @@ export default function FixedMenu() {
                 </Box> */}
             </Box>
             <Box sx={{ display: "flex", alignItems: "center" }}>
-                <Box sx={{ paddingRight: "1rem" }}>
+                {/* <Box sx={{ paddingRight: "1rem" }}>
                     <Collaborators collaborators={collaborators} />
-                </Box>
+                </Box> */}
                 <Box sx={{ paddingRight: "0.5rem" }}>
                     <Button variant="primary">Update</Button>
                 </Box>
