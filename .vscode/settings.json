@@ -1,0 +1,8 @@
+{
+    "java.configuration.updateBuildConfiguration": "interactive",
+    "java.checkstyle.configuration": "${workspaceFolder}/checkstyle.xml",
+    "java.checkstyle.properties": {
+        "basedir": "${workspaceFolder}"
+    },
+    "java.checkstyle.version": "10.13.0"
+}

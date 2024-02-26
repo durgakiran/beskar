@@ -1,9 +1,12 @@
 dbdatamongo
 editorlocal
 pgdata
-uilocal/**
+uilocal
 .gitconfig.pers
 /**/node_modules
 /**/.next
 .env.local
 .env
+**/**/.gradle
+**/**/build
+uploads

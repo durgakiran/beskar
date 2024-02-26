@@ -1,13 +1,12 @@
-"use client"
-import Login from "@components/login"
-import { SessionProvider } from "next-auth/react"
+"use client";
+import KeycloakProvider from "./core/auth/KeycloakProvider";
+import Home from "@components/home";
 
 
 export default function Page() {
     return (
-        <SessionProvider>
-            <Login />
-            <h1>Hello, Ted Dox!</h1>
-        </SessionProvider>
-    )
+        <KeycloakProvider>
+            <Home />
+        </KeycloakProvider>
+    );
 }

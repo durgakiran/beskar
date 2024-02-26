@@ -1,0 +1,24 @@
+textArea {
+    display: block;
+    height: 34px;
+    overflow-y: hidden;
+    overflow-x: hidden;
+    width: 100%;
+    /* letter-spacing: -0.1rem; */
+    line-height: 1.1;
+    outline: none;
+    border: none;
+    /* font-size: 28px; */
+    font-family: inherit;
+    font-weight: 400;
+    text-align: initial;
+    height: 37px;
+    padding: 0;
+    box-shadow: none;
+    resize: none;
+    white-space: pre-wrap;
+    margin: auto;
+    text-overflow: ellipsis;
+    box-sizing: border-box;
+    font-size: 2em;
+}

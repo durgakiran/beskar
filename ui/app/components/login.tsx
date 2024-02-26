@@ -12,8 +12,10 @@ export default function Login() {
       (async () => {
         try {
           const data = await get('/api/protected');
-          localStorage.setItem('access_token', data.data.token);
-          router.push('/space');
+          if (data && data.data && data.data.token) {
+            localStorage.setItem('access_token', data.data.token);
+            router.push('/space');
+          }
         } catch(e) {
           console.error(e);
         }
