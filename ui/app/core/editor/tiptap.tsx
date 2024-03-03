@@ -1,6 +1,5 @@
 "use client";
 import { Editor, EditorContent, useEditor } from "@tiptap/react";
-import styled from "styled-components";
 import Typography from "@tiptap/extension-typography";
 import TextAlign from "@tiptap/extension-text-align";
 import Paragraph from "@tiptap/extension-paragraph";
@@ -11,16 +10,12 @@ import Placeholder from "@tiptap/extension-placeholder";
 import Underline from "@tiptap/extension-underline";
 import StarterKit from "@tiptap/starter-kit";
 import TextStyle from "@tiptap/extension-placeholder";
+import Image from "@tiptap/extension-image";
 import Color from "@tiptap/extension-placeholder";
-// import Collaboration from '@tiptap/extension-collaboration'
-// import CollaborationCursor from '@tiptap/extension-collaboration-cursor'
 import TaskList from "@tiptap/extension-task-list";
 import TaskItem from "@tiptap/extension-task-item";
 import CodeBlock from "@tiptap/extension-code-block";
-// import { WebrtcProvider } from 'y-webrtc'
-// import * as Y from 'yjs'
-// import { EXAMPLE_JSON } from "@editor";
-import { Button, ButtonGroup, IconButton, Tooltip } from "@primer/react";
+import { IconButton, Tooltip } from "@primer/react";
 import { useDebounce } from "app/core/hooks/debounce";
 import { useEffect, useState } from "react";
 import { GRAPHQL_UPDATE_DOC_DATA, GRAPHQL_UPDATE_DOC_TITLE } from "@queries/space";
@@ -28,14 +23,9 @@ import { client } from "@http";
 import { useMutation } from "@apollo/client";
 import { BubbleMenu } from "./bubbleMenu/bubbleMenu";
 import { BoldIcon, StrikethroughIcon, ItalicIcon } from "@primer/octicons-react";
-import { UnderlineIcon } from "lucide-react";
 import "./styles.css";
 import { ModifiedUnderlineIcon } from "./Button/modifiedIconButton";
-import FixedMenu from "./fixedMenu/FixedMenu";
-// import { useDidMountEffect } from "app/core/hooks/didMountEffect";
-
-// const ydoc = new Y.Doc()
-// const provider = new WebrtcProvider('tiptap-collaboration-cursor-extension', ydoc)
+import { uploadImageData } from "../http/uploadImageData";
 
 const extensions = [
     StarterKit.configure({
@@ -55,16 +45,6 @@ const extensions = [
     }),
     TextStyle,
     Color,
-    // Collaboration.configure({
-    //     document: ydoc,
-    //   }),
-    //   CollaborationCursor.configure({
-    //     provider,
-    //     user: {
-    //       name: 'Cyndi Lauper',
-    //       color: '#f783ac',
-    //     },
-    // }),
     TaskList,
     TaskItem.configure({
         nested: true,
@@ -74,6 +54,7 @@ const extensions = [
     }),
     CodeBlock,
     Underline,
+    Image
 ];
 
 interface TipTapProps {
@@ -101,6 +82,29 @@ export function TipTap({ setEditorContext, content, pageId, id, editable = true,
             setUpdated(true);
             setEditedData(editor.getJSON());
         },
+        editorProps: {
+            handlePaste(view, event, slice) {
+                // we will handle paste here.
+                console.log(event);
+                console.log(slice);
+                let cbPayload = [...event.clipboardData.items];
+                cbPayload = cbPayload.filter((i) => /image/.test(i.type) && i.type != "");
+                cbPayload.forEach(i => console.log(i.type));
+                console.log(cbPayload);
+                if(!cbPayload.length || cbPayload.length === 0) return false; // not handled use default behaviour
+                console.log(cbPayload[0].getAsFile());
+                uploadImageData(cbPayload[0].getAsFile()).then((name) => {
+                    console.log(name);
+                    const { schema } = view.state;
+                    const node = schema.nodes.image.create({ src: `${process.env.NEXT_PUBLIC_IMAGE_SERVER_URL}/${name}` }); // creates the image element
+                    const transaction = view.state.tr.replaceSelectionWith(node); // places it in the correct position
+                    view.dispatch(transaction);
+                }).catch((err) => {
+                    console.error(err);
+                });
+                return true; 
+            },
+        }
     });
 
     useEffect(() => {
