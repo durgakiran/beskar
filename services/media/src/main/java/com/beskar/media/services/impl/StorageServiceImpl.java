@@ -6,6 +6,7 @@ import java.net.MalformedURLException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Random;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.UrlResource;
 import org.springframework.stereotype.Service;
@@ -31,10 +32,12 @@ public class StorageServiceImpl implements StorageService {
     @Override
     public String save(MultipartFile file) {
         try {
-            Files.copy(file.getInputStream(), this.root.resolve(file.getOriginalFilename()));
-            return file.getOriginalFilename();
+            String filename = file.getOriginalFilename().replace(" ", "-");
+            filename += "-" + this.getSaltString();
+            Files.copy(file.getInputStream(), this.root.resolve(filename));
+            return filename;
         } catch (IOException e) {
-            throw new RuntimeException("Could not upload file");
+            throw new RuntimeException("Could not upload file", e);
         }
     }
 
@@ -51,6 +54,19 @@ public class StorageServiceImpl implements StorageService {
         } catch (MalformedURLException e) {
             throw new RuntimeException("Error: " + e.getMessage());
         }
+    }
+
+    protected String getSaltString() {
+        String saltChars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890";
+        StringBuilder salt = new StringBuilder();
+        Random rnd = new Random();
+        while (salt.length() < 18) { // length of the random string.
+            int index = (int) (rnd.nextFloat() * saltChars.length());
+            salt.append(saltChars.charAt(index));
+        }
+        String saltStr = salt.toString();
+        return saltStr;
+
     }
 
 }
