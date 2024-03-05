@@ -1,5 +1,11 @@
 version: '3'
 
+# add liquibase
+includes:
+  liquibase:
+    taskfile: ./db/Taskfile.yml
+    dir: ./db
+
 tasks:
   hello:
     cmd: echo "hello world"
@@ -18,7 +24,6 @@ tasks:
     cmds: 
       - echo "fill parameters from ssm"
       - sh ./parameters.sh
-  # TODO: add liquibase
 
   run-main-servers:
     deps: [parameter]
