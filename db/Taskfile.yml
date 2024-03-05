@@ -1,0 +1,33 @@
+version: '3'
+
+tasks:
+  init:
+    cmds:
+      - echo "running database init"
+      - liquibase  --defaultsFile=liquibase.properties update
+    dir: ./init
+
+  beskar-init:
+    deps: [init]
+    cmds:
+      - echo "running beskar init"
+      - liquibase  --defaultsFile=liquibase.properties update
+    dir: ./beskar-init
+  
+  beskar:
+    deps: [beskar-init]
+    cmds:
+      - echo "running beskar"
+      - liquibase  --defaultsFile=liquibase.properties update
+    dir: ./beskar
+
+  auth-init:
+    cmds:
+      - echo "running init for auth daabase"
+      - liquibase  --defaultsFile=auth.properties update
+    dir: ./init
+  
+  liquibase-update:
+    deps: [auth-init, beskar]
+    cmds:
+      - echo "running liquibase changesets"

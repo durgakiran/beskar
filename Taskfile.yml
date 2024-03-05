@@ -1,0 +1,33 @@
+version: '3'
+
+# add liquibase
+includes:
+  liquibase:
+    taskfile: ./db/Taskfile.yml
+    dir: ./db
+
+tasks:
+  hello:
+    cmd: echo "hello world"
+
+  create-env-file:
+    cmds:
+      - echo "creates env file in ui directory" 
+      - touch ./ui/.env.local
+      - cat ./.env.example > ./ui/.env.local
+      - echo "create env local file"
+      - touch .env.local
+      - cat ./.env.example > ./.env.local
+
+  parameter:
+    deps: [create-env-file]
+    cmds: 
+      - echo "fill parameters from ssm"
+      - sh ./parameters.sh
+
+  run-main-servers:
+    deps: [parameter]
+    cmds:
+      - sudo docker-compose -f docker-compose.yml up -d
+
+  
