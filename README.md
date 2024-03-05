@@ -6,3 +6,5 @@
 - postgres: 14+
 - docker
 - docker compose
+- liquibase
+- task-go
