@@ -9,8 +9,6 @@ export function uploadImageData(data: File): Promise<string> {
         image.onload = function() {
             // upload image
             uploadImage(data).then((value) => {
-                console.log(value);
-                console.log(value.data.data.name);
                 resolve(value.data.data.name);
             }).catch((err) => {
                 reject(err);

@@ -1,5 +1,6 @@
 import { useContext, useEffect, useState } from 'react';
 import { authContext } from './authContext';
+import { UserContext } from './userContext';
 
 
 
@@ -10,15 +11,8 @@ export default function useKeycloak() {
     return keycloak;
 }
 
-export function useAuthenticated() {
-    const keycloak = useContext(authContext);
-    const [authenticated, setAuthenticated] = useState(false);
+export function useUser() {
+    const user = useContext(UserContext);
 
-    useEffect(() => {
-        keycloak.onAuthSuccess = () => {
-            setAuthenticated(true);
-        };
-    }, [keycloak]);
-
-    return authenticated;
+    return user;
 }

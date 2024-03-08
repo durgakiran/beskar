@@ -1,5 +1,5 @@
 'use client'
-import { useMutation, useQuery } from "@apollo/client";
+import { useLazyQuery, useMutation, useQuery } from "@apollo/client";
 import { client } from "@http";
 import { ActionList, ActionMenu, Box, Heading, IconButton, NavList, Spinner } from "@primer/react";
 import { GRAPHQL_DELETE_PAGE, GRAPHQL_GET_PAGES } from "@queries/space";
@@ -7,6 +7,8 @@ import { HomeIcon, GearIcon, PlusIcon, KebabHorizontalIcon, TrashIcon, PencilIco
 import { useCallback, useEffect, useState } from "react";
 import { useRouter, useSelectedLayoutSegment } from "next/navigation";
 import AddPage from "./addPage";
+import Link from "next/link";
+import { useUser } from "app/core/auth/useKeycloak";
 
 
 interface Docs {
@@ -39,11 +41,21 @@ interface Props {
 }
 
 export default function SideNav(param: Props) {
+    const user = useUser();
     const [isOpen, setIsOpen] = useState(false);
     const router = useRouter();
-    const { data, loading, error, refetch } = useQuery<SpaceData>(GRAPHQL_GET_PAGES, { client: client, variables: { id: param.id } });
+    const [getPages, { data, loading, error, refetch }] = useLazyQuery<SpaceData>(GRAPHQL_GET_PAGES, { client: client, variables: { id: param.id } });
     const [mutateFunction] = useMutation(GRAPHQL_DELETE_PAGE, { client: client} )
     const pathName = useSelectedLayoutSegment();
+
+    useEffect(() => {
+        if (user && user.authenticated) {
+            getPages();
+        }
+        if (user && !user.authenticated) {
+            router.push("/");
+        }
+    }, [user]);
 
 
     const activeItem = useCallback((path: string) => {
@@ -65,7 +77,7 @@ export default function SideNav(param: Props) {
     };
 
 
-    if (loading) {
+    if (loading || user.loading) {
         return <Spinner size="small" />;
     }
 
@@ -103,7 +115,7 @@ export default function SideNav(param: Props) {
                             data.core_space_url[0].space.pages.map((value, i) => {
                                 if (value.docs[0]) {
                                     return (
-                                        <NavList.Item as="a" role="link" sx={{lineHeight: '24px'}} key={i} href={`/space/${param.id}/view/${value.id}`}>
+                                        <NavList.Item as={Link} role="link" sx={{lineHeight: '24px'}} key={i} href={`/space/${param.id}/view/${value.id}`}>
                                             {value.docs[0].title}
                                             <NavList.TrailingVisual>
                                                 <Box as="div" onClick={(ev) => {ev.stopPropagation(); ev.preventDefault();}} sx={{ display: 'flex', alignItems: 'center', zIndex: 100 }}>

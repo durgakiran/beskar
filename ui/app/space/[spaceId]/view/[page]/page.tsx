@@ -1,9 +1,11 @@
 'use client'
-import { useQuery } from "@apollo/client";
+import { useLazyQuery, useQuery } from "@apollo/client";
 import { TipTap } from "@editor";
 import { client } from "@http";
 import { Box, Heading, Spinner } from "@primer/react";
 import { GRAPHQL_GET_PAGE } from "@queries/space";
+import { useUser } from "app/core/auth/useKeycloak";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 interface IDoc {
@@ -29,8 +31,20 @@ interface IData {
 }
 
 export default function Page({ params }: { params: { page: string } }) {
+    const user = useUser();
+    const router = useRouter();
     const  [editorData, setEditorData] = useState({});
-    const { data, loading, error, refetch } = useQuery<IData>(GRAPHQL_GET_PAGE, { client: client, variables: { pageId: params.page } });
+    const [ getPage, { loading, error, data } ] = useLazyQuery<IData, { pageId: string }>(GRAPHQL_GET_PAGE, { client: client, variables: { pageId: params.page } });
+
+    useEffect(() => {
+        console.log(user);
+        if (user && user.authenticated) {
+            getPage();
+        }
+        if (user && !user.authenticated) {
+            router.push("/space");
+        }
+    }, [user]);
 
     useEffect(() => {
         try {
@@ -43,7 +57,7 @@ export default function Page({ params }: { params: { page: string } }) {
         }
     }, [data, error]);
 
-    if (loading) {
+    if (loading || user.loading) {
         <Box sx={{textAlign: "center"}}>
             <Spinner size="medium" />
         </Box>

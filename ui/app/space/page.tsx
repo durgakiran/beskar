@@ -56,11 +56,9 @@ export default function Page() {
 
     useEffect(() => {
         if (data && data.core_space) {
-            console.log(data.core_space);
             const newData = data.core_space.map((datum, i) => {
                 return { id: datum.id, slug: datum.space_urls[0].id ?? "#", name: datum.name };
             });
-            console.log(newData);
             setTableData(newData);
         }
     }, [data]);

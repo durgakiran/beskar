@@ -28,19 +28,23 @@ export default function FormatTypePicker({ editor }: FormatTypePickerProps) {
         }
     }, []);
 
-    return options.map((item, i) => (
-        <Button
-            aria-label={item.label}
-            sx={{ color: "black" }}
-            className={item.isActive() ? "active" : ""}
-            as="button"
-            size="small"
-            variant="invisible"
-            key={i}
-            disabled={item.disabled()}
-            onClick={() => item.onClick()}
-        >
-            <ModifiedIcon name={item.icon} size={16} />
-        </Button>
-    ));
+    return (
+        <>
+            {options.map((item, i) => (
+                <Button
+                    aria-label={item.label}
+                    sx={{ color: "black" }}
+                    className={item.isActive() ? "active" : ""}
+                    as="button"
+                    size="small"
+                    variant="invisible"
+                    key={i}
+                    disabled={item.disabled()}
+                    onClick={() => item.onClick()}
+                >
+                    <ModifiedIcon name={item.icon} size={16} />
+                </Button>
+            ))}
+        </>
+    );
 }

@@ -1,5 +1,5 @@
 "use client";
-import { useQuery } from "@apollo/client";
+import { useLazyQuery, useQuery } from "@apollo/client";
 import { TipTap } from "@editor";
 import { EditorContext } from "@editor/context/editorContext";
 import { Editorheader } from "@editor/header";
@@ -8,6 +8,8 @@ import { client } from "@http";
 import { Box, PageLayout, Spinner } from "@primer/react";
 import { GRAPHQL_GET_PAGE } from "@queries/space";
 import { Editor } from "@tiptap/react";
+import { useUser } from "app/core/auth/useKeycloak";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import "./styles.css";
 
@@ -36,8 +38,20 @@ interface IData {
 export default function Page({ params }: { params: { slug: string[] } }) {
     const [editorData, setEditorData] = useState({});
     const [editorContext, setEditorContext] = useState<Editor>();
-    const { data, loading, error, refetch } = useQuery<IData>(GRAPHQL_GET_PAGE, { client: client, variables: { pageId: params.slug[0] } });
+    const [ getPage , { data, loading }] = useLazyQuery<IData>(GRAPHQL_GET_PAGE, { client: client, variables: { pageId: params.slug[0] } });
     const [title, setTitle] = useState<string>();
+    const router = useRouter();
+    const user = useUser();
+
+    const handleClose = () => {
+        router.push("/");
+    }
+
+    useEffect(() => {
+        if (user && user.authenticated) {
+            getPage();
+        }
+    }, [user])
 
     useEffect(() => {
         try {
@@ -52,7 +66,7 @@ export default function Page({ params }: { params: { slug: string[] } }) {
     }, [data]);
 
 
-    if (loading) {
+    if (loading || user.loading) {
         <Box sx={{ textAlign: "center" }}>
             <Spinner size="medium" />
         </Box>;
@@ -64,7 +78,7 @@ export default function Page({ params }: { params: { slug: string[] } }) {
                 <Box data-testid="editor-window">
                     <Box as="header" data-testid="sticky-header" sx={{ position: "sticky", zIndex: 1, top: 0, padding: "2em 1em", display: "grid", placeItems: "center", backgroundColor: "white" }}>
                         <EditorContext.Provider value={editorContext}>
-                            <Editorheader />
+                            <Editorheader handleClose={handleClose} />
                         </EditorContext.Provider>
                     </Box>
                     <PageLayout>

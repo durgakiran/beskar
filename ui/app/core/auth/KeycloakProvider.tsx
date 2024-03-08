@@ -8,7 +8,8 @@ export default function KeycloakProvider ({ children }: { children: React.ReactN
     const keycloak = useKeycloak();
 
     useEffect(() => {
-        if (!keycloakInitialized.current) {
+        if (!keycloakInitialized.current && !keycloak.authenticated) {
+            console.log("initialising keycloak");
             keycloakInitialized.current = true;
             keycloak
                 .init({
@@ -17,8 +18,8 @@ export default function KeycloakProvider ({ children }: { children: React.ReactN
                 })
                 .then((res) =>{
                     if (res) {
-                        console.log(keycloak.token);
                         localStorage.setItem('access_token', keycloak.token);
+                        localStorage.setItem('refresh_token', keycloak.refreshToken);
                     }
                 })
                 .catch((e) => console.error(e));

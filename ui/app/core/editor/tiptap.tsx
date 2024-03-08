@@ -85,16 +85,10 @@ export function TipTap({ setEditorContext, content, pageId, id, editable = true,
         editorProps: {
             handlePaste(view, event, slice) {
                 // we will handle paste here.
-                console.log(event);
-                console.log(slice);
                 let cbPayload = [...event.clipboardData.items];
                 cbPayload = cbPayload.filter((i) => /image/.test(i.type) && i.type != "");
-                cbPayload.forEach(i => console.log(i.type));
-                console.log(cbPayload);
                 if(!cbPayload.length || cbPayload.length === 0) return false; // not handled use default behaviour
-                console.log(cbPayload[0].getAsFile());
                 uploadImageData(cbPayload[0].getAsFile()).then((name) => {
-                    console.log(name);
                     const { schema } = view.state;
                     const node = schema.nodes.image.create({ src: `${process.env.NEXT_PUBLIC_IMAGE_SERVER_URL}/${name}` }); // creates the image element
                     const transaction = view.state.tr.replaceSelectionWith(node); // places it in the correct position
