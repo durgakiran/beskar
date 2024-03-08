@@ -38,13 +38,13 @@ interface IData {
 export default function Page({ params }: { params: { slug: string[] } }) {
     const [editorData, setEditorData] = useState({});
     const [editorContext, setEditorContext] = useState<Editor>();
-    const [ getPage , { data, loading }] = useLazyQuery<IData>(GRAPHQL_GET_PAGE, { client: client, variables: { pageId: params.slug[0] } });
+    const [ getPage , { data, loading }] = useLazyQuery<IData>(GRAPHQL_GET_PAGE, { client: client, variables: { pageId: params.slug[1] } });
     const [title, setTitle] = useState<string>();
     const router = useRouter();
     const user = useUser();
 
     const handleClose = () => {
-        router.push("/");
+        router.push(`/space/${params.slug[0]}/view/${params.slug[1]}`);
     }
 
     useEffect(() => {
@@ -86,7 +86,7 @@ export default function Page({ params }: { params: { slug: string[] } }) {
                             <Box>
                                 <TextArea value={title} handleInput={(value: string) => setTitle(value)} />
                             </Box>
-                            <TipTap title={title} setEditorContext={(editorContext: Editor) =>  setEditorContext(editorContext) } content={editorData} pageId={params.slug[0]} id={data.core_page[0].docs[0].id} />
+                            <TipTap title={title} setEditorContext={(editorContext: Editor) =>  setEditorContext(editorContext) } content={editorData} pageId={params.slug[1]} id={data.core_page[0].docs[0].id} />
                         </PageLayout.Content>
                     </PageLayout>
                 </Box>

@@ -74,7 +74,7 @@ export default function SideNav(param: Props) {
     };
 
     const editePage = async (page: number) => {
-        router.push(`/edit/${page}`);
+        router.push(`/edit/${param.id}/${page}`);
     };
 
 
