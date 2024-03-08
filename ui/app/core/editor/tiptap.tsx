@@ -90,7 +90,7 @@ export function TipTap({ setEditorContext, content, pageId, id, editable = true,
                 if(!cbPayload.length || cbPayload.length === 0) return false; // not handled use default behaviour
                 uploadImageData(cbPayload[0].getAsFile()).then((name) => {
                     const { schema } = view.state;
-                    const node = schema.nodes.image.create({ src: `${process.env.NEXT_PUBLIC_IMAGE_SERVER_URL}/${name}` }); // creates the image element
+                    const node = schema.nodes.image.create({ src: `${process.env.NEXT_PUBLIC_IMAGE_SERVER_URL}/media/${name}` }); // creates the image element
                     const transaction = view.state.tr.replaceSelectionWith(node); // places it in the correct position
                     view.dispatch(transaction);
                 }).catch((err) => {

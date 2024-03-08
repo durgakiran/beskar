@@ -30,4 +30,14 @@ tasks:
     cmds:
       - sudo docker-compose -f docker-compose.yml up -d
 
+  run-user-service:
+    cmds:
+      - gradle clean bootRun
+    dir: ./services/user
+  
+  run-media-service:
+    cmds:
+      - gradle clean bootRun
+    dir: ./services/media
+
   
