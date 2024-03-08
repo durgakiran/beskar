@@ -67,9 +67,10 @@ export default function SideNav(param: Props) {
     }, [pathName]);
 
     const deletePage = async (page: number) => {
-        await mutateFunction({ variables: { pgId: page } });
-        refetch();
-        router.push(`/space/${param.id}`);
+        // TODO: Add confirmation page
+        // await mutateFunction({ variables: { pgId: page } });
+        // refetch();
+        // router.push(`/space/${param.id}`);
     };
 
     const editePage = async (page: number) => {
