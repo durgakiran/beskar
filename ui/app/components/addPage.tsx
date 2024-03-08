@@ -47,7 +47,6 @@ export default function AddPage({ isOpen, setIsOpen, spaceId, parentId }: IAddPa
     };
 
     useEffect(() => {
-        console.log(data);
         if (data) {
             router.push(`/edit/${data.insert_core_page.returning[0].id}`);
         }

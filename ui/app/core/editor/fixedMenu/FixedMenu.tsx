@@ -10,9 +10,10 @@ import { ContentTypePicker } from "@editor/menus/contentTypePicker/ContentTypePi
 import FormatTypePicker from "@editor/menus/formatTypePicker/formatTypePicker";
 import ContentAlignPicker from "@editor/menus/contentAlignTypePicker/contentAlignPicker";
 
-export default function FixedMenu() {
+export default function FixedMenu({ handleClose }: { handleClose: () => void }) {
     // const collaborators = useContext(CollaboratorsContext);
     const editor = useContext(EditorContext);
+
 
     // useEffect(() => {
     //     console.log(collaborators);
@@ -110,7 +111,7 @@ export default function FixedMenu() {
                     <Button variant="primary">Update</Button>
                 </Box>
                 <Box sx={{ paddingRight: "0.5rem" }}>
-                    <Button variant="invisible">Close</Button>
+                    <Button variant="invisible" onClick={handleClose} >Close</Button>
                 </Box>
             </Box>
         </Box>

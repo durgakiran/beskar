@@ -1,6 +1,7 @@
 "use client";
 import { useGetCall } from "@http";
-import { Header } from "@primer/react";
+import { Button, Header } from "@primer/react";
+import { useLogout } from "app/core/auth/useKeycloak";
 import { useEffect } from "react";
 import { CustomAvatar } from "./customAvatar";
 
@@ -13,6 +14,7 @@ interface UserInfo {
 
 export default function MenuBar() {
     const [status, res] = useGetCall<UserInfo>("http://localhost:8084/user/details");
+    const logout = useLogout();
 
     useEffect(() => {
         console.log(res);
@@ -26,6 +28,9 @@ export default function MenuBar() {
             <Header.Item full></Header.Item>
             <Header.Item>
                 {res && res.data && res.data.name && <CustomAvatar />}
+            </Header.Item>
+            <Header.Item>
+                <Button variant="invisible" onClick={() => logout()} >Logout</Button>
             </Header.Item>
         </Header>
     );

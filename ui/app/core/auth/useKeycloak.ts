@@ -1,5 +1,6 @@
-import { useContext, useEffect, useState } from 'react';
+import { useCallback, useContext, useEffect, useState } from 'react';
 import { authContext } from './authContext';
+import { UserContext } from './userContext';
 
 
 
@@ -10,15 +11,22 @@ export default function useKeycloak() {
     return keycloak;
 }
 
-export function useAuthenticated() {
+export function useUser() {
+    const user = useContext(UserContext);
+
+    return user;
+}
+
+export function useLogout() {
     const keycloak = useContext(authContext);
-    const [authenticated, setAuthenticated] = useState(false);
 
-    useEffect(() => {
-        keycloak.onAuthSuccess = () => {
-            setAuthenticated(true);
-        };
-    }, [keycloak]);
+    const callbackFn = useCallback(() => {
+        keycloak.logout().then(() => {
+            localStorage.clear();
+        }).catch((err) => {
+            console.error("failed to logout", err);
+        });
+    }, []);
 
-    return authenticated;
+    return callbackFn;
 }
