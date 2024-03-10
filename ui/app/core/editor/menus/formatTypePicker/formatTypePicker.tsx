@@ -18,7 +18,6 @@ export default function FormatTypePicker({ editor }: FormatTypePickerProps) {
         if (editor) {
             editor.on("selectionUpdate", () => {
                 const activeItemTmp = options.filter((option) => option.isActive());
-                console.log(activeItemTmp);
                 setActiveFormatType(activeItemTmp);
             });
             editor.on("transaction", () => {
