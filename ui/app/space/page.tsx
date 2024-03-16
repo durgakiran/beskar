@@ -1,49 +1,19 @@
 "use client";
-import { Box, Button, Link, Spinner } from "@primer/react";
-import { Column, DataTable, Table } from "@primer/react/drafts";
 import { useEffect, useState } from "react";
 import { client } from "@http";
 import styled from "styled-components";
 import { useQuery } from "@apollo/client";
 import { GRAPHQL_GET_SPACES } from "@queries/space";
 import AddSpace from "@components/addSpace";
-import Slate from "@components/slate";
 import { useRouter } from "next/navigation";
+import { Avatar, Button, Card, Spinner } from "flowbite-react";
 
-
-const Container = styled.div`
-    padding: 16px;
-`;
-
-const CenteredButton = styled(Button)`
-    margin: auto;
-`;
-
-const Footer = styled.div`
-    display: flex;
-    flex-direction: row;
-    flex-wrap: wrap;
-    align-content: center;
-    justify-content: flex-end;
-    align-items: center;
-    box-sizing: border-box;
-    margin-top: 1rem;
-`;
 
 interface Data {
     name: string;
     id: string;
     slug: string;
 }
-
-const columns: Array<Column<Data>> = [
-    {
-        header: "Space Name",
-        field: "name",
-        rowHeader: true,
-        renderCell: (row) => <Link href={`/space/${row.slug}`}>{row.name}</Link>,
-    },
-];
 
 const BLANK_STATE_HEADING = "No Spaces, Please create one";
 const BLANK_STATE_BTN_TEXT = "Create a space";
@@ -56,7 +26,7 @@ export default function Page() {
 
     useEffect(() => {
         if (data && data.core_space) {
-            const newData = data.core_space.map((datum, i) => {
+            const newData: Data[] = data.core_space.map((datum, i) => {
                 return { id: datum.id, slug: datum.space_urls[0].id ?? "#", name: datum.name };
             });
             setTableData(newData);
@@ -70,41 +40,57 @@ export default function Page() {
     }, [error]);
 
     return (
-        <Container>
-            {loading ? (
-                <Box sx={{ textAlign: "center" }}>
-                    <Spinner size="large" />
-                </Box>
-            ) : !loading && tableData.length === 0 ? (
-                <Slate title={BLANK_STATE_HEADING} primaryActionText={BLANK_STATE_BTN_TEXT} primaryAction={() => setIsOpen(true)} />
-            ) : (
-                <Table.Container>
-                    <Table.Title as="h2" id="spaces">
-                        All Spaces
-                    </Table.Title>
-                    <Table.Subtitle as="p" id="space-subtitle">
-                        Organize your content across spaces
-                    </Table.Subtitle>
-                    <Table.Actions>
-                        <Button
-                            size="small"
-                            onClick={() => {
-                                setIsOpen(true);
-                            }}
-                        >
-                            + Space
-                        </Button>
-                    </Table.Actions>
-                    <DataTable aria-labelledby="spaces" aria-describedby="space-subtitle" data={tableData} columns={columns} />
-                </Table.Container>
-            )}
-            <AddSpace
-                isOpen={isOpen}
-                setIsOpen={(open: boolean) => {
-                    setIsOpen(open);
-                    refetch();
-                }}
-            />
-        </Container>
+        <>
+            <div className="py-2.5 md:mx-8">
+                <div className="mb-8 flex justify-between">
+                    <div>
+                        <h1 className="text-xl font-bold tracking-tight text-gray-900 dark:text-white">
+                            Your Spaces
+                        </h1>
+                        <h6 className="text-sm font-bold tracking-tight text-gray-500 dark:text-white">Organize your content across spaces</h6>
+                    </div>
+                    <div>
+                        <Button size={"sm"} onClick={() => {
+                            setIsOpen(true);
+                        }}>Add Space +</Button>
+                    </div>
+                </div>
+                <div className="flex flex-col items-center">
+                    {
+                        loading ? <Spinner aria-label="loading data" size="xl" /> : null
+                    }
+                </div>
+                <div className="flex flex-wrap space-x-4">
+                    {
+                        !loading && tableData.length ? (
+                            tableData.map((item, i) => {
+                                return (
+                                    <Card href={`/space/${item.slug}`} className="w-48" key={i}>
+                                        <div className="flex flex-col items-center">
+                                            <Avatar size="lg" placeholderInitials={item.name.charAt(0).toUpperCase()} />
+                                        </div>
+                                        <div className="text-center">
+                                            <h2 className="text-lg font-bold tracking-tight text-gray-900 dark:text-white">
+                                                {item.name}
+                                            </h2>
+                                            <p className="font-normal text-gray-700 dark:text-gray-400">
+                                                About the space
+                                            </p>
+                                        </div>
+                                    </Card>
+                                )
+                            })
+                        ) : null
+                    }
+                </div>
+                <AddSpace
+                    isOpen={isOpen}
+                    setIsOpen={(open: boolean) => {
+                        setIsOpen(open);
+                        refetch();
+                    }}
+                />
+            </div>
+        </>
     );
 }

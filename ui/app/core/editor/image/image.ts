@@ -6,14 +6,18 @@ export const customImage = Image.extend({
             const container = document.createElement("div");
             container.setAttribute("class", "image-wrapper");
             const imageContainer = document.createElement("div");
-            imageContainer.setAttribute("class", "image-container");
+            imageContainer.setAttribute("class", "image-container px-2");
+            imageContainer.setAttribute("contentEditable", "true");
             container.appendChild(imageContainer);
 
             container.addEventListener('click', evemt => {
                 console.log("clicked over image");
             });
 
-            const content = document.createElement('div')
+            const content = document.createElement('div');
+            if (editor.isEditable) {
+                content.setAttribute("class", "image-actual-container");
+            }
             imageContainer.append(content);
 
             const { src, alt, title } = HTMLAttributes;
@@ -21,10 +25,11 @@ export const customImage = Image.extend({
             const image = document.createElement('img');
             image.src = src;
             image.alt = alt;
+            image.classList.add("rounded");
             const subTitle = document.createElement("h6")
             subTitle.innerText = title || "image";
             content.appendChild(image);
-            content.appendChild(subTitle);
+            imageContainer.appendChild(subTitle);
             container.style.maxWidth = "100%";
             image.style.objectFit = "contain";
 

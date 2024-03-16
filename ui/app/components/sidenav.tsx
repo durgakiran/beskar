@@ -1,14 +1,15 @@
 'use client'
-import { useLazyQuery, useMutation, useQuery } from "@apollo/client";
+import { useLazyQuery, useMutation } from "@apollo/client";
 import { client } from "@http";
-import { ActionList, ActionMenu, Box, Heading, IconButton, NavList, Spinner } from "@primer/react";
 import { GRAPHQL_DELETE_PAGE, GRAPHQL_GET_PAGES } from "@queries/space";
-import { HomeIcon, GearIcon, PlusIcon, KebabHorizontalIcon, TrashIcon, PencilIcon } from '@primer/octicons-react';
 import { useCallback, useEffect, useState } from "react";
 import { useRouter, useSelectedLayoutSegment } from "next/navigation";
 import AddPage from "./addPage";
-import Link from "next/link";
 import { useUser } from "app/core/auth/useKeycloak";
+import { Dropdown, Sidebar, Spinner } from "flowbite-react";
+import { HiHome, HiDocumentText, HiTrash, HiOutlinePencil, HiOutlineDotsHorizontal, HiOutlineMinusSm, HiOutlinePlusSm, HiCog } from 'react-icons/hi';
+import { twMerge } from 'tailwind-merge';
+import Link from "next/link";
 
 
 interface Docs {
@@ -45,7 +46,7 @@ export default function SideNav(param: Props) {
     const [isOpen, setIsOpen] = useState(false);
     const router = useRouter();
     const [getPages, { data, loading, error, refetch }] = useLazyQuery<SpaceData>(GRAPHQL_GET_PAGES, { client: client, variables: { id: param.id } });
-    const [mutateFunction] = useMutation(GRAPHQL_DELETE_PAGE, { client: client} )
+    const [mutateFunction] = useMutation(GRAPHQL_DELETE_PAGE, { client: client })
     const pathName = useSelectedLayoutSegment();
 
     useEffect(() => {
@@ -79,72 +80,56 @@ export default function SideNav(param: Props) {
 
 
     if (loading || user.loading) {
-        return <Spinner size="small" />;
+        return <Spinner size="lg" />;
     }
 
-    
+
     if (data) {
         return (
             <>
-                <Heading as="h2" id="workflows-heading" sx={{fontSize: 2}}>
-                    {data.core_space_url[0].space.name.toUpperCase()}
-                </Heading>
-                <NavList aria-labelledby="workflows-heading" >
-                    <Box sx={{pt: 2, pb: 4}}>
-                        <NavList.Item  href={`/space/${param.id}`} aria-current={activeItem(null)}>
-                            <NavList.LeadingVisual>
-                                <HomeIcon />
-                            </NavList.LeadingVisual>
-                            overview
-                        </NavList.Item>
-                        <NavList.Item href={`/space/${param.id}/settings`} aria-current={activeItem('settings')}>
-                            <NavList.LeadingVisual>
-                                <GearIcon />
-                            </NavList.LeadingVisual>
-                            settings
-                        </NavList.Item>
-                    </Box>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxSizing: 'border-box', marginRight: '8px', paddingRight: '8px' }} >
-                        <Heading as="h3" id="content-heading" sx={{fontSize: 1}}>
-                            Content
-                        </Heading>
-                        <IconButton onClick={() => setIsOpen(true)} variant="invisible"  aria-label="Add a page" size="small" icon={PlusIcon} />
-                    </Box>
-                    <NavList.Divider></NavList.Divider>
-                    <Box sx={{pt: 2, pb: 4}}>
-                        {
-                            data.core_space_url[0].space.pages.map((value, i) => {
-                                if (value.docs[0]) {
-                                    return (
-                                        <NavList.Item as={Link} role="link" sx={{lineHeight: '24px'}} key={i} href={`/space/${param.id}/view/${value.id}`}>
-                                            {value.docs[0].title}
-                                            <NavList.TrailingVisual>
-                                                <Box as="div" onClick={(ev) => {ev.stopPropagation(); ev.preventDefault();}} sx={{ display: 'flex', alignItems: 'center', zIndex: 100 }}>
-                                                    <ActionMenu>
-                                                        <ActionMenu.Button variant="invisible" size="small" icon={KebabHorizontalIcon}>
-                                                            <></>
-                                                        </ActionMenu.Button>
-                                                        <ActionMenu.Overlay sx={{paddingTop: '1rem', left: 0, top: 0, paddingBottom: '1rem'}} style={{ left: 0 }} width="small">
-                                                            <ActionList.Item onClick={() => editePage(value.id)}>
-                                                                Edit
-                                                                <ActionList.TrailingVisual><PencilIcon /></ActionList.TrailingVisual>
-                                                            </ActionList.Item>
-                                                            <ActionList.Item onClick={() => deletePage(value.id)} variant="danger">
-                                                                Delete
-                                                                <ActionList.TrailingVisual><TrashIcon /></ActionList.TrailingVisual>
-                                                            </ActionList.Item>
-                                                        </ActionMenu.Overlay>
-                                                    </ActionMenu>
-                                                    <IconButton variant="invisible" size="small" icon={PlusIcon} aria-label="add child page" />
-                                                </Box>
-                                            </NavList.TrailingVisual>
-                                        </NavList.Item>
-                                    )
+                <Sidebar aria-label="Content navigation">
+                    <Sidebar.Items>
+                        <Sidebar.ItemGroup>
+                            <Sidebar.Item href={`/space/${param.id}`} icon={HiHome}>
+                                Overview
+                            </Sidebar.Item>
+                            <Sidebar.Item href={`/space/${param.id}/settings`} icon={HiCog}>
+                                Settings
+                            </Sidebar.Item>
+                        </Sidebar.ItemGroup>
+                        <Sidebar.ItemGroup>
+                            <Sidebar.Collapse
+                                icon={HiDocumentText}
+                                label="Content"
+                                open
+                                renderChevronIcon={(theme, open) => {
+                                    const IconComponent = open ? HiOutlineMinusSm : HiOutlinePlusSm;
+
+                                    return <IconComponent aria-hidden className={twMerge(theme.label.icon.open[open ? 'on' : 'off'])} />;
+                                }}
+                            >
+                                { 
+                                    data.core_space_url[0].space.pages.map((value, i) => {
+                                        if (value.docs[0]) {
+                                            return (
+                                                <li className="py-2 pl-4 flex flex-nowrap border-r-2 hover:bg-gray-100 active:bg-gray-100" key={i}>
+                                                    <Link href={`/space/${param.id}/view/${value.id}`}>{value.docs[0].title}</Link>
+                                                    <div className="relative">
+                                                        <Dropdown className="bg-white" label={<HiOutlineDotsHorizontal size="24" />} inline aria-label="options" >
+                                                            <Dropdown.Item onClick={() => editePage(value.id)} icon={HiOutlinePencil}>Edit</Dropdown.Item>
+                                                            <Dropdown.Item icon={HiTrash}>Delete</Dropdown.Item>
+                                                        </Dropdown>
+                                                    </div>
+                                                </li>
+                                            );
+                                        }
+                                        return null;
+                                    })
                                 }
-                            })
-                        }
-                    </Box>
-                </NavList>
+                            </Sidebar.Collapse>
+                        </Sidebar.ItemGroup>
+                    </Sidebar.Items>
+                </Sidebar>
                 <AddPage isOpen={isOpen} setIsOpen={setIsOpen} spaceId={data.core_space_url[0].space.id} />
             </>
         );

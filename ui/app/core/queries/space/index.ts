@@ -13,6 +13,17 @@ export const GRAPHQL_GET_SPACES = gql`
     }
 `;
 
+export const GRAPHQL_GET_PAGE_BREADCRUM = gql`
+    query GetPageBreadCrum($id: bigint = "$id") {
+        core_space_url(where: {id: {_eq: $id}}) {
+            id
+            space {
+                name
+            }
+        }
+    }
+`;
+
 export const GRAPHQL_ADD_SPACE = gql`
     mutation InsertSpace($name: String) {
         insert_core_space(objects: {name: $name}) {

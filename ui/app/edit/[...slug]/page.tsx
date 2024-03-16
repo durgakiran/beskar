@@ -1,14 +1,15 @@
 "use client";
-import { useLazyQuery, useQuery } from "@apollo/client";
+import { useLazyQuery } from "@apollo/client";
 import { TipTap } from "@editor";
 import { EditorContext } from "@editor/context/editorContext";
 import { Editorheader } from "@editor/header";
 import TextArea from "@editor/textarea/TextArea";
 import { client } from "@http";
-import { Box, PageLayout, Spinner } from "@primer/react";
+import { Box, PageLayout } from "@primer/react";
 import { GRAPHQL_GET_PAGE } from "@queries/space";
 import { Editor } from "@tiptap/react";
 import { useUser } from "app/core/auth/useKeycloak";
+import { Spinner } from "flowbite-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import "./styles.css";
@@ -67,9 +68,9 @@ export default function Page({ params }: { params: { slug: string[] } }) {
 
 
     if (loading || user.loading) {
-        <Box sx={{ textAlign: "center" }}>
-            <Spinner size="medium" />
-        </Box>;
+        <div className="text-center">
+            <Spinner size="lg" />
+        </div>;
     }
 
     return (

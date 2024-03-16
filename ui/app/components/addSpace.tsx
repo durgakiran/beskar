@@ -1,9 +1,10 @@
 'use client'
 import { useMutation } from "@apollo/client";
 import { client } from "@http";
-import { Box, Button, Dialog, FormControl, Spinner, TextInput } from "@primer/react";
+import { Box, Dialog, FormControl, Spinner } from "@primer/react";
 import { GRAPHQL_ADD_SPACE } from "@queries/space";
-import { MouseEvent, useCallback, useState } from "react";
+import { Button, Label, Modal, TextInput } from "flowbite-react";
+import { MouseEvent, useCallback, useRef, useState } from "react";
 import styled from 'styled-components';
 
 
@@ -26,6 +27,7 @@ interface IAddSpace {
 export default function AddSpace({ isOpen, setIsOpen }: IAddSpace) {
     const [name, setName] = useState('');
     const [mutateFunction, { data, loading, error }] = useMutation(GRAPHQL_ADD_SPACE, { client: client });
+    const spaceNameRef = useRef();
 
 
     const onDialogClose = useCallback(() => {
@@ -36,28 +38,37 @@ export default function AddSpace({ isOpen, setIsOpen }: IAddSpace) {
         setName(value);
     }, []);
 
-    const handleSubmit  = async (ev: MouseEvent<HTMLButtonElement>) => {
+    const handleSubmit = async (ev: MouseEvent<HTMLButtonElement>) => {
         ev.preventDefault();
         await mutateFunction({ variables: { name: name } });
         setIsOpen(false);
     };
 
     return (
-        <Dialog isOpen={isOpen} width="small" onDismiss={onDialogClose}>
-            <Dialog.Header>
-                Add Space
-            </Dialog.Header>
-            <Box as="form" p="3">
-                <FormControl>
-                    <FormControl.Label>Name of space</FormControl.Label>
-                    <TextInput value={name} onInput={(ev) => handleInput((ev.target as HTMLInputElement).value)} placeholder="Enter space name..." />
-                </FormControl>
-                <Footer>
-                    <Button onClick={handleSubmit} disabled={loading}>
-                        {loading ? <Spinner size="small" /> : <>Add</> }
-                    </Button>
-                </Footer>
-            </Box>
-        </Dialog>
+        <>
+            <Modal dismissible show={isOpen} onClose={() => onDialogClose()} initialFocus={spaceNameRef}>
+                <Modal.Header>Create new space.</Modal.Header>
+                <Modal.Body>
+                    <div>
+                        <div>
+                            <div className="mb-2 block">
+                                <Label htmlFor="name" value="Space name" />
+                            </div>
+                            <TextInput
+                                id="name"
+                                placeholder="Engineering"
+                                value={name}
+                                ref={spaceNameRef}
+                                onChange={(event) => setName(event.target.value)}
+                                required
+                            />
+                        </div>
+                        <div className="w-full mt-6 flex-row-reverse">
+                            <Button onClick={handleSubmit} isProcessing={loading} disabled={loading}>create</Button>
+                        </div>
+                    </div>
+                </Modal.Body>
+            </Modal>
+        </>
     )
 }
