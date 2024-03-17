@@ -25,7 +25,7 @@ import { BoldIcon, StrikethroughIcon, ItalicIcon } from "@primer/octicons-react"
 import "./styles.css";
 import { ModifiedUnderlineIcon } from "./Button/modifiedIconButton";
 import { uploadImageData } from "../http/uploadImageData";
-import { customImage } from "./image/image";
+import { customImage, reactImage } from "./image/image";
 
 const extensions = [
     StarterKit.configure({
@@ -54,7 +54,8 @@ const extensions = [
     }),
     CodeBlock,
     Underline,
-    customImage
+    customImage,
+    reactImage
 ];
 
 interface TipTapProps {

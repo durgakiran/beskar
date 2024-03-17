@@ -1,20 +1,16 @@
 "use client";
-import Header from "@components/menuBar";
-import { BaseStyles, ThemeProvider, theme } from "@primer/react";
-import KeycloakProvider from "app/core/auth/KeycloakProvider";
-import UserProvider from "app/core/auth/UserProvider";
+import { Spinner } from "flowbite-react";
+import dynamic from "next/dynamic";
+
+const LayoutPage = dynamic(() => import("@components/spaceLayout"), {
+    ssr: false,
+    loading: () => <Spinner />
+})
 
 export default function Layout({ children }: { children: React.ReactNode }) {
     return (
-        <KeycloakProvider>
-            <UserProvider>
-                <ThemeProvider>
-                    <BaseStyles>
-                        <Header />
-                        {children}
-                    </BaseStyles>
-                </ThemeProvider>
-            </UserProvider>
-        </KeycloakProvider>
+        <LayoutPage>
+            {children}
+        </LayoutPage>
     );
 }

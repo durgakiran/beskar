@@ -1,22 +1,19 @@
 'use client'
 
 import SideNav from "@components/sidenav"
-import { PageLayout } from "@primer/react"
 
 
-export default function Layout({children, params}: {children: React.ReactNode, params: { spaceId: string }}) {
+export default function Layout({ children, params }: { children: React.ReactNode, params: { spaceId: string } }) {
 
     return (
-        <>
-            <PageLayout containerWidth="full">
-                <PageLayout.Pane resizable position="start">
-                    <SideNav id={params.spaceId}/>
-                </PageLayout.Pane>
-                <PageLayout.Content>
-                    {children}
-                </PageLayout.Content>
-            </PageLayout>
-        </>
+        <div className="flex space-x-4">
+            <div>
+                <SideNav id={params.spaceId} />
+            </div>
+            <div className="grow">
+                {children}
+            </div>
+        </div>
     )
-    
+
 }
