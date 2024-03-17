@@ -28,6 +28,25 @@ html {
     margin-right: 4rem;
 }
 
+.mt-2 {
+    margin-top: 0.5rem;
+}
+
+.my-4 {
+    margin-top: 1rem;
+    margin-bottom: 1rem;
+}
+
+.my-2 {
+    margin-top: 0.5rem;
+    margin-bottom: 0.5rem;
+}
+
+.mx-2 {
+    margin-left: 0.5rem;
+    margin-right: 0.5rem;
+}
+
 .text-3xl {
     font-size: 1.875rem/* 30px */;
     line-height: 2.25rem/* 36px */;
@@ -55,4 +74,33 @@ html {
     --tw-border-opacity: 1;
     border-color: rgb(104 117 245 / var(--tw-border-opacity));
     border-width: 2px;
+}
+
+.img-alt[contentEditable=true]:empty:before {
+    content: attr(data-placeholder);
+    pointer-events: none;
+    display: block; /* For Firefox */
+}
+
+.border-sky-400 {
+    --tw-border-opacity: 1;
+    border-color: rgb(56 189 248 / var(--tw-border-opacity));
+}
+
+
+.m-2 {
+    margin: 0.5rem/* 8px */;
+}
+
+.focus-visible\:outline-none:focus-visible {
+    outline: 2px solid transparent;
+    outline-offset: 2px;
+}
+
+.caret-teal-500 {
+    caret-color: #0694A2;
+}
+
+.m-auto {
+    margin: auto;
 }

@@ -1,43 +1,51 @@
 import Image from "@tiptap/extension-image"
+import { mergeAttributes, Node, ReactNodeViewRenderer } from "@tiptap/react";
+import ImageView from "./imageView";
+
+export const reactImage = Node.create({
+    name: "imageViewer",
+    group: "block",
+    content: "inline*",
+    parseHTML() {
+        return [
+            {
+                tag: "ImageView",
+            }
+        ]
+    },
+    addKeyboardShortcuts() {
+        return {
+            'Mod-Enter': () => {
+                return this.editor.chain().insertContentAt(this.editor.state.selection.head, { type: this.type.name }).focus().run()
+            },
+        }
+    },
+
+    renderHTML({ HTMLAttributes }) {
+        return ['ImageView', mergeAttributes(HTMLAttributes), 0]
+    },
+
+    addNodeView() {
+        return ReactNodeViewRenderer(ImageView)
+    },
+})
 
 export const customImage = Image.extend({
+    content: "inline*",
+
+    parseHTML() {
+        return [
+            {
+                tag: "ImageView",
+            }
+        ]
+    },
+
+    renderHTML({ HTMLAttributes }) {
+        return ['ImageView', mergeAttributes(HTMLAttributes), 0]
+    },
+
     addNodeView() {
-        return ({ node, HTMLAttributes, getPos, editor }) => {
-            const container = document.createElement("div");
-            container.setAttribute("class", "image-wrapper");
-            const imageContainer = document.createElement("div");
-            imageContainer.setAttribute("class", "image-container px-2");
-            imageContainer.setAttribute("contentEditable", "true");
-            container.appendChild(imageContainer);
-
-            container.addEventListener('click', evemt => {
-                console.log("clicked over image");
-            });
-
-            const content = document.createElement('div');
-            if (editor.isEditable) {
-                content.setAttribute("class", "image-actual-container");
-            }
-            imageContainer.append(content);
-
-            const { src, alt, title } = HTMLAttributes;
-
-            const image = document.createElement('img');
-            image.src = src;
-            image.alt = alt;
-            image.classList.add("rounded");
-            const subTitle = document.createElement("h6")
-            subTitle.innerText = title || "image";
-            content.appendChild(image);
-            imageContainer.appendChild(subTitle);
-            container.style.maxWidth = "100%";
-            image.style.objectFit = "contain";
-
-
-            return {
-                dom: container,
-                contentDOM: content,
-            }
-        }
+        return ReactNodeViewRenderer(ImageView)
     },
 });
