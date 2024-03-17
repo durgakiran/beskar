@@ -23,9 +23,9 @@ export default function ImageView(props) {
 
     return (
         <NodeViewWrapper>
-            <div className="img-container rounded m-auto my-4 relative" contentEditable={true} style={{ width: "760px", height: "400px" }}>
+            <div className="img-container rounded m-auto my-4 relative" contentEditable={props.editor.isEditable} style={{ width: "760px", height: "400px" }}>
                 <div className="img-wrapper px-2 w-full h-full" onFocus={handleImageContainerClick}>
-                    <div className="focus-visible:outline-none caret-teal-500" contentEditable={true}>
+                    <div className="focus-visible:outline-none caret-teal-500" contentEditable={props.editor.isEditable}>
                         <div className="img-content px-2 w-full h-full" >
                             <img className="object-cover px-2 box-border rounded" src={props.node.attrs.src} alt={props.node.attrs.alt} />
                         </div>
@@ -35,7 +35,7 @@ export default function ImageView(props) {
                     <div
                         onKeyDown={handleEnter}
                         onBlur={handleInput}
-                        contentEditable={true}
+                        contentEditable={props.editor.isEditable}
                         data-placeholder="Add a caption"
                         className="img-alt opacity-10 text-center focus-visible:outline-none p-2 m-2 text-gray-500">
                         {props.node.attrs.alt}
