@@ -1,0 +1,65 @@
+table:
+  name: doc
+  schema: core
+object_relationships:
+  - name: page
+    using:
+      foreign_key_constraint_on: page_id
+insert_permissions:
+  - role: user
+    permission:
+      check: {}
+      set:
+        owner: x-hasura-User-Id
+      columns:
+        - id
+        - page_id
+        - data
+        - draft
+        - title
+        - date_updated
+        - version
+        - owner
+    comment: ""
+select_permissions:
+  - role: user
+    permission:
+      columns:
+        - id
+        - page_id
+        - data
+        - draft
+        - title
+        - date_updated
+        - version
+        - owner
+      filter:
+        _or:
+          - _and:
+              - owner:
+                  _eq: X-Hasura-User-Id
+              - draft:
+                  _eq: 1
+          - draft:
+              _eq: 0
+    comment: ""
+update_permissions:
+  - role: user
+    permission:
+      columns:
+        - id
+        - page_id
+        - data
+        - draft
+        - title
+        - date_updated
+        - version
+        - owner
+      filter: {}
+      check: {}
+    comment: ""
+delete_permissions:
+  - role: user
+    permission:
+      filter: {}
+    comment: ""
