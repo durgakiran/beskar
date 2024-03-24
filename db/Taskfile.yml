@@ -1,10 +1,55 @@
 version: '3'
 
 tasks:
+  temp:
+    cmds:
+      - echo "creating temporary yml file"
+      - rm -f liquibase-temp.properties
+      - touch liquibase-temp.properties
+      - echo {{.File}}
+      - cp {{.File}} liquibase-temp.properties
+
+  replace:
+    cmds:
+      - echo "replacing parameters"
+      - echo "***replace host***"
+      - sed -i "s/@DB_HOST@/{{.DB_HOST}}/" ./liquibase-temp.properties
+      - sed -i "s/@DB_ROOT_PASS@/{{.DB_ROOT_PASS}}/" ./liquibase-temp.properties
+      - sed -i "s/@DB_ROOT_USER@/{{.DB_ROOT_USER}}/" ./liquibase-temp.properties
+      - sed -i "s/@DB_ROOT@/{{.DB_ROOT}}/" ./liquibase-temp.properties
+      - sed -i "s/@DB_BESKAR_ADMIN_USER@/{{.DB_BESKAR_ADMIN_USER}}/" ./liquibase-temp.properties
+      - sed -i "s/@DB_BESKAR_ADMIN_USER_PWD@/{{.DB_BESKAR_ADMIN_USER_PWD}}/" ./liquibase-temp.properties
+      - sed -i "s/@DB_BESKAR_APP_USER@/{{.DB_BESKAR_APP_USER}}/" ./liquibase-temp.properties
+      - sed -i "s/@DB_BESKAR_APP_USER_PWD@/{{.DB_BESKAR_APP_USER_PWD}}/" ./liquibase-temp.properties
+    silent: true
+    vars:
+      PARAMETERS:
+        sh: aws ssm get-parameter --name beskar-dev-parameters --with-decryption | jq '.Parameter.Value | fromjson'
+      DB_HOST:
+        sh: echo '{{.PARAMETERS}}' | jq -r '.DB_HOST'
+      DB_ROOT_PASS:
+        sh: echo '{{.PARAMETERS}}' | jq -r '.DB_ROOT_PASS'
+      DB_ROOT_USER:
+        sh: echo '{{.PARAMETERS}}' | jq -r '.DB_ROOT_USER'
+      DB_ROOT:
+        sh: echo '{{.PARAMETERS}}' | jq -r '.DB_ROOT'
+      DB_BESKAR_ADMIN_USER:
+        sh: echo '{{.PARAMETERS}}' | jq -r '.DB_BESKAR_ADMIN_USER'
+      DB_BESKAR_ADMIN_USER_PWD:
+        sh: echo '{{.PARAMETERS}}' | jq -r '.DB_BESKAR_ADMIN_USER_PWD'
+      DB_BESKAR_APP_USER:
+        sh: echo '{{.PARAMETERS}}' | jq -r '.DB_BESKAR_APP_USER'
+      DB_BESKAR_APP_USER_PWD:
+        sh: echo '{{.PARAMETERS}}' | jq -r '.DB_BESKAR_APP_USER_PWD'
+
   init:
     cmds:
       - echo "running database init"
-      - liquibase  --defaultsFile=liquibase.properties update
+      - task temp
+      - task replace
+      - liquibase --defaultsFile=liquibase-temp.properties update
+    env:
+      File: './liquibase.properties'
     dir: ./init
 
   beskar-init:
@@ -15,16 +60,24 @@ tasks:
     dir: ./beskar-init
   
   beskar:
-    deps: [beskar-init]
     cmds:
       - echo "running beskar"
-      - liquibase  --defaultsFile=liquibase.properties update
+      - task init
+      - task temp
+      - task replace
+      - liquibase --defaultsFile=liquibase-temp.properties update
+    env:
+      File: './liquibase.properties'
     dir: ./beskar
 
   auth-init:
     cmds:
       - echo "running init for auth daabase"
-      - liquibase  --defaultsFile=auth.properties update
+      - task temp
+      - task replace
+      - liquibase --defaultsFile=liquibase-temp.properties update
+    env:
+      File: './auth.properties'
     dir: ./init
   
   liquibase-update:

@@ -10,3 +10,4 @@ uilocal
 **/**/.gradle
 **/**/build
 uploads
+*-temp.*
