@@ -9,13 +9,14 @@ DIRECTORY=$PWD
 WD=$DIRECTORY/docker/database
 LQB=liquibasebin
 
-# bring up databases
-docker compose -f $WD/db.yml -p beskar-db up -d
+echo "running from 📂 $DIRECTORY"
+
+# java -version
 
 # download liquibase
 if [ ! -d $WD/$LQB ]
 then
-    echo "liquibase does not exist, downloading ..."
+    echo "liquibase does not exist, downloading ... ⚙️"
     mkdir $WD/$LQB
     curl -kLSs https://github.com/liquibase/liquibase/releases/download/v4.27.0/liquibase-4.27.0.zip -o $WD/$LQB/liquibase.zip
     unzip $WD/$LQB/liquibase.zip -d $WD/$LQB
@@ -24,13 +25,13 @@ fi
 LQ=$WD/$LQB/liquibase # liquibase command
 
 # check if postgres is up and healthy
-until pg_isready -h localhost -p 5432
+until pg_isready -h postgres -p 5432
 do
-    echo "waiting for postgres container to be rady..."
+    echo "waiting for postgres container to be ready... 🙁"
     sleep 1
 done
 
-echo "postgres is ready, running migrations..."
+echo "postgres is ready, running migrations... 🥳"
 DB_HOST=postgres
 DB_PORT=5432
 DB_ROOT=postgres
@@ -78,8 +79,8 @@ $LQ --defaultsFile=liquibase-temp.properties update
 # run beskar scripts
 BESKAR_DIRECTORY=$DIRECTORY/db/beskar
 cd $BESKAR_DIRECTORY
-create_temp_liquibase_file $BESKAR_DIRECTORY
-copy_data_to_liquibaes_prop_file $BESKAR_DIRECTORY liquibase.properties
+create_temp_liquibase_file $BESKAR_DIRECTORY liquibase.properties
+copy_data_to_liquibaes_prop_file $BESKAR_DIRECTORY
 $LQ --defaultsFile=liquibase-temp.properties update
 
 echo "database initialised with schema 🔥"
