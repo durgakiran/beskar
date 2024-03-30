@@ -8,3 +8,8 @@
 - docker compose
 - liquibase
 - task-go
+
+
+
+powershell command to attach local volume
+# docker run -d --name devtest -v ${PWD}:/app  build-db:latest

@@ -11,3 +11,4 @@ uilocal
 **/**/build
 uploads
 *-temp.*
+liquibasebin
