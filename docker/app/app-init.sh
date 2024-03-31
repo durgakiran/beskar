@@ -20,22 +20,28 @@ then
 fi
 
 KQ=$WD/$KQD/keycloak-24.0.2/bin/kcadm.sh
+REALM=devbeskarrealm
+CLIENT=besarappclient
 
 echo create a realm
-$KQ get realms --no-config --server http://shield:8080 --realm master --user admin --password admin | jq '.[] | { name: .realm }' | grep devbeskarrealm | grep -q . \
+$KQ get realms --no-config --server http://shield:8080 --realm master --user admin --password admin | jq '.[] | { name: .realm }' | grep $REALM | grep -q . \
     && echo realm found 😁 \
-    || $KQ create realms --no-config -s realm=devbeskarrealm -s enabled=true -o --server http://shield:8080 --realm master --user admin --password admin
+    || $KQ create realms --no-config -s realm=$REALM -s enabled=true -o --server http://shield:8080 --realm master --user admin --password admin
 
 
 echo create a client in realm
-$KQ get clients -r devbeskarrealm  --no-config --server http://shield:8080 --realm master --user admin --password admin | jq '.[] | { name: .clientId }' | grep besarappclient | grep -q . \
+$KQ get clients -r $REALM  --no-config --server http://shield:8080 --realm master --user admin --password admin | jq '.[] | { name: .clientId }' | grep $CLIENT | grep -q . \
     && echo client found 😁 \
-    || $KQ create clients --no-config --server http://shield:8080  --realm master --user admin --password admin -r devbeskarrealm -s clientId=besarappclient -s enabled=true
+    || $KQ create clients --no-config --server http://shield:8080  --realm master --user admin --password admin -r $REALM -s clientId=$CLIENT -s enabled=true -s 'redirectUris=["http://localhost:8080/*", "http://localhost:3000/*"]' -s 'webOrigins=["http://localhost:8080", "http://localhost:3000"]' -s publicClient=true
 
 echo create a IDP with github
-$KQ get identity-provider/instances -r devbeskarrealm --fields alias,providerId,enabled --no-config --server http://shield:8080  --realm master --user admin --password admin | jq '.[] | { name: .alias }' | grep github | grep -q . \
+$KQ get identity-provider/instances -r $REALM --fields alias,providerId,enabled --no-config --server http://shield:8080  --realm master --user admin --password admin | jq '.[] | { name: .alias }' | grep github | grep -q . \
     && echo IDP found 😁 \
-    || $KQ create identity-provider/instances --no-config --server http://shield:8080  --realm master --user admin --password admin -r devbeskarrealm -s alias=github -s providerId=github -s enabled=true  -s 'config.useJwksUrl="true"' -s config.clientId=$GITHUB_CLIENT_ID -s config.clientSecret=$GITHUB_CLIENT_SECRET
+    || $KQ create identity-provider/instances --no-config --server http://shield:8080  --realm master --user admin --password admin -r $REALM -s alias=github -s providerId=github -s enabled=true  -s 'config.useJwksUrl="true"' -s config.clientId=$GITHUB_CLIENT_ID -s config.clientSecret=$GITHUB_CLIENT_SECRET
+
+
+# update client with redirect uris
+$KQ update clients --no-config --server http://shield:8080  --realm master --user admin --password admin 
 
 # check if postgres is up and healthy
 # until pg_isready -h localhost -p 5432
