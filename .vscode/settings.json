@@ -4,5 +4,8 @@
     "java.checkstyle.properties": {
         "basedir": "${workspaceFolder}"
     },
-    "java.checkstyle.version": "10.13.0"
+    "java.checkstyle.version": "10.13.0",
+    "cSpell.words": [
+        "keycloak"
+    ]
 }
