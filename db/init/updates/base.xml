@@ -54,7 +54,7 @@
             <rollback> <!--don't do anything --> </rollback>
         </changeSet>
 
-        <changeSet id="${database_name}-grant-permission-1" author="VHINDMA">
+        <changeSet id="${database_name}-grant-permission-1" author="kiran kumar">
             <preConditions>
                 <sqlCheck expectedResult="1">
                     SELECT count(1) FROM pg_roles WHERE rolname = '${admin_user}';
@@ -87,7 +87,7 @@
             <rollback> <!--don't do anything --> </rollback>
         </changeSet>
         
-        <changeSet id="${database_name}-grant-permission-2" author="VHINDMA">
+        <changeSet id="${database_name}-grant-permission-2" author="kiran kumar">
             <preConditions>
                 <sqlCheck expectedResult="1">
                     SELECT count(1) FROM pg_roles WHERE rolname = '${admin_user}';
