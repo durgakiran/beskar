@@ -1,0 +1,68 @@
+table:
+  name: space
+  schema: core
+array_relationships:
+  - name: pages
+    using:
+      foreign_key_constraint_on:
+        column: space_id
+        table:
+          name: page
+          schema: core
+  - name: space_urls
+    using:
+      foreign_key_constraint_on:
+        column: space_id
+        table:
+          name: space_url
+          schema: core
+insert_permissions:
+  - role: user
+    permission:
+      check:
+        user_id:
+          _eq: X-Hasura-User-Id
+      set:
+        user_id: x-hasura-User-Id
+      columns:
+        - date_created
+        - date_updated
+        - id
+        - name
+        - user_id
+    comment: ""
+select_permissions:
+  - role: user
+    permission:
+      columns:
+        - date_created
+        - date_updated
+        - id
+        - name
+        - user_id
+      filter:
+        user_id:
+          _eq: X-Hasura-User-Id
+      allow_aggregations: true
+    comment: ""
+update_permissions:
+  - role: user
+    permission:
+      columns:
+        - name
+        - date_created
+        - date_updated
+        - id
+        - user_id
+      filter:
+        user_id:
+          _eq: X-Hasura-User-Id
+      check: null
+    comment: ""
+delete_permissions:
+  - role: user
+    permission:
+      filter:
+        user_id:
+          _eq: X-Hasura-User-Id
+    comment: ""

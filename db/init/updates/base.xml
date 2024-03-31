@@ -69,6 +69,23 @@
             </sql>
             <rollback> <!--don't do anything --> </rollback>
         </changeSet>
+
+        <changeSet id="${database_name}-grant-schema-permission-2" runOnChange="true" author="Kiran kumar">
+            <preConditions>
+                <sqlCheck expectedResult="1">
+                    SELECT count(1) FROM pg_roles WHERE rolname = '${admin_user}';
+                </sqlCheck>
+                <sqlCheck expectedResult="1">
+                    SELECT COUNT(1) FROM pg_catalog.pg_database WHERE lower(datname) = lower('${database_name}')
+                </sqlCheck>
+            </preConditions>
+            <comment>grant all on schema public to ${admin_user}</comment>
+            <executeCommand executable="bash" >
+                <arg value="-c"/>
+                <arg value="export PGPASSWORD=&quot;${postgres_user_pwd}&quot;; psql -h ${db_host} -p ${db_port} -U ${postgres_user} -d ${database_name} -c &quot;GRANT USAGE, CREATE ON SCHEMA public TO ${admin_user}&quot;"/>
+            </executeCommand>
+            <rollback> <!--don't do anything --> </rollback>
+        </changeSet>
         
         <changeSet id="${database_name}-grant-permission-2" author="VHINDMA">
             <preConditions>

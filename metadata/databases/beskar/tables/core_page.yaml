@@ -1,0 +1,62 @@
+table:
+  name: page
+  schema: core
+object_relationships:
+  - name: space
+    using:
+      foreign_key_constraint_on: space_id
+array_relationships:
+  - name: docs
+    using:
+      foreign_key_constraint_on:
+        column: page_id
+        table:
+          name: doc
+          schema: core
+insert_permissions:
+  - role: user
+    permission:
+      check: {}
+      set:
+        owner_id: x-hasura-User-Id
+      columns:
+        - id
+        - parent_id
+        - draft
+        - status
+        - date_created
+        - owner_id
+        - space_id
+    comment: ""
+select_permissions:
+  - role: user
+    permission:
+      columns:
+        - id
+        - parent_id
+        - draft
+        - status
+        - date_created
+        - owner_id
+        - space_id
+      filter: {}
+    comment: ""
+update_permissions:
+  - role: user
+    permission:
+      columns:
+        - id
+        - parent_id
+        - draft
+        - status
+        - date_created
+        - owner_id
+        - space_id
+      filter: {}
+      check: null
+    comment: ""
+delete_permissions:
+  - role: user
+    permission:
+      filter: {}
+    comment: ""

@@ -1,0 +1,55 @@
+table:
+  name: space_url
+  schema: core
+object_relationships:
+  - name: space
+    using:
+      foreign_key_constraint_on: space_id
+insert_permissions:
+  - role: user
+    permission:
+      check:
+        space:
+          user_id:
+            _eq: X-Hasura-User-Id
+      columns:
+        - id
+        - slug
+        - date_updated
+        - space_id
+    comment: ""
+select_permissions:
+  - role: user
+    permission:
+      columns:
+        - id
+        - slug
+        - date_updated
+        - space_id
+      filter:
+        space:
+          user_id:
+            _eq: X-Hasura-User-Id
+    comment: ""
+update_permissions:
+  - role: user
+    permission:
+      columns:
+        - id
+        - slug
+        - date_updated
+        - space_id
+      filter:
+        space:
+          user_id:
+            _eq: X-Hasura-User-Id
+      check: null
+    comment: ""
+delete_permissions:
+  - role: user
+    permission:
+      filter:
+        space:
+          user_id:
+            _eq: X-Hasura-User-Id
+    comment: ""
