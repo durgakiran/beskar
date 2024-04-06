@@ -5,7 +5,7 @@ ENV GITHUB_CLIENT_SECRET=GITHUB_CLIENT_SECRET
 
 # Install dependencies
 RUN apt-get update && apt-get install -y \
-    wget jq curl\
+    wget jq curl unzip\
     && rm -rf /var/lib/apt/lists/*
 
 RUN apt-get update && apt-get install -y openjdk-17-jdk openjdk-17-jre
