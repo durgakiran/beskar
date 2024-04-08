@@ -1,7 +1,6 @@
 'use client'
 import { useMutation } from "@apollo/client";
 import { client } from "@http";
-import { Box, Dialog, FormControl, Spinner } from "@primer/react";
 import { GRAPHQL_ADD_SPACE } from "@queries/space";
 import { Button, Label, Modal, TextInput } from "flowbite-react";
 import { MouseEvent, useCallback, useRef, useState } from "react";
