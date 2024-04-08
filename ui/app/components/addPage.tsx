@@ -25,14 +25,10 @@ interface IAddPage {
     parentId?: string;
     setIsOpen: (open: boolean) => void;
 }
-
 export default function AddPage({ isOpen, setIsOpen, spaceId, parentId }: IAddPage) {
     const [name, setName] = useState('');
     const [mutateFunction, { data, loading, error }] = useMutation(GRAPHQL_ADD_PAGE, { client: client });
     const router = useRouter();
-
-
-
     const onDialogClose = useCallback(() => {
         setIsOpen(false);
     }, []);
