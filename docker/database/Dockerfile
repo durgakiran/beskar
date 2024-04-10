@@ -2,7 +2,7 @@ FROM postgres:16.2
 
 # Install dependencies
 RUN apt-get update && apt-get install -y \
-    wget \
+    wget jq curl unzip\
     && rm -rf /var/lib/apt/lists/*
 
 RUN apt-get update && apt-get install -y openjdk-17-jdk openjdk-17-jre

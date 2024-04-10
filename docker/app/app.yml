@@ -40,6 +40,7 @@ services:
       KC_DB_URL: ${KC_DB_URL}
       KC_DB_USERNAME: ${DB_ADMIN_USERNAME}
       KC_DB_PASSWORD: ${DB_ADMIN_PASSWORD}
+      KC_LOG_LEVEL: DEBUG
     ports:
       - "8083:8080"
     command:
