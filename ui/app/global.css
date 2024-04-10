@@ -113,3 +113,6 @@ html {
 .m-auto {
     margin: auto;
 }
+.w-3\/4 {
+    width: 75%;
+}
