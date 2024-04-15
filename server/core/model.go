@@ -18,3 +18,19 @@ type ResponseMeta struct {
 
 const SUCCESS = "success"
 const FAILURE = "FAILED"
+
+type UserInfo struct {
+	Name       string `json:"name"`
+	Username   string `json:"preferred_username"`
+	Email      string `json:"email"`
+	Id         string `json:"sub"`
+	IsVerified bool   `json:"email_verified"`
+}
+
+type UserInfoOut struct {
+	Name       string `json:"name"`
+	Username   string `json:"username"`
+	Email      string `json:"email"`
+	Id         string `json:"id"`
+	IsVerified bool   `json:"emailVerified"`
+}

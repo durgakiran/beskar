@@ -8,6 +8,7 @@ import (
 	"os"
 
 	media "github.com/durgakiran/beskar/media/controller"
+	profile "github.com/durgakiran/beskar/profile/controller"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
@@ -17,7 +18,7 @@ import (
 func addCorsMiddleWare(r *chi.Mux) {
 	r.Use(cors.Handler(
 		cors.Options{
-			AllowedOrigins: []string{"https://*", "http://*"},
+			AllowedOrigins: []string{"https://*", "http://localhost:3000"},
 			// AllowOriginFunc:  func(r *http.Request, origin string) bool { return true },
 			AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 			AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
@@ -42,7 +43,8 @@ func main() {
 	r.Use(middleware.Logger)
 	r.Use(middleware.Heartbeat("/"))
 	r.Use(middleware.Recoverer)
-	r.Mount("/image", media.Router())
+	r.Mount("/media", media.Router())
+	r.Mount("/profile", profile.Router())
 
 	logger.Error("Serving on port: %s\n", port)
 	err = http.ListenAndServe(port, r)

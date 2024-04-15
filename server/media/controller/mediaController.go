@@ -16,10 +16,20 @@ type fileNameType struct {
 }
 
 func getImage(w http.ResponseWriter, r *http.Request) {
-	w.WriteHeader(http.StatusOK)
-	w.Header().Set("Content-Type", "text/plain")
-	w.Header().Set("Charset", "utf-8")
-	w.Write([]byte("OK"))
+	imageId := chi.URLParam(r, "imageid")
+	data, err := media.GetImage(imageId)
+	if err != nil {
+		slog.Error("Error retrieving file: %s", err)
+		render.Status(r, http.StatusNoContent)
+		render.Render(w, r, core.NewFailedResponse(http.StatusNoContent, err.Error(), ""))
+		return
+	}
+
+	w.Header().Add("Content-Disposition", imageId)
+	// w.Header().Add("Content-Length", len(new(data.Buffer)))
+	w.Header().Add("Content-Type", http.DetectContentType(data))
+	w.Write(data)
+	return
 }
 
 func saveImage(w http.ResponseWriter, r *http.Request) {
@@ -48,7 +58,7 @@ func saveImage(w http.ResponseWriter, r *http.Request) {
 func Router() *chi.Mux {
 	r := chi.NewRouter()
 	r.Use(core.AuthMiddleWare)
-	r.Get("/id", getImage)
+	r.Get("/image/{imageid}", getImage)
 	r.Post("/upload", saveImage)
 	return r
 }

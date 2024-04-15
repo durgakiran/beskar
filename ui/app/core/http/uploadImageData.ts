@@ -1,7 +1,7 @@
 import { post } from "./call";
 
 const baseUrl = process.env.NEXT_PUBLIC_IMAGE_SERVER_URL;
-const endpoint = "/media";
+const endpoint = "/media/upload";
 export function uploadImageData(data: File): Promise<string> {
     const url = new Promise<string>((resolve, reject) => {
         const image = new Image();

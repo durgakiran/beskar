@@ -76,3 +76,11 @@ func (i *Image) SaveImage() error {
 	}
 	return nil
 }
+
+func GetImage(id string) ([]byte, error) {
+	data, err := os.ReadFile("public/images/" + id)
+	if err != nil {
+		return nil, err
+	}
+	return data, nil
+}

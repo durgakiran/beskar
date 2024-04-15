@@ -9,5 +9,5 @@ export const post = (path: string, body: any, headerOptions: Record<string, any>
 };
 
 export const get = (path: string) => {
-    return axios.get(path, { withCredentials: true, headers: { Authorization: `Bearer ${localStorage.getItem("access_token")}` } });
+    return axios.get(path, { withCredentials: false, headers: { Authorization: `Bearer ${localStorage.getItem("access_token")}` } });
 };
