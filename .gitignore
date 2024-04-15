@@ -14,3 +14,4 @@ uploads
 liquibasebin
 keycloakbin
 images
+.env
