@@ -57,7 +57,7 @@ export default function SideNav(param: Props) {
     // const user = useUser();
     const { data: sessionData, status } = useSession()
     const [isOpen, setIsOpen] = useState(false);
-    const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+    const [isDropdownOpen, setIsDropdownOpen] = useState(true);
     const [showCreateDialog, setShowCreateDialog] = useState(false);
     const router = useRouter();
     const [getPages, { data, loading, error, refetch }] = useLazyQuery<SpaceData>(GRAPHQL_GET_PAGES, { client: client, variables: { id: param.id } });
