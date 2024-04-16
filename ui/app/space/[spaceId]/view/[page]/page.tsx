@@ -3,8 +3,8 @@ import { useLazyQuery, useQuery } from "@apollo/client";
 import { TipTap } from "@editor";
 import { client } from "@http";
 import { GRAPHQL_GET_PAGE, GRAPHQL_GET_PAGE_BREADCRUM } from "@queries/space";
-import { useUser } from "app/core/auth/useKeycloak";
 import { Breadcrumb, BreadcrumbItem, Button, Spinner } from "flowbite-react";
+import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { HiHome, HiPencil } from "react-icons/hi"
@@ -46,22 +46,20 @@ interface IData {
 }
 
 export default function Page({ params }: { params: { page: string, spaceId: string } }) {
-    const user = useUser();
+    const { data: sessionData, status } = useSession();
     const router = useRouter();
     const [editorData, setEditorData] = useState({});
     const [getPage, { loading, error, data }] = useLazyQuery<IData, { pageId: string }>(GRAPHQL_GET_PAGE, { client: client, variables: { pageId: params.page } });
     const [getBreadCrum, { loading: loadingBreadCrum, error: errorBreadCrum, data: dataBreadCrum }] = useLazyQuery<IBreadCrum, { id: string }>(GRAPHQL_GET_PAGE_BREADCRUM, { client: client, variables: { id: params.spaceId } });
 
     useEffect(() => {
-        console.log(params);
-        if (user && user.authenticated) {
+        if (status === "authenticated" && sessionData) {
             getPage();
             getBreadCrum();
-        }
-        if (user && !user.authenticated) {
+        } else if (status !== "loading") {
             router.push("/space");
         }
-    }, [user]);
+    }, [sessionData, status]);
 
     useEffect(() => {
         try {
@@ -74,7 +72,7 @@ export default function Page({ params }: { params: { page: string, spaceId: stri
         }
     }, [data, error]);
 
-    if (loading || user.loading) {
+    if (loading || status === "loading") {
         <div className="text-center">
             <Spinner size="lg" />
         </div>

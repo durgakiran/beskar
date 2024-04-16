@@ -5,7 +5,6 @@ import { GRAPHQL_DELETE_PAGE, GRAPHQL_GET_PAGES } from "@queries/space";
 import { useCallback, useEffect, useState } from "react";
 import { useRouter, useSelectedLayoutSegment } from "next/navigation";
 import AddPage from "./addPage";
-import { useUser } from "app/core/auth/useKeycloak";
 import { Button, Dropdown, Sidebar, Spinner } from "flowbite-react";
 import {
     HiHome,
@@ -25,6 +24,7 @@ import {
 import { twMerge } from "tailwind-merge";
 import Link from "next/link";
 import { Accordion } from "flowbite-react";
+import { useSession } from "next-auth/react";
 interface Docs {
     title: string;
     id: number;
@@ -54,7 +54,8 @@ interface Props {
 }
 
 export default function SideNav(param: Props) {
-    const user = useUser();
+    // const user = useUser();
+    const { data: sessionData, status } = useSession()
     const [isOpen, setIsOpen] = useState(false);
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
     const [showCreateDialog, setShowCreateDialog] = useState(false);
@@ -65,13 +66,12 @@ export default function SideNav(param: Props) {
     const [pagesData, setPagesData] = useState<Array<Pages>>([]);
 
     useEffect(() => {
-        if (user && user.authenticated) {
+        if (status === "authenticated" && sessionData) {
             getPages();
-        }
-        if (user && !user.authenticated) {
+        } else if (status !== "loading") {
             router.push("/");
         }
-    }, [user]);
+    }, [sessionData, status]);
 
     useEffect(() => {
         console.log(data);
@@ -106,7 +106,7 @@ export default function SideNav(param: Props) {
         router.push(`/edit/${param.id}/${page}`);
     };
 
-    if (loading || (user && user.loading)) {
+    if (loading || status == "loading") {
         return <Spinner size="lg" />;
     }
 
