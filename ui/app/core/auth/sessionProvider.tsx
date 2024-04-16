@@ -7,7 +7,6 @@ export default function SessionGuard({ children }: { children: ReactNode }) {
     const { data, status } = useSession();
     useEffect(() => {
         if (status !== "loading") {
-            console.log(data)
             if (!data || (data as any)?.error === "RefreshAccessTokenError") {
                 signIn("keycloak");
             } else {
