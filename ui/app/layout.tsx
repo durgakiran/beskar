@@ -1,5 +1,7 @@
 import { Inter, Noto_Color_Emoji } from "next/font/google";
 import "./global.css";
+import { AuthProviders } from "./core/auth/authProvider";
+import SessionGuard from "./core/auth/sessionProvider";
 
 const notoColorEmoji = Noto_Color_Emoji({ weight: "400", subsets: ["emoji"] });
 const inter = Inter({ subsets: ["latin"] });
@@ -12,7 +14,11 @@ export const metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
     return (
         <html lang="en">
-            <body>{children}</body>
+            <body>
+                <AuthProviders>
+                    <SessionGuard>{children}</SessionGuard>
+                </AuthProviders>
+            </body>
         </html>
     );
 }

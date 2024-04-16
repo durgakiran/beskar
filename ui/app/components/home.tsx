@@ -1,19 +1,19 @@
-import useKeycloak, { useUser } from "app/core/auth/useKeycloak";
+import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react"
 
 export default function Home() {
-    const user = useUser();
+    const { data, status } = useSession();
     const router = useRouter();
 
     useEffect(() => {
-        if (user && user.authenticated) {
+        if (status !== "loading" && data) {
             router.push('/space');
         }
-        if (user && !user.authenticated) {
+        if (status === "unauthenticated") {
             router.push("/");
         }
-    }, [user]);
+    }, [data, status]);
 
     return (
         <h2>Welcome to Ted Dox!</h2>

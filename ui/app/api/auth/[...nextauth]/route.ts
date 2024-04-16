@@ -1,72 +1,73 @@
-import NextAuth, { NextAuthOptions } from "next-auth";
-import GithubProvider from "next-auth/providers/github";
-import { JWT, getToken } from "next-auth/jwt";
-import * as jsonwebtoken from "jsonwebtoken";
-import { HasuraAdapter } from "@auth/hasura-adapter";
+import { AuthOptions, TokenSet } from "next-auth";
+import { JWT } from "next-auth/jwt";
+import NextAuth from "next-auth/next";
+import KeycloakProvider from "next-auth/providers/keycloak";
 
-const authOptions: NextAuthOptions = {
-  // https://next-auth.js.org/configuration/providers/oauth
-  providers: [
-    GithubProvider({
-        clientId: process.env.GITHUB_ID,
-        clientSecret: process.env.GITHUB_SECRET,
-    }),
-  ],
-  debug: true,
-  adapter: HasuraAdapter({
-        endpoint: process.env.HASURA_PROJECT_ENDPOINT!,
-        adminSecret: process.env.HASURA_ADMIN_SECRET!,
-  }),
-  theme: {
-        colorScheme: "auto",
-  },
-  // Use JWT strategy so we can forward them to Hasura
-  session: { strategy: "jwt" },
-  // Encode and decode your JWT with the HS256 algorithm
-  jwt: {
-    encode: ({ secret, token }) => {
-        console.log("secret", secret);
-        const encodedToken = jsonwebtoken.sign(token!, secret, {
-            algorithm: "HS256",
-        });
-        return encodedToken;
+export const authOptions: AuthOptions = {
+    providers: [
+        KeycloakProvider({
+            clientId: process.env.KEYCLOAK_CLIENT_ID,
+            clientSecret: process.env.KEYCLOAK_CLIENT_SECRET,
+            issuer: process.env.KEYCLOAK_ISSUER,
+        }),
+    ],
+    session: {
+        maxAge: 60 * 30,
     },
-    decode: async ({ secret, token }) => {
-        const decodedToken = jsonwebtoken.verify(token!, secret, {
-            algorithms: ["HS256"],
-        });
-        return decodedToken as JWT;
-    },
-  },
-  callbacks: {
-    // Add the required Hasura claims
-    // https://hasura.io/docs/latest/graphql/core/auth/authentication/jwt/#the-spec
-    async jwt({ token, user, account }) {
-        if (account) {
-            token.accessToken = account.access_token;
-        }
-        return {
-                ...token,
-                "https://hasura.io/jwt/claims": {
-                "x-hasura-allowed-roles": ["user"],
-                "x-hasura-default-role": "user",
-                "x-hasura-role": "user",
-                "x-hasura-user-id": token.sub,
-            },
-        };
-    },
-    // Add user ID to the session
-    session: async ({ session, token }) => {
-        console.log("token", token);
-        if (session?.user) {
-            session.user.id = token.sub!;
+    callbacks: {
+        async jwt({ token, account }) {
+            if (account) {
+                token.idToken = account.id_token;
+                token.accessToken = account.access_token;
+                token.refreshToken = account.refresh_token;
+                token.expiresAt = account.expires_at;
+                return token;
+            }
+            // we take a buffer of one minute(60 * 1000 ms)
+            if (Date.now() < (token.expiresAt as number) * 1000 - 60 * 1000) {
+                return token;
+            } else {
+                try {
+                    const response = await requestRefreshOfAccessToken(token);
+
+                    const tokens: TokenSet = await response.json();
+
+                    if (!response.ok) throw tokens;
+
+                    const updatedToken: JWT = {
+                        ...token, // Keep the previous token properties
+                        idToken: tokens.id_token,
+                        accessToken: tokens.access_token,
+                        expiresAt: Math.floor(Date.now() / 1000 + (tokens.expires_in as number)),
+                        refreshToken: tokens.refresh_token ?? token.refreshToken,
+                    };
+                    return updatedToken;
+                } catch (error) {
+                    console.error("Error refreshing access token", error);
+                    return { ...token, error: "RefreshAccessTokenError" };
+                }
+            }
+        },
+        async session({ session, token }) {
             session.accessToken = token.accessToken as string;
-        }
-        return session;
+            return session;
+        },
     },
-  },
 };
 
-const handler = NextAuth(authOptions);
+function requestRefreshOfAccessToken(token: JWT) {
+    return fetch(`${process.env.KEYCLOAK_ISSUER}/protocol/openid-connect/token`, {
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+            client_id: process.env.KEYCLOAK_CLIENT_ID,
+            client_secret: process.env.KEYCLOAK_CLIENT_SECRET,
+            grant_type: "refresh_token",
+            refresh_token: token.refreshToken!,
+        } as Record<string, any>),
+        method: "POST",
+        cache: "no-store",
+    });
+}
 
+const handler = NextAuth(authOptions);
 export { handler as GET, handler as POST };

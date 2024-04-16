@@ -8,11 +8,11 @@ import { client } from "@http";
 import { Box, PageLayout } from "@primer/react";
 import { GRAPHQL_GET_PAGE } from "@queries/space";
 import { Editor } from "@tiptap/react";
-import { useUser } from "app/core/auth/useKeycloak";
 import { Spinner } from "flowbite-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import "./styles.css";
+import { useSession } from "next-auth/react";
 
 interface IDoc {
     data: any;
@@ -42,17 +42,19 @@ export default function Page({ params }: { params: { slug: string[] } }) {
     const [ getPage , { data, loading }] = useLazyQuery<IData>(GRAPHQL_GET_PAGE, { client: client, variables: { pageId: params.slug[1] } });
     const [title, setTitle] = useState<string>();
     const router = useRouter();
-    const user = useUser();
+    const { data: sessionData, status } = useSession();
 
     const handleClose = () => {
         router.push(`/space/${params.slug[0]}/view/${params.slug[1]}`);
     }
 
     useEffect(() => {
-        if (user && user.authenticated) {
+        if (status === "authenticated" && sessionData) {
             getPage();
+        } else if (status !== "loading") {
+            router.push("/");
         }
-    }, [user])
+    }, [sessionData, status])
 
     useEffect(() => {
         try {
@@ -67,7 +69,7 @@ export default function Page({ params }: { params: { slug: string[] } }) {
     }, [data]);
 
 
-    if (loading || user.loading) {
+    if (loading || status === "loading") {
         <div className="text-center">
             <Spinner size="lg" />
         </div>;

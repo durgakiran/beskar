@@ -1,7 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
 import { client } from "@http";
-import styled from "styled-components";
 import { useQuery } from "@apollo/client";
 import { GRAPHQL_GET_SPACES } from "@queries/space";
 import AddSpace from "@components/addSpace";
