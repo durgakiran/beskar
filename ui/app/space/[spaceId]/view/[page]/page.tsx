@@ -4,7 +4,7 @@ import { TipTap } from "@editor";
 import { client } from "@http";
 import { GRAPHQL_GET_PAGE, GRAPHQL_GET_PAGE_BREADCRUM } from "@queries/space";
 import { Breadcrumb, BreadcrumbItem, Button, Spinner } from "flowbite-react";
-import { useSession } from "next-auth/react";
+import { signIn, useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { HiHome, HiPencil } from "react-icons/hi"
@@ -67,6 +67,9 @@ export default function Page({ params }: { params: { page: string, spaceId: stri
 
     useEffect(() => {
         try {
+            if (error && error.message.includes("JWTExpired")) {
+                signIn("keycloak")
+            }
             if (data) {
                 const eData = typeof data.core_page[0].docs[0].data === 'string' ? JSON.parse(data.core_page[0].docs[0].data) : data.core_page[0].docs[0].data;
                 setEditorData(eData);

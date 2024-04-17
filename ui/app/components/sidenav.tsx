@@ -14,6 +14,7 @@ import {
     HiCog,
 } from "react-icons/hi";
 import { signIn, useSession } from "next-auth/react";
+import Link from "next/link";
 interface Docs {
     title: string;
     id: number;
@@ -114,11 +115,14 @@ export default function SideNav(param: Props) {
                                 </div>
                                 {isDropdownOpen && (
                                     <div className="dropdown-content">
-                                        <Sidebar.ItemGroup>
+                                        <ul className="list-disc pl-6 pt-2 pr-2">
                                             {data && data.core_space_url && data.core_space_url[0].space.pages.map((page, i) => (
-                                                <Sidebar.Item active={pahtName2 === `/space/${param.id}/view/${page.id}`} href={`/space/${param.id}/view/${page.id}`} key={i}>{page.docs[0].title}</Sidebar.Item>
+                                                <li className="py-1 hover:bg-gray-100" key={i}>
+                                                    {/* active={pahtName2 === `/space/${param.id}/view/${page.id}`} */}
+                                                    <Link className="text-sm" href={`/space/${param.id}/view/${page.id}`}>{page.docs[0].title}</Link>
+                                                </li>
                                             ))}
-                                        </Sidebar.ItemGroup>
+                                        </ul>
                                     </div>
                                 )}
                             </div>
