@@ -82,7 +82,7 @@ export default function Page({ params }: { params: { page: string, spaceId: stri
         </div>
     }
     return (
-        <div className="min-h-screen  max-w-[max-w-96] mx-auto ">
+        <div className="min-h-screen mx-auto ">
             <div className="py-2 mb-4 flex flex-nowrap justify-between box-border shadow-sm   ">
 
                 <div>

@@ -26,8 +26,9 @@ interface IAddPage {
     spaceId: string;
     parentId?: string;
     setIsOpen: (open: boolean) => void;
+    editPage: (pageId: number) => void;
 }
-export default function AddPage({ isOpen, setIsOpen, spaceId, parentId }: IAddPage) {
+export default function AddPage({ isOpen, setIsOpen, spaceId, parentId, editPage }: IAddPage) {
     const [name, setName] = useState('');
     const [mutateFunction, { data, loading, error }] = useMutation(GRAPHQL_ADD_PAGE, { client: client });
     const router = useRouter();
@@ -47,7 +48,8 @@ export default function AddPage({ isOpen, setIsOpen, spaceId, parentId }: IAddPa
 
     useEffect(() => {
         if (data) {
-            router.push(`/edit/${data.insert_core_page.returning[0].id}`);
+            // router.push(`/edit/${spaceId}/${data.insert_core_page.returning[0].id}`);
+            editPage(data.insert_core_page.returning[0].id)
         }
     }, [data]);
 

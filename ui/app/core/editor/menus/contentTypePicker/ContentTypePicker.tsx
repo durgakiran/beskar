@@ -1,9 +1,9 @@
-import { ActionList, ActionMenu } from "@primer/react";
 import { useTextMenuContentTypes } from "./hooks/useTextMenuContentTypes";
 import { Editor } from "@tiptap/react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { ContentTypePickerOption } from "./types";
 import ModifiedIcon from "@components/modifiedIcon";
+import { Dropdown } from "flowbite-react";
 
 interface ContentTypePickerProps {
     editor: Editor;
@@ -16,38 +16,33 @@ export const ContentTypePicker = ({ editor }: ContentTypePickerProps) => {
 
     useEffect(() => {
         if (editor) {
-            editor.on('selectionUpdate', () => {
-                const activeItemTmp = options.find(option => option.isActive());
+            editor.on("selectionUpdate", () => {
+                const activeItemTmp = options.find((option) => option.isActive());
                 setActiveItem(activeItemTmp);
             });
-            editor.on('transaction', () => {
-                const activeItemTmp = options.find(option => option.isActive());
+            editor.on("transaction", () => {
+                const activeItemTmp = options.find((option) => option.isActive());
                 setActiveItem(activeItemTmp);
             });
         }
     }, []);
-    
 
     return (
-        <ActionMenu open={open} onOpenChange={setOpen}>
-            <ActionMenu.Button disabled={!activeItem} variant="invisible"> 
-                { activeItem ? activeItem.label : "Normal Text" }
-            </ActionMenu.Button>
-            <ActionMenu.Overlay>
-                <ActionList>
-                    {
-                        options.map((item, i) => (
-                            <ActionList.Item key={i} onClick={() => {item.onClick(); setOpen(false) }} disabled={item.disabled()} active={item.isActive()} >
-                                <ActionList.LeadingVisual>
-                                    <ModifiedIcon name={item.icon} size={16} />
-                                </ActionList.LeadingVisual>
-                                {item.label} 
-                                {/* <ActionList.TrailingVisual sx={{ color: "fg.subtle" }}>æ⌥1</ActionList.TrailingVisual> */}
-                            </ActionList.Item>
-                        ))
-                    }
-                </ActionList>
-            </ActionMenu.Overlay>
-        </ActionMenu>
+        <Dropdown inline disabled={!activeItem} label={activeItem ? activeItem.label : "Normal Text"}>
+            {options.map((item, i) => {
+                return (
+                    <Dropdown.Item
+                        onClick={() => {
+                            item.onClick();
+                            setOpen(false);
+                        }}
+                        disabled={item.disabled()}
+                        key={i}
+                    >
+                        {item.label}
+                    </Dropdown.Item>
+                );
+            })}
+        </Dropdown>
     );
 };

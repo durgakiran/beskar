@@ -8,6 +8,7 @@ import { useRouter } from "next/navigation";
 import { Avatar, Button, Card, Spinner } from "flowbite-react";
 import Slate from "@components/slate";
 import { useLogout } from "app/core/auth/useKeycloak";
+import { signIn } from "next-auth/react";
 
 
 interface Data {
@@ -37,7 +38,7 @@ export default function Page() {
 
     useEffect(() => {
         if (error && error.message.includes("JWTExpired")) {
-            logout()
+            signIn("keycloak")
         }
     }, [error]);
 

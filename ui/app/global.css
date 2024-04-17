@@ -133,3 +133,6 @@ html {
 .w-6 {
     width: 1.5rem/* 24px */;
 }
+.grow {
+    flex-grow: 1;
+}
