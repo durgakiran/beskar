@@ -1,12 +1,12 @@
 'use client'
 import { useMutation } from "@apollo/client";
 import { client } from "@http";
-import { Box,FormControl } from "@primer/react";
 import { GRAPHQL_ADD_PAGE } from "@queries/space";
 import { useRouter } from "next/navigation";
 import { MouseEvent, useCallback, useEffect, useState } from "react";
 import styled from 'styled-components';
-import { Button,Spinner,TextInput, Alert,Modal } from "flowbite-react";
+import { Button,Spinner,TextInput,Modal } from "flowbite-react";
+
 
 
 
@@ -26,8 +26,9 @@ interface IAddPage {
     spaceId: string;
     parentId?: string;
     setIsOpen: (open: boolean) => void;
+    editPage: (pageId: number) => void;
 }
-export default function AddPage({ isOpen, setIsOpen, spaceId, parentId }: IAddPage) {
+export default function AddPage({ isOpen, setIsOpen, spaceId, parentId, editPage }: IAddPage) {
     const [name, setName] = useState('');
     const [mutateFunction, { data, loading, error }] = useMutation(GRAPHQL_ADD_PAGE, { client: client });
     const router = useRouter();
@@ -47,7 +48,8 @@ export default function AddPage({ isOpen, setIsOpen, spaceId, parentId }: IAddPa
 
     useEffect(() => {
         if (data) {
-            router.push(`/edit/${data.insert_core_page.returning[0].id}`);
+            // router.push(`/edit/${spaceId}/${data.insert_core_page.returning[0].id}`);
+            editPage(data.insert_core_page.returning[0].id)
         }
     }, [data]);
 
@@ -57,17 +59,17 @@ export default function AddPage({ isOpen, setIsOpen, spaceId, parentId }: IAddPa
             <Modal.Header>
                 Add a new Page
             </Modal.Header>
-            < Box as="form" p="2">  
-                <FormControl>
-                    <FormControl.Label>Title of Page</FormControl.Label>
-                    <TextInput className="w-3/4" value={name} onInput={(ev) => handleInput((ev.target as HTMLInputElement).value)} placeholder="Enter page title..." />
-                </FormControl>
+            <div className="form p-4"> 
+                <div>
+                    <h2>Title of Page</h2>
+                    <TextInput className="w-4/5 " value={name} onInput={(ev) => handleInput((ev.target as HTMLInputElement).value)} placeholder="Enter page title..." />
+                </div>
                 <Footer>
                     <Button onClick={handleSubmit} disabled={loading}>
-                        {loading ? <Spinner size="small" /> : <>Add</> }
+                       {loading ? <Spinner size="small" /> : "Add"}
                     </Button>
                 </Footer>
-            </Box>
+            </div>
         </Modal>
     )
 }

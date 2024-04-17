@@ -5,7 +5,6 @@ import { EditorContext } from "@editor/context/editorContext";
 import { Editorheader } from "@editor/header";
 import TextArea from "@editor/textarea/TextArea";
 import { client } from "@http";
-import { Box, PageLayout } from "@primer/react";
 import { GRAPHQL_GET_PAGE } from "@queries/space";
 import { Editor } from "@tiptap/react";
 import { Spinner } from "flowbite-react";
@@ -78,21 +77,25 @@ export default function Page({ params }: { params: { slug: string[] } }) {
     return (
         <div style={{ minHeight: 300 }}>
             {title && (
-                <Box data-testid="editor-window">
-                    <Box as="header" data-testid="sticky-header" sx={{ position: "sticky", zIndex: 1, top: 0, padding: "2em 1em", display: "grid", placeItems: "center", backgroundColor: "white" }}>
+                <div data-testid="editor-window">
+                    <div className="header" data-testid="sticky-header" style={{ position: "sticky", zIndex: 1, top: 0, padding: "2em 1em", display: "grid", placeItems: "center", backgroundColor: "white" }}>
                         <EditorContext.Provider value={editorContext}>
                             <Editorheader handleClose={handleClose} />
                         </EditorContext.Provider>
-                    </Box>
-                    <PageLayout>
-                        <PageLayout.Content sx={{ maxWidth: "1024px", margin: "auto" }}>
-                            <Box>
-                                <TextArea value={title} handleInput={(value: string) => setTitle(value)} />
-                            </Box>
-                            <TipTap title={title} setEditorContext={(editorContext: Editor) =>  setEditorContext(editorContext) } content={editorData} pageId={params.slug[1]} id={data.core_page[0].docs[0].id} />
-                        </PageLayout.Content>
-                    </PageLayout>
-                </Box>
+                    </div>
+                    <div style={{ maxWidth: "1024px", margin: "auto" }}>
+                        <div>
+                            <TextArea value={title} handleInput={(value: string) => setTitle(value)} />
+                        </div>
+                        <TipTap
+                            title={title}
+                            setEditorContext={(editorContext: Editor) => setEditorContext(editorContext)}
+                            content={editorData}
+                            pageId={params.slug[1]}
+                            id={data.core_page[0].docs[0].id}
+                        />
+                    </div>
+                </div>
             )}
         </div>
     );

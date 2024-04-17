@@ -1,5 +1,5 @@
 import { CollaboratorProps } from "@editor/context/collaborators";
-import { Avatar, AvatarStack, Box } from "@primer/react";
+import { Avatar } from "flowbite-react";
 import { useEffect } from "react";
 
 export interface CollaboratorsProps {
@@ -13,9 +13,17 @@ export default function Collaborators(props: CollaboratorsProps) {
 
     if (props && props.collaborators && props.collaborators.length > 0) {
         return (
-            <Box sx={{ display: "flex", alignItems: "center" }}>
-                <AvatarStack>{props.collaborators ? props.collaborators.map((collaborator, i) => <Avatar size={32} src={collaborator.image} alt={collaborator.name} key={i} />) : null}</AvatarStack>
-            </Box>
+            <div style={{ display: "flex", alignItems: "center" }}>
+                {props.collaborators ? props.collaborators.map((collaborator, i) => (
+                    <Avatar
+                        size={32}
+                        img={collaborator.image}
+                        alt={collaborator.name}
+                        key={i}
+                        rounded
+                    />
+                )) : null}
+            </div>
         );
     }
 

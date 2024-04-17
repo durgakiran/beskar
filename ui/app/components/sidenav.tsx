@@ -3,28 +3,18 @@ import { useLazyQuery, useMutation } from "@apollo/client";
 import { client } from "@http";
 import { GRAPHQL_DELETE_PAGE, GRAPHQL_GET_PAGES } from "@queries/space";
 import { useCallback, useEffect, useState } from "react";
-import { useRouter, useSelectedLayoutSegment } from "next/navigation";
+import { usePathname, useRouter, useSelectedLayoutSegment } from "next/navigation";
 import AddPage from "./addPage";
-import { Button, Dropdown, Sidebar, Spinner } from "flowbite-react";
+import { Sidebar, Spinner } from "flowbite-react";
 import {
     HiHome,
-    HiDocumentText,
-    HiTrash,
-    HiOutlinePencil,
-    HiOutlineDotsHorizontal,
-    HiOutlineMinusSm,
     HiOutlinePlusSm,
-    HiDotsCircleHorizontal,
-    HiOutlineDotsCircleHorizontal,
     HiOutlineChevronDown,
     HiOutlineChevronRight,
     HiCog,
 } from "react-icons/hi";
-
-import { twMerge } from "tailwind-merge";
+import { signIn, useSession } from "next-auth/react";
 import Link from "next/link";
-import { Accordion } from "flowbite-react";
-import { useSession } from "next-auth/react";
 interface Docs {
     title: string;
     id: number;
@@ -64,6 +54,7 @@ export default function SideNav(param: Props) {
     const [mutateFunction] = useMutation(GRAPHQL_DELETE_PAGE, { client: client });
     const pathName = useSelectedLayoutSegment();
     const [pagesData, setPagesData] = useState<Array<Pages>>([]);
+    const pahtName2 = usePathname();
 
     useEffect(() => {
         if (status === "authenticated" && sessionData) {
@@ -74,8 +65,10 @@ export default function SideNav(param: Props) {
     }, [sessionData, status]);
 
     useEffect(() => {
-        console.log(data);
-    }, [data]);
+        if (error && error.message.includes("JWTExpired")) {
+            signIn("keycloak")
+        }
+    }, [error])
 
     const toggleDropdown = () => {
         setIsDropdownOpen(!isDropdownOpen);
@@ -84,16 +77,6 @@ export default function SideNav(param: Props) {
     const openAddPage = () => {
         setIsOpen(true);
     };
-    const activeItem = useCallback(
-        (path: string) => {
-            if (pathName === path) {
-                return "true";
-            }
-
-            return "false";
-        },
-        [pathName],
-    );
 
     const deletePage = async (page: number) => {
         // TODO: Add confirmation page
@@ -125,25 +108,28 @@ export default function SideNav(param: Props) {
                             <div className="sidenav-content-container">
                                 <div className="content-header flex flex-row items-center">
                                     <button onClick={toggleDropdown}>{isDropdownOpen ? <HiOutlineChevronDown /> : <HiOutlineChevronRight />}</button>
-                                    <span className="ml-2 mr-1">Contents</span>
+                                    <span className="ml-2 mr-1 text-sm font-medium">PAGES</span>
                                     <button className="ml-auto" onClick={openAddPage}>
                                         <HiOutlinePlusSm />
                                     </button>
                                 </div>
                                 {isDropdownOpen && (
                                     <div className="dropdown-content">
-                                        <Sidebar.ItemGroup>
+                                        <ul className="list-disc pl-6 pt-2 pr-2">
                                             {data && data.core_space_url && data.core_space_url[0].space.pages.map((page, i) => (
-                                                <Sidebar.Item href={`/space/${param.id}/view/${page.id}`} key={i}>{page.docs[0].title}</Sidebar.Item>
+                                                <li className="py-1 hover:bg-gray-100" key={i}>
+                                                    {/* active={pahtName2 === `/space/${param.id}/view/${page.id}`} */}
+                                                    <Link className="text-sm" href={`/space/${param.id}/view/${page.id}`}>{page.docs[0].title}</Link>
+                                                </li>
                                             ))}
-                                        </Sidebar.ItemGroup>
+                                        </ul>
                                     </div>
                                 )}
                             </div>
                         </Sidebar.ItemGroup>
                     </Sidebar.Items>
                 </Sidebar>
-                <AddPage isOpen={isOpen} setIsOpen={setIsOpen} spaceId={data.core_space_url[0].space.id} />
+                <AddPage isOpen={isOpen} setIsOpen={setIsOpen} editPage={editePage} spaceId={data.core_space_url[0].space.id} />
             </>
         );
     }
