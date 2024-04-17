@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
-	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -41,7 +40,6 @@ func (t *tokenType) authenticate() error {
 		Transport: tr,
 	}
 	ctx := oidc.ClientContext(context.Background(), client)
-	fmt.Println(os.Getenv("KC_REALM_URL"))
 	provider, err := oidc.NewProvider(ctx, os.Getenv("KC_REALM_URL"))
 	if err != nil {
 		slog.Error("authorisation failed while getting the provider: " + err.Error())
@@ -68,7 +66,6 @@ func (t *tokenType) authenticate() error {
 func AuthMiddleWare(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		token := r.Header.Get("Authorization")
-		fmt.Println(token)
 		if len(token) == 0 {
 			render.Status(r, http.StatusUnauthorized)
 			render.Render(w, r, NewFailedResponse(401, "Authorization token not provided", ""))
