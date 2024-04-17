@@ -1,12 +1,12 @@
 'use client'
 import { useMutation } from "@apollo/client";
 import { client } from "@http";
-import { Box,FormControl } from "@primer/react";
 import { GRAPHQL_ADD_PAGE } from "@queries/space";
 import { useRouter } from "next/navigation";
 import { MouseEvent, useCallback, useEffect, useState } from "react";
 import styled from 'styled-components';
-import { Button,Spinner,TextInput, Alert,Modal } from "flowbite-react";
+import { Button,Spinner,TextInput,Modal } from "flowbite-react";
+
 
 
 
@@ -57,17 +57,17 @@ export default function AddPage({ isOpen, setIsOpen, spaceId, parentId }: IAddPa
             <Modal.Header>
                 Add a new Page
             </Modal.Header>
-            < Box as="form" p="2">  
-                <FormControl>
-                    <FormControl.Label>Title of Page</FormControl.Label>
-                    <TextInput className="w-3/4" value={name} onInput={(ev) => handleInput((ev.target as HTMLInputElement).value)} placeholder="Enter page title..." />
-                </FormControl>
+            <div className="form p-4"> 
+                <div>
+                    <h2>Title of Page</h2>
+                    <TextInput className="w-4/5 " value={name} onInput={(ev) => handleInput((ev.target as HTMLInputElement).value)} placeholder="Enter page title..." />
+                </div>
                 <Footer>
                     <Button onClick={handleSubmit} disabled={loading}>
-                        {loading ? <Spinner size="small" /> : <>Add</> }
+                       {loading ? <Spinner size="small" /> : "Add"}
                     </Button>
                 </Footer>
-            </Box>
+            </div>
         </Modal>
     )
 }

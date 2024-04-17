@@ -113,6 +113,23 @@ html {
 .m-auto {
     margin: auto;
 }
-.w-3\/4 {
-    width: 75%;
+
+.w-4\/5 {
+    width: 80%;
+}
+.max-w-full {
+    max-width: 100%;
+}
+.max-w-\[max-w-96\] {
+    max-width: max-w-96;
+}
+.mx-auto {
+    margin-left: auto;
+    margin-right: auto;
+}
+.h-6 {
+    height: 1.5rem/* 24px */;
+}
+.w-6 {
+    width: 1.5rem/* 24px */;
 }

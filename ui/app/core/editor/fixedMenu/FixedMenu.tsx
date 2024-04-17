@@ -1,6 +1,8 @@
 "use client";
-import { ActionList, ActionMenu, Avatar, Box, Button, IconButton } from "@primer/react";
-import { HomeIcon, UndoIcon, RedoIcon, ItalicIcon, BoldIcon, KebabHorizontalIcon } from "@primer/octicons-react";
+import { Button,Avatar } from "flowbite-react";
+import { HiHome, } from "react-icons/hi";
+import { FaUndoAlt,FaRedoAlt,FaItalic,FaBold } from "react-icons/fa";
+import { GoKebabHorizontal } from "react-icons/go";
 import { ModifiedAlignCenterIcon, ModifiedAlignLeftIcon, ModifiedAlignRightIcon, ModifiedHighlighterIcon, ModifiedPaletteIconIcon } from "@editor/Button/modifiedIconButton";
 import Collaborators from "@editor/collaborators/Collaborators";
 import { useContext, useEffect } from "react";
@@ -24,20 +26,41 @@ export default function FixedMenu({ handleClose }: { handleClose: () => void }) 
     }
 
     return (
-        <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", maxWidth: "1024px" }}>
-            <Box sx={{ display: "flex", alignItems: "center" }}>
-                <Box sx={{ display: "flex", borderRight: "0.5px solid", paddingRight: "1em" }}>
-                    <IconButton variant="invisible" icon={HomeIcon} size="medium" aria-label="home" />
-                    <IconButton variant="invisible" onClick={() => editor.chain().undo().run()} icon={UndoIcon} size="medium" aria-label="undo" />
-                    <IconButton variant="invisible" onClick={() => editor.chain().redo().run()} icon={RedoIcon} size="medium" aria-label="redo" />
-                </Box>
-                <Box sx={{ display: "flex", borderRight: "0.5px solid", paddingLeft: "1rem", paddingRight: "1em" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", maxWidth: "1024px" }}>
+            <div style={{ display: "flex", alignItems: "center" }}>
+                <div style={{ display: "flex", borderRight: "0.5px solid", paddingRight: "1em" }}>
+                <Button
+                    style={{ background: 'transparent', border: 'none', padding: 0 }}
+                    aria-label="home"
+                    onClick={() => console.log("Home clicked")}
+                    >
+                    <HiHome className="w-6 h-6" />
+                </Button>
+
+                <Button
+                    style={{ background: 'transparent', border: 'none', padding: 0 }}
+                    onClick={() => editor.chain().undo().run()}
+                    aria-label="undo"
+                    >
+                    <FaUndoAlt className="w-6 h-6" />
+                </Button>
+                <Button
+                    style={{ background: 'transparent', border: 'none', padding: 0 }}
+                    onClick={() => editor.chain().redo().run()}
+                    aria-label="redo"
+                    >
+                    <FaRedoAlt className="w-6 h-6" />
+                </Button>
+                    
+                </div>
+            
+                <div style={{ display: "flex", borderRight: "0.5px solid", paddingLeft: "1rem", paddingRight: "1em" }}>
                     <ContentTypePicker editor={editor} />
-                </Box>
-                <Box sx={{ display: "flex", borderRight: "0.5px solid", paddingLeft: "1rem", paddingRight: "1em" }}>
+                </div>
+                <div style={{ display: "flex", borderRight: "0.5px solid", paddingLeft: "1rem", paddingRight: "1em" }}>
                     <FormatTypePicker  editor={editor} />
-                </Box>
-                <Box sx={{ display: "flex", borderRight: "0.5px solid", paddingLeft: "1rem", paddingRight: "1em" }}>
+                </div>
+                <div style={{ display: "flex", borderRight: "0.5px solid", paddingLeft: "1rem", paddingRight: "1em" }}>
                     {/* <ActionMenu>
                         <ActionMenu.Button size="small" variant="invisible">
                             <ModifiedAlignLeftIcon />
@@ -57,8 +80,8 @@ export default function FixedMenu({ handleClose }: { handleClose: () => void }) 
                         </ActionMenu.Overlay>
                     </ActionMenu> */}
                     <ContentAlignPicker editor={editor} />
-                </Box>
-                <Box sx={{ display: "flex", borderRight: "0.5px solid", paddingLeft: "1rem", paddingRight: "1em" }}>
+                </div>
+                <div style={{ display: "flex", borderRight: "0.5px solid", paddingLeft: "1rem", paddingRight: "1em" }}>
                     {/* <ActionMenu>
                         <ActionMenu.Button size="small" variant="invisible">
                             <ModifiedHighlighterIcon />
@@ -95,25 +118,26 @@ export default function FixedMenu({ handleClose }: { handleClose: () => void }) 
                             </ActionList>
                         </ActionMenu.Overlay>
                     </ActionMenu> */}
-                </Box>
+                </div>
                 {/* 
                 <Box>List, indent by tab</Box>
                 <Box>Additional macros such as Action Item, Link, Image, Mention, Emoji, Table, Layouts and other macros drops</Box>
                 <Box>
                     Collaboration, AI, find and replace, show inline comments, content level restrictions, copy link, update button, close button, ellipsis for preview, resolved commnets and view changes{" "}
                 </Box> */}
-            </Box>
-            <Box sx={{ display: "flex", alignItems: "center" }}>
+            </div>
+            <div style={{ display: "flex", alignItems: "center" }}>
                 {/* <Box sx={{ paddingRight: "1rem" }}>
                     <Collaborators collaborators={collaborators} />
                 </Box> */}
-                <Box sx={{ paddingRight: "0.5rem" }}>
-                    <Button variant="primary">Update</Button>
-                </Box>
-                <Box sx={{ paddingRight: "0.5rem" }}>
-                    <Button variant="invisible" onClick={handleClose} >Close</Button>
-                </Box>
-            </Box>
-        </Box>
+                <div style={{ paddingRight: "0.5rem" }}>
+                    <Button color="black">Update</Button> {/* 'color' used for specifying button color */}
+                </div>
+                <div style={{ paddingRight: "0.5rem" }}>
+                    <Button color="gray" onClick={handleClose} style={{ backgroundColor: 'transparent', border: 'none' }}>
+                        Close </Button>
+                </div>
+            </div>
+        </div>
     );
 }

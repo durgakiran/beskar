@@ -14,14 +14,14 @@ import Color from "@tiptap/extension-placeholder";
 import TaskList from "@tiptap/extension-task-list";
 import TaskItem from "@tiptap/extension-task-item";
 import CodeBlock from "@tiptap/extension-code-block";
-import { IconButton, Tooltip } from "@primer/react";
+import {Button, Tooltip } from "flowbite-react";
+import { GrStrikeThrough, GrItalic, GrBold } from "react-icons/gr";
 import { useDebounce } from "app/core/hooks/debounce";
 import { useEffect, useState } from "react";
 import { GRAPHQL_UPDATE_DOC_DATA, GRAPHQL_UPDATE_DOC_TITLE } from "@queries/space";
 import { client } from "@http";
 import { useMutation } from "@apollo/client";
 import { BubbleMenu } from "./bubbleMenu/bubbleMenu";
-import { BoldIcon, StrikethroughIcon, ItalicIcon } from "@primer/octicons-react";
 import "./styles.css";
 import { ModifiedUnderlineIcon } from "./Button/modifiedIconButton";
 import { uploadImageData } from "../http/uploadImageData";
@@ -41,7 +41,7 @@ const extensions = [
     Document,
     Heading,
     Placeholder.configure({
-        placeholder: "Write somthing ....",
+        placeholder: "Write something ....",
     }),
     TextStyle,
     Color,
@@ -131,30 +131,30 @@ export function TipTap({ setEditorContext, content, pageId, id, editable = true,
         <>
             {editor && (
                 <BubbleMenu className="bubble-menu" editor={editor} tippyOptions={{ duration: 100 }}>
-                    <Tooltip aria-label="Bold">
-                        <IconButton aria-label="bold" icon={BoldIcon} size="small" onClick={() => editor.chain().focus().toggleBold().run()} className={editor.isActive("bold") ? "is-active" : ""} />
+                   <Tooltip content="Bold">
+                        <Button onClick={() => editor.chain().focus().toggleBold().run()}
+                            className={editor.isActive("bold") ? "is-active" : ""}>
+                            <GrBold />
+                        </Button>
                     </Tooltip>
-                    <IconButton
-                        aria-label="strikethrough"
-                        icon={StrikethroughIcon}
-                        size="small"
-                        onClick={() => editor.chain().focus().toggleStrike().run()}
-                        className={editor.isActive("bold") ? "is-active" : ""}
-                    />
-                    <IconButton
-                        aria-label="italic"
-                        icon={ItalicIcon}
-                        size="small"
-                        onClick={() => editor.chain().focus().toggleItalic().run()}
-                        className={editor.isActive("italic") ? "is-active" : ""}
-                    />
-                    <IconButton
-                        aria-label="underline"
-                        icon={ModifiedUnderlineIcon}
-                        size="small"
-                        onClick={() => editor.chain().focus().toggleUnderline().run()}
-                        className={editor.isActive("underline") ? "is-active" : ""}
-                    />
+                    <Tooltip content="Strike">
+                        <Button onClick={() => editor.chain().focus().toggleStrike().run()}
+                            className={editor.isActive("strike") ? "is-active" : ""}>
+                            <GrStrikeThrough />
+                        </Button>
+                    </Tooltip>
+                    <Tooltip content="Italic">
+                        <Button onClick={() => editor.chain().focus().toggleItalic().run()}
+                            className={editor.isActive("italic") ? "is-active" : ""}>
+                            <GrItalic />
+                        </Button>
+                    </Tooltip>
+                    <Tooltip content="Underline">
+                        <Button onClick={() => editor.chain().focus().toggleUnderline().run()}
+                            className={editor.isActive("underline") ? "is-active" : ""}>
+                            <ModifiedUnderlineIcon />
+                        </Button>
+                    </Tooltip>
                 </BubbleMenu>
             )}
             <EditorContent className="editor" editor={editor} />

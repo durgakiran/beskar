@@ -51,6 +51,10 @@ export default function Page({ params }: { params: { page: string, spaceId: stri
     const [editorData, setEditorData] = useState({});
     const [getPage, { loading, error, data }] = useLazyQuery<IData, { pageId: string }>(GRAPHQL_GET_PAGE, { client: client, variables: { pageId: params.page } });
     const [getBreadCrum, { loading: loadingBreadCrum, error: errorBreadCrum, data: dataBreadCrum }] = useLazyQuery<IBreadCrum, { id: string }>(GRAPHQL_GET_PAGE_BREADCRUM, { client: client, variables: { id: params.spaceId } });
+    
+    const editPage = () => {
+        router.push(`/edit/${params.spaceId}/${params.page}`);
+    }
 
     useEffect(() => {
         console.log(params);
@@ -79,10 +83,10 @@ export default function Page({ params }: { params: { page: string, spaceId: stri
             <Spinner size="lg" />
         </div>
     }
-
     return (
-        <div className="min-h-screen">
-            <div className="py-2 mb-4 flex flex-nowrap justify-between box-border shadow-sm">
+        <div className="min-h-screen  max-w-[max-w-96] mx-auto ">
+            <div className="py-2 mb-4 flex flex-nowrap justify-between box-border shadow-sm   ">
+
                 <div>
                     {
                         !loadingBreadCrum && dataBreadCrum && dataBreadCrum.core_space_url && dataBreadCrum.core_space_url[0] ?
@@ -91,12 +95,14 @@ export default function Page({ params }: { params: { page: string, spaceId: stri
                                 <Breadcrumb.Item href={`space/${dataBreadCrum.core_space_url[0].id}`} >{dataBreadCrum.core_space_url[0].space.name}</Breadcrumb.Item>
                             </Breadcrumb> : null
                     }
-                </div>
+                 </div>
+                
                 <div>
-                    <Button size="sm">
-                        <HiPencil size="16" />
+                    <Button  className="max-w-full "  size="sm" onClick={editPage}>
+                        <HiPencil size="15" />
                     </Button>
                 </div>
+               
             </div>
             {
                 data && (

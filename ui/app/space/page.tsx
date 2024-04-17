@@ -7,6 +7,7 @@ import { GRAPHQL_GET_SPACES } from "@queries/space";
 import AddSpace from "@components/addSpace";
 import { useRouter } from "next/navigation";
 import { Avatar, Button, Card, Spinner } from "flowbite-react";
+import Slate from "@components/slate";
 
 
 interface Data {
@@ -81,6 +82,9 @@ export default function Page() {
                                 )
                             })
                         ) : null
+                    }
+                    {
+                        !loading ? (<Slate title="No spaces available" />) : null
                     }
                 </div>
                 <AddSpace
