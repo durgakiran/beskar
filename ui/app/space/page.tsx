@@ -1,13 +1,13 @@
 "use client";
 import { useEffect, useState } from "react";
 import { client } from "@http";
-import styled from "styled-components";
 import { useQuery } from "@apollo/client";
 import { GRAPHQL_GET_SPACES } from "@queries/space";
 import AddSpace from "@components/addSpace";
 import { useRouter } from "next/navigation";
 import { Avatar, Button, Card, Spinner } from "flowbite-react";
 import Slate from "@components/slate";
+import { useLogout } from "app/core/auth/useKeycloak";
 
 
 interface Data {
@@ -24,6 +24,7 @@ export default function Page() {
     const [isOpen, setIsOpen] = useState(false);
     const [tableData, setTableData] = useState([]);
     const { loading, error, data, refetch } = useQuery(GRAPHQL_GET_SPACES, { client: client });
+    const logout = useLogout();
 
     useEffect(() => {
         if (data && data.core_space) {
@@ -36,7 +37,7 @@ export default function Page() {
 
     useEffect(() => {
         if (error && error.message.includes("JWTExpired")) {
-            router.push("/");
+            logout()
         }
     }, [error]);
 
@@ -84,7 +85,7 @@ export default function Page() {
                         ) : null
                     }
                     {
-                        !loading ? (<Slate title="No spaces available" />) : null
+                        !loading && !tableData.length ? (<Slate title={BLANK_STATE_HEADING} />) : null
                     }
                 </div>
                 <AddSpace

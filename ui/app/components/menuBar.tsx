@@ -15,7 +15,7 @@ interface UserInfo {
 const USER_URI = process.env.NEXT_PUBLIC_USER_SERVER_URL;
 
 export default function MenuBar() {
-    const [status, res] = useGetCall<UserInfo>(USER_URI + "/user/details");
+    const [status, res] = useGetCall<UserInfo>(USER_URI + "/profile/details");
     const logout = useLogout();
 
     useEffect(() => {

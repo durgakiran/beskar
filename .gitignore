@@ -13,3 +13,5 @@ uploads
 *-temp.*
 liquibasebin
 keycloakbin
+images
+.env

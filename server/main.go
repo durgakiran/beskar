@@ -1,51 +1,54 @@
 package main
 
 import (
+	"fmt"
 	"log"
+	"log/slog"
 	"net/http"
+	"os"
 
-	"github.com/durgakiran/beskar/auth"
-	"github.com/durgakiran/beskar/doc"
-	"github.com/go-chi/chi"
+	media "github.com/durgakiran/beskar/media/controller"
+	profile "github.com/durgakiran/beskar/profile/controller"
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
+	"github.com/go-chi/cors"
+	"github.com/joho/godotenv"
 )
 
-func middlewareCors(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// set the headers
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE")
-		w.Header().Set("Access-Control-Allow-Headers", "*")
-		if r.Method == "OPTIONS" {
-			w.WriteHeader(http.StatusOK)
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
-}
-
-func healthz(w http.ResponseWriter, r *http.Request) {
-	w.WriteHeader(http.StatusOK)
-	w.Header().Set("Content-Type", "text/plain")
-	w.Header().Set("Charset", "utf-8")
-	w.Write([]byte("OK"))
+func addCorsMiddleWare(r *chi.Mux) {
+	r.Use(cors.Handler(
+		cors.Options{
+			AllowedOrigins: []string{"https://*", "http://localhost:3000"},
+			// AllowOriginFunc:  func(r *http.Request, origin string) bool { return true },
+			AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+			AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
+			ExposedHeaders:   []string{"Link"},
+			AllowCredentials: false,
+			MaxAge:           300, // Maximum value not ignored by any of major browsers
+		}),
+	)
 }
 
 func main() {
-
-	const port = "8081"
+	err := godotenv.Load()
+	if err != nil {
+		fmt.Println(err)
+	}
+	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
+	const port = ":9095"
 
 	r := chi.NewRouter()
-	corsMux := middlewareCors(r)
+	addCorsMiddleWare(r)
 
-	r.Get("/healthz", http.HandlerFunc(healthz))
-	r.Mount("/api/v1/auth", auth.Router())
-	r.Mount("/api/v1/doc", doc.Router())
+	r.Use(middleware.Logger)
+	r.Use(middleware.Heartbeat("/"))
+	r.Use(middleware.Recoverer)
+	r.Mount("/media", media.Router())
+	r.Mount("/profile", profile.Router())
 
-	server := &http.Server{
-		Addr:    ":8081",
-		Handler: corsMux,
+	logger.Error("Serving on port: %s\n", port)
+	err = http.ListenAndServe(port, r)
+	if err != nil {
+		log.Fatal(err)
 	}
-
-	log.Printf("Serving on port: %s\n", port)
-	log.Fatal(server.ListenAndServe())
 }
