@@ -3,11 +3,11 @@ import { useLazyQuery, useQuery } from "@apollo/client";
 import { TipTap } from "@editor";
 import { client } from "@http";
 import { GRAPHQL_GET_PAGE, GRAPHQL_GET_PAGE_BREADCRUM } from "@queries/space";
-import { Breadcrumb, BreadcrumbItem, Button, Spinner } from "flowbite-react";
+import { Breadcrumb, BreadcrumbItem, Button, Spinner, Tooltip } from "flowbite-react";
 import { signIn, useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { HiHome, HiPencil } from "react-icons/hi"
+import { HiHome, HiPencil, HiOutlineTrash } from "react-icons/hi"
 
 interface IDoc {
     data: any;
@@ -56,6 +56,10 @@ export default function Page({ params }: { params: { page: string, spaceId: stri
         router.push(`/edit/${params.spaceId}/${params.page}`);
     }
 
+    const deletePage = () => {
+
+    }
+
     useEffect(() => {
         if (status === "authenticated" && sessionData) {
             getPage();
@@ -98,10 +102,17 @@ export default function Page({ params }: { params: { page: string, spaceId: stri
                     }
                  </div>
                 
-                <div>
-                    <Button  className="max-w-full "  size="sm" onClick={editPage}>
-                        <HiPencil size="15" />
-                    </Button>
+                <div className="flex space-x-4">
+                    <Tooltip content="Edit page" placement="bottom">
+                        <Button outline  className="max-w-full" color="light"  size="xs" onClick={editPage}>
+                            <HiPencil size="15" />
+                        </Button>
+                    </Tooltip>
+                    <Tooltip content="Delete page" placement="bottom">
+                        <Button outline  className="max-w-full" color="light"  size="xs" onClick={deletePage}>
+                            <HiOutlineTrash size="15" />
+                        </Button>
+                    </Tooltip>
                 </div>
                
             </div>
