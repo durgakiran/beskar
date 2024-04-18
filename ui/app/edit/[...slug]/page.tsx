@@ -78,7 +78,7 @@ export default function Page({ params }: { params: { slug: string[] } }) {
         <div style={{ minHeight: 300 }}>
             {title && (
                 <div data-testid="editor-window">
-                    <div className="header" data-testid="sticky-header" style={{ position: "sticky", zIndex: 1, top: 0, padding: "2em 1em", display: "grid", placeItems: "center", backgroundColor: "white" }}>
+                    <div className="header" data-testid="sticky-header" style={{ position: "sticky", zIndex: 1, top: 0, display: "grid", placeItems: "center", backgroundColor: "white" }}>
                         <EditorContext.Provider value={editorContext}>
                             <Editorheader handleClose={handleClose} />
                         </EditorContext.Provider>

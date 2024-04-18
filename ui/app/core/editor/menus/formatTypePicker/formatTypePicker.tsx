@@ -31,17 +31,19 @@ export default function FormatTypePicker({ editor }: FormatTypePickerProps) {
         <>
             {options.map((item, i) => (
                 <Button
-                aria-label={item.label}
-                style={{ color: 'black'}}
-                className={item.isActive() ? "active" : ""}
-                as="button"
-                size="small"
-                key={i}
-                disabled={item.disabled()}
-                onClick={() => item.onClick()}
-              >
-                <ModifiedIcon name={item.icon} size={16} />
-              </Button>
+                    outline
+                    color="transparent"
+                    aria-label={item.label}
+                    style={{ color: "black" }}
+                    className={item.isActive() ? "active" : ""}
+                    as="button"
+                    size="xs"
+                    key={i}
+                    disabled={item.disabled()}
+                    onClick={() => item.onClick()}
+                >
+                    <ModifiedIcon name={item.icon} size={16} />
+                </Button>
             ))}
         </>
     );
