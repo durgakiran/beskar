@@ -14,6 +14,7 @@ import Color from "@tiptap/extension-placeholder";
 import TaskList from "@tiptap/extension-task-list";
 import TaskItem from "@tiptap/extension-task-item";
 import CodeBlock from "@tiptap/extension-code-block";
+import blockQuote from "@tiptap/extension-blockquote";
 import {Button, Tooltip } from "flowbite-react";
 import { GrStrikeThrough, GrItalic, GrBold } from "react-icons/gr";
 import { useDebounce } from "app/core/hooks/debounce";
@@ -37,6 +38,7 @@ const extensions = [
         alignments: ["left", "right", "center", "justify"],
     }),
     Paragraph,
+    blockQuote,
     Text,
     Document,
     Heading,

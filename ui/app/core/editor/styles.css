@@ -36,11 +36,17 @@
 }
 .editor ul[data-type="taskList"] li {
     display: flex;
+    align-items: center;
 }
 .editor ul[data-type="taskList"] li > label {
     flex: 0 0 auto;
     margin-right: 0.5rem;
     user-select: none;
+    line-height: 1.4;
+    margin-top: 0;
+}
+.editor input[type="checkbox"] {
+    border-radius: 4px;
 }
 .editor ul[data-type="taskList"] li > div {
     flex: 1 1 auto;
@@ -136,6 +142,9 @@
 }
 .editor .ProseMirror [data-type="column"] {
     overflow: auto;
+}
+.editor .ProseMirror p code {
+    padding: 0.1rem 0.4rem;
 }
 .editor .ProseMirror code {
     border-radius: 0.125rem;
@@ -332,9 +341,10 @@
 }
 .editor .ProseMirror ul[data-type="taskList"] li {
     display: flex;
+    align-items: center;
 }
 .editor .ProseMirror ul[data-type="taskList"] li > label {
-    margin-top: 0.25rem;
+    margin-top: 0;
     margin-right: 0.5rem;
     flex: 1 1 auto;
     flex-shrink: 0;
@@ -342,6 +352,7 @@
     -webkit-user-select: none;
     -moz-user-select: none;
     user-select: none;
+    line-height: 1.4;
 }
 .editor .ProseMirror ul[data-type="taskList"] li > div {
     flex: 1 1 auto;
@@ -371,6 +382,11 @@
 }
 .editor .ProseMirror blockquote + figcaption.is-empty:not(.is-editor-empty):before {
     content: "Author";
+}
+.tiptap blockquote {
+    margin-left: 0;
+    padding-left: 1rem;
+    border-left: 2px solid gray;
 }
 .editor .ProseMirror [data-placeholder][data-suggestion] :before,
 .editor .ProseMirror [data-placeholder][data-suggestion]:before {
