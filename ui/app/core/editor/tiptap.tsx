@@ -115,7 +115,7 @@ export function TipTap({ setEditorContext, content, pageId, id, editable = true,
     }, [editor, setEditorContext]);
 
     useEffect(() => {
-        if (updated) {
+        if (updated && editable) {
             mutateFunction({ variables: { id: id, pageId: pageId, data: debouncedValue, title: debouncedTitle } })
                 .then((data) => console.log(data))
                 .catch((error) => console.log(error));
@@ -124,9 +124,11 @@ export function TipTap({ setEditorContext, content, pageId, id, editable = true,
 
 
     useEffect(() => {
-        mutateTitleFn({ variables: { id: id, pageId: pageId, title: debouncedTitle } })
-            .then((data) => console.log(data))
-            .catch((error) => console.log(error));
+        if (editable) {
+            mutateTitleFn({ variables: { id: id, pageId: pageId, title: debouncedTitle } })
+                .then((data) => console.log(data))
+                .catch((error) => console.log(error));
+        }
     }, [debouncedTitle]);
 
     return (
