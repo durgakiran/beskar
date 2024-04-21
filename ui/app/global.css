@@ -140,3 +140,28 @@ html {
 .pl-6 {
     padding-left: 1.5rem/* 24px */;
 }
+
+.rounded-sm {
+    border-radius: 0.125rem/* 2px */;
+}
+
+.h-16 {
+    height: 4rem/* 64px */;
+}
+
+.bg-blue-500 {
+    --tw-bg-opacity: 1;
+    background-color: rgb(63 131 248 / var(--tw-bg-opacity));
+}
+
+.cursor-crosshair {
+    cursor: crosshair;
+}
+
+.cursor-move {
+    cursor: move;
+}
+
+.w-1 {
+    width: 0.25rem/* 4px */;
+}

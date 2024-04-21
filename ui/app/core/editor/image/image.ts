@@ -48,4 +48,15 @@ export const customImage = Image.extend({
     addNodeView() {
         return ReactNodeViewRenderer(ImageView)
     },
+    addAttributes() {
+        return {
+            ...this.parent?.(),
+            width: {
+                default: 500
+            },
+            height: {
+                default: null
+            }
+        }
+    },
 });

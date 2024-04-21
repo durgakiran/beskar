@@ -69,6 +69,8 @@ interface TipTapProps {
     title: string;
 }
 
+const MAX_DEFAULT_WIDTH = 760;
+
 export function TipTap({ setEditorContext, content, pageId, id, editable = true, title }: TipTapProps) {
     const [editedData, setEditedData] = useState(null);
     const debouncedValue = useDebounce(editedData, 10000);
@@ -91,9 +93,15 @@ export function TipTap({ setEditorContext, content, pageId, id, editable = true,
                 let cbPayload = [...event.clipboardData.items];
                 cbPayload = cbPayload.filter((i) => /image/.test(i.type) && i.type != "");
                 if(!cbPayload.length || cbPayload.length === 0) return false; // not handled use default behaviour
-                uploadImageData(cbPayload[0].getAsFile()).then((name) => {
+                uploadImageData(cbPayload[0].getAsFile()).then(([name, width, height]) => {
                     const { schema } = view.state;
-                    const node = schema.nodes.image.create({ src: `${process.env.NEXT_PUBLIC_IMAGE_SERVER_URL}/media/${name}` }); // creates the image element
+                    if (width > MAX_DEFAULT_WIDTH) {
+                        const ratio = MAX_DEFAULT_WIDTH / width;
+                        width = 760;
+                        height = Math.round(ratio * height );
+                        console.log(height)
+                    }
+                    const node = schema.nodes.image.create({ src: `${process.env.NEXT_PUBLIC_IMAGE_SERVER_URL}/media/image/${name}`, width, height }); // creates the image element
                     const transaction = view.state.tr.replaceSelectionWith(node); // places it in the correct position
                     view.dispatch(transaction);
                 }).catch((err) => {
@@ -106,7 +114,9 @@ export function TipTap({ setEditorContext, content, pageId, id, editable = true,
 
     useEffect(() => {
         if (content && editor) {
-            editor.commands.setContent(content);
+            setTimeout(() => {
+                editor.commands.setContent(content);
+            })
         }
     }, [content, editor]);
 
