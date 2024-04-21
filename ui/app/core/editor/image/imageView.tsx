@@ -1,7 +1,7 @@
+"use client";
 import { Editor, NodeViewWrapper } from "@tiptap/react";
 import { useLoadImage } from "app/core/http/uploadImageData";
-import { FocusEvent, KeyboardEvent, useCallback, useEffect, useRef, useState } from "react";
-
+import { FocusEvent, KeyboardEvent, MouseEvent, useCallback, useEffect, useRef, useState } from "react";
 
 interface EventDetails {
     name: "parent" | "child";
@@ -32,8 +32,7 @@ function useEventDebounce(event, delay) {
 
         return () => {
             clearTimeout(handler);
-        }
-
+        };
     }, [events]);
 
     return active;
@@ -48,19 +47,51 @@ export default function ImageView(props) {
     const imageEditableRef = useRef(null);
     const altTextRef = useRef(null);
     const [event, setEvent] = useState(null);
+    const [imageActiveEvent, setImageActiveEvent] = useState(null);
     const debouncedEvent = useEventDebounce(event, 10);
+    const debouncedImageActiveEvent = useEventDebounce(imageActiveEvent, 10);
+    const [imgSize, setImgSize] = useState({ width: props.node.attrs.width, height: props.node.attrs.height });
 
     useEffect(() => {
         setBlockActive(debouncedEvent);
     }, [debouncedEvent]);
 
+    useEffect(() => {
+        setImageActive(debouncedImageActiveEvent);
+    }, [debouncedImageActiveEvent]);
+
+    const resizeHandler = (mouseDownEvent) => {
+        const startSize = imgSize;
+        const startPosition = { x: mouseDownEvent.pageX, y: mouseDownEvent.pageY };
+
+        function onMouseMove(mouseMoveEvent) {
+            setImgSize({
+                width: startSize.width - startPosition.x + mouseMoveEvent.pageX,
+                height: startSize.height - startPosition.y + mouseMoveEvent.pageY,
+            });
+        }   
+        function onMouseUp() {
+            document.body.removeEventListener("mousemove", onMouseMove);
+        }
+
+        document.body.addEventListener("mousemove", onMouseMove);
+        document.body.addEventListener("mouseup", onMouseUp, { once: true });
+    };
+
+    useEffect(() => {
+        props.updateAttributes({
+            width: imgSize.width,
+            height: imgSize.height
+        });
+    }, [imgSize]);
+
     const handleImageFocus = (ev: FocusEvent<HTMLDivElement, Element>) => {
         const eventDetails: EventDetails = {
             name: "child",
             focus: true,
-        }
+        };
         setEvent(eventDetails);
-        setImageActive(true);
+        setImageActiveEvent(eventDetails);
     };
 
     const handleImageBlur = (ev: FocusEvent<HTMLDivElement, Element>) => {
@@ -68,16 +99,16 @@ export default function ImageView(props) {
         const eventDetails: EventDetails = {
             name: "child",
             focus: false,
-        }
+        };
         setEvent(eventDetails);
-        setTimeout(() =>  setImageActive(false));
+        setImageActiveEvent(eventDetails);
     };
 
     const handleCaptionActive = (ev: FocusEvent<HTMLDivElement, Element>) => {
         const eventDetails: EventDetails = {
             name: "child",
             focus: true,
-        }
+        };
         setEvent(eventDetails);
         setCaptionActive(true);
     };
@@ -88,6 +119,15 @@ export default function ImageView(props) {
         }
     };
 
+    const handleMouseDown = () => {
+        const eventDetails: EventDetails = {
+            name: "child",
+            focus: true,
+        };
+        setEvent(eventDetails);
+        setImageActiveEvent(eventDetails);
+    };
+
     const handleInput = (event: FocusEvent) => {
         props.updateAttributes({
             alt: (event.target as HTMLElement).innerText,
@@ -96,25 +136,39 @@ export default function ImageView(props) {
         const eventDetails: EventDetails = {
             name: "child",
             focus: false,
-        }
+        };
         setEvent(eventDetails);
-        setTimeout(() =>  setCaptionActive(false));
+        setTimeout(() => setCaptionActive(false));
     };
 
     return (
         <NodeViewWrapper>
-            <div contentEditable="false" ref={parentRef}  >
+            <div contentEditable="false" ref={parentRef}>
                 <div className="img-container rounded m-auto my-4 relative" contentEditable="false">
-                    <div className="img-wrapper px-2 w-full h-full flex items-center justify-center focus:outline-1" contentEditable="false" onBlur={(ev) => handleImageBlur(ev)} onFocus={handleImageFocus}>
-                        {(imageActive) && <div className="h-16 w-1 rounded bg-blue-500 cursor-move" contentEditable="false"></div>}
+                    <div
+                        className="img-wrapper px-2 w-full h-full flex items-center justify-center focus-visible:outline-none"
+                        contentEditable={props.editor.isEditable}
+                        onBlur={(ev) => handleImageBlur(ev)}
+                        onFocus={handleImageFocus}
+                    >
+                        {imageActive && <div className="h-16 w-1 rounded bg-blue-500 cursor-move" contentEditable="false"></div>}
                         <div ref={imageEditableRef} className="focus-visible:outline-none mx-2 caret-teal-500" contentEditable={props.editor.isEditable}>
-                            <div className={"img-content box-border " + ((imageActive) ? "border rounded border-blue-500" : "")}>
-                                {data && <img className="object-cover box-border rounded" src={data} height={props.node.attrs.height} width={props.node.attrs.width} alt={props.node.attrs.alt} />}
+                            <div className={"img-content box-border " + (imageActive ? "border rounded border-blue-500" : "")}>
+                                {data && <img className="object-cover box-border rounded" src={data} height={imgSize.height} width={imgSize.width} alt={props.node.attrs.alt} />}
                             </div>
                         </div>
-                        {(imageActive) && <div className="h-16 w-1 rounded bg-blue-500 cursor-move" contentEditable="false"></div>}
+                        {imageActive && (
+                            <div
+                                className="h-16 w-1 rounded bg-blue-500 cursor-move"
+                                onMouseDown={(ev) => {
+                                    handleMouseDown();
+                                    resizeHandler(ev);
+                                }}
+                                contentEditable="false"
+                            ></div>
+                        )}
                     </div>
-                    {blockActive && (
+                    {(blockActive || props.node.attrs.alt) && (
                         <div contentEditable={false}>
                             <div
                                 ref={altTextRef}
