@@ -29,9 +29,7 @@ import { uploadImageData } from "../http/uploadImageData";
 import { customImage, reactImage } from "./image/image";
 
 const extensions = [
-    StarterKit.configure({
-        history: false,
-    }),
+    StarterKit,
     Typography,
     TextAlign.configure({
         types: ["heading", "paragraph"],
