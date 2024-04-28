@@ -115,7 +115,15 @@ export default function ImageView(props) {
 
     const handleEnter = (event: KeyboardEvent) => {
         if (event.key.toLowerCase() === "enter") {
-            event.preventDefault();
+            // console.log(props.getPos())
+            console.log(props.getPos());
+            // (props.editor as Editor).chain().insertContentAt((props.editor as Editor).state.selection.head, { type: "paragraph" }).focus().run();
+            // console.log(props.getPos());
+            // console.log(props)
+            // altTextRef.current.blur();
+            // (props.editor as Editor).commands.focus(props.getPos() + 1);
+            // console.log(props.getPos());
+            // event.preventDefault();
         }
     };
 
@@ -143,16 +151,25 @@ export default function ImageView(props) {
 
     return (
         <NodeViewWrapper>
-            <div contentEditable="false" ref={parentRef}>
+            <div ref={parentRef} contentEditable="true">
                 <div className="img-container rounded m-auto my-4 relative" contentEditable="false">
                     <div
                         className="img-wrapper px-2 w-full h-full flex items-center justify-center focus-visible:outline-none"
-                        contentEditable={props.editor.isEditable}
+                        contentEditable="false"
                         onBlur={(ev) => handleImageBlur(ev)}
                         onFocus={handleImageFocus}
                     >
-                        {imageActive && <div className="h-16 w-1 rounded bg-blue-500 cursor-move" contentEditable="false"></div>}
-                        <div ref={imageEditableRef} className="focus-visible:outline-none mx-2 caret-teal-500" contentEditable={props.editor.isEditable}>
+                        {imageActive && (
+                            <div
+                                className="h-16 w-1 rounded bg-blue-500 cursor-move"
+                                onMouseDown={(ev) => {
+                                    handleMouseDown();
+                                    resizeHandler(ev);
+                                }}
+                                contentEditable="false"
+                            ></div>
+                        )}
+                        <div ref={imageEditableRef} className="focus-visible:outline-none mx-2" contentEditable={props.editor.isEditable}>
                             <div className={"img-content box-border " + (imageActive ? "border rounded border-blue-500" : "")}>
                                 {data && <img className="object-cover box-border rounded" src={data} height={imgSize.height} width={imgSize.width} alt={props.node.attrs.alt} />}
                             </div>

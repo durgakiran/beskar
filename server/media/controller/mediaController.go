@@ -26,21 +26,19 @@ func getImage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Add("Content-Disposition", imageId)
-	// w.Header().Add("Content-Length", len(new(data.Buffer)))
 	w.Header().Add("Content-Type", http.DetectContentType(data))
 	w.Write(data)
-	return
 }
 
 func saveImage(w http.ResponseWriter, r *http.Request) {
 	file, header, err := r.FormFile("file")
-	defer file.Close()
 	if err != nil {
 		slog.Error("Error retrieving file: %s", err)
 		render.Status(r, http.StatusInternalServerError)
 		render.Render(w, r, core.NewFailedResponse(500, err.Error(), ""))
 		return
 	}
+	defer file.Close()
 	image := media.Image{Name: header.Filename, WData: file}
 	err = image.SaveImage()
 	if err != nil {
