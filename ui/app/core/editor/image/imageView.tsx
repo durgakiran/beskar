@@ -115,15 +115,8 @@ export default function ImageView(props) {
 
     const handleEnter = (event: KeyboardEvent) => {
         if (event.key.toLowerCase() === "enter") {
-            // console.log(props.getPos())
-            console.log(props.getPos());
-            // (props.editor as Editor).chain().insertContentAt((props.editor as Editor).state.selection.head, { type: "paragraph" }).focus().run();
-            // console.log(props.getPos());
-            // console.log(props)
-            // altTextRef.current.blur();
-            // (props.editor as Editor).commands.focus(props.getPos() + 1);
-            // console.log(props.getPos());
-            // event.preventDefault();
+            (props.editor as Editor).chain().insertContentAt((props.editor as Editor).state.selection.head, { type: "paragraph" }).focus().run();
+            event.preventDefault();
         }
     };
 
