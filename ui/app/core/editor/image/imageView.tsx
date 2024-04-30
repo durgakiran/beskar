@@ -144,7 +144,7 @@ export default function ImageView(props) {
 
     return (
         <NodeViewWrapper>
-            <div ref={parentRef} contentEditable="true">
+            <div ref={parentRef} className="focus-visible:outline-none" contentEditable="true">
                 <div className="img-container rounded m-auto my-4 relative" contentEditable="false">
                     <div
                         className="img-wrapper px-2 w-full h-full flex items-center justify-center focus-visible:outline-none"
