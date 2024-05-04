@@ -46,7 +46,7 @@ func main() {
 	r.Mount("/media", media.Router())
 	r.Mount("/profile", profile.Router())
 
-	logger.Error("Serving on port: %s\n", port)
+	logger.Error(fmt.Sprintf("Serving on port: %s\n", port))
 	err = http.ListenAndServe(port, r)
 	if err != nil {
 		log.Fatal(err)

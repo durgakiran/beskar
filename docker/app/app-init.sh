@@ -113,6 +113,8 @@ else
     $KQ create clients/$id/protocol-mappers/models -r $REALM $CONFIG $PAYLOAD
 fi
 
+echo "Add client authentication to true"
+$KQ update clients/$id -s "publicClient=false" -r $REALM $CONFIG
 
 until curl -XGET --output /dev/null --silent --head --fail http://graphql-engine:8080/healthz?strict=false; do
     echo 'waiting for graphql server to be ready... 😫'
