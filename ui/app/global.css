@@ -4,6 +4,91 @@
 
 html {
     font-family: Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica Neue,Arial,Noto Sans,sans-serif,Apple Color Emoji,Segoe UI Emoji,Segoe UI Symbol,Noto Color Emoji;
+    /* color-scheme: light; */
+    --td-background-accent-gray-subtlest: #f1f2f4;
+    --td-background-accent-gray-subtlest-hovered: #dcdfe4;
+    --td-background-accent-gray-subtlest-pressed: #b3b9c4;
+    --td-background-accent-gray-subtler: #dcdfe4;
+    --td-background-accent-gray-subtler-hovered: #b3b9c4;
+    --td-background-accent-gray-subtler-pressed: #8590a2;
+    --td-background-accent-gray-subtle: #8590a2;
+    --td-background-accent-gray-subtle-hovered: #b3b9c4;
+    --td-background-accent-gray-subtle-pressed: #dcdfe4;
+    --td-background-accent-gray-bolder: #626f86;
+    --td-background-accent-gray-bolder-hovered: #44546f;
+    --td-background-accent-gray-bolder-pressed: #2c3e5d;
+    --td-background-accent-blue-subtlest: #e9f2ff;
+    --td-background-accent-blue-subtlest-hovered: #cce0ff;
+    --td-background-accent-blue-subtlest-pressed: #85b8ff;
+    --td-background-accent-blue-subtler: #cce0ff;
+    --td-background-accent-blue-subtler-hovered: #85b8ff;
+    --td-background-accent-blue-subtler-pressed: #579dff;
+    --td-background-accent-blue-subtle: #579dff;
+    --td-background-accent-blue-subtle-hovered: #85b8ff;
+    --td-background-accent-blue-subtle-pressed: #cce0ff;
+    --td-background-accent-blue-bolder: #0c66e4;
+    --td-background-accent-blue-bolder-hovered: #05c;
+    --td-background-accent-blue-bolder-pressed: #09326c;
+    --td-background-accent-teal-subtlest: #e7f9ff;
+    --td-background-accent-teal-subtlest-hovered: #c6edfb;
+    --td-background-accent-teal-subtlest-pressed: #9dd9ee;
+    --td-background-accent-teal-subtler: #c6edfb;
+    --td-background-accent-teal-subtler-hovered: #9dd9ee;
+    --td-background-accent-teal-subtler-pressed: #6cc3e0;
+    --td-background-accent-teal-subtle: #6cc3e0;
+    --td-background-accent-teal-subtle-hovered: #9dd9ee;
+    --td-background-accent-teal-subtle-pressed: #c6edfb;
+    --td-background-accent-teal-bolder: #227d9b;
+    --td-background-accent-teal-bolder-hovered: #206a83;
+    --td-background-accent-teal-bolder-pressed: #164555;
+    --td-background-accent-green-subtlest: #dcfff1;
+    --td-background-accent-green-subtlest-hovered: #baf3db;
+    --td-background-accent-green-subtlest-pressed: #7ee2b8;
+    --td-background-accent-green-subtler: #baf3db;
+    --td-background-accent-green-subtler-hovered: #7ee2b8;
+    --td-background-accent-green-subtler-pressed: #4bce97;
+    --td-background-accent-green-subtle: #4bce97;
+    --td-background-accent-green-subtle-hovered: #7ee2b8;
+    --td-background-accent-green-subtle-pressed: #baf3db;
+    --td-background-accent-green-bolder: #1f845a;
+    --td-background-accent-green-bolder-hovered: #216e4e;
+    --td-background-accent-green-bolder-pressed: #164b35;
+    --td-background-accent-yellow-subtlest: #fff7d6;
+    --td-background-accent-yellow-subtlest-hovered: #f8e6a0;
+    --td-background-accent-yellow-subtlest-pressed: #f5cd47;
+    --td-background-accent-yellow-subtler: #f8e6a0;
+    --td-background-accent-yellow-subtler-hovered: #f5cd47;
+    --td-background-accent-yellow-subtler-pressed: #e2b203;
+    --td-background-accent-yellow-subtle: #f5cd47;
+    --td-background-accent-yellow-subtle-hovered: #e2b203;
+    --td-background-accent-yellow-subtle-pressed: #cf9f02;
+    --td-background-accent-yellow-bolder: #946f00;
+    --td-background-accent-yellow-bolder-hovered: #7f5f01;
+    --td-background-accent-yellow-bolder-pressed: #533f04;
+    --td-background-accent-red-subtlest: #ffeceb;
+    --td-background-accent-red-subtlest-hovered: #ffd5d2;
+    --td-background-accent-red-subtlest-pressed: #fd9891;
+    --td-background-accent-red-subtler: #ffd5d2;
+    --td-background-accent-red-subtler-hovered: #fd9891;
+    --td-background-accent-red-subtler-pressed: #f87168;
+    --td-background-accent-red-subtle: #f87168;
+    --td-background-accent-red-subtle-hovered: #fd9891;
+    --td-background-accent-red-subtle-pressed: #ffd5d2;
+    --td-background-accent-red-bolder: #c9372c;
+    --td-background-accent-red-bolder-hovered: #ae2e24;
+    --td-background-accent-red-bolder-pressed: #5d1f1a;
+    --td-background-accent-purple-subtlest: #f3f0ff;
+    --td-background-accent-purple-subtlest-hovered: #dfd8fd;
+    --td-background-accent-purple-subtlest-pressed: #b8acf6;
+    --td-background-accent-purple-subtler: #dfd8fd;
+    --td-background-accent-purple-subtler-hovered: #b8acf6;
+    --td-background-accent-purple-subtler-pressed: #9f8fef;
+    --td-background-accent-purple-subtle: #9f8fef;
+    --td-background-accent-purple-subtle-hovered: #b8acf6;
+    --td-background-accent-purple-subtle-pressed: #dfd8fd;
+    --td-background-accent-purple-bolder: #6e5dc6;
+    --td-background-accent-purple-bolder-hovered: #5e4db2;
+    --td-background-accent-purple-bolder-pressed: #352c63;
 }
 
 
@@ -152,6 +237,21 @@ html {
 .bg-blue-500 {
     --tw-bg-opacity: 1;
     background-color: rgb(63 131 248 / var(--tw-bg-opacity));
+}
+
+.bg-slate-100 {
+    --tw-bg-opacity: 1;
+    background-color: rgb(241 245 249 / var(--tw-bg-opacity));
+}
+
+.hover\:bg-blue-100:hover {
+    --tw-bg-opacity: 1;
+    background-color: rgb(225 239 254 / var(--tw-bg-opacity));
+}
+
+.hover\:bg-slate-100:hover {
+    --tw-bg-opacity: 1;
+    background-color: rgb(241 245 249 / var(--tw-bg-opacity));
 }
 
 .cursor-crosshair {

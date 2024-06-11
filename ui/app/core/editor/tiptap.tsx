@@ -28,6 +28,7 @@ import { ModifiedUnderlineIcon } from "./Button/modifiedIconButton";
 import { uploadImageData } from "../http/uploadImageData";
 import { customImage, reactImage } from "./image/image";
 import { SlashCommand } from "./extensions/slashCommand/command";
+import { CustomInput } from "./note/Note";
 
 const extensions = [
     StarterKit,
@@ -58,6 +59,7 @@ const extensions = [
     customImage,
     reactImage,
     SlashCommand,
+    CustomInput,
 ];
 
 interface TipTapProps {

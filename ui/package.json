@@ -15,6 +15,9 @@
   "dependencies": {
     "@apollo/client": "^3.8.8",
     "@auth/hasura-adapter": "^0.2.11",
+    "@emoji-mart/data": "^1.2.1",
+    "@emoji-mart/react": "^1.1.1",
+    "@floating-ui/react": "^0.26.16",
     "@supabase/supabase-js": "^2.39.1",
     "@tiptap/extension-bullet-list": "^2.1.13",
     "@tiptap/extension-character-count": "^2.1.13",
@@ -52,6 +55,7 @@
     "@tiptap/starter-kit": "^2.1.13",
     "@tiptap/suggestion": "^2.1.13",
     "axios": "^1.6.3",
+    "emoji-mart": "^5.6.0",
     "flowbite": "^2.3.0",
     "flowbite-react": "^0.7.2",
     "graphql": "^16.8.1",

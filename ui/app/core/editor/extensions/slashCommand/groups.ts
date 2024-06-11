@@ -101,6 +101,16 @@ export const GROUPS: Group[] = [
                     editor.chain().focus().setCodeBlock().run();
                 },
             },
+            {
+                name: "CustomInput",
+                label: "Note",
+                iconName: "CodeSquare",
+                description: "Code block with syntax highlighting",
+                shouldBeHidden: (editor) => editor.isActive("columns"),
+                action: (editor) => {
+                    editor.chain().insertContentAt(editor.state.selection.head, { type: 'noteBlock' }).focus().run()
+                },
+            },
         ],
     },
     //   {
