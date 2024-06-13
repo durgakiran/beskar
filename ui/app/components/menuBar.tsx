@@ -32,7 +32,7 @@ export default function MenuBar() {
                     <Navbar.Link href="/space" as={Link}>
                         Spaces
                     </Navbar.Link>
-                    <Navbar.Link href="#">Pricing</Navbar.Link>
+                    {/* <Navbar.Link href="#">Pricing</Navbar.Link> */}
                     <Navbar.Link href="#">Contact</Navbar.Link>
                 </Navbar.Collapse>
                 <div className="flex">

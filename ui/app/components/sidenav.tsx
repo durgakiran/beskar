@@ -102,9 +102,9 @@ export default function SideNav(param: Props) {
                             <Sidebar.Item href={`/space/${param.id}`} icon={HiHome}>
                                 Overview
                             </Sidebar.Item>
-                            <Sidebar.Item href={`/space/${param.id}/settings`} icon={HiCog}>
+                            {/* <Sidebar.Item href={`/space/${param.id}/settings`} icon={HiCog}>
                                 Settings
-                            </Sidebar.Item>
+                            </Sidebar.Item> */}
                             <div className="sidenav-content-container">
                                 <div className="content-header flex flex-row items-center">
                                     <button onClick={toggleDropdown}>{isDropdownOpen ? <HiOutlineChevronDown /> : <HiOutlineChevronRight />}</button>
