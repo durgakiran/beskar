@@ -1,44 +1,34 @@
 {
-  "compilerOptions": {
-    "baseUrl": ".",
-    "target": "es2015",
-    "paths": {
-      "@http": ["./app/core/http/index.ts"],
-      "@tiptap": ["./app/core/tiptap/*"],
-      "@editor": ["./app/core/editor/index.ts"],
-      "@editor/*": ["./app/core/editor/*"],
-      "@components/*": ["./app/components/*"],
-      "@queries/space": ["./app/core/queries/space/index.ts"]
+    "compilerOptions": {
+        "baseUrl": ".",
+        "target": "es2015",
+        "paths": {
+            "@http": ["./app/core/http/index.ts"],
+            "@tiptap": ["./app/core/tiptap/*"],
+            "@editor": ["./app/core/editor/index.ts"],
+            "@editor/*": ["./app/core/editor/*"],
+            "@components/*": ["./app/components/*"],
+            "@queries/space": ["./app/core/queries/space/index.ts"],
+            "@/lib/utils": ["./app/lib/utils/index.ts"]
+        },
+        "lib": ["dom", "dom.iterable", "esnext"],
+        "allowJs": true,
+        "skipLibCheck": true,
+        "strict": false,
+        "noEmit": true,
+        "incremental": true,
+        "esModuleInterop": true,
+        "module": "esnext",
+        "moduleResolution": "node",
+        "resolveJsonModule": true,
+        "isolatedModules": true,
+        "jsx": "preserve",
+        "plugins": [
+            {
+                "name": "next"
+            }
+        ]
     },
-    "lib": [
-      "dom",
-      "dom.iterable",
-      "esnext"
-    ],
-    "allowJs": true,
-    "skipLibCheck": true,
-    "strict": false,
-    "noEmit": true,
-    "incremental": true,
-    "esModuleInterop": true,
-    "module": "esnext",
-    "moduleResolution": "node",
-    "resolveJsonModule": true,
-    "isolatedModules": true,
-    "jsx": "preserve",
-    "plugins": [
-      {
-        "name": "next"
-      }
-    ]
-  },
-  "include": [
-    "next-env.d.ts",
-    ".next/types/**/*.ts",
-    "**/*.ts",
-    "**/*.tsx"
-  ],
-  "exclude": [
-    "node_modules"
-  ]
+    "include": ["next-env.d.ts", ".next/types/**/*.ts", "**/*.ts", "**/*.tsx"],
+    "exclude": ["node_modules"]
 }

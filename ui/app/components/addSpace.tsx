@@ -4,19 +4,7 @@ import { client } from "@http";
 import { GRAPHQL_ADD_SPACE } from "@queries/space";
 import { Button, Label, Modal, TextInput } from "flowbite-react";
 import { MouseEvent, useCallback, useRef, useState } from "react";
-import styled from 'styled-components';
 
-
-const Footer = styled.div`
-    display: flex;
-    flex-direction: row;
-    flex-wrap: wrap;
-    align-content: center;
-    justify-content: flex-end;
-    align-items: center;
-    box-sizing: border-box;
-    margin-top: 1rem;
-`;
 
 interface IAddSpace {
     isOpen: boolean;

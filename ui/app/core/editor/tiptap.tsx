@@ -18,7 +18,7 @@ import blockQuote from "@tiptap/extension-blockquote";
 import { Button, Tooltip } from "flowbite-react";
 import { GrStrikeThrough, GrItalic, GrBold } from "react-icons/gr";
 import { useDebounce } from "app/core/hooks/debounce";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { GRAPHQL_UPDATE_DOC_DATA, GRAPHQL_UPDATE_DOC_TITLE } from "@queries/space";
 import { client } from "@http";
 import { useMutation } from "@apollo/client";
@@ -29,6 +29,8 @@ import { uploadImageData } from "../http/uploadImageData";
 import { customImage, reactImage } from "./image/image";
 import { SlashCommand } from "./extensions/slashCommand/command";
 import { CustomInput } from "./note/Note";
+import { TableColumnMenu, TableRowMenu } from "./Table/menus";
+import { Table, TableCell, TableHeader, TableRow } from "./Table";
 
 const extensions = [
     StarterKit,
@@ -60,6 +62,10 @@ const extensions = [
     reactImage,
     SlashCommand,
     CustomInput,
+    Table,
+    TableCell,
+    TableHeader,
+    TableRow,
 ];
 
 interface TipTapProps {
@@ -75,6 +81,7 @@ const MAX_DEFAULT_WIDTH = 760;
 
 export function TipTap({ setEditorContext, content, pageId, id, editable = true, title }: TipTapProps) {
     const [editedData, setEditedData] = useState(null);
+    const menuContainerRef = useRef(null);
     const debouncedValue = useDebounce(editedData, 10000);
     const debouncedTitle = useDebounce(title, 10000);
     const [updated, setUpdated] = useState(false);
@@ -145,7 +152,7 @@ export function TipTap({ setEditorContext, content, pageId, id, editable = true,
     }, [debouncedTitle]);
 
     return (
-        <>
+        <div ref={menuContainerRef}>
             {editor && (
                 <BubbleMenu className="bubble-menu" editor={editor} tippyOptions={{ duration: 100 }}>
                     <Tooltip content="Bold">
@@ -171,6 +178,12 @@ export function TipTap({ setEditorContext, content, pageId, id, editable = true,
                 </BubbleMenu>
             )}
             <EditorContent className="editor" editor={editor} />
-        </>
+            {editor && (
+                <>
+                    <TableRowMenu editor={editor} appendTo={menuContainerRef} />
+                    <TableColumnMenu editor={editor} appendTo={menuContainerRef} />
+                </>
+            )}
+        </div>
     );
 }

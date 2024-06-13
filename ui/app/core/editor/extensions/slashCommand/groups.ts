@@ -108,7 +108,17 @@ export const GROUPS: Group[] = [
                 description: "Code block with syntax highlighting",
                 shouldBeHidden: (editor) => editor.isActive("columns"),
                 action: (editor) => {
-                    editor.chain().insertContentAt(editor.state.selection.head, { type: 'noteBlock' }).focus().run()
+                    editor.chain().insertContentAt(editor.state.selection.head, { type: "noteBlock" }).focus().run();
+                },
+            },
+            {
+                name: "table",
+                label: "Table",
+                iconName: "Table",
+                description: "Insert a table",
+                shouldBeHidden: (editor) => editor.isActive("columns"),
+                action: (editor) => {
+                    editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: false }).run();
                 },
             },
         ],

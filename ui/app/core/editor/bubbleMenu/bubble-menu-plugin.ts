@@ -40,7 +40,9 @@ export class BubbleMenuView {
 
         const hasEditorFocus = view.hasFocus() || isChildOfMenu;
 
-        if (!hasEditorFocus || empty || isEmptyTextBlock || !this.editor.isEditable) {
+        const isTable = this.editor.isActive("table");
+
+        if (!hasEditorFocus || empty || isEmptyTextBlock || !this.editor.isEditable || isTable) {
             return false;
         }
         return true;
