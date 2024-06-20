@@ -109,7 +109,6 @@ export function TipTap({ setEditorContext, content, pageId, id, editable = true,
                             const ratio = MAX_DEFAULT_WIDTH / width;
                             width = 760;
                             height = Math.round(ratio * height);
-                            console.log(height);
                         }
                         const node = schema.nodes.image.create({ src: `${process.env.NEXT_PUBLIC_IMAGE_SERVER_URL}/media/image/${name}`, width, height }); // creates the image element
                         const transaction = view.state.tr.replaceSelectionWith(node); // places it in the correct position

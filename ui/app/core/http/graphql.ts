@@ -1,7 +1,6 @@
 "use client";
 import { ApolloClient, from, HttpLink, InMemoryCache } from "@apollo/client";
 import { onError } from "@apollo/client/link/error"
-import { keycloak } from "../auth/authContext";
 
 
 const URI = process.env.NEXT_PUBLIC_HASURA_PROJECT_ENDPOINT;

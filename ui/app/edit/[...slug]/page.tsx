@@ -38,14 +38,14 @@ interface IData {
 export default function Page({ params }: { params: { slug: string[] } }) {
     const [editorData, setEditorData] = useState({});
     const [editorContext, setEditorContext] = useState<Editor>();
-    const [ getPage , { data, loading }] = useLazyQuery<IData>(GRAPHQL_GET_PAGE, { client: client, variables: { pageId: params.slug[1] } });
+    const [getPage, { data, loading }] = useLazyQuery<IData>(GRAPHQL_GET_PAGE, { client: client, fetchPolicy: "no-cache", variables: { pageId: params.slug[1] } });
     const [title, setTitle] = useState<string>();
     const router = useRouter();
     const { data: sessionData, status } = useSession();
 
     const handleClose = () => {
         router.push(`/space/${params.slug[0]}/view/${params.slug[1]}`);
-    }
+    };
 
     useEffect(() => {
         if (status === "authenticated" && sessionData) {
@@ -53,7 +53,7 @@ export default function Page({ params }: { params: { slug: string[] } }) {
         } else if (status !== "loading") {
             router.push("/");
         }
-    }, [sessionData, status])
+    }, [sessionData, status]);
 
     useEffect(() => {
         try {
@@ -67,7 +67,6 @@ export default function Page({ params }: { params: { slug: string[] } }) {
         }
     }, [data]);
 
-
     if (loading || status === "loading") {
         <div className="text-center">
             <Spinner size="lg" />
@@ -78,7 +77,11 @@ export default function Page({ params }: { params: { slug: string[] } }) {
         <div style={{ minHeight: 300 }}>
             {title && (
                 <div data-testid="editor-window">
-                    <div className="header" data-testid="sticky-header" style={{ position: "sticky", zIndex: 1, top: 0, display: "grid", placeItems: "center", marginBottom: '2rem', backgroundColor: "white" }}>
+                    <div
+                        className="header"
+                        data-testid="sticky-header"
+                        style={{ position: "sticky", zIndex: 1, top: 0, display: "grid", placeItems: "center", marginBottom: "2rem", backgroundColor: "white" }}
+                    >
                         <EditorContext.Provider value={editorContext}>
                             <Editorheader handleClose={handleClose} />
                         </EditorContext.Provider>
