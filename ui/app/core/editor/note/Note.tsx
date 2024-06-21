@@ -57,7 +57,7 @@ const NoteBlock = (props) => {
                     <NodeViewContent className="content" />
                 </div>
             </NodeViewWrapper>
-            {isOpen && (
+            {(isOpen && props.editor.isEditable) && (
                 <div ref={refs.setFloating} style={floatingStyles} {...getFloatingProps()}>
                     <FlaotingOptions bgColor={props.node.attrs.color} updateAttributes={props.updateAttributes} handleColorSelection={handleColorSelection} />
                 </div>

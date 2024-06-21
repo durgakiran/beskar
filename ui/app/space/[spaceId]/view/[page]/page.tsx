@@ -49,10 +49,9 @@ export default function Page({ params }: { params: { page: string; spaceId: stri
     const { data: sessionData, status } = useSession();
     const router = useRouter();
     const [editorData, setEditorData] = useState({});
-    const [getPage, { loading, error, data }] = useLazyQuery<IData, { pageId: string }>(GRAPHQL_GET_PAGE, { client: client, variables: { pageId: params.page } });
+    const [getPage, { loading, error, data }] = useLazyQuery<IData, { pageId: string }>(GRAPHQL_GET_PAGE, { client: client, fetchPolicy: "no-cache", variables: { pageId: params.page } });
     const [getBreadCrum, { loading: loadingBreadCrum, error: errorBreadCrum, data: dataBreadCrum }] = useLazyQuery<IBreadCrum, { id: string }>(GRAPHQL_GET_PAGE_BREADCRUM, {
         client: client,
-        fetchPolicy: "no-cache",
         variables: { id: params.spaceId },
     });
 

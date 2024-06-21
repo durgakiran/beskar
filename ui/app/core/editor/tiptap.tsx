@@ -3,14 +3,25 @@ import { Editor, EditorContent, useEditor } from "@tiptap/react";
 import Typography from "@tiptap/extension-typography";
 import TextAlign from "@tiptap/extension-text-align";
 import Paragraph from "@tiptap/extension-paragraph";
+import Bold from "@tiptap/extension-bold";
+import BulletList from "@tiptap/extension-bullet-list";
+import Code from "@tiptap/extension-code";
+import Dropcursor from "@tiptap/extension-dropcursor";
+import Gapcursor from "@tiptap/extension-gapcursor";
+import Hardbreak from "@tiptap/extension-hard-break";
+import History from "@tiptap/extension-history";
+import Horizontalrule from "@tiptap/extension-horizontal-rule";
+import Italic from "@tiptap/extension-italic";
+import ListItem from "@tiptap/extension-list-item";
+import OrderedList from "@tiptap/extension-ordered-list";
+import Strike from "@tiptap/extension-strike";
 import Text from "@tiptap/extension-text";
 import Document from "@tiptap/extension-document";
 import Heading from "@tiptap/extension-heading";
 import Placeholder from "@tiptap/extension-placeholder";
 import Underline from "@tiptap/extension-underline";
-import StarterKit from "@tiptap/starter-kit";
-import TextStyle from "@tiptap/extension-placeholder";
-import Color from "@tiptap/extension-placeholder";
+import TextStyle from "@tiptap/extension-text-style";
+import Color from "@tiptap/extension-color";
 import TaskList from "@tiptap/extension-task-list";
 import TaskItem from "@tiptap/extension-task-item";
 import CodeBlock from "@tiptap/extension-code-block";
@@ -33,7 +44,18 @@ import { TableColumnMenu, TableRowMenu } from "./Table/menus";
 import { Table, TableCell, TableHeader, TableRow } from "./Table";
 
 const extensions = [
-    StarterKit,
+    Bold,
+    BulletList,
+    Code,
+    Dropcursor,
+    Gapcursor,
+    Hardbreak,
+    History,
+    Horizontalrule,
+    Italic,
+    ListItem,
+    OrderedList,
+    Strike,
     Typography,
     TextAlign.configure({
         types: ["heading", "paragraph"],
@@ -138,7 +160,7 @@ export function TipTap({ setEditorContext, content, pageId, id, editable = true,
         if (updated && editable) {
             mutateFunction({ variables: { id: id, pageId: pageId, data: debouncedValue, title: debouncedTitle } })
                 .then((data) => console.log(data))
-                .catch((error) => console.log(error));
+                .catch((error) => console.log(error)); // TODO: handle JWT expired error
         }
     }, [debouncedValue]);
 
