@@ -4,85 +4,83 @@
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
     xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext"
     xmlns:pro="http://www.liquibase.org/xml/ns/pro"
-    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
-        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd
-        http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd
-        http://www.liquibase.org/xml/ns/pro http://www.liquibase.org/xml/ns/pro/liquibase-pro-latest.xsd">
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd
+                        http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd
+                        http://www.liquibase.org/xml/ns/pro http://www.liquibase.org/xml/ns/pro/liquibase-pro-latest.xsd">
 
-    
-        <changeSet id="1-create-core-schema" author="Kiran Kumar">
-            <comment>Create core schema</comment>
-            <sql>
+
+    <changeSet id="1-create-core-schema" author="Kiran Kumar">
+        <comment>Create core schema</comment>
+        <sql>
                 <![CDATA[ 
                     CREATE SCHEMA IF NOT EXISTS core;
                 ]]>
             </sql>
-            <rollback></rollback>
-        </changeSet>
-    
-        <changeSet id="2" author="Kiran Kumar">
-            <preConditions onFail="MARK_RAN">
-                <sqlCheck expectedResult="0">
-                    SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'space';
-                </sqlCheck>
-            </preConditions>
-            <comment>Create space table</comment>
-            <createTable tableName="space" schemaName="core">
-                <column name="id" type="UUID" defaultValueComputed="gen_random_uuid()">
-                    <constraints primaryKey="true" nullable="false"/>
-                </column>
-                <column name="name" type="text">
-                    <constraints nullable="false"/>
-                </column>
-                <column defaultValueComputed="now()" name="date_created" type="TIMESTAMP WITH TIME ZONE">
-                    <constraints nullable="false"/>
-                </column>
-                <column defaultValueComputed="now()" name="date_updated" type="TIMESTAMP WITH TIME ZONE">
-                    <constraints nullable="false"/>
-                </column>
-            </createTable>
-        </changeSet>
+        <rollback></rollback>
+    </changeSet>
 
-        <changeSet id="3-add-user-id-column" author="Kiran Kumar">
-            <preConditions onFail="HALT">
-                <sqlCheck expectedResult="1">
-                    SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'space';
-                </sqlCheck>
-            </preConditions>
-            <comment>Add user_id to space table</comment>
-            <addColumn tableName="space" schemaName="core">
-                <column name="user_id" type="UUID">
-                    <constraints nullable="false" />
-                </column>
-            </addColumn>
-        </changeSet>
+    <changeSet id="2" author="Kiran Kumar">
+        <preConditions onFail="MARK_RAN">
+            <sqlCheck expectedResult="0"> SELECT COUNT(*) FROM information_schema.tables WHERE
+                table_name = 'space'; </sqlCheck>
+        </preConditions>
+        <comment>Create space table</comment>
+        <createTable tableName="space" schemaName="core">
+            <column name="id" type="UUID" defaultValueComputed="gen_random_uuid()">
+                <constraints primaryKey="true" nullable="false" />
+            </column>
+            <column name="name" type="text">
+                <constraints nullable="false" />
+            </column>
+            <column defaultValueComputed="now()" name="date_created" type="TIMESTAMP WITH TIME ZONE">
+                <constraints nullable="false" />
+            </column>
+            <column defaultValueComputed="now()" name="date_updated" type="TIMESTAMP WITH TIME ZONE">
+                <constraints nullable="false" />
+            </column>
+        </createTable>
+    </changeSet>
 
-        <changeSet id="4-space-url-table" author="Kiran Kumar">
-            <preConditions onFail="MARK_RAN">
-                <sqlCheck expectedResult="0">
-                    SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'space_url';
-                </sqlCheck>
-            </preConditions>
-            <comment>Create space_url table</comment>
-            <createTable tableName="space_url" schemaName="core">
-                <column name="id" type="BIGINT" autoIncrement="true">
-                    <constraints primaryKey="true" nullable="false"/>
-                </column>
-                <column name="slug" type="text" >
-                    <constraints nullable="false" />
-                </column>
-                <column name="space_id" type="UUID">
-                    <constraints nullable="false" validateForeignKey="true" foreignKeyName="space_url_space_fkey" referencedTableName="space"  referencedColumnNames="id" referencedTableSchemaName="core" deleteCascade="true" />
-                </column>
-                <column defaultValueComputed="now()" name="date_updated" type="TIMESTAMP WITH TIME ZONE">
-                    <constraints nullable="false"/>
-                </column>
-            </createTable>
-        </changeSet>
+    <changeSet id="3-add-user-id-column" author="Kiran Kumar">
+        <preConditions onFail="HALT">
+            <sqlCheck expectedResult="1"> SELECT COUNT(*) FROM information_schema.tables WHERE
+                table_name = 'space'; </sqlCheck>
+        </preConditions>
+        <comment>Add user_id to space table</comment>
+        <addColumn tableName="space" schemaName="core">
+            <column name="user_id" type="UUID">
+                <constraints nullable="false" />
+            </column>
+        </addColumn>
+    </changeSet>
 
-        <changeSet id="5-space-url-trigger-function" runOnChange="true" author="Kiran Kumar">
-            <comment>Create space url mapping function</comment>
-            <createProcedure>
+    <changeSet id="4-space-url-table" author="Kiran Kumar">
+        <preConditions onFail="MARK_RAN">
+            <sqlCheck expectedResult="0"> SELECT COUNT(*) FROM information_schema.tables WHERE
+                table_name = 'space_url'; </sqlCheck>
+        </preConditions>
+        <comment>Create space_url table</comment>
+        <createTable tableName="space_url" schemaName="core">
+            <column name="id" type="BIGINT" autoIncrement="true">
+                <constraints primaryKey="true" nullable="false" />
+            </column>
+            <column name="slug" type="text">
+                <constraints nullable="false" />
+            </column>
+            <column name="space_id" type="UUID">
+                <constraints nullable="false" validateForeignKey="true"
+                    foreignKeyName="space_url_space_fkey" referencedTableName="space"
+                    referencedColumnNames="id" referencedTableSchemaName="core" deleteCascade="true" />
+            </column>
+            <column defaultValueComputed="now()" name="date_updated" type="TIMESTAMP WITH TIME ZONE">
+                <constraints nullable="false" />
+            </column>
+        </createTable>
+    </changeSet>
+
+    <changeSet id="5-space-url-trigger-function" runOnChange="true" author="Kiran Kumar">
+        <comment>Create space url mapping function</comment>
+        <createProcedure>
                 <![CDATA[ 
                     CREATE OR REPLACE FUNCTION core.space_url_trigger_function()
                         RETURNS TRIGGER AS 
@@ -95,82 +93,163 @@
                     LANGUAGE plpgsql;
                 ]]>
             </createProcedure>
-            <rollback></rollback>
-        </changeSet>
+        <rollback></rollback>
+    </changeSet>
 
-        <changeSet id="6-space-url-trigger" runOnChange="true" author="Kiran Kumar">
-            <comment>Attach space url mappng trigger</comment>
-            <sql>
+    <changeSet id="6-space-url-trigger" runOnChange="true" author="Kiran Kumar">
+        <comment>Attach space url mappng trigger</comment>
+        <sql>
                 <![CDATA[ 
                     CREATE OR REPLACE TRIGGER insert_space_url_trigger AFTER INSERT ON core.space
                     FOR EACH ROW
                     EXECUTE FUNCTION core.space_url_trigger_function();
                 ]]>
             </sql>
-            <rollback></rollback>
-        </changeSet>
+        <rollback></rollback>
+    </changeSet>
 
-        <changeSet id="7-page-table" author="kiran kumar">
-            <preConditions onFail="MARK_RAN">
-                <sqlCheck expectedResult="0">
-                    SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'page';
-                </sqlCheck>
-            </preConditions>
-            <comment>Create Page table</comment>
-            <createTable tableName="page" schemaName="core">
-                <column name="id" type="BIGINT" autoIncrement="true" >
-                    <constraints primaryKey="true" nullable="false" />
-                </column>
-                <column name="draft" type="SMALLINT" defaultValue="1" >
-                    <constraints nullable="false" />
-                </column>
-                <column name="space_id" type="UUID" />
-                <column name="owner_id" type="UUID" />
-                <column name="parent_id" type="BIGINT" />
-                <column name="date_created" type="TIMESTAMP WITH TIMEZONE" defaultValueComputed="now()">
-                    <constraints nullable="false"/>
-                </column>
-                <column name="status" type="SMALLINT"></column>
-            </createTable>
-        </changeSet>
+    <changeSet id="7-page-table" author="kiran kumar">
+        <preConditions onFail="MARK_RAN">
+            <sqlCheck expectedResult="0"> SELECT COUNT(*) FROM information_schema.tables WHERE
+                table_name = 'page'; </sqlCheck>
+        </preConditions>
+        <comment>Create Page table</comment>
+        <createTable tableName="page" schemaName="core">
+            <column name="id" type="BIGINT" autoIncrement="true">
+                <constraints primaryKey="true" nullable="false" />
+            </column>
+            <column name="draft" type="SMALLINT" defaultValue="1">
+                <constraints nullable="false" />
+            </column>
+            <column name="space_id" type="UUID" />
+            <column name="owner_id" type="UUID" />
+            <column name="parent_id" type="BIGINT" />
+            <column name="date_created" type="TIMESTAMP WITH TIMEZONE" defaultValueComputed="now()">
+                <constraints nullable="false" />
+            </column>
+            <column name="status" type="SMALLINT"></column>
+        </createTable>
+    </changeSet>
 
-        <changeSet id="8-doc-table" author="kiran kumar">
-            <preConditions onFail="MARK_RAN">
-                <sqlCheck expectedResult="0">
-                    SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'doc';
-                </sqlCheck>
-            </preConditions>
-            <comment>Create doc table</comment>
-            <createTable tableName="doc" schemaName="core">
-                <column name="id" type="BIGINT" autoIncrement="true"  >
-                    <constraints primaryKey="true" nullable="false" />
-                </column>
-                <column name="page_id" type="BIGINT"></column>
-                <column name="version" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="now()"></column>
-                <column name="data" type="JSON" >
-                    <constraints nullable="false" />
-                </column>
-                <column name="title" type="Text" >
-                    <constraints nullable="false" />
-                </column>
-                <column name="owner" type="UUID" >
-                    <constraints nullable="false" />
-                </column>
-                <column name="date_updated" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="now()" >
-                    <constraints nullable="false" />
-                </column>
-                <column name="draft" type="SMALLINT" defaultValue="1">
-                    <constraints nullable="false" />
-                </column>
-            </createTable>
-        </changeSet>
+    <changeSet id="8-doc-table" author="kiran kumar">
+        <preConditions onFail="MARK_RAN">
+            <sqlCheck expectedResult="0"> SELECT COUNT(*) FROM information_schema.tables WHERE
+                table_name = 'doc'; </sqlCheck>
+        </preConditions>
+        <comment>Create doc table</comment>
+        <createTable tableName="doc" schemaName="core">
+            <column name="id" type="BIGINT" autoIncrement="true">
+                <constraints primaryKey="true" nullable="false" />
+            </column>
+            <column name="page_id" type="BIGINT"></column>
+            <column name="version" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="now()"></column>
+            <column name="data" type="JSON">
+                <constraints nullable="false" />
+            </column>
+            <column name="title" type="Text">
+                <constraints nullable="false" />
+            </column>
+            <column name="owner" type="UUID">
+                <constraints nullable="false" />
+            </column>
+            <column name="date_updated" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="now()">
+                <constraints nullable="false" />
+            </column>
+            <column name="draft" type="SMALLINT" defaultValue="1">
+                <constraints nullable="false" />
+            </column>
+        </createTable>
+    </changeSet>
 
-        <changeSet id="9-doc-page-id-fkey" author="Kiran Kumar">
-            <addForeignKeyConstraint baseTableSchemaName="core" referencedTableSchemaName="core" baseTableName="doc" baseColumnNames="page_id" constraintName="doc_page_id_fkey" referencedTableName="page" referencedColumnNames="id" deleteCascade="true" />
-        </changeSet>
+    <changeSet id="9-doc-page-id-fkey" author="Kiran Kumar">
+        <addForeignKeyConstraint baseTableSchemaName="core" referencedTableSchemaName="core"
+            baseTableName="doc" baseColumnNames="page_id" constraintName="doc_page_id_fkey"
+            referencedTableName="page" referencedColumnNames="id" deleteCascade="true" />
+    </changeSet>
 
-        <changeSet id="10-page-space-id-fkey" author="Kiran Kumar">
-            <addForeignKeyConstraint baseTableSchemaName="core" referencedTableSchemaName="core" baseTableName="page" baseColumnNames="space_id" constraintName="page_space_id_fkey" referencedTableName="space" referencedColumnNames="id" deleteCascade="true" />
-        </changeSet>
+    <changeSet id="10-page-space-id-fkey" author="Kiran Kumar">
+        <addForeignKeyConstraint baseTableSchemaName="core" referencedTableSchemaName="core"
+            baseTableName="page" baseColumnNames="space_id" constraintName="page_space_id_fkey"
+            referencedTableName="space" referencedColumnNames="id" deleteCascade="true" />
+    </changeSet>
+
+    <changeSet id="11-content-table" author="Kiran Kumar">
+        <preConditions>
+            <sqlCheck expectedResult="0"> SELECT COUNT(*) FROM information_schema.tables WHERE
+                table_name = 'content'; </sqlCheck>
+        </preConditions>
+        <comment>Create version 2 of doc table</comment>
+        <createTable tableName="content" schemaName="core">
+            <column name="id" type="BIGINT" autoIncrement="true">
+                <constraints primaryKey="true" nullable="false" />
+            </column>
+            <column name="doc_id" type="BIGINT">
+                <constraints nullable="false" />
+            </column>
+            <column name="parent_id" type="BIGINT" />
+            <column name="order" type="INT" />
+            <column name="type" type="VARCHAR(100)" />
+            <column name="attrs" type="JSONB" />
+            <column name="marks" type="JSONB" />
+            <column name="text" type="Text" />
+        </createTable>
+    </changeSet>
+
+    <changeSet id="12-doc-version-table" author="Kiran Kumar">
+        <preConditions>
+            <sqlCheck expectedResult="0"> SELECT COUNT(*) FROM information_schema.tables WHERE
+                table_name = 'doc_version'; </sqlCheck>
+        </preConditions>
+        <comment>Create doc_version table</comment>
+        <createTable tableName="doc_version" schemaName="core">
+            <column name="doc_id" type="BIGINT" />
+            <column name="version" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="now()" />
+            <column name="draft" type="BOOLEAN" defaultValue="TRUE" />
+            <column name="owner" type="UUID">
+                <constraints nullable="false" />
+            </column>
+            <column name="title" type="Text">
+                <constraints nullable="false" />
+            </column>
+        </createTable>
+    </changeSet>
+
+    <changeSet id="13-doc-v2-table" author="Kiran Kumar">
+        <preConditions>
+            <sqlCheck expectedResult="0"> SELECT COUNT(*) FROM information_schema.tables WHERE
+                table_name = 'doc_v2'; </sqlCheck>
+        </preConditions>
+        <comment>Create version 2 of doc table</comment>
+        <createTable tableName="doc_v2" schemaName="core">
+            <column name="id" type="BIGINT" autoIncrement="true">
+                <constraints primaryKey="true" nullable="false" />
+            </column>
+            <column name="page_id" type="BIGINT" />
+            <column name="owner" type="UUID">
+                <constraints nullable="false" />
+            </column>
+            <column name="date_created" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="now()">
+                <constraints nullable="false" />
+            </column>
+        </createTable>
+    </changeSet>
+
+    <changeSet id="14-doc-page-map-fkey" author="Kiran Kumar">
+        <addForeignKeyConstraint baseTableSchemaName="core" referencedTableSchemaName="core"
+            baseTableName="doc_v2" baseColumnNames="page_id" constraintName="doc_page_id_map_fkey"
+            referencedTableName="page" referencedColumnNames="id" deleteCascade="true" />
+    </changeSet>
+
+    <changeSet id="15-doc-version-doc-fkey" author="Kiran Kumar">
+        <addForeignKeyConstraint baseTableSchemaName="core" referencedTableSchemaName="core"
+            baseTableName="doc_version" baseColumnNames="doc_id" constraintName="doc_version_doc_map_fkey"
+            referencedTableName="doc_v2" referencedColumnNames="id" deleteCascade="true" />
+    </changeSet>
+
+    <changeSet id="16-content-doc-fkey" author="Kiran Kumar">
+        <addForeignKeyConstraint baseTableSchemaName="core" referencedTableSchemaName="core"
+            baseTableName="content" baseColumnNames="doc_id" constraintName="content_doc_map_fkey"
+            referencedTableName="doc_v2" referencedColumnNames="id" deleteCascade="true" />
+    </changeSet>
 
 </databaseChangeLog>
