@@ -41,6 +41,9 @@ DB_BESKAR_ADMIN_USER=beskar_admin # run liquibase migrations with this user
 DB_BESKAR_ADMIN_USER_PWD=beskar_admin_pwd
 DB_BESKAR_APP_USER=app_user
 DB_BESKAR_APP_USER_PWD=app_user_pwd
+TAG=$(echo date +"%s")
+
+echo "running migrations with tag $TAG"
 
 
 function create_temp_liquibase_file() {
@@ -70,10 +73,12 @@ INIT_DIRECTORY=$DIRECTORY/db/init
 cd $INIT_DIRECTORY
 create_temp_liquibase_file $INIT_DIRECTORY liquibase.properties
 copy_data_to_liquibaes_prop_file $INIT_DIRECTORY
+$LQ --defaultsFile=liquibase-temp.properties tag $TAG
 $LQ --defaultsFile=liquibase-temp.properties update
 
 create_temp_liquibase_file $INIT_DIRECTORY auth.properties
 copy_data_to_liquibaes_prop_file $INIT_DIRECTORY
+$LQ --defaultsFile=liquibase-temp.properties tag $TAG
 $LQ --defaultsFile=liquibase-temp.properties update
 
 # run beskar scripts
@@ -81,6 +86,7 @@ BESKAR_DIRECTORY=$DIRECTORY/db/beskar
 cd $BESKAR_DIRECTORY
 create_temp_liquibase_file $BESKAR_DIRECTORY liquibase.properties
 copy_data_to_liquibaes_prop_file $BESKAR_DIRECTORY
+$LQ --defaultsFile=liquibase-temp.properties tag $TAG
 $LQ --defaultsFile=liquibase-temp.properties update
 
 echo "database initialised with schema 🔥"
