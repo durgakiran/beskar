@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 
+	editor "github.com/durgakiran/beskar/editor/controller"
 	media "github.com/durgakiran/beskar/media/controller"
 	profile "github.com/durgakiran/beskar/profile/controller"
 	"github.com/go-chi/chi/v5"
@@ -45,6 +46,7 @@ func main() {
 	r.Use(middleware.Recoverer)
 	r.Mount("/media", media.Router())
 	r.Mount("/profile", profile.Router())
+	r.Mount("/editor", editor.Router())
 
 	logger.Error(fmt.Sprintf("Serving on port: %s\n", port))
 	err = http.ListenAndServe(port, r)

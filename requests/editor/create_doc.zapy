@@ -1,0 +1,47 @@
+{
+  "metadata": {
+    "v": "1",
+    "cell_type": "zapy:request",
+    "tags": []
+  },
+  "endpoint": "http://localhost:9095/editor/save",
+  "method": "POST",
+  "params": [
+    {
+      "active": true,
+      "key": "",
+      "value": ""
+    }
+  ],
+  "headers": [
+    {
+      "active": true,
+      "key": "Content-Type",
+      "value": "{{ ctx.auto() }}"
+    },
+    {
+      "active": true,
+      "key": "Authorization",
+      "value": "Bearer {{ctx.store.access_token}}"
+    },
+    {
+      "active": true,
+      "key": "",
+      "value": ""
+    }
+  ],
+  "script": [
+    ""
+  ],
+  "variables": [
+    {
+      "active": true,
+      "key": "",
+      "value": ""
+    }
+  ],
+  "body_type": "application/json",
+  "body": [
+    "{}"
+  ]
+}

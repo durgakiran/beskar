@@ -9,9 +9,12 @@ uilocal
 .env
 **/**/.gradle
 **/**/build
+
 uploads
 *-temp.*
 liquibasebin
 keycloakbin
 images
 .env
+zappy
+*.pyc
