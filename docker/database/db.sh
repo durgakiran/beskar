@@ -22,4 +22,4 @@ sleep 5
 # there is an issue while attaching volume in windows, so needed to add additional // at the start
 # https://stackoverflow.com/questions/35315996/how-do-i-mount-a-docker-volume-while-using-a-windows-host
 # TODO: need to check if this works on linux/mac
-docker run -d --name $CONTAINER -v //$DIRECTORY:/app --network custom_local_network  $IMAGE  
+docker run -d --name $CONTAINER -v //$DIRECTORY:/app --network custom_local_network  $IMAGE  -it

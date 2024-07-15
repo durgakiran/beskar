@@ -180,7 +180,7 @@
         </preConditions>
         <comment>Create version 2 of doc table</comment>
         <createTable tableName="content" schemaName="core">
-            <column name="id" type="BIGINT" autoIncrement="true">
+            <column name="id" type="UUID">
                 <constraints primaryKey="true" nullable="false" />
             </column>
             <column name="doc_id" type="BIGINT">
@@ -195,7 +195,31 @@
         </createTable>
     </changeSet>
 
-    <changeSet id="12-doc-version-table" author="Kiran Kumar">
+    <changeSet id="12-page-doc-map" author="Kiran Kumar">
+        <preConditions>
+            <sqlCheck expectedResult="0"> 
+                SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'page_doc_map'; 
+            </sqlCheck>
+        </preConditions>
+        <createTable tableName="page_doc_map" schemaName="core">
+            <column name="page_id" type="BIGINT">
+                <constraints nullable="false" />
+            </column>
+            <column name="doc_id" type="BIGINT" autoIncrement="true">
+                <constraints primaryKey="true"/>
+            </column>
+            <column name="title" type="text">
+                <constraints nullable="false"/>
+            </column>
+            <column name="version" type="TIMESTAMP WITH TIME ZONE" defaultValue="now()"></column>
+            <column name="owner_id" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+            <column name="draft" type="SMALLINT"></column>
+        </createTable>
+    </changeSet>
+
+    <!-- <changeSet id="12-doc-version-table" author="Kiran Kumar">
         <preConditions>
             <sqlCheck expectedResult="0"> SELECT COUNT(*) FROM information_schema.tables WHERE
                 table_name = 'doc_version'; </sqlCheck>
@@ -212,9 +236,9 @@
                 <constraints nullable="false" />
             </column>
         </createTable>
-    </changeSet>
+    </changeSet> -->
 
-    <changeSet id="13-doc-v2-table" author="Kiran Kumar">
+    <!-- <changeSet id="13-doc-v2-table" author="Kiran Kumar">
         <preConditions>
             <sqlCheck expectedResult="0"> SELECT COUNT(*) FROM information_schema.tables WHERE
                 table_name = 'doc_v2'; </sqlCheck>
@@ -224,7 +248,6 @@
             <column name="id" type="BIGINT" autoIncrement="true">
                 <constraints primaryKey="true" nullable="false" />
             </column>
-            <column name="page_id" type="BIGINT" />
             <column name="owner" type="UUID">
                 <constraints nullable="false" />
             </column>
@@ -232,24 +255,33 @@
                 <constraints nullable="false" />
             </column>
         </createTable>
-    </changeSet>
+    </changeSet> -->
 
     <changeSet id="14-doc-page-map-fkey" author="Kiran Kumar">
         <addForeignKeyConstraint baseTableSchemaName="core" referencedTableSchemaName="core"
-            baseTableName="doc_v2" baseColumnNames="page_id" constraintName="doc_page_id_map_fkey"
+            baseTableName="page_doc_map" baseColumnNames="page_id" constraintName="doc_page_id_map_fkey"
             referencedTableName="page" referencedColumnNames="id" deleteCascade="true" />
     </changeSet>
 
-    <changeSet id="15-doc-version-doc-fkey" author="Kiran Kumar">
+    <!-- <changeSet id="15-doc-version-doc-fkey" author="Kiran Kumar">
         <addForeignKeyConstraint baseTableSchemaName="core" referencedTableSchemaName="core"
             baseTableName="doc_version" baseColumnNames="doc_id" constraintName="doc_version_doc_map_fkey"
             referencedTableName="doc_v2" referencedColumnNames="id" deleteCascade="true" />
-    </changeSet>
+    </changeSet> -->
 
     <changeSet id="16-content-doc-fkey" author="Kiran Kumar">
         <addForeignKeyConstraint baseTableSchemaName="core" referencedTableSchemaName="core"
             baseTableName="content" baseColumnNames="doc_id" constraintName="content_doc_map_fkey"
-            referencedTableName="doc_v2" referencedColumnNames="id" deleteCascade="true" />
+            referencedTableName="page_doc_map" referencedColumnNames="doc_id" deleteCascade="true" />
+    </changeSet>
+
+    <changeSet id="17-grant-usage-to-app-user" author="Kiran Kumar">
+        <sql>
+            GRANT USAGE ON SCHEMA core TO ${app_user};
+            GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA core TO ${app_user};
+            GRANT ALL ON ALL SEQUENCES IN SCHEMA core TO ${app_user};
+        </sql>
+        <rollback />
     </changeSet>
 
 </databaseChangeLog>

@@ -18,3 +18,7 @@ images
 .env
 zappy
 *.pyc
+ui/public/workers
+ui/public/jbi.wasm
+logs
+*.wasm

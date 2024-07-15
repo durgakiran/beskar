@@ -1,13 +1,14 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
-	"log/slog"
 	"net/http"
 	"os"
 
-	editor "github.com/durgakiran/beskar/editor/controller"
+	"github.com/durgakiran/beskar/core"
+	editor "github.com/durgakiran/beskar/editor"
 	media "github.com/durgakiran/beskar/media/controller"
 	profile "github.com/durgakiran/beskar/profile/controller"
 	"github.com/go-chi/chi/v5"
@@ -35,8 +36,24 @@ func main() {
 	if err != nil {
 		fmt.Println(err)
 	}
-	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
+	core.InitializeLogger()
+	logger := core.Logger
 	const port = ":9095"
+
+	// create connection pool with database
+	connPool := core.GetPool()
+	defer connPool.Close()
+	connection, err := connPool.Acquire(context.Background())
+	if err != nil {
+		logger.Error(fmt.Sprintf("Error while acquiring connection from the database pool!!. %s", err.Error()))
+		os.Exit(1)
+	}
+	err = connection.Ping(context.Background())
+	if err != nil {
+		logger.Error(fmt.Sprintf("Could not ping database %s", err.Error()))
+		os.Exit(1)
+	}
+	connection.Release()
 
 	r := chi.NewRouter()
 	addCorsMiddleWare(r)
@@ -48,7 +65,7 @@ func main() {
 	r.Mount("/profile", profile.Router())
 	r.Mount("/editor", editor.Router())
 
-	logger.Error(fmt.Sprintf("Serving on port: %s\n", port))
+	logger.Info(fmt.Sprintf("Serving on port: %s", port))
 	err = http.ListenAndServe(port, r)
 	if err != nil {
 		log.Fatal(err)

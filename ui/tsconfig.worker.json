@@ -1,0 +1,9 @@
+{
+    "extends": "./tsconfig.json",
+    "compilerOptions": {
+        "outDir": "./public/workers",
+        "module": "esnext",
+        "noEmit": false
+    },
+    "include": ["workers/**/*.ts", "workers/**/*.d.ts"]
+}

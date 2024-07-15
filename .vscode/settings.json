@@ -7,5 +7,9 @@
     "java.checkstyle.version": "10.13.0",
     "cSpell.words": [
         "keycloak"
+    ],
+    "zapy.serverFile": "main.py",
+    "python.analysis.extraPaths": [
+        "./requests"
     ]
 }

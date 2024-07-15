@@ -42,6 +42,10 @@
   ],
   "body_type": "application/json",
   "body": [
-    "{}"
+    "{",
+    "    \"title\": \"Hello World\",",
+    "    \"spaceId\": \"f458794c-7127-4ea1-934c-ab44a8c3bfb0\"",
+    "}",
+    ""
   ]
 }

@@ -59,6 +59,9 @@ func (t *tokenType) authenticate() error {
 	var claims Claims
 
 	err = idToken.Claims(&claims)
+	if err != nil {
+		return err
+	}
 	t.Claims = claims
 	return nil
 }
