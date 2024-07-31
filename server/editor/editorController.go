@@ -14,47 +14,6 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-func saveDoc(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	fmt.Println(ctx.Value("claims"))
-	claims, ok := ctx.Value("claims").(core.Claims)
-	if !ok {
-		render.Status(r, http.StatusForbidden)
-		render.Render(w, r, core.NewFailedResponse(http.StatusForbidden, core.FAILURE, "Invalid user Id"))
-		return
-	}
-	userId := claims.Claims.UserId
-	data, err := io.ReadAll(r.Body)
-	defer r.Body.Close()
-	if err != nil {
-		render.Status(r, http.StatusInternalServerError)
-		render.Render(w, r, core.NewFailedResponse(http.StatusInternalServerError, core.FAILURE, "Unable to read request body"))
-		return
-	}
-	inputDoc, err := ValidateNewDoc(data)
-	if err != nil {
-		render.Status(r, http.StatusBadRequest)
-		render.Render(w, r, core.NewFailedResponse(http.StatusBadRequest, core.FAILURE, "Unable to process request body"))
-		return
-	}
-	inputDoc.OwnerId = uuid.MustParse(userId)
-	validSpaceUserPermissions := ValidateUserSpacePermissions(inputDoc.SpaceId, inputDoc.OwnerId)
-	if !validSpaceUserPermissions {
-		render.Status(r, http.StatusForbidden)
-		render.Render(w, r, core.NewFailedResponse(http.StatusForbidden, core.FAILURE, "Invalid space permissions"))
-		return
-	}
-	pageId, err := inputDoc.Create()
-	if err != nil {
-		render.Status(r, http.StatusInternalServerError)
-		render.Render(w, r, core.NewFailedResponse(http.StatusInternalServerError, core.FAILURE, "Unable to create new page"))
-		return
-	}
-
-	render.Status(r, http.StatusCreated)
-	render.Render(w, r, core.NewSucessResponse(core.SUCCESS, struct{ page int64 }{page: pageId}))
-}
-
 func updateDoc(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	fmt.Println(ctx.Value("claims"))
@@ -138,6 +97,44 @@ func getDocumentToEdit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	sendSuccessResponse(w, r, http.StatusOK, outputDocument)
+}
+
+func saveDoc(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	fmt.Println(ctx.Value("claims"))
+	claims, ok := ctx.Value("claims").(core.Claims)
+	if !ok {
+		sendFailedReponse(w, r, http.StatusForbidden, "Invalid user Id")
+		return
+	}
+	userId := claims.Claims.UserId
+	data, err := io.ReadAll(r.Body)
+	defer r.Body.Close()
+	if err != nil {
+		sendFailedReponse(w, r, http.StatusBadRequest, "Unable to read request body")
+		return
+	}
+	inputDoc, err := ValidateNewDoc(data)
+	if err != nil {
+		sendFailedReponse(w, r, http.StatusBadRequest, "Unable to process request body")
+		return
+	}
+	inputDoc.OwnerId = uuid.MustParse(userId)
+	validSpaceUserPermissions := ValidateUserSpacePermissions(inputDoc.SpaceId, inputDoc.OwnerId)
+	if !validSpaceUserPermissions {
+		sendFailedReponse(w, r, http.StatusForbidden, "Invalid space permissions")
+		return
+	}
+	pageId, err := inputDoc.Create()
+	if err != nil {
+		sendFailedReponse(w, r, http.StatusInternalServerError, "Unable to create new page")
+		return
+	}
+	type PageId struct {
+		Page int64 `json:"page"`
+	}
+	render.Status(r, http.StatusCreated)
+	render.Render(w, r, core.NewSucessResponse(core.SUCCESS, PageId{Page: pageId}))
 }
 
 func Router() *chi.Mux {
