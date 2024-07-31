@@ -24,3 +24,8 @@ func ValidateNewDoc(data []byte) (InputDocument, error) {
 
 	return inputDoc, nil
 }
+
+func ValidateUserSpacePermissions(spaceId uuid.UUID, userId uuid.UUID) bool {
+	space := GetSpace(spaceId)
+	return space.UserId == userId
+}

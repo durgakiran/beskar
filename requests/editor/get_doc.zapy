@@ -1,0 +1,62 @@
+{
+  "metadata": {
+    "v": "1",
+    "cell_type": "zapy:request",
+    "tags": []
+  },
+  "endpoint": "http://localhost:9095/editor/space/{{spaceId}}/page/{{pageId}}",
+  "method": "GET",
+  "params": [
+    {
+      "active": false,
+      "key": "spaceId",
+      "value": ""
+    },
+    {
+      "active": false,
+      "key": "pageId",
+      "value": ""
+    }
+  ],
+  "headers": [
+    {
+      "active": false,
+      "key": "Content-Type",
+      "value": "{{ ctx.auto() }}"
+    },
+    {
+      "active": true,
+      "key": "Authorization",
+      "value": "Bearer {{ctx.store.access_token}}"
+    },
+    {
+      "active": false,
+      "key": "",
+      "value": ""
+    }
+  ],
+  "script": [
+    ""
+  ],
+  "variables": [
+    {
+      "active": true,
+      "key": "spaceId",
+      "value": "f458794c-7127-4ea1-934c-ab44a8c3bfb0"
+    },
+    {
+      "active": true,
+      "key": "pageId",
+      "value": "8"
+    },
+    {
+      "active": true,
+      "key": "",
+      "value": ""
+    }
+  ],
+  "body_type": "None",
+  "body": [
+    ""
+  ]
+}

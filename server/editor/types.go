@@ -38,11 +38,11 @@ type Page struct {
 }
 
 type Space struct {
-	Id          uuid.UUID
-	Name        string
-	DateCreated time.Time
-	DateUpdate  time.Time
-	UserId      uuid.UUID
+	Id          uuid.UUID `json:"id"`
+	Name        string    `json:"name"`
+	DateCreated time.Time `json:"dateCreated"`
+	DateUpdate  time.Time `json:"dateUpdated"`
+	UserId      uuid.UUID `json:"userId"`
 }
 
 type Editor interface {
@@ -56,14 +56,25 @@ type Editor interface {
 	Delete() int64
 }
 
+type Document struct {
+	Title    string    `json:"title"`
+	OwnerId  uuid.UUID `json:"ownerId"`
+	ParentId int64     `json:"parentId"`
+	Id       int64     `json:"id"`
+	DocId    int64     `json:"docId"`
+	SpaceId  uuid.UUID `json:"spaceId"`
+}
+
 type InputDocument struct {
-	Title    string        `json:"title"`
-	OwnerId  uuid.UUID     `json:"owner"`
-	ParentId int64         `json:"parentId"`
-	SpaceId  uuid.UUID     `json:"spaceId"`
-	New      []ContentNode `json:"new"`
-	Updated  []ContentNode `json:"updated"`
-	Deleted  []ContentNode `json:"deleted"`
+	Document
+	New     []ContentNode `json:"new"`
+	Updated []ContentNode `json:"updated"`
+	Deleted []ContentNode `json:"deleted"`
+}
+
+type OutputDocument struct {
+	Document
+	Nodes []ContentNode `json:"nodes"`
 }
 
 type Sequence interface {
