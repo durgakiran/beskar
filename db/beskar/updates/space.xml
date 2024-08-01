@@ -284,4 +284,17 @@
         <rollback />
     </changeSet>
 
+    <changeSet id="18-modify-data-type-content-parent-id" author="Kiran Kumar">
+        <addColumn tableName="content" schemaName="core">
+            <column name="parent_id_2" type="uuid"></column>
+        </addColumn>
+    </changeSet>
+
+    <changeSet id="19-modify-data-type-content-parent-id-drop-column" author="Kiran Kumar">
+        <dropColumn tableName="content" schemaName="core" columnName="parent_id"  />
+    </changeSet>
+
+    <changeSet id="19-modify-data-type-content-parent-id-rename-column" author="Kiran Kumar">
+        <renameColumn tableName="content" oldColumnName="parent_id_2" schemaName="core" newColumnName="parent_id" />
+    </changeSet>
 </databaseChangeLog>

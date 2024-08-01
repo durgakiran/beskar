@@ -14,9 +14,9 @@ import (
 const (
 	newPage        = "INSERT INTO core.page (space_id, owner_id, parent_id, date_created, status) VALUES ($1, $2, $3, $4, $5) RETURNING id"
 	newDoc         = "INSERT INTO core.page_doc_map (page_id, title, version, owner_id, draft) VALUES ($1, $2, $3, $4, $5) RETURNING doc_id"
-	newContent     = "INSERT INTO core.content (id, doc_id, parent_id, order, type, attrs, marks, text) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id"
+	newContent     = "INSERT INTO core.content (id, doc_id, parent_id, \"order\", type, attrs, marks, text) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id"
 	getSpace       = "SELECT id, name, date_created AS dateCreated, date_updated AS dateUpdated, user_id AS userId FROM core.space WHERE id = $1"
-	updateContent  = "UPDATE core.content SET parent_id = $2, order = $3, type = $4, attrs = $5, marks = $6, text = $7 WHERE id = $8 AND doc_id = $1"
+	updateContent  = "UPDATE core.content SET parent_id = $2, \"order\" = $3, type = $4, attrs = $5, marks = $6, text = $7 WHERE id = $8 AND doc_id = $1"
 	deleteContent  = "DELETE FROM core.content WHERE id = $1 AND doc_id = $2"
 	updateDocQuery = "UPDATE core.page_doc_map SET title = $1, version = $2 WHERE doc_id = $3 AND page_id = $4"
 	getDocument    = `SELECT 
@@ -130,9 +130,16 @@ func (d Doc) Delete() int64 {
 	return int64(0)
 }
 
+func nullifyIfZeroUUID(id uuid.UUID) interface{} {
+	if id == uuid.Nil {
+		return nil
+	}
+	return id
+}
+
 func (c ContentNode) Create(conn pgx.Tx, ctx context.Context) (uuid.UUID, error) {
 	var docId uuid.UUID
-	err := conn.QueryRow(ctx, newContent, c.ContentId, c.DocId, c.ParentId, c.OrderId, c.Type, c.Attributes, c.Marks, c.Text).Scan(&docId)
+	err := conn.QueryRow(ctx, newContent, c.ContentId, c.DocId, nullifyIfZeroUUID(c.ParentId), c.OrderId, c.Type, c.Attributes, c.Marks, c.Text).Scan(&docId)
 	if err != nil {
 		// error happened we need to cancel whole transaction
 		fmt.Printf("Error happened while creating Content %v \n", err.Error())
@@ -144,7 +151,7 @@ func (c ContentNode) Create(conn pgx.Tx, ctx context.Context) (uuid.UUID, error)
 
 func (c ContentNode) Update(conn pgx.Tx, ctx context.Context) (uuid.UUID, error) {
 	var docId uuid.UUID
-	_, err := conn.Exec(ctx, updateContent, c.DocId, c.ParentId, c.OrderId, c.Type, c.Attributes, c.Marks, c.Text, c.ContentId)
+	_, err := conn.Exec(ctx, updateContent, c.DocId, nullifyIfZeroUUID(c.ParentId), c.OrderId, c.Type, c.Attributes, c.Marks, c.Text, c.ContentId)
 	if err != nil {
 		// error happened we need to cancel whole transaction
 		fmt.Printf("Error happened while creating Content %v \n", err.Error())
@@ -202,7 +209,7 @@ func (document InputDocument) Create() (int64, error) {
 		return pageId, err
 	}
 	// create doc
-	doc := Doc{PageId: pageId, OwnerId: document.OwnerId, Version: time.Now(), Title: document.Title, Draft: 0}
+	doc := Doc{PageId: pageId, OwnerId: document.OwnerId, Version: time.Now(), Title: document.Title, Draft: 1}
 	docId, err := doc.Create(tx, ctx)
 	if err != nil {
 		return pageId, err
@@ -234,8 +241,10 @@ func (document InputDocument) Update() (int64, error) {
 	// if err != nil {
 	// 	return pageId, err
 	// }
-	// create doc
-	doc := Doc{PageId: document.Id, OwnerId: document.OwnerId, Version: time.Now(), Title: document.Title, Draft: 0}
+	// create or update doc
+	// we need to create a doc if there is none exists in draft state
+	// we need to update a doc if exists in draft state
+	doc := Doc{PageId: document.Id, DocId: document.DocId, OwnerId: document.OwnerId, Version: time.Now(), Title: document.Title, Draft: 1}
 	_, err = doc.Update(tx, ctx)
 	if err != nil {
 		return document.Id, err
