@@ -50,7 +50,6 @@ func (i Doc) CreateEditorDocument() Document {
 	idToChildIdMap := make(map[uuid.UUID][]uuid.UUID)
 
 	var rootId uuid.UUID
-
 	for _, child := range data {
 		if child.ParentId != uuid.Nil {
 			if _, ok := idToChildIdMap[child.ParentId]; !ok {

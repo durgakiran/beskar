@@ -14,19 +14,19 @@ type Content struct {
 }
 
 type Doc struct {
-	DocId          int64
-	PageId         string
-	OwnerId        uuid.UUID
-	CurrentVersion int64
-	Title          string
-	Draft          int8
-	Data           []Content
+	Title    string    `json:"title"`
+	OwnerId  uuid.UUID `json:"ownerId"`
+	ParentId int64     `json:"parentId"`
+	Id       int64     `json:"id"`
+	DocId    int64     `json:"docId"`
+	SpaceId  uuid.UUID `json:"spaceId"`
+	Data     []Content `json:"nodes"`
 }
 
 // represents document object recieved from the editor
 type Document struct {
 	Type       string                   `json:"type"`
-	Content    []Document               `json:"Content"`
+	Content    []Document               `json:"content"`
 	Attributes map[string]interface{}   `json:"attrs"`
 	Marks      []map[string]interface{} `json:"marks"`
 	Text       string                   `json:"text"`

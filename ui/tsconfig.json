@@ -4,6 +4,7 @@
         "target": "es2015",
         "paths": {
             "@http": ["./app/core/http/index.ts"],
+            "@http/hooks": ["./app/core/http/hooks/index.ts"],
             "@tiptap": ["./app/core/tiptap/*"],
             "@editor": ["./app/core/editor/index.ts"],
             "@editor/*": ["./app/core/editor/*"],

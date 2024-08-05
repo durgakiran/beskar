@@ -8,14 +8,14 @@ import (
 )
 
 type ContentNode struct {
-	DocId      int64                  `json:"docId"`
-	ContentId  uuid.UUID              `json:"contentId"`
-	ParentId   uuid.UUID              `json:"parentId"`
-	OrderId    int64                  `json:"orderId"`
-	Type       string                 `json:"type"`
-	Attributes map[string]interface{} `json:"attrs"`
-	Marks      map[string]interface{} `json:"marks"`
-	Text       string                 `json:"text"`
+	DocId      int64                    `json:"docId" db:"docId"`
+	ContentId  uuid.UUID                `json:"contentId" db:"contentid"`
+	ParentId   uuid.UUID                `json:"parentId" db:"parentId"`
+	OrderId    int64                    `json:"orderId" db:"orderId"`
+	Type       string                   `json:"type" db:"type"`
+	Attributes map[string]interface{}   `json:"attrs" db:"attrs"`
+	Marks      []map[string]interface{} `json:"marks" db:"marks"`
+	Text       string                   `json:"text" db:"text"`
 }
 
 type Doc struct {

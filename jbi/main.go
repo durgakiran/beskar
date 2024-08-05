@@ -65,6 +65,20 @@ func run() js.Func {
 	})
 }
 
+func editorDoc() js.Func {
+	return js.FuncOf(func(this js.Value, args []js.Value) interface{} {
+		var t core.Doc
+
+		err := json.Unmarshal([]byte(args[0].String()), &t)
+		if err != nil {
+			return js.ValueOf([]interface{}{"Invalid JSON"})
+		}
+		doc := t.CreateEditorDocument()
+		marshalledOutput, err := json.Marshal(&doc)
+		return js.ValueOf(string(marshalledOutput[:]))
+	})
+}
+
 func Add(a int, b int) int {
 	return a + b
 }
@@ -91,6 +105,7 @@ func main() {
 	// Attach the previously defined 'run' function to the global JavaScript object,
 	// making it callable from the JavaScript environment.
 	js.Global().Set("run", run())
+	js.Global().Set("getDoc", editorDoc())
 
 	// Utilize a channel receive expression to halt the 'main' goroutine, preventing the program from terminating.
 	<-ch

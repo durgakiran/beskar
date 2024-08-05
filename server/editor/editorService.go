@@ -116,6 +116,7 @@ func fetchContent(conn pgx.Tx, ctx context.Context, docId int64) ([]ContentNode,
 	}
 	nodes, err = pgx.CollectRows(rows, pgx.RowToStructByNameLax[ContentNode])
 	if err != nil {
+		fmt.Println(err)
 		fmt.Printf("Error happend while fetching nodes %v \n", err.Error())
 		return nodes, err
 	}

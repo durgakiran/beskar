@@ -27,7 +27,7 @@ func TestCreateEditorDocument(t *testing.T) {
 
 		contentArray := make([]Content, 0)
 		contentArray = append(contentArray, content)
-		inputDocument := Doc{DocId: 1, PageId: "1", Data: contentArray, Title: "Hello World"}
+		inputDocument := Doc{DocId: 1, Id: 1, Data: contentArray, Title: "Hello World"}
 		out := inputDocument.CreateEditorDocument()
 
 		if out.Type != "doc" {
@@ -59,7 +59,7 @@ func TestCreateEditorDocument(t *testing.T) {
 			t.Errorf("Failed to unmarhsal doc data")
 		}
 		got := doc.ConvertToContentObjects(1)
-		inputDocument := Doc{DocId: 1, PageId: "1", Data: got, Title: "Hello World"}
+		inputDocument := Doc{DocId: 1, Id: 1, Data: got, Title: "Hello World"}
 		out := inputDocument.CreateEditorDocument()
 
 		if len(out.Content) != 2 {

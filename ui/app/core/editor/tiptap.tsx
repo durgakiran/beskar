@@ -146,17 +146,17 @@ export function TipTap({ setEditorContext, content, pageId, id, editable = true,
     });
 
     useEffect(() => {
-        workerRef.current = new Worker('/workers/editor.js', { type: "module" });
-        workerRef.current.onmessage = (e) => {
-            console.log(e);
-        };
-        workerRef.current.onerror = (e) => {
-            console.log(e);
-        };
-        workerRef.current.postMessage({ type: "init", data: { id: id, pageId: pageId } });
-        return () => {
-            workerRef.current.terminate();
-        };
+        // workerRef.current = new Worker('/workers/editor.js', { type: "module" });
+        // workerRef.current.onmessage = (e) => {
+        //     console.log(e);
+        // };
+        // workerRef.current.onerror = (e) => {
+        //     console.log(e);
+        // };
+        // workerRef.current.postMessage({ type: "init", data: { id: id, pageId: pageId } });
+        // return () => {
+        //     workerRef.current.terminate();
+        // };
         // LoadWasm().then(() => {
         //     setIsWasmLoading(false);
         // })
@@ -184,17 +184,17 @@ export function TipTap({ setEditorContext, content, pageId, id, editable = true,
     useEffect(() => {
         if (updated && editable) {
             // we can call wasm file here
-            mutateFunction({ variables: { id: id, pageId: pageId, data: debouncedValue, title: debouncedTitle } })
-                .then((data) => console.log(data))
-                .catch((error) => console.log(error)); // TODO: handle JWT expired error
+            // mutateFunction({ variables: { id: id, pageId: pageId, data: debouncedValue, title: debouncedTitle } })
+            //     .then((data) => console.log(data))
+            //     .catch((error) => console.log(error)); // TODO: handle JWT expired error
         }
     }, [debouncedValue]);
 
     useEffect(() => {
         if (editable) {
-            mutateTitleFn({ variables: { id: id, pageId: pageId, title: debouncedTitle } })
-                .then((data) => console.log(data))
-                .catch((error) => console.log(error));
+            // mutateTitleFn({ variables: { id: id, pageId: pageId, title: debouncedTitle } })
+            //     .then((data) => console.log(data))
+            //     .catch((error) => console.log(error));
         }
     }, [debouncedTitle]);
 
