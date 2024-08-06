@@ -68,7 +68,7 @@ export default function Page() {
                         !loading && tableData.length ? (
                             tableData.map((item, i) => {
                                 return (
-                                    <Card href={`/space/${item.slug}`} className="w-48" key={i}>
+                                    <Card href={`/space/${item.id}`} className="w-48" key={i}>
                                         <div className="flex flex-col items-center">
                                             <Avatar size="lg" placeholderInitials={item.name.charAt(0).toUpperCase()} />
                                         </div>

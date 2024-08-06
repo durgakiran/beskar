@@ -1,7 +1,7 @@
 "use client";
 import { useLazyQuery, useMutation } from "@apollo/client";
 import { client } from "@http";
-import { GRAPHQL_DELETE_PAGE, GRAPHQL_GET_PAGES } from "@queries/space";
+import { GRAPHQL_DELETE_PAGE, GRAPHQL_GET_PAGES, GRAPHQL_GET_PAGES_BY_SPACE_ID } from "@queries/space";
 import { useCallback, useEffect, useState } from "react";
 import { usePathname, useRouter, useSelectedLayoutSegment } from "next/navigation";
 import AddPage from "./addPage";
@@ -31,12 +31,17 @@ interface SpaceDatum {
     pages: Array<Pages>;
 }
 
+interface PageDocMap {
+    title: string;
+}
+
 interface CoreSpaceUrlData {
-    space: SpaceDatum;
+    id: number;
+    page_doc_maps: Array<PageDocMap>;
 }
 
 interface SpaceData {
-    core_space_url: Array<CoreSpaceUrlData>;
+    core_page: Array<CoreSpaceUrlData>;
 }
 
 interface Props {
@@ -50,7 +55,7 @@ export default function SideNav(param: Props) {
     const [isDropdownOpen, setIsDropdownOpen] = useState(true);
     const [showCreateDialog, setShowCreateDialog] = useState(false);
     const router = useRouter();
-    const [getPages, { data, loading, error, refetch }] = useLazyQuery<SpaceData>(GRAPHQL_GET_PAGES, { client: client, variables: { id: param.id } });
+    const [getPages, { data, loading, error, refetch }] = useLazyQuery<SpaceData>(GRAPHQL_GET_PAGES_BY_SPACE_ID, { client: client, variables: { id: param.id } });
     const [mutateFunction] = useMutation(GRAPHQL_DELETE_PAGE, { client: client });
     const pathName = useSelectedLayoutSegment();
     const [pagesData, setPagesData] = useState<Array<Pages>>([]);
@@ -116,10 +121,10 @@ export default function SideNav(param: Props) {
                                 {isDropdownOpen && (
                                     <div className="dropdown-content">
                                         <ul className="list-disc pl-6 pt-2 pr-2">
-                                            {data && data.core_space_url && data.core_space_url[0].space.pages.map((page, i) => (
+                                            {data && data.core_page && data.core_page.map((page, i) => (
                                                 <li className="py-1 hover:bg-gray-100" key={i}>
                                                     {/* active={pahtName2 === `/space/${param.id}/view/${page.id}`} */}
-                                                    <Link className="text-sm" href={`/space/${param.id}/view/${page.id}`}>{page.docs[0].title}</Link>
+                                                    <Link className="text-sm" href={`/space/${param.id}/view/${page.id}`}>{page.page_doc_maps[0] ? page.page_doc_maps[0].title : ""}</Link>
                                                 </li>
                                             ))}
                                         </ul>
@@ -129,7 +134,7 @@ export default function SideNav(param: Props) {
                         </Sidebar.ItemGroup>
                     </Sidebar.Items>
                 </Sidebar>
-                <AddPage isOpen={isOpen} setIsOpen={setIsOpen} editPage={editePage} spaceId={data.core_space_url[0].space.id} />
+                <AddPage isOpen={isOpen} setIsOpen={setIsOpen} editPage={editePage} spaceId={param.id} />
             </>
         );
     }
