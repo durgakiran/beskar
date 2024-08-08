@@ -297,4 +297,36 @@
     <changeSet id="19-modify-data-type-content-parent-id-rename-column" author="Kiran Kumar">
         <renameColumn tableName="content" oldColumnName="parent_id_2" schemaName="core" newColumnName="parent_id" />
     </changeSet>
+
+    <changeSet id="20-add-draft-table" author="Kiran Kumar">
+        <preConditions onFail="MARK_RAN">
+            <sqlCheck expectedResult="0"> 
+                SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'content_draft'; 
+            </sqlCheck>
+        </preConditions>
+        <comment>Create doc table</comment>
+        <createTable tableName="content_draft" schemaName="core">
+            <column name="id" type="BIGINT" autoIncrement="true">
+                <constraints primaryKey="true" nullable="false" />
+            </column>
+            <column name="doc_id" type="BIGINT"></column>
+            <column name="data" type="JSON">
+                <constraints nullable="false" />
+            </column>
+        </createTable>
+    </changeSet>
+
+    <changeSet id="21-content-draft-page-fk" author="Kiran Kumar">
+        <addForeignKeyConstraint baseTableSchemaName="core" referencedTableSchemaName="core"
+            baseTableName="content_draft" baseColumnNames="doc_id" constraintName="content_draft_doc_map_fkey"
+            referencedTableName="page_doc_map" referencedColumnNames="doc_id" deleteCascade="true" />
+    </changeSet>
+
+    <changeSet id="22-grant-usage-to-app-user" author="Kiran Kumar">
+        <sql>
+            ALTER DEFAULT PRIVILEGES FOR USER beskar_admin IN SCHEMA core GRANT SELECT, INSERT, UPDATE, DELETE  ON TABLES TO ${app_user};
+            ALTER DEFAULT PRIVILEGES FOR USER beskar_admin IN SCHEMA core GRANT ALL ON SEQUENCES TO ${app_user};
+        </sql>
+        <rollback />
+    </changeSet>
 </databaseChangeLog>

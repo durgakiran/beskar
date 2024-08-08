@@ -72,9 +72,25 @@ type InputDocument struct {
 	Deleted []ContentNode `json:"deleted"`
 }
 
+type ContentDraft struct {
+	Id    int64       `json:"id" db:"id"`
+	DocId int64       `json:"docId" db:"doc_id"`
+	Data  interface{} `json:"data" data:"data"`
+}
+
+type InputDraftDocument struct {
+	Document
+	Data interface{} `json:"data"`
+}
+
 type OutputDocument struct {
 	Document
 	Nodes []ContentNode `json:"nodes"`
+}
+
+type OutputDocumentToEdit struct {
+	Document
+	Data ContentDraft `json:"data"`
 }
 
 type Sequence interface {

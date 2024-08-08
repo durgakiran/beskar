@@ -2,6 +2,7 @@ package editor
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -24,7 +25,13 @@ const (
 						FROM 
 							core.page p, core.page_doc_map d
 						WHERE 
-							p.space_id = $1 AND p.id = $2 AND p.id = d.page_id AND d.draft = 1 AND d.owner_id = $3`
+							p.space_id = $1 AND p.id = $2 AND p.id = d.page_id AND d.draft = 0 AND d.owner_id = $3 ORDER BY d.version DESC LIMIT 1`
+	getDocumentToEdit = `SELECT 
+							d.title AS title, d.owner_id AS ownerId, d.page_id id, d.doc_id AS docId, p.space_id AS spaceId
+						FROM 
+							core.page p, core.page_doc_map d
+						WHERE 
+							p.space_id = $1 AND p.id = $2 AND p.id = d.page_id AND d.draft = 1 AND d.owner_id = $3 ORDER BY d.version DESC LIMIT 1`
 	getDocumentNodes = `SELECT 
 							c.doc_id AS docId, 
 							c.id AS contentId, 
@@ -37,10 +44,22 @@ const (
 						FROM 
 							core.content c
 						WHERE c.doc_id = $1`
+	updateDraftDocument = `INSERT INTO core.content_draft (doc_id, data) VALUES ($1, $2)`
+	getDraftDocument    = `SELECT id, doc_id, data FROM core.content_draft cd WHERE cd.doc_id = $1`
 )
 
 func logger() *zap.Logger {
 	return core.Logger
+}
+
+func (c ContentDraft) Create(conn pgx.Tx, ctx context.Context) (int64, error) {
+	var docId int64
+	err := conn.QueryRow(ctx, updateDraftDocument, c.DocId, c.Data).Scan(&docId)
+	if err != nil {
+		logger().Error(err.Error())
+		return int64(0), err
+	}
+	return docId, nil
 }
 
 func (p Page) Create(conn pgx.Tx, ctx context.Context) (int64, error) {
@@ -107,6 +126,21 @@ func fetchDocument(conn pgx.Tx, ctx context.Context, pageId int64, spaceId uuid.
 	return doc, err
 }
 
+func fetchDocumentToEdit(conn pgx.Tx, ctx context.Context, pageId int64, spaceId uuid.UUID, ownerId uuid.UUID) (Document, error) {
+	var doc Document
+	row, err := conn.Query(ctx, getDocumentToEdit, spaceId, pageId, ownerId)
+	if err != nil {
+		fmt.Println(err.Error())
+		return doc, err
+	}
+	doc, err = pgx.CollectExactlyOneRow[Document](row, pgx.RowToStructByNameLax[Document])
+	if err != nil {
+		fmt.Printf("Error happend while fetching document %v \n", err.Error())
+		return doc, err
+	}
+	return doc, err
+}
+
 func fetchContent(conn pgx.Tx, ctx context.Context, docId int64) ([]ContentNode, error) {
 	var nodes []ContentNode
 	rows, err := conn.Query(ctx, getDocumentNodes, docId)
@@ -115,6 +149,25 @@ func fetchContent(conn pgx.Tx, ctx context.Context, docId int64) ([]ContentNode,
 		return nodes, err
 	}
 	nodes, err = pgx.CollectRows(rows, pgx.RowToStructByNameLax[ContentNode])
+	if err != nil {
+		fmt.Println(err)
+		fmt.Printf("Error happend while fetching nodes %v \n", err.Error())
+		return nodes, err
+	}
+	return nodes, err
+}
+
+func fetchContentToEdit(conn pgx.Tx, ctx context.Context, docId int64) (ContentDraft, error) {
+	var nodes ContentDraft
+	rows, err := conn.Query(ctx, getDraftDocument, docId)
+	if err != nil {
+		fmt.Println(err.Error())
+		return nodes, err
+	}
+	nodes, err = pgx.CollectExactlyOneRow(rows, pgx.RowToStructByNameLax[ContentDraft])
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nodes, nil
+	}
 	if err != nil {
 		fmt.Println(err)
 		fmt.Printf("Error happend while fetching nodes %v \n", err.Error())
@@ -211,24 +264,16 @@ func (document InputDocument) Create() (int64, error) {
 	}
 	// create doc
 	doc := Doc{PageId: pageId, OwnerId: document.OwnerId, Version: time.Now(), Title: document.Title, Draft: 1}
-	docId, err := doc.Create(tx, ctx)
+	_, err = doc.Create(tx, ctx)
 	if err != nil {
 		return pageId, err
-	}
-	// create content
-	for _, child := range document.New {
-		child.DocId = docId
-		_, err := child.Create(tx, ctx)
-		if err != nil {
-			return pageId, err
-		}
 	}
 	tx.Commit(ctx)
 	// return created page id
 	return pageId, nil
 }
 
-func (document InputDocument) Update() (int64, error) {
+func (document InputDocument) Publish() (int64, error) {
 	connPool := core.GetPool()
 	ctx := context.Background()
 	tx, err := connPool.Begin(ctx)
@@ -245,7 +290,7 @@ func (document InputDocument) Update() (int64, error) {
 	// create or update doc
 	// we need to create a doc if there is none exists in draft state
 	// we need to update a doc if exists in draft state
-	doc := Doc{PageId: document.Id, DocId: document.DocId, OwnerId: document.OwnerId, Version: time.Now(), Title: document.Title, Draft: 1}
+	doc := Doc{PageId: document.Id, DocId: document.DocId, OwnerId: document.OwnerId, Version: time.Now(), Title: document.Title, Draft: 0}
 	_, err = doc.Update(tx, ctx)
 	if err != nil {
 		return document.Id, err
@@ -280,6 +325,32 @@ func (document InputDocument) Update() (int64, error) {
 	return document.Id, nil
 }
 
+func (document InputDraftDocument) Update() (int64, error) {
+	connPool := core.GetPool()
+	ctx := context.Background()
+	tx, err := connPool.Begin(ctx)
+	defer tx.Rollback(ctx)
+	if err != nil {
+		panic("Unable to start transaction" + err.Error())
+	}
+	// create or update doc
+	// we need to create a doc if there is none exists in draft state
+	// we need to update a doc if exists in draft state
+	doc := Doc{PageId: document.Id, OwnerId: document.OwnerId, Version: time.Now(), Title: document.Title, Draft: 1}
+	docId, err := doc.Create(tx, ctx)
+	if err != nil {
+		return document.Id, err
+	}
+	ContentDraft := ContentDraft{DocId: docId, Data: document.Data}
+	_, err = ContentDraft.Create(tx, ctx)
+	if err != nil {
+		return document.Id, err
+	}
+	tx.Commit(ctx)
+	// return updated page id
+	return document.Id, nil
+}
+
 func GetDocument(pageId int64, spaceId uuid.UUID, ownerId uuid.UUID) (OutputDocument, error) {
 	var outputDocument OutputDocument
 	connPool := core.GetPool()
@@ -302,6 +373,32 @@ func GetDocument(pageId int64, spaceId uuid.UUID, ownerId uuid.UUID) (OutputDocu
 	}
 	outputDocument.Document = doc
 	outputDocument.Nodes = append(outputDocument.Nodes, nodes...)
+	tx.Commit(ctx)
+	return outputDocument, nil
+}
+
+func GetDocumentToEdit(pageId int64, spaceId uuid.UUID, ownerId uuid.UUID) (OutputDocumentToEdit, error) {
+	var outputDocument OutputDocumentToEdit
+	connPool := core.GetPool()
+	ctx := context.Background()
+	tx, err := connPool.Begin(ctx)
+	defer tx.Rollback(ctx)
+	if err != nil {
+		panic("Unable to start transaction" + err.Error())
+	}
+	doc, err := fetchDocumentToEdit(tx, ctx, pageId, spaceId, ownerId)
+	if err != nil {
+		return outputDocument, err
+	}
+	if doc.DocId == 0 { // zero value
+		return outputDocument, err
+	}
+	nodes, err := fetchContentToEdit(tx, ctx, doc.DocId)
+	if err != nil {
+		return outputDocument, err
+	}
+	outputDocument.Document = doc
+	outputDocument.Data = nodes
 	tx.Commit(ctx)
 	return outputDocument, nil
 }

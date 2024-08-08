@@ -1,14 +1,8 @@
-'use client'
-import { useMutation } from "@apollo/client";
-import { client } from "@http";
-import { GRAPHQL_ADD_PAGE } from "@queries/space";
-import { useRouter } from "next/navigation";
+"use client";
 import { MouseEvent, useCallback, useEffect, useState } from "react";
-import styled from 'styled-components';
-import { Button,Spinner,TextInput,Modal } from "flowbite-react";
-
-
-
+import styled from "styled-components";
+import { Button, Spinner, TextInput, Modal } from "flowbite-react";
+import { Response, usePost } from "@http/hooks";
 
 const Footer = styled.div`
     display: flex;
@@ -28,48 +22,55 @@ interface IAddPage {
     setIsOpen: (open: boolean) => void;
     editPage: (pageId: number) => void;
 }
-export default function AddPage({ isOpen, setIsOpen, spaceId, parentId, editPage }: IAddPage) {
-    const [name, setName] = useState('');
-    const [mutateFunction, { data, loading, error }] = useMutation(GRAPHQL_ADD_PAGE, { client: client });
-    const router = useRouter();
 
-        
+interface Page {
+    spaceId: string;
+    title: string;
+    parentId?: number;
+}
+
+interface PageResponse {
+    page: number;
+}
+
+export default function AddPage({ isOpen, setIsOpen, spaceId, parentId, editPage }: IAddPage) {
+    const [name, setName] = useState("");
+    const [{ data, errors, isLoading: loading }, createPage] = usePost<Response<PageResponse>, Page>(`editor/save`);
+    const [added, setAdded] = useState(false);
+
     const handleInput = useCallback((value: string) => {
         setName(value);
     }, []);
 
-    const handleSubmit  = async (ev: MouseEvent<HTMLButtonElement>) => {
+    const handleSubmit = async (ev: MouseEvent<HTMLButtonElement>) => {
         ev.preventDefault();
-        await mutateFunction({ variables: { parentId, spaceId, data: "", title: name } });
+        await createPage({ title: name, spaceId });
     };
     const closeModal = () => {
-        setIsOpen(false); // Update parent component's state to reflect modal closure
+        setIsOpen(false);
     };
 
     useEffect(() => {
         if (data) {
-            // router.push(`/edit/${spaceId}/${data.insert_core_page.returning[0].id}`);
-            editPage(data.insert_core_page.returning[0].id)
+            setAdded(true);
+            editPage(data.data.page);
         }
     }, [data]);
 
-
     return (
-        <Modal show={isOpen} onClose={closeModal}  size="sm">
-            <Modal.Header>
-                Add a new Page
-            </Modal.Header>
-            <div className="form p-4"> 
+        <Modal show={isOpen} onClose={closeModal} size="sm">
+            <Modal.Header>Add a new Page</Modal.Header>
+            <div className="form p-4">
                 <div>
                     <h2>Title of Page</h2>
                     <TextInput className="w-4/5 " value={name} onInput={(ev) => handleInput((ev.target as HTMLInputElement).value)} placeholder="Enter page title..." />
                 </div>
                 <Footer>
-                    <Button onClick={handleSubmit} disabled={loading}>
-                       {loading ? <Spinner size="small" /> : "Add"}
+                    <Button onClick={handleSubmit} disabled={loading || added}>
+                        {loading ? <Spinner size="small" /> : "Add"}
                     </Button>
                 </Footer>
             </div>
         </Modal>
-    )
+    );
 }

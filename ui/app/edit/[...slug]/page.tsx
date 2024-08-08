@@ -1,44 +1,35 @@
 "use client";
-import { useLazyQuery } from "@apollo/client";
 import { TipTap } from "@editor";
 import { EditorContext } from "@editor/context/editorContext";
 import { Editorheader } from "@editor/header";
 import TextArea from "@editor/textarea/TextArea";
-import { client } from "@http";
-import { GRAPHQL_GET_PAGE } from "@queries/space";
 import { Editor } from "@tiptap/react";
 import { Spinner } from "flowbite-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import "./styles.css";
 import { useSession } from "next-auth/react";
+import { Response, useGet } from "@http/hooks";
 
-interface IDoc {
+interface DraftData {
     data: any;
-    id: number;
-    title: string;
-    version: Date;
-}
-
-interface IPage {
-    date_created: Date;
-    draft: number;
-    id: number;
-    owner_id: string;
-    parent_id: string | null;
-    space_id: string;
-    status: string | null;
-    docs: Array<IDoc>;
 }
 
 interface IData {
-    core_page: Array<IPage>;
+    title: string;
+    ownerId: string;
+    parentId: number;
+    id: number;
+    docId: number;
+    spaceId: string;
+    data: DraftData
 }
 
 export default function Page({ params }: { params: { slug: string[] } }) {
     const [editorData, setEditorData] = useState({});
     const [editorContext, setEditorContext] = useState<Editor>();
-    const [getPage, { data, loading }] = useLazyQuery<IData>(GRAPHQL_GET_PAGE, { client: client, fetchPolicy: "no-cache", variables: { pageId: params.slug[1] } });
+    const [ { data, errors, isLoading: loading }, fetchData ] = useGet<Response<IData>>(`editor/space/${params.slug[0]}/page/${params.slug[1]}/edit`)
+    const [loaded, setLoaded] = useState(false);
     const [title, setTitle] = useState<string>();
     const router = useRouter();
     const { data: sessionData, status } = useSession();
@@ -48,18 +39,21 @@ export default function Page({ params }: { params: { slug: string[] } }) {
     };
 
     useEffect(() => {
-        if (status === "authenticated" && sessionData) {
-            getPage();
+        if (status === "authenticated") {
+            if (!loaded) {
+                fetchData();
+            }
         } else if (status !== "loading") {
             router.push("/");
         }
-    }, [sessionData, status]);
+    }, [status]);
 
     useEffect(() => {
         try {
             if (data) {
-                setTitle(data.core_page[0].docs[0].title);
-                const eData = typeof data.core_page[0].docs[0].data === "string" ? JSON.parse(data.core_page[0].docs[0].data) : data.core_page[0].docs[0].data;
+                setLoaded(true);
+                setTitle(data.data.title);
+                const eData = typeof data.data.data.data === "string" ? JSON.parse(data.data.data.data) : data.data.data.data;
                 setEditorData(eData);
             }
         } catch (e) {
@@ -71,6 +65,10 @@ export default function Page({ params }: { params: { slug: string[] } }) {
         <div className="text-center">
             <Spinner size="lg" />
         </div>;
+    }
+
+    if (errors) {
+        return <div>Something went wrong</div>
     }
 
     return (
@@ -95,7 +93,7 @@ export default function Page({ params }: { params: { slug: string[] } }) {
                             setEditorContext={(editorContext: Editor) => setEditorContext(editorContext)}
                             content={editorData}
                             pageId={params.slug[1]}
-                            id={data.core_page[0].docs[0].id}
+                            id={data.data.docId}
                         />
                     </div>
                 </div>
