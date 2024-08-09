@@ -42,6 +42,7 @@ import { SlashCommand } from "./extensions/slashCommand/command";
 import { CustomInput } from "./note/Note";
 import { TableColumnMenu, TableRowMenu } from "./Table/menus";
 import { Table, TableCell, TableHeader, TableRow } from "./Table";
+import { NodeIdExtension } from "@editor/extensions";
 
 const extensions = [
     Bold,
@@ -88,6 +89,7 @@ const extensions = [
     TableCell,
     TableHeader,
     TableRow,
+    NodeIdExtension
 ];
 
 interface TipTapProps {
@@ -173,6 +175,7 @@ export function TipTap({ setEditorContext, content, pageId, id, editable = true,
         if (content && editor) {
             setTimeout(() => {
                 editor.commands.setContent(content);
+                console.log(editor.getJSON())
             });
         }
     }, [content, editor]);

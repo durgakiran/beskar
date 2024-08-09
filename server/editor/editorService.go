@@ -15,9 +15,10 @@ import (
 const (
 	newPage        = "INSERT INTO core.page (space_id, owner_id, parent_id, date_created, status) VALUES ($1, $2, $3, $4, $5) RETURNING id"
 	newDoc         = "INSERT INTO core.page_doc_map (page_id, title, version, owner_id, draft) VALUES ($1, $2, $3, $4, $5) RETURNING doc_id"
-	newContent     = "INSERT INTO core.content (id, doc_id, parent_id, \"order\", type, attrs, marks, text) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id"
+	newContent     = "INSERT INTO core.content (id, doc_id, parent_id, \"order\", type, attrs, marks) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id"
+	newText        = "INSERT INTO core.text_node (doc_id, parent_id, \"order\", marks, text) VALUES ($1, $2, $3, $4, $5) RETURNING id"
 	getSpace       = "SELECT id, name, date_created AS dateCreated, date_updated AS dateUpdated, user_id AS userId FROM core.space WHERE id = $1"
-	updateContent  = "UPDATE core.content SET parent_id = $2, \"order\" = $3, type = $4, attrs = $5, marks = $6, text = $7 WHERE id = $8 AND doc_id = $1"
+	updateContent  = "UPDATE core.content SET parent_id = $2, \"order\" = $3, type = $4, attrs = $5, marks = $6 WHERE id = $7 AND doc_id = $1"
 	deleteContent  = "DELETE FROM core.content WHERE id = $1 AND doc_id = $2"
 	updateDocQuery = "UPDATE core.page_doc_map SET title = $1, version = $2 WHERE doc_id = $3 AND page_id = $4"
 	getDocument    = `SELECT 
@@ -36,14 +37,22 @@ const (
 							c.doc_id AS docId, 
 							c.id AS contentId, 
 							c.parent_id AS parentId, 
-							c.order AS orderId, 
+							c.order AS order, 
 							c.type AS type, 
 							c.attrs AS attrs, 
-							c.marks AS marks, 
-							c.text AS text 
+							c.marks AS marks
 						FROM 
 							core.content c
 						WHERE c.doc_id = $1`
+	getTextNodes = `SELECT 
+						c.doc_id AS docId, 
+						c.parent_id AS parentId, 
+						c.order AS order,
+						c.marks AS marks,
+						c.text as text
+					FROM
+						core.text_node c
+					WHERE c.doc_id = $1`
 	updateDraftDocument = `INSERT INTO core.content_draft (doc_id, data) VALUES ($1, $2)`
 	getDraftDocument    = `SELECT id, doc_id, data FROM core.content_draft cd WHERE cd.doc_id = $1`
 )
@@ -141,20 +150,32 @@ func fetchDocumentToEdit(conn pgx.Tx, ctx context.Context, pageId int64, spaceId
 	return doc, err
 }
 
-func fetchContent(conn pgx.Tx, ctx context.Context, docId int64) ([]ContentNode, error) {
+func fetchContent(conn pgx.Tx, ctx context.Context, docId int64) (NodeData, error) {
 	var nodes []ContentNode
 	rows, err := conn.Query(ctx, getDocumentNodes, docId)
 	if err != nil {
 		fmt.Println(err.Error())
-		return nodes, err
+		return NodeData{}, err
 	}
 	nodes, err = pgx.CollectRows(rows, pgx.RowToStructByNameLax[ContentNode])
 	if err != nil {
 		fmt.Println(err)
 		fmt.Printf("Error happend while fetching nodes %v \n", err.Error())
-		return nodes, err
+		return NodeData{}, err
 	}
-	return nodes, err
+	var textNodes []TextNode
+	rows, err = conn.Query(ctx, getTextNodes, docId)
+	if err != nil {
+		fmt.Println(err.Error())
+		return NodeData{}, err
+	}
+	textNodes, err = pgx.CollectRows(rows, pgx.RowToStructByNameLax[TextNode])
+	if err != nil {
+		fmt.Println(err)
+		fmt.Printf("Error happend while fetching nodes %v \n", err.Error())
+		return NodeData{}, err
+	}
+	return NodeData{Content: nodes, Text: textNodes}, err
 }
 
 func fetchContentToEdit(conn pgx.Tx, ctx context.Context, docId int64) (ContentDraft, error) {
@@ -193,7 +214,19 @@ func nullifyIfZeroUUID(id uuid.UUID) interface{} {
 
 func (c ContentNode) Create(conn pgx.Tx, ctx context.Context) (uuid.UUID, error) {
 	var docId uuid.UUID
-	err := conn.QueryRow(ctx, newContent, c.ContentId, c.DocId, nullifyIfZeroUUID(c.ParentId), c.OrderId, c.Type, c.Attributes, c.Marks, c.Text).Scan(&docId)
+	err := conn.QueryRow(ctx, newContent, c.ContentId, c.DocId, nullifyIfZeroUUID(c.ParentId), c.OrderId, c.Type, c.Attributes, c.Marks).Scan(&docId)
+	if err != nil {
+		// error happened we need to cancel whole transaction
+		fmt.Printf("Error happened while creating Content %v \n", err.Error())
+		// conn.Rollback(ctx)
+		return uuid.Nil, err
+	}
+	return docId, nil
+}
+
+func (c TextNode) Create(conn pgx.Tx, ctx context.Context) (uuid.UUID, error) {
+	var docId uuid.UUID
+	err := conn.QueryRow(ctx, newText, c.DocId, nullifyIfZeroUUID(c.ParentId), c.OrderId, c.Marks, c.Text).Scan(&docId)
 	if err != nil {
 		// error happened we need to cancel whole transaction
 		fmt.Printf("Error happened while creating Content %v \n", err.Error())
@@ -205,7 +238,7 @@ func (c ContentNode) Create(conn pgx.Tx, ctx context.Context) (uuid.UUID, error)
 
 func (c ContentNode) Update(conn pgx.Tx, ctx context.Context) (uuid.UUID, error) {
 	var docId uuid.UUID
-	_, err := conn.Exec(ctx, updateContent, c.DocId, nullifyIfZeroUUID(c.ParentId), c.OrderId, c.Type, c.Attributes, c.Marks, c.Text, c.ContentId)
+	_, err := conn.Exec(ctx, updateContent, c.DocId, nullifyIfZeroUUID(c.ParentId), c.OrderId, c.Type, c.Attributes, c.Marks, c.ContentId)
 	if err != nil {
 		// error happened we need to cancel whole transaction
 		fmt.Printf("Error happened while creating Content %v \n", err.Error())
@@ -296,7 +329,7 @@ func (document InputDocument) Publish() (int64, error) {
 		return document.Id, err
 	}
 	// create content
-	for _, child := range document.New {
+	for _, child := range document.Nodes.Content {
 		child.DocId = document.DocId
 		_, err := child.Create(tx, ctx)
 		if err != nil {
@@ -304,22 +337,30 @@ func (document InputDocument) Publish() (int64, error) {
 			return document.Id, err
 		}
 	}
-	for _, child := range document.Updated {
+	for _, child := range document.Nodes.Text {
 		child.DocId = document.DocId
-		_, err := child.Update(tx, ctx)
+		_, err := child.Create(tx, ctx)
 		if err != nil {
 			// return pageId and error
 			return document.Id, err
 		}
 	}
-	for _, child := range document.Deleted {
-		child.DocId = document.DocId
-		_, err := child.Delete(tx, ctx)
-		if err != nil {
-			// return pageId and error
-			return document.Id, err
-		}
-	}
+	// for _, child := range document.Updated {
+	// 	child.DocId = document.DocId
+	// 	_, err := child.Update(tx, ctx)
+	// 	if err != nil {
+	// 		// return pageId and error
+	// 		return document.Id, err
+	// 	}
+	// }
+	// for _, child := range document.Deleted {
+	// 	child.DocId = document.DocId
+	// 	_, err := child.Delete(tx, ctx)
+	// 	if err != nil {
+	// 		// return pageId and error
+	// 		return document.Id, err
+	// 	}
+	// }
 	tx.Commit(ctx)
 	// return updated page id
 	return document.Id, nil
@@ -372,7 +413,7 @@ func GetDocument(pageId int64, spaceId uuid.UUID, ownerId uuid.UUID) (OutputDocu
 		return outputDocument, err
 	}
 	outputDocument.Document = doc
-	outputDocument.Nodes = append(outputDocument.Nodes, nodes...)
+	outputDocument.Nodes = nodes
 	tx.Commit(ctx)
 	return outputDocument, nil
 }

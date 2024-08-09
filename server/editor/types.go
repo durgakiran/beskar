@@ -7,15 +7,28 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
+type Node struct {
+	DocId    int64                    `json:"docId" db:"docId"`
+	ParentId uuid.UUID                `json:"parentId" db:"parentId"`
+	Marks    []map[string]interface{} `json:"marks" db:"marks"`
+	OrderId  int64                    `json:"orderId" db:"order"`
+}
+
+type TextNode struct {
+	Node
+	Text string `json:"text" db:"text"`
+}
+
 type ContentNode struct {
-	DocId      int64                    `json:"docId" db:"docId"`
-	ContentId  uuid.UUID                `json:"contentId" db:"contentid"`
-	ParentId   uuid.UUID                `json:"parentId" db:"parentId"`
-	OrderId    int64                    `json:"orderId" db:"orderId"`
-	Type       string                   `json:"type" db:"type"`
-	Attributes map[string]interface{}   `json:"attrs" db:"attrs"`
-	Marks      []map[string]interface{} `json:"marks" db:"marks"`
-	Text       string                   `json:"text" db:"text"`
+	Node
+	ContentId  uuid.UUID              `json:"contentId" db:"contentid"`
+	Type       string                 `json:"type" db:"type"`
+	Attributes map[string]interface{} `json:"attrs" db:"attrs"`
+}
+
+type NodeData struct {
+	Content []ContentNode `json:"content"`
+	Text    []TextNode    `json:"text"`
 }
 
 type Doc struct {
@@ -67,9 +80,7 @@ type Document struct {
 
 type InputDocument struct {
 	Document
-	New     []ContentNode `json:"new"`
-	Updated []ContentNode `json:"updated"`
-	Deleted []ContentNode `json:"deleted"`
+	Nodes NodeData `json:"nodeData"`
 }
 
 type ContentDraft struct {
@@ -85,7 +96,7 @@ type InputDraftDocument struct {
 
 type OutputDocument struct {
 	Document
-	Nodes []ContentNode `json:"nodes"`
+	Nodes NodeData `json:"nodeData"`
 }
 
 type OutputDocumentToEdit struct {

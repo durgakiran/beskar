@@ -9,6 +9,7 @@
             "@editor": ["./app/core/editor/index.ts"],
             "@editor/*": ["./app/core/editor/*"],
             "@components/*": ["./app/components/*"],
+            "@editor/extensions": ["./app/core/editor/extensions/index.ts"],
             "@queries/space": ["./app/core/queries/space/index.ts"],
             "@/lib/utils": ["./app/lib/utils/index.ts"]
         },

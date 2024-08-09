@@ -284,6 +284,14 @@
         <rollback />
     </changeSet>
 
+    <changeSet id="22-grant-usage-to-app-user" author="Kiran Kumar">
+        <sql>
+            ALTER DEFAULT PRIVILEGES FOR USER beskar_admin IN SCHEMA core GRANT SELECT, INSERT, UPDATE, DELETE  ON TABLES TO ${app_user};
+            ALTER DEFAULT PRIVILEGES FOR USER beskar_admin IN SCHEMA core GRANT ALL ON SEQUENCES TO ${app_user};
+        </sql>
+        <rollback />
+    </changeSet>
+
     <changeSet id="18-modify-data-type-content-parent-id" author="Kiran Kumar">
         <addColumn tableName="content" schemaName="core">
             <column name="parent_id_2" type="uuid"></column>
@@ -322,10 +330,55 @@
             referencedTableName="page_doc_map" referencedColumnNames="doc_id" deleteCascade="true" />
     </changeSet>
 
-    <changeSet id="22-grant-usage-to-app-user" author="Kiran Kumar">
+    <changeSet id="23-create-text-node-table" author="Kiran Kumar">
+        <preConditions onFail="MARK_RAN">
+            <sqlCheck expectedResult="0">
+                SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'text_node';
+            </sqlCheck>
+        </preConditions>
+        <comment>Create text_node table</comment>
+        <createTable tableName="text_node" schemaName="core">
+            <column name="parent_id" type="UUID" >
+                <constraints nullable="false" />
+            </column>
+            <column name="doc_id" type="BIGINT">
+                <constraints  nullable="false" />
+            </column>
+            <column name="marks" type="jsonb"/>
+            <column name="order" type="INTEGER">
+                <constraints nullable="false" />
+            </column>
+            <column name="text" type="text" />
+        </createTable>
+    </changeSet>
+
+    <changeSet id="24-migrate-text-content" author="Kiran Kumar">
+        <preConditions>
+            <sqlCheck expectedResult="1">
+                SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'text_node';
+            </sqlCheck>
+        </preConditions>
+        <comment>Migrate existing text content into new table</comment>
         <sql>
-            ALTER DEFAULT PRIVILEGES FOR USER beskar_admin IN SCHEMA core GRANT SELECT, INSERT, UPDATE, DELETE  ON TABLES TO ${app_user};
-            ALTER DEFAULT PRIVILEGES FOR USER beskar_admin IN SCHEMA core GRANT ALL ON SEQUENCES TO ${app_user};
+            INSERT INTO core.text_node (parent_id, doc_id, marks, "order", text) SELECT parent_id, doc_id, marks, "order", text FROM core.content WHERE type = 'text' ORDER BY parent_id;
+        </sql>
+        <rollback></rollback>
+    </changeSet>
+
+    <changeSet id="25-drop-text-column-from-content-table" author="Kiran Kumar">
+        <comment>Drop text column</comment>
+        <dropColumn tableName="content" schemaName="core" columnName="text" />
+        <rollback />
+    </changeSet>
+
+    <changeSet id="26-add-fk-text-node-content" author="Kiran Kumar">
+        <comment>Add foreign key constraint between text_node and content table</comment>
+        <addForeignKeyConstraint baseTableName="text_node" baseTableSchemaName="core" baseColumnNames="parent_id" constraintName="fk-text-node-content" referencedTableName="content" referencedTableSchemaName="core" referencedColumnNames="id" deleteCascade="true"  />
+    </changeSet>
+
+    <changeSet id="27-delete-text-nodes" author="Kiran Kumar">
+        <sql>
+            DELETE FROM core.content where type = 'text';
         </sql>
         <rollback />
     </changeSet>
