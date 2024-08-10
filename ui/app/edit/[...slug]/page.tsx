@@ -6,10 +6,11 @@ import TextArea from "@editor/textarea/TextArea";
 import { Editor } from "@tiptap/react";
 import { Spinner } from "flowbite-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import "./styles.css";
 import { useSession } from "next-auth/react";
 import { Response, useGet } from "@http/hooks";
+import { usePUT } from "app/core/http/hooks/usePut";
 
 interface DraftData {
     data: any;
@@ -22,42 +23,160 @@ interface IData {
     id: number;
     docId: number;
     spaceId: string;
-    data: DraftData
+    data: DraftData;
+    draft: boolean;
+    nodeData: any;
+}
+
+interface IPayload {
+    title: string;
+    ownerId: string;
+    parentId?: number;
+    id: number;
+    docId?: number;
+    spaceId: string;
+    data: any;
+}
+
+interface IPayloadPublish {
+    title: string;
+    ownerId: string;
+    parentId?: number;
+    id: number;
+    docId?: number;
+    spaceId: string;
+    nodeData: any;
+}
+
+interface UpdateDocDTO {
+    page: number
+}
+
+interface DocumentDTO {
+    id: number;
+    pageId: number;
+    data: any;
 }
 
 export default function Page({ params }: { params: { slug: string[] } }) {
     const [editorData, setEditorData] = useState({});
     const [editorContext, setEditorContext] = useState<Editor>();
     const [ { data, errors, isLoading: loading }, fetchData ] = useGet<Response<IData>>(`editor/space/${params.slug[0]}/page/${params.slug[1]}/edit`)
+    const [ { errors: upadteErrors, isLoading: updating }, updateDraftData ] = usePUT<Response<UpdateDocDTO>, IPayload>(`editor/update`)
+    const [ { data:  publishigData,errors: publishErrors, isLoading: publishing }, publishDraftData ] = usePUT<Response<UpdateDocDTO>, IPayloadPublish>(`editor/publish`)
     const [loaded, setLoaded] = useState(false);
     const [title, setTitle] = useState<string>();
     const router = useRouter();
     const { data: sessionData, status } = useSession();
+    const workerRef = useRef<Worker>();
+    const [workerInitiated, setWorkerInitiated] = useState(false);
+    const [updatedData, setUpdatedData] = useState<DocumentDTO>();
+    const [updatedTitle, setUpdatedTitle] = useState<string>();
+    const [publishableDocument, setPublishableDocument] = useState<any>();
+    const [page, setPage] = useState<Response<IData>>();
 
     const handleClose = () => {
         router.push(`/space/${params.slug[0]}/view/${params.slug[1]}`);
     };
 
+    const updateContent = (content: any, title: string) => {
+        const payLoad: IPayload = {
+            data: content,
+            id: Number(params.slug[1]),
+            ownerId: sessionData.user.id,
+            spaceId: params.slug[0],
+            title: title
+        }
+        setUpdatedData({ data: content, id: page.data.docId, pageId: page.data.id });
+        setUpdatedTitle(title);
+        updateDraftData(payLoad);
+    }
+
+    const handleUpdate = () => {
+        workerRef.current.postMessage({ type: "data", data: updatedData })
+    }
+
     useEffect(() => {
-        if (status === "authenticated") {
-            if (!loaded) {
-                fetchData();
-            }
-        } else if (status !== "loading") {
+        if (data) {
+            setUpdatedData({ data: editorData, id: data.data.docId, pageId: data.data.id });
+        }
+    }, [editorData]);
+
+    useEffect(() => {
+        if (data) {
+            setPage(data);
+        }
+    }, [data])
+
+    useEffect(() => {
+        if (upadteErrors) {
+            console.error("Something went wrong while updating data ",upadteErrors)
+        }
+    }, [upadteErrors])
+
+    useEffect(() => {
+        if (status === "authenticated" && !loaded && !loading && workerInitiated) {
+            fetchData();
+        } 
+        if (!(status == "authenticated" || status == "loading")) {
             router.push("/");
         }
-    }, [status]);
+    }, [status, workerInitiated]);
+
+    useEffect(() => {
+        if (status == "authenticated" && !publishing && publishableDocument) {
+            publishDraftData({ title: title, id: Number(params.slug[1]), spaceId: params.slug[0], ownerId: sessionData.user.id, nodeData: publishableDocument, docId: page.data.docId, parentId: page.data.parentId  })
+        }
+    }, [status, publishableDocument]);
+
+    useEffect(() => {
+        if (!publishing && publishigData) {
+            router.push(`/space/${params.slug[0]}/view/${params.slug[1]}`);
+        }
+    }, [publishing])
+
+
+    useEffect(() => {
+        workerRef.current = new Worker("/workers/editor.js", { type: "module" });
+        workerRef.current.onmessage = (e) => {
+            switch (e.data.type) {
+                case "initiated":
+                    setWorkerInitiated(true);
+                    break;
+                case "editorData":
+                    setEditorData(e.data.data ? JSON.parse(e.data.data) : undefined);
+                    break;
+                case "contentData":
+                    setPublishableDocument(JSON.parse(e.data.data).data)
+                default:
+                    break;
+            }
+        };
+        workerRef.current.onerror = (e) => {
+            console.error(e);
+        };
+        workerRef.current.postMessage({ type: "init" });
+        return () => {
+            workerRef.current.terminate();
+        };
+    }, []);
 
     useEffect(() => {
         try {
             if (data) {
                 setLoaded(true);
                 setTitle(data.data.title);
-                const eData = typeof data.data.data.data === "string" ? JSON.parse(data.data.data.data) : data.data.data.data;
-                setEditorData(eData);
+                if (data.data.draft) {
+                    const eData = typeof data.data.data.data === "string" ? JSON.parse(data.data.data.data) : data.data.data.data;
+                    setUpdatedData({ data: eData, id: data.data.docId, pageId: data.data.id });
+                    setEditorData(eData);
+                } else {
+                    // render by loading data from worker
+                    workerRef.current.postMessage({ type: "doc", data: data.data });
+                }
             }
         } catch (e) {
-            console.log(e);
+            console.error(e);
         }
     }, [data]);
 
@@ -81,7 +200,7 @@ export default function Page({ params }: { params: { slug: string[] } }) {
                         style={{ position: "sticky", zIndex: 1, top: 0, display: "grid", placeItems: "center", marginBottom: "2rem", backgroundColor: "white" }}
                     >
                         <EditorContext.Provider value={editorContext}>
-                            <Editorheader handleClose={handleClose} />
+                            <Editorheader handleClose={handleClose} handleUpdate={handleUpdate}/>
                         </EditorContext.Provider>
                     </div>
                     <div style={{ maxWidth: "1024px", margin: "auto" }}>
@@ -94,6 +213,7 @@ export default function Page({ params }: { params: { slug: string[] } }) {
                             content={editorData}
                             pageId={params.slug[1]}
                             id={data.data.docId}
+                            updateContent={(content, title) => updateContent(content, title)}
                         />
                     </div>
                 </div>

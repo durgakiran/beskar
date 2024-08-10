@@ -99,13 +99,14 @@ interface TipTapProps {
     id: number;
     editable?: boolean;
     title: string;
+    updateContent: (content: any, title: string) => void;
 }
 
 const MAX_DEFAULT_WIDTH = 760;
 
-export function TipTap({ setEditorContext, content, pageId, id, editable = true, title }: TipTapProps) {
+export function TipTap({ setEditorContext, content, pageId, id, editable = true, title, updateContent }: TipTapProps) {
     const [editedData, setEditedData] = useState(null);
-    const workerRef = useRef<Worker>();
+    // const workerRef = useRef<Worker>();
     const menuContainerRef = useRef(null);
     const debouncedValue = useDebounce(editedData, 10000);
     const debouncedTitle = useDebounce(title, 10000);
@@ -147,29 +148,29 @@ export function TipTap({ setEditorContext, content, pageId, id, editable = true,
         },
     });
 
-    useEffect(() => {
-        // workerRef.current = new Worker('/workers/editor.js', { type: "module" });
-        // workerRef.current.onmessage = (e) => {
-        //     console.log(e);
-        // };
-        // workerRef.current.onerror = (e) => {
-        //     console.log(e);
-        // };
-        // workerRef.current.postMessage({ type: "init", data: { id: id, pageId: pageId } });
-        // return () => {
-        //     workerRef.current.terminate();
-        // };
-        // LoadWasm().then(() => {
-        //     setIsWasmLoading(false);
-        // })
-    }, []);
+    // useEffect(() => {
+    //     // workerRef.current = new Worker('/workers/editor.js', { type: "module" });
+    //     // workerRef.current.onmessage = (e) => {
+    //     //     console.log(e);
+    //     // };
+    //     // workerRef.current.onerror = (e) => {
+    //     //     console.log(e);
+    //     // };
+    //     // workerRef.current.postMessage({ type: "init", data: { id: id, pageId: pageId } });
+    //     // return () => {
+    //     //     workerRef.current.terminate();
+    //     // };
+    //     // LoadWasm().then(() => {
+    //     //     setIsWasmLoading(false);
+    //     // })
+    // }, []);
 
 
     useEffect(() => {
-        if (workerRef.current) {
-            workerRef.current.postMessage({ type: "data", data: { id: id, pageId: pageId, data: debouncedValue } });
+        if (updated && editable) {
+            updateContent(debouncedValue, debouncedTitle);
         }
-    }, [debouncedValue])
+    }, [debouncedValue, debouncedTitle])
 
     useEffect(() => {
         if (content && editor) {

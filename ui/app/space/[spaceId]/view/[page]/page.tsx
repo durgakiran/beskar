@@ -160,7 +160,15 @@ export default function Page({ params }: { params: { page: string; spaceId: stri
                     <div className="mb-8">
                         <h1 className="text-3xl font-bold">{data.data.title}</h1>
                     </div>
-                    <TipTap title={data.data.title} setEditorContext={() => {}} editable={false} content={content} pageId={params.page} id={data.data.docId} />
+                    <TipTap
+                        updateContent={(content, title) => console.log(content, title)}
+                        title={data.data.title}
+                        setEditorContext={() => {}}
+                        editable={false}
+                        content={content}
+                        pageId={params.page}
+                        id={data.data.docId}
+                    />
                 </div>
             )}
         </div>

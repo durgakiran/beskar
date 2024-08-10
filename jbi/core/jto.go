@@ -1,7 +1,6 @@
 package core
 
 import (
-	"fmt"
 	"reflect"
 
 	"github.com/google/uuid"
@@ -24,6 +23,7 @@ func (c ContentState) EnumIndex() int {
 	return int(c)
 }
 
+// TODO: re-calculate the content id every time.
 // Traverses Document object from editor to DB node object
 func (r Document) ConvertToContentObjects(docId int64) NodeData {
 	content := make([]Content, 0)
@@ -44,15 +44,16 @@ func (r Document) ConvertToContentObjects(docId int64) NodeData {
 		contentObject.Text = currentNode.value.Text
 		contentObject.OrderId = int64(currentNode.Order)
 		contentObject.DocId = docId
-		if val, ok := currentNode.value.Attributes["contentId"]; ok && val != uuid.Nil {
-			if valueType, ok := val.(string); ok {
-				contentObject.ContentId = uuid.MustParse(valueType)
-			} else {
-				panic(fmt.Errorf("wrong type of content id %v", valueType))
-			}
-		} else {
-			contentObject.ContentId = uuid.New()
-		}
+		// if val, ok := currentNode.value.Attributes["contentId"]; ok && val != uuid.Nil && val != nil {
+		// 	if valueType, ok := val.(string); ok {
+		// 		contentObject.ContentId = uuid.MustParse(valueType)
+		// 	} else {
+		// 		panic(fmt.Errorf("wrong type of content id %v", valueType))
+		// 	}
+		// } else {
+		// 	contentObject.ContentId = uuid.New()
+		// }
+		contentObject.ContentId = uuid.New()
 		contentObject.ParentId = currentNode.Parent
 		contentObject.OrderId = currentNode.Order
 		content = append(content, contentObject)

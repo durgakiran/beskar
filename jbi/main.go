@@ -33,7 +33,6 @@ import (
 // that wraps the Go function.
 func run() js.Func {
 	return js.FuncOf(func(this js.Value, args []js.Value) interface{} {
-		fmt.Println(this)
 
 		// t will be used to store unmarshaled JSON data.
 		var t core.EditorDocument
@@ -42,6 +41,7 @@ func run() js.Func {
 		err := json.Unmarshal([]byte(args[0].String()), &t)
 
 		if err != nil {
+			fmt.Println(err)
 			return js.ValueOf([]interface{}{"invalid JSON"})
 		}
 

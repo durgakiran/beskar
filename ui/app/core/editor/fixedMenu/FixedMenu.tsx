@@ -8,7 +8,7 @@ import { ContentTypePicker } from "@editor/menus/contentTypePicker/ContentTypePi
 import FormatTypePicker from "@editor/menus/formatTypePicker/formatTypePicker";
 import ContentAlignPicker from "@editor/menus/contentAlignTypePicker/contentAlignPicker";
 
-export default function FixedMenu({ handleClose }: { handleClose: () => void }) {
+export default function FixedMenu({ handleClose, handleUpdate }: { handleClose: () => void, handleUpdate: () => void }) {
     const editor = useContext(EditorContext);
 
     if (!editor) {
@@ -43,7 +43,7 @@ export default function FixedMenu({ handleClose }: { handleClose: () => void }) 
             </div>
             <div style={{ display: "flex", alignItems: "center" }}>
                 <div style={{ paddingRight: "0.5rem" }}>
-                    <Button color="black">Update</Button> {/* 'color' used for specifying button color */}
+                    <Button color="black" onClick={handleUpdate}>Update</Button>
                 </div>
                 <div style={{ paddingRight: "0.5rem" }}>
                     <Button color="gray" onClick={handleClose} style={{ backgroundColor: "transparent", border: "none" }}>

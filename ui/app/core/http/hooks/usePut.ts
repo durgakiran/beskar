@@ -6,7 +6,7 @@ import { useCallback, useState } from "react";
  * @param headers
  * @returns isLoading, Data type and any errors
  */
-export function usePost<T, P>(path: string, headers: Record<string, any> = {}): [{ isLoading: boolean; data: T; errors: any }, mutateData: (payLoad: P) => void] {
+export function usePUT<T, P>(path: string, headers: Record<string, any> = {}): [{ isLoading: boolean; data: T; errors: any }, mutateData: (payLoad: P) => void] {
     const [isDataFetching, setIsDataFetching] = useState<boolean>(false);
     const [data, setData] = useState<T>();
     const [errors, setErrors] = useState<any>();
@@ -14,7 +14,7 @@ export function usePost<T, P>(path: string, headers: Record<string, any> = {}): 
     const mutateData = useCallback((payLoad: P) => {
         setIsDataFetching(true);
         fetch("http://localhost:9095/" + path, {
-            method: "POST",
+            method: "PUT",
             credentials: "omit",
             body: JSON.stringify(payLoad),
             headers: { Authorization: `Bearer ${localStorage.getItem("access_token")}`, "Content-Type": "application/json", ...headers },

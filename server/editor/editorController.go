@@ -2,7 +2,6 @@ package editor
 
 import (
 	"errors"
-	"fmt"
 	"io"
 	"net/http"
 	"strconv"
@@ -12,7 +11,12 @@ import (
 	"github.com/go-chi/render"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"go.uber.org/zap"
 )
+
+func logger() *zap.Logger {
+	return core.Logger
+}
 
 func sendFailedReponse(w http.ResponseWriter, r *http.Request, code int, message string) {
 	render.Status(r, code)
@@ -26,7 +30,6 @@ func sendSuccessResponse(w http.ResponseWriter, r *http.Request, code int, data 
 
 func getDocumentToView(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	fmt.Println(ctx.Value("claims"))
 	claims, ok := ctx.Value("claims").(core.Claims)
 	if !ok {
 		sendFailedReponse(w, r, http.StatusForbidden, "Invalid user Id")
@@ -58,9 +61,8 @@ func getDocumentToView(w http.ResponseWriter, r *http.Request) {
 	sendSuccessResponse(w, r, http.StatusOK, outputDocument)
 }
 
-func getDocumentToEditController(w http.ResponseWriter, r *http.Request) {
+func getDocumentToEdit(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	fmt.Println(ctx.Value("claims"))
 	claims, ok := ctx.Value("claims").(core.Claims)
 	if !ok {
 		sendFailedReponse(w, r, http.StatusForbidden, "Invalid user Id")
@@ -94,7 +96,6 @@ func getDocumentToEditController(w http.ResponseWriter, r *http.Request) {
 
 func saveDoc(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	fmt.Println(ctx.Value("claims"))
 	claims, ok := ctx.Value("claims").(core.Claims)
 	if !ok {
 		sendFailedReponse(w, r, http.StatusForbidden, "Invalid user Id")
@@ -132,7 +133,6 @@ func saveDoc(w http.ResponseWriter, r *http.Request) {
 
 func publishDoc(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	fmt.Println(ctx.Value("claims"))
 	claims, ok := ctx.Value("claims").(core.Claims)
 	if !ok {
 		render.Status(r, http.StatusForbidden)
@@ -161,6 +161,11 @@ func publishDoc(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	pageId, err := inputDoc.Publish()
+	if err != nil && err.Error() == "nothing new to update" {
+		render.Status(r, http.StatusConflict)
+		render.Render(w, r, core.NewFailedResponse(http.StatusConflict, core.FAILURE, "There is nothing new to update"))
+		return
+	}
 	if err != nil {
 		render.Status(r, http.StatusInternalServerError)
 		render.Render(w, r, core.NewFailedResponse(http.StatusInternalServerError, core.FAILURE, "Unable to update document"))
@@ -176,7 +181,6 @@ func publishDoc(w http.ResponseWriter, r *http.Request) {
 
 func updateDraftDoc(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	fmt.Println(ctx.Value("claims"))
 	claims, ok := ctx.Value("claims").(core.Claims)
 	if !ok {
 		render.Status(r, http.StatusForbidden)
@@ -222,7 +226,7 @@ func Router() *chi.Mux {
 	r := chi.NewRouter()
 	r.Use(core.AuthMiddleWare)
 	r.Get("/space/{spaceId}/page/{pageId}", getDocumentToView)
-	r.Get("/space/{spaceId}/page/{pageId}/edit", getDocumentToEditController)
+	r.Get("/space/{spaceId}/page/{pageId}/edit", getDocumentToEdit)
 	r.Post("/save", saveDoc)
 	r.Put("/publish", publishDoc)
 	r.Put("/update", updateDraftDoc)

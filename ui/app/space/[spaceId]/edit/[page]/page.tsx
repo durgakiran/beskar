@@ -65,7 +65,15 @@ export default function Page({ params }: { params: PageParams }) {
     if (data) {
         return (
             <div>
-                <TipTap content={content} title={""} pageId="14" id={14} editable={false} setEditorContext={() => {}} />
+                <TipTap
+                    content={content}
+                    title={""}
+                    pageId="14"
+                    id={14}
+                    editable={false}
+                    updateContent={(content, title) => console.log(content, title)}
+                    setEditorContext={() => {}}
+                />
             </div>
         );
     }

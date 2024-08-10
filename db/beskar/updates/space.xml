@@ -371,9 +371,17 @@
         <rollback />
     </changeSet>
 
+    <changeSet id="28-delete-pk-content" author="Kiran Kumar">
+        <dropPrimaryKey tableName="content" schemaName="core" constraintName="content_pkey" dropIndex="true" />
+    </changeSet>
+
+    <changeSet id="29-add-pk-content" author="Kiran Kumar">
+        <addPrimaryKey tableName="content" columnNames="doc_id, id" schemaName="core" constraintName="content_pkey"  />
+    </changeSet>
+
     <changeSet id="26-add-fk-text-node-content" author="Kiran Kumar">
         <comment>Add foreign key constraint between text_node and content table</comment>
-        <addForeignKeyConstraint baseTableName="text_node" baseTableSchemaName="core" baseColumnNames="parent_id" constraintName="fk-text-node-content" referencedTableName="content" referencedTableSchemaName="core" referencedColumnNames="id" deleteCascade="true"  />
+        <addForeignKeyConstraint baseTableName="text_node" baseTableSchemaName="core" baseColumnNames="parent_id, doc_id" constraintName="fk-text-node-content" referencedTableName="content" referencedTableSchemaName="core" referencedColumnNames="id, doc_id" deleteCascade="true"  />
     </changeSet>
 
     <changeSet id="27-delete-text-nodes" author="Kiran Kumar">

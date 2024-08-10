@@ -86,13 +86,13 @@ type QueueOperations interface {
 
 type EditorDocument struct {
 	Id     int64    `json:"id"`
-	PageId string   `json:"pageId"`
+	PageId int64    `json:"pageId"`
 	Data   Document `json:"data"`
 }
 
 type OutputDocument struct {
 	Id     int64    `json:"id"`
-	PageId string   `json:"pageId"`
+	PageId int64    `json:"pageId"`
 	Data   NodeData `json:"data"`
 }
 

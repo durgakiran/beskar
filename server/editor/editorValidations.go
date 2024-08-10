@@ -12,7 +12,7 @@ func ValidateNewDraftDoc(data []byte) (InputDraftDocument, error) {
 	var inputDoc InputDraftDocument
 	err := json.Unmarshal(data, &inputDoc)
 	if err != nil {
-		fmt.Println(err.Error())
+		logger().Error(fmt.Sprintf(err.Error()))
 		return InputDraftDocument{}, err
 	}
 
@@ -31,7 +31,7 @@ func ValidateNewDoc(data []byte) (InputDocument, error) {
 	var inputDoc InputDocument
 	err := json.Unmarshal(data, &inputDoc)
 	if err != nil {
-		fmt.Println(err.Error())
+		logger().Error(err.Error())
 		return InputDocument{}, err
 	}
 

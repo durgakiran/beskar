@@ -101,7 +101,9 @@ type OutputDocument struct {
 
 type OutputDocumentToEdit struct {
 	Document
-	Data ContentDraft `json:"data"`
+	Data  ContentDraft `json:"data"`
+	Draft bool         `json:"draft"`
+	Nodes NodeData     `json:"nodeData"`
 }
 
 type Sequence interface {

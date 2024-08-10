@@ -12,8 +12,9 @@ self.onmessage = (e) => {
             break;
         case 'data':
             if (initialised) {
+                console.log(e.data.data);
                 Run(JSON.stringify(e.data.data)).then((output) => {
-                    console.log(output)
+                    self.postMessage({ type: "contentData", data: output })
                 });
             }
             break;
