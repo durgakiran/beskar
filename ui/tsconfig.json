@@ -4,10 +4,12 @@
         "target": "es2015",
         "paths": {
             "@http": ["./app/core/http/index.ts"],
+            "@http/hooks": ["./app/core/http/hooks/index.ts"],
             "@tiptap": ["./app/core/tiptap/*"],
             "@editor": ["./app/core/editor/index.ts"],
             "@editor/*": ["./app/core/editor/*"],
             "@components/*": ["./app/components/*"],
+            "@editor/extensions": ["./app/core/editor/extensions/index.ts"],
             "@queries/space": ["./app/core/queries/space/index.ts"],
             "@/lib/utils": ["./app/lib/utils/index.ts"]
         },

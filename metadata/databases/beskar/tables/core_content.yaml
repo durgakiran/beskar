@@ -1,0 +1,55 @@
+table:
+  name: content
+  schema: core
+object_relationships:
+  - name: page_doc_map
+    using:
+      foreign_key_constraint_on: doc_id
+insert_permissions:
+  - role: user
+    permission:
+      check: {}
+      columns:
+        - doc_id
+        - type
+        - order
+        - attrs
+        - marks
+        - text
+        - id
+        - parent_id
+    comment: ""
+select_permissions:
+  - role: user
+    permission:
+      columns:
+        - doc_id
+        - type
+        - order
+        - attrs
+        - marks
+        - text
+        - id
+        - parent_id
+      filter: {}
+    comment: ""
+update_permissions:
+  - role: user
+    permission:
+      columns:
+        - doc_id
+        - type
+        - order
+        - attrs
+        - marks
+        - text
+        - id
+        - parent_id
+      filter: {}
+      check: {}
+    comment: ""
+delete_permissions:
+  - role: user
+    permission:
+      filter: {}
+    comment: ""

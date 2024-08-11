@@ -14,12 +14,10 @@ export const GRAPHQL_GET_SPACES = gql`
 `;
 
 export const GRAPHQL_GET_PAGE_BREADCRUM = gql`
-    query GetPageBreadCrum($id: bigint = "$id") {
-        core_space_url(where: {id: {_eq: $id}}) {
+    query GetPageBreadCrum($id: uuid = "$id") {
+        core_space(where: {id: {_eq: $id}}) {
+            name
             id
-            space {
-                name
-            }
         }
     }
 `;
@@ -73,6 +71,18 @@ export const GRAPHQL_GET_PAGES = gql`
         }
     }
 `;
+
+export const GRAPHQL_GET_PAGES_BY_SPACE_ID = gql`
+    query get_pages_by_space_id($id: uuid) {
+        core_page(where: {space_id: {_eq: $id}}) {
+            id
+            parent_id
+            page_doc_maps(order_by: {version: desc}, limit: 1) {
+                title
+            }
+        }
+    }
+`
 
 export const GRAPHQL_GET_PAGE = gql`
     query GetPage($pageId: bigint) {

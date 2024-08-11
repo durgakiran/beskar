@@ -33,7 +33,6 @@ import (
 // that wraps the Go function.
 func run() js.Func {
 	return js.FuncOf(func(this js.Value, args []js.Value) interface{} {
-		fmt.Println(this)
 
 		// t will be used to store unmarshaled JSON data.
 		var t core.EditorDocument
@@ -42,6 +41,7 @@ func run() js.Func {
 		err := json.Unmarshal([]byte(args[0].String()), &t)
 
 		if err != nil {
+			fmt.Println(err)
 			return js.ValueOf([]interface{}{"invalid JSON"})
 		}
 
@@ -61,6 +61,20 @@ func run() js.Func {
 		}
 
 		// UTF-8 string
+		return js.ValueOf(string(marshalledOutput[:]))
+	})
+}
+
+func editorDoc() js.Func {
+	return js.FuncOf(func(this js.Value, args []js.Value) interface{} {
+		var t core.Doc
+
+		err := json.Unmarshal([]byte(args[0].String()), &t)
+		if err != nil {
+			return js.ValueOf([]interface{}{"Invalid JSON"})
+		}
+		doc := t.CreateEditorDocument()
+		marshalledOutput, err := json.Marshal(&doc)
 		return js.ValueOf(string(marshalledOutput[:]))
 	})
 }
@@ -91,6 +105,7 @@ func main() {
 	// Attach the previously defined 'run' function to the global JavaScript object,
 	// making it callable from the JavaScript environment.
 	js.Global().Set("run", run())
+	js.Global().Set("getDoc", editorDoc())
 
 	// Utilize a channel receive expression to halt the 'main' goroutine, preventing the program from terminating.
 	<-ch

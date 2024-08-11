@@ -42,6 +42,7 @@ import { SlashCommand } from "./extensions/slashCommand/command";
 import { CustomInput } from "./note/Note";
 import { TableColumnMenu, TableRowMenu } from "./Table/menus";
 import { Table, TableCell, TableHeader, TableRow } from "./Table";
+import { NodeIdExtension } from "@editor/extensions";
 
 const extensions = [
     Bold,
@@ -88,6 +89,7 @@ const extensions = [
     TableCell,
     TableHeader,
     TableRow,
+    NodeIdExtension
 ];
 
 interface TipTapProps {
@@ -97,13 +99,14 @@ interface TipTapProps {
     id: number;
     editable?: boolean;
     title: string;
+    updateContent: (content: any, title: string) => void;
 }
 
 const MAX_DEFAULT_WIDTH = 760;
 
-export function TipTap({ setEditorContext, content, pageId, id, editable = true, title }: TipTapProps) {
+export function TipTap({ setEditorContext, content, pageId, id, editable = true, title, updateContent }: TipTapProps) {
     const [editedData, setEditedData] = useState(null);
-    const workerRef = useRef<Worker>();
+    // const workerRef = useRef<Worker>();
     const menuContainerRef = useRef(null);
     const debouncedValue = useDebounce(editedData, 10000);
     const debouncedTitle = useDebounce(title, 10000);
@@ -145,34 +148,35 @@ export function TipTap({ setEditorContext, content, pageId, id, editable = true,
         },
     });
 
-    useEffect(() => {
-        workerRef.current = new Worker('/workers/editor.js', { type: "module" });
-        workerRef.current.onmessage = (e) => {
-            console.log(e);
-        };
-        workerRef.current.onerror = (e) => {
-            console.log(e);
-        };
-        workerRef.current.postMessage({ type: "init", data: { id: id, pageId: pageId } });
-        return () => {
-            workerRef.current.terminate();
-        };
-        // LoadWasm().then(() => {
-        //     setIsWasmLoading(false);
-        // })
-    }, []);
+    // useEffect(() => {
+    //     // workerRef.current = new Worker('/workers/editor.js', { type: "module" });
+    //     // workerRef.current.onmessage = (e) => {
+    //     //     console.log(e);
+    //     // };
+    //     // workerRef.current.onerror = (e) => {
+    //     //     console.log(e);
+    //     // };
+    //     // workerRef.current.postMessage({ type: "init", data: { id: id, pageId: pageId } });
+    //     // return () => {
+    //     //     workerRef.current.terminate();
+    //     // };
+    //     // LoadWasm().then(() => {
+    //     //     setIsWasmLoading(false);
+    //     // })
+    // }, []);
 
 
     useEffect(() => {
-        if (workerRef.current) {
-            workerRef.current.postMessage({ type: "data", data: { id: id, pageId: pageId, data: debouncedValue } });
+        if (updated && editable) {
+            updateContent(debouncedValue, debouncedTitle);
         }
-    }, [debouncedValue])
+    }, [debouncedValue, debouncedTitle])
 
     useEffect(() => {
         if (content && editor) {
             setTimeout(() => {
                 editor.commands.setContent(content);
+                console.log(editor.getJSON())
             });
         }
     }, [content, editor]);
@@ -184,17 +188,17 @@ export function TipTap({ setEditorContext, content, pageId, id, editable = true,
     useEffect(() => {
         if (updated && editable) {
             // we can call wasm file here
-            mutateFunction({ variables: { id: id, pageId: pageId, data: debouncedValue, title: debouncedTitle } })
-                .then((data) => console.log(data))
-                .catch((error) => console.log(error)); // TODO: handle JWT expired error
+            // mutateFunction({ variables: { id: id, pageId: pageId, data: debouncedValue, title: debouncedTitle } })
+            //     .then((data) => console.log(data))
+            //     .catch((error) => console.log(error)); // TODO: handle JWT expired error
         }
     }, [debouncedValue]);
 
     useEffect(() => {
         if (editable) {
-            mutateTitleFn({ variables: { id: id, pageId: pageId, title: debouncedTitle } })
-                .then((data) => console.log(data))
-                .catch((error) => console.log(error));
+            // mutateTitleFn({ variables: { id: id, pageId: pageId, title: debouncedTitle } })
+            //     .then((data) => console.log(data))
+            //     .catch((error) => console.log(error));
         }
     }, [debouncedTitle]);
 

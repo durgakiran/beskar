@@ -4,8 +4,8 @@
     "cell_type": "zapy:request",
     "tags": []
   },
-  "endpoint": "http://localhost:9095/editor/update",
-  "method": "PUT",
+  "endpoint": "http://localhost:9095/editor/space/{{spaceId}}/page/{{pageId}}/edit",
+  "method": "GET",
   "params": [
     {
       "active": true,
@@ -23,11 +23,6 @@
       "active": true,
       "key": "Authorization",
       "value": "Bearer {{ctx.store.access_token}}"
-    },
-    {
-      "active": true,
-      "key": "",
-      "value": ""
     }
   ],
   "script": [
@@ -36,21 +31,26 @@
   "variables": [
     {
       "active": true,
+      "key": "spaceId",
+      "value": "f458794c-7127-4ea1-934c-ab44a8c3bfb0"
+    },
+    {
+      "active": true,
+      "key": "pageId",
+      "value": "15"
+    },
+    {
+      "active": true,
       "key": "",
       "value": ""
     }
   ],
-  "body_type": "application/json",
+  "body_type": "None",
   "body": [
-    "{",
-    "    \"title\": \"Testing second page\",",
-    "    \"spaceId\": \"f458794c-7127-4ea1-934c-ab44a8c3bfb0\",",
-    "    \"parentId\": 0,",
-    "    \"id\": 15,",
-    "    \"docId\": 8,",
-    "    \"ownerId\": \"6203346b-242e-4d2a-8cf5-af0818fcc748\",",
-    "    \"data\": \"{\\\"type\\\":\\\"doc\\\",\\\"content\\\":[null]}\"",
-    "}",
-    ""
+    {
+      "active": true,
+      "key": "",
+      "value": ""
+    }
   ]
 }

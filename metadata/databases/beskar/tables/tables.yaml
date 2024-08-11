@@ -1,4 +1,6 @@
+- "!include core_content.yaml"
 - "!include core_doc.yaml"
 - "!include core_page.yaml"
+- "!include core_page_doc_map.yaml"
 - "!include core_space.yaml"
 - "!include core_space_url.yaml"

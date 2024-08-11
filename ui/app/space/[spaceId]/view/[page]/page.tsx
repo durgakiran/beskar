@@ -2,11 +2,12 @@
 import { useLazyQuery, useQuery } from "@apollo/client";
 import { TipTap } from "@editor";
 import { client } from "@http";
+import { useGet } from "@http/hooks";
 import { GRAPHQL_GET_PAGE, GRAPHQL_GET_PAGE_BREADCRUM } from "@queries/space";
 import { Breadcrumb, BreadcrumbItem, Button, Spinner, Tooltip } from "flowbite-react";
 import { signIn, useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { HiHome, HiPencil, HiOutlineTrash } from "react-icons/hi";
 
 interface IDoc {
@@ -22,12 +23,12 @@ interface IBreadCrumSpaceData {
 }
 
 interface IBreadCrumSpace {
-    space: IBreadCrumSpaceData;
-    id: number;
+    name: string;
+    id: string;
 }
 
 interface IBreadCrum {
-    core_space_url: Array<IBreadCrumSpace>;
+    core_space: Array<IBreadCrumSpace>;
 }
 
 interface IPage {
@@ -47,9 +48,13 @@ interface IData {
 
 export default function Page({ params }: { params: { page: string; spaceId: string } }) {
     const { data: sessionData, status } = useSession();
+    const workerRef = useRef<Worker>();
+    const [workerInitiated, setWorkerInitiated] = useState(false);
+    const [content, setContent] = useState();
     const router = useRouter();
     const [editorData, setEditorData] = useState({});
-    const [getPage, { loading, error, data }] = useLazyQuery<IData, { pageId: string }>(GRAPHQL_GET_PAGE, { client: client, fetchPolicy: "no-cache", variables: { pageId: params.page } });
+    // const [getPage, { loading, error, data }] = useLazyQuery<IData, { pageId: string }>(GRAPHQL_GET_PAGE, { client: client, fetchPolicy: "no-cache", variables: { pageId: params.page } });
+    const [{ isLoading, data, errors }, fetchData] = useGet<{ data: any; status: string }>(`editor/space/${params.spaceId}/page/${params.page}`);
     const [getBreadCrum, { loading: loadingBreadCrum, error: errorBreadCrum, data: dataBreadCrum }] = useLazyQuery<IBreadCrum, { id: string }>(GRAPHQL_GET_PAGE_BREADCRUM, {
         client: client,
         variables: { id: params.spaceId },
@@ -62,29 +67,63 @@ export default function Page({ params }: { params: { page: string; spaceId: stri
     const deletePage = () => {};
 
     useEffect(() => {
-        if (status === "authenticated" && sessionData) {
-            getPage();
-            getBreadCrum();
+        workerRef.current = new Worker("/workers/editor.js", { type: "module" });
+        workerRef.current.onmessage = (e) => {
+            console.log(e);
+            switch (e.data.type) {
+                case "initiated":
+                    setWorkerInitiated(true);
+                    break;
+                case "editorData":
+                    console.log(JSON.parse(e.data.data));
+                    setContent(JSON.parse(e.data.data));
+                    break;
+                default:
+                    break;
+            }
+        };
+        workerRef.current.onerror = (e) => {
+            console.log(e);
+        };
+        workerRef.current.postMessage({ type: "init" });
+        return () => {
+            workerRef.current.terminate();
+        };
+    }, []);
+
+    useEffect(() => {
+        console.log(status);
+        if (status === "authenticated") {
+            if (workerInitiated) {
+                fetchData();
+                getBreadCrum();
+            }
         } else if (status !== "loading") {
             router.push("/space");
         }
-    }, [sessionData, status]);
+    }, [status, workerInitiated]);
+
+    useEffect(() => {
+        if (data) {
+            workerRef.current.postMessage({ type: "doc", data: data.data });
+        }
+    }, [data]);
 
     useEffect(() => {
         try {
-            if (error && error.message.includes("JWTExpired")) {
+            if (errors && errors.message.includes("JWTExpired")) {
                 signIn("keycloak");
             }
-            if (data) {
-                const eData = typeof data.core_page[0].docs[0].data === "string" ? JSON.parse(data.core_page[0].docs[0].data) : data.core_page[0].docs[0].data;
-                setEditorData(eData);
-            }
+            // if (data) {
+            //     const eData = typeof data.core_page[0].docs[0].data === "string" ? JSON.parse(data.core_page[0].docs[0].data) : data.core_page[0].docs[0].data;
+            //     setEditorData(eData);
+            // }
         } catch (e) {
             // console.log(e);
         }
-    }, [data, error]);
+    }, [data, errors]);
 
-    if (loading || status === "loading") {
+    if (isLoading || status === "loading") {
         <div className="text-center">
             <Spinner size="lg" />
         </div>;
@@ -93,12 +132,12 @@ export default function Page({ params }: { params: { page: string; spaceId: stri
         <div className="min-h-screen mx-auto ">
             <div className="py-2 mb-4 flex flex-nowrap justify-between box-border shadow-sm   ">
                 <div>
-                    {!loadingBreadCrum && dataBreadCrum && dataBreadCrum.core_space_url && dataBreadCrum.core_space_url[0] ? (
+                    {!loadingBreadCrum && dataBreadCrum && dataBreadCrum.core_space && dataBreadCrum.core_space[0] ? (
                         <Breadcrumb aria-label="page navigation">
                             <Breadcrumb.Item href="/" icon={HiHome}>
                                 Home
                             </Breadcrumb.Item>
-                            <Breadcrumb.Item href={`space/${dataBreadCrum.core_space_url[0].id}`}>{dataBreadCrum.core_space_url[0].space.name}</Breadcrumb.Item>
+                            <Breadcrumb.Item href={`space/${dataBreadCrum.core_space[0].id}`}>{dataBreadCrum.core_space[0].name}</Breadcrumb.Item>
                         </Breadcrumb>
                     ) : null}
                 </div>
@@ -116,12 +155,20 @@ export default function Page({ params }: { params: { page: string; spaceId: stri
                     </Tooltip>
                 </div>
             </div>
-            {data && (
+            {content && (
                 <div className="ml-16 mr-16">
                     <div className="mb-8">
-                        <h1 className="text-3xl font-bold">{data.core_page[0].docs[0].title}</h1>
+                        <h1 className="text-3xl font-bold">{data.data.title}</h1>
                     </div>
-                    <TipTap title={data.core_page[0].docs[0].title} setEditorContext={() => {}} editable={false} content={editorData} pageId={params.page} id={data.core_page[0].docs[0].id} />
+                    <TipTap
+                        updateContent={(content, title) => console.log(content, title)}
+                        title={data.data.title}
+                        setEditorContext={() => {}}
+                        editable={false}
+                        content={content}
+                        pageId={params.page}
+                        id={data.data.docId}
+                    />
                 </div>
             )}
         </div>

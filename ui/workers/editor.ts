@@ -7,12 +7,21 @@ self.onmessage = (e) => {
         case 'init':
             loadWasm().then(() => {
                 console.log("wasm loaded");
+                self.postMessage({ type: "initiated" })
             });
             break;
         case 'data':
             if (initialised) {
+                console.log(e.data.data);
                 Run(JSON.stringify(e.data.data)).then((output) => {
-                    console.log(output)
+                    self.postMessage({ type: "contentData", data: output })
+                });
+            }
+            break;
+        case 'doc':
+            if (initialised) {
+                GetEditorDoc(JSON.stringify(e.data.data)).then((output) => {
+                    self.postMessage({ type: "editorData", data: output })
                 });
             }
             break;
@@ -32,6 +41,13 @@ async function Run(data: string) {
     return new Promise((resolve) => {
         const output = globalThis.run(data);
         resolve(output);
+    })
+}
+
+async function GetEditorDoc(data: string) {
+    return new Promise((resolve) => {
+        const output = globalThis.getDoc(data);
+        resolve(output)
     })
 }
 

@@ -15,7 +15,12 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
 	"github.com/joho/godotenv"
+	"go.uber.org/zap"
 )
+
+func logger() *zap.Logger {
+	return core.Logger
+}
 
 func addCorsMiddleWare(r *chi.Mux) {
 	r.Use(cors.Handler(
@@ -34,7 +39,7 @@ func addCorsMiddleWare(r *chi.Mux) {
 func main() {
 	err := godotenv.Load()
 	if err != nil {
-		fmt.Println(err)
+		logger().Error(err.Error())
 	}
 	core.InitializeLogger()
 	logger := core.Logger
