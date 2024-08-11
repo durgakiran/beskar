@@ -34,6 +34,8 @@ command: `GOOS=js GOARCH=wasm go build -o ./jbi.wasm`
 
 copy to public folder: `cp ./jbi.wasm ../ui/public`
 
+### Generating graphl metada (hasura)
+Generate hasura graphql meta: `hasura metadata export --endpoint http://localhost:8080 --admin-secret <secret-value>`
 
 ## FAQ:
 1. How do I know my database setup is done?
