@@ -130,10 +130,10 @@ export default function Page({ params }: { params: { slug: string[] } }) {
     }, [status, publishableDocument]);
 
     useEffect(() => {
-        if (!publishing && publishigData) {
+        if (publishigData) {
             router.push(`/space/${params.slug[0]}/view/${params.slug[1]}`);
         }
-    }, [publishing])
+    }, [publishigData])
 
 
     useEffect(() => {
