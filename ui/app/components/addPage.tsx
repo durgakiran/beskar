@@ -18,7 +18,7 @@ const Footer = styled.div`
 interface IAddPage {
     isOpen: boolean;
     spaceId: string;
-    parentId?: string;
+    parentId?: number;
     setIsOpen: (open: boolean) => void;
     editPage: (pageId: number) => void;
 }
@@ -44,7 +44,7 @@ export default function AddPage({ isOpen, setIsOpen, spaceId, parentId, editPage
 
     const handleSubmit = async (ev: MouseEvent<HTMLButtonElement>) => {
         ev.preventDefault();
-        await createPage({ title: name, spaceId });
+        await createPage({ title: name, spaceId, parentId: parentId });
     };
     const closeModal = () => {
         setIsOpen(false);
