@@ -15,7 +15,6 @@ insert_permissions:
         - order
         - attrs
         - marks
-        - text
         - id
         - parent_id
     comment: ""
@@ -28,7 +27,6 @@ select_permissions:
         - order
         - attrs
         - marks
-        - text
         - id
         - parent_id
       filter: {}
@@ -42,7 +40,6 @@ update_permissions:
         - order
         - attrs
         - marks
-        - text
         - id
         - parent_id
       filter: {}

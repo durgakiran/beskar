@@ -47,6 +47,57 @@ services:
       - start-dev
     networks:
       - custom_local_network
+  proxy:
+    container_name: proxy
+    image: nginx:1.24
+    depends_on:
+      shield:
+        condition: service_started
+    networks:
+      - custom_local_network
+    ports:
+      - "8085:8085" # hits keycloak server      
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    healthcheck:
+      test: ["CMD-SHELL", "service nginx status || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+  guard:
+    image: ghcr.io/permify/permify-beta:v1.0.2-2c9db609
+    container_name: permify_guard
+    environment:
+      PERMIFY_DATABASE_ENGINE: postgres
+      PERMIFY_DATABASE_URI: "postgres://${DB_ADMIN_USERNAME}:${DB_ADMIN_PASSWORD}@postgres:5432/auth"
+      PERMIFY_DATABASE_AUTO_MIGRATE: true
+      PERMIFY_DATABASE_MAX_OPEN_CONNECTIONS: 20
+      PERMIFY_AUTHN_ENABLED: true
+      PERMIFY_AUTHN_METHOD: preshared
+      PERMIFY_AUTHN_PRESHARED_KEYS: "secret"
+      PERMIFY_AUTHN_OIDC_ISSUER: "http://shield:8080/realms/devbeskarrealm"
+      PERMIFY_AUTHN_OIDC_AUDIENCE: account
+      PERMIFY_AUTHN_OIDC_REFRESH_INTERVAL: 10m
+      PERMIFY_AUTHN_OIDC_BACKOFF_MAX_RETRIES: 5
+      PERMIFY_AUTHN_OIDC_BACKOFF_FREQUENCY: 12s
+      PERMIFY_AUTHN_OIDC_VALID_METHODS: "RS256"
+      PERMIFY_LOGGER_LEVEL: info
+      PERMIFY_SERVER_RATE_LIMIT: 100
+      PERMIFY_SERVER_HTTP_ENABLED: true
+      PERMIFY_SERVER_HTTP_PORT: 3476
+      PERMIFY_SERVER_HTTP_TLS_ENABLED: false
+      PERMIFY_SERVER_GRPS_PORT: 3478
+      PERMIFY_SERVER_GRPC_TLS_ENABLED: false
+      PERMIFY_LOG_ENABLED: false
+    depends_on:
+      shield:
+        condition: service_started
+    ports:
+      - 3476:3476
+      - 3478:3478
+    networks:
+      - custom_local_network
+
 
 networks:
   custom_local_network:
