@@ -1,9 +1,10 @@
 'use client'
 import { useMutation } from "@apollo/client";
 import { client } from "@http";
+import { Response, usePost } from "@http/hooks";
 import { GRAPHQL_ADD_SPACE } from "@queries/space";
 import { Button, Label, Modal, TextInput } from "flowbite-react";
-import { MouseEvent, useCallback, useRef, useState } from "react";
+import { MouseEvent, useCallback, useEffect, useRef, useState } from "react";
 
 
 interface IAddSpace {
@@ -11,9 +12,18 @@ interface IAddSpace {
     setIsOpen: (open: boolean) => void;
 }
 
+interface Payload {
+    name: string;
+}
+
+interface Data {
+    data: string;
+}
+
 export default function AddSpace({ isOpen, setIsOpen }: IAddSpace) {
     const [name, setName] = useState('');
-    const [mutateFunction, { data, loading, error }] = useMutation(GRAPHQL_ADD_SPACE, { client: client });
+    // const [mutateFunction, { data, loading, error }] = useMutation(GRAPHQL_ADD_SPACE, { client: client });
+    const [{ data, errors: error, isLoading: loading }, mutateData] = usePost<Response<Data>, Payload>("space/create")
     const spaceNameRef = useRef();
 
 
@@ -27,9 +37,14 @@ export default function AddSpace({ isOpen, setIsOpen }: IAddSpace) {
 
     const handleSubmit = async (ev: MouseEvent<HTMLButtonElement>) => {
         ev.preventDefault();
-        await mutateFunction({ variables: { name: name } });
-        setIsOpen(false);
+        await mutateData({ name: name });
     };
+
+    useEffect(() => {
+        if (data && !loading) {
+            setIsOpen(false);
+        }
+    }, [data, loading])
 
     return (
         <>
