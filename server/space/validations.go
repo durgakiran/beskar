@@ -3,6 +3,8 @@ package space
 import (
 	"encoding/json"
 	"errors"
+
+	"github.com/durgakiran/beskar/core"
 )
 
 func validateSpace(data []byte) (Space, error) {
@@ -13,7 +15,7 @@ func validateSpace(data []byte) (Space, error) {
 		return space, err
 	}
 	if space.Name == "" {
-		return space, errors.New(ErrorCode_name[ErrorCode_ERROR_CODE_MISSING_INPUT])
+		return space, errors.New(core.ErrorCode_name[core.ErrorCode_ERROR_CODE_MISSING_INPUT])
 	}
 	return space, nil
 }

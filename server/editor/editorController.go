@@ -2,6 +2,7 @@ package editor
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"strconv"
@@ -39,7 +40,7 @@ func getDocumentToView(w http.ResponseWriter, r *http.Request) {
 	ownerId := uuid.MustParse(userId)
 	spaceId := uuid.MustParse(chi.URLParam(r, "spaceId"))
 	pageId := chi.URLParam(r, "pageId")
-	validSpaceUserPermissions := ValidateUserSpacePermissions(spaceId, ownerId)
+	validSpaceUserPermissions := core.ValidateUserPagePermission(pageId, ownerId, "view")
 	if !validSpaceUserPermissions {
 		sendFailedReponse(w, r, http.StatusForbidden, "Invalid space permissions")
 		return
@@ -72,7 +73,7 @@ func getDocumentToEdit(w http.ResponseWriter, r *http.Request) {
 	ownerId := uuid.MustParse(userId)
 	spaceId := uuid.MustParse(chi.URLParam(r, "spaceId"))
 	pageId := chi.URLParam(r, "pageId")
-	validSpaceUserPermissions := ValidateUserSpacePermissions(spaceId, ownerId)
+	validSpaceUserPermissions := core.ValidateUserPagePermission(pageId, ownerId, "edit")
 	if !validSpaceUserPermissions {
 		sendFailedReponse(w, r, http.StatusForbidden, "Invalid space permissions")
 		return
@@ -114,13 +115,14 @@ func saveDoc(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	inputDoc.OwnerId = uuid.MustParse(userId)
-	validSpaceUserPermissions := ValidateUserSpacePermissions(inputDoc.SpaceId, inputDoc.OwnerId)
+	validSpaceUserPermissions := core.ValidateUserSpacePermissions(inputDoc.SpaceId, inputDoc.OwnerId, "edit_page")
 	if !validSpaceUserPermissions {
 		sendFailedReponse(w, r, http.StatusForbidden, "Invalid space permissions")
 		return
 	}
 	pageId, err := inputDoc.Create()
 	if err != nil {
+		logger().Error(err.Error())
 		sendFailedReponse(w, r, http.StatusInternalServerError, "Unable to create new page")
 		return
 	}
@@ -154,7 +156,7 @@ func publishDoc(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	inputDoc.OwnerId = uuid.MustParse(userId)
-	validSpaceUserPermissions := ValidateUserSpacePermissions(inputDoc.SpaceId, inputDoc.OwnerId)
+	validSpaceUserPermissions := core.ValidateUserPagePermission(fmt.Sprintf("%v", inputDoc.Id), inputDoc.OwnerId, "edit")
 	if !validSpaceUserPermissions {
 		render.Status(r, http.StatusForbidden)
 		render.Render(w, r, core.NewFailedResponse(http.StatusForbidden, core.FAILURE, "Invalid space permissions"))
@@ -202,7 +204,7 @@ func updateDraftDoc(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	inputDoc.OwnerId = uuid.MustParse(userId)
-	validSpaceUserPermissions := ValidateUserSpacePermissions(inputDoc.SpaceId, inputDoc.OwnerId)
+	validSpaceUserPermissions := core.ValidateUserPagePermission(fmt.Sprintf("%v", inputDoc.Id), inputDoc.OwnerId, "edit")
 	if !validSpaceUserPermissions {
 		render.Status(r, http.StatusForbidden)
 		render.Render(w, r, core.NewFailedResponse(http.StatusForbidden, core.FAILURE, "Invalid space permissions"))
@@ -227,7 +229,7 @@ func Router() *chi.Mux {
 	r.Use(core.AuthMiddleWare)
 	r.Get("/space/{spaceId}/page/{pageId}", getDocumentToView)
 	r.Get("/space/{spaceId}/page/{pageId}/edit", getDocumentToEdit)
-	r.Post("/save", saveDoc)
+	r.Post("/space/{spaceId}/page/create", saveDoc)
 	r.Put("/publish", publishDoc)
 	r.Put("/update", updateDraftDoc)
 	return r

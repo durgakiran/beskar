@@ -22,7 +22,7 @@
     {
       "active": true,
       "key": "Authorization",
-      "value": "Bearer {{ctx.store.access_token}}"
+      "value": "Bearer secret"
     },
     {
       "active": true,

@@ -6,6 +6,7 @@ import (
 	"os"
 	"sync"
 
+	permify_payload "buf.build/gen/go/permifyco/permify/protocolbuffers/go/base/v1"
 	permify_grpc "github.com/Permify/permify-go/grpc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -53,4 +54,175 @@ func GetPermifyInstance() *permify_grpc.Client {
 		fmt.Println("Single instance already created.")
 	}
 	return singleInstance
+}
+
+func WriteRelations(entityId string, entity string, subjectId string, subject string, relation string) error {
+	ctx := context.Background()
+	_, err := GetPermifyInstance().Data.WriteRelationships(
+		ctx,
+		&permify_payload.RelationshipWriteRequest{
+			TenantId: "t1",
+			Metadata: &permify_payload.RelationshipWriteRequestMetadata{
+				SchemaVersion: "",
+			},
+			Tuples: []*permify_payload.Tuple{
+				{
+					Entity: &permify_payload.Entity{
+						Type: entity,
+						Id:   entityId,
+					},
+					Relation: relation,
+					Subject: &permify_payload.Subject{
+						Type: subject,
+						Id:   subjectId,
+					},
+				},
+			},
+		},
+	)
+	return err
+}
+
+func GetEntitiesWithPermission(entity string, subject string, subjectId string, permission string) ([]string, error) {
+	rr, err := GetPermifyInstance().Permission.LookupEntity(
+		context.Background(),
+		&permify_payload.PermissionLookupEntityRequest{
+			TenantId: "t1",
+			Metadata: &permify_payload.PermissionLookupEntityRequestMetadata{
+				SchemaVersion: "",
+				SnapToken:     "",
+				Depth:         20,
+			},
+			EntityType: entity,
+			Permission: permission,
+			Subject: &permify_payload.Subject{
+				Type:     subject,
+				Id:       subjectId,
+				Relation: "",
+			},
+		},
+	)
+	if err != nil {
+		return make([]string, 0), err
+	}
+	return rr.GetEntityIds(), err
+}
+
+func CreateSubjectPermissions(entity string, entityId string, subject string, subjectId string, permission string) (string, error) {
+	rr, err := GetPermifyInstance().Data.Write(
+		context.Background(),
+		&permify_payload.DataWriteRequest{
+			TenantId: "t1",
+			Metadata: &permify_payload.DataWriteRequestMetadata{
+				SchemaVersion: "",
+			},
+			Tuples: []*permify_payload.Tuple{
+				{
+					Entity: &permify_payload.Entity{
+						Type: entity,
+						Id:   entityId,
+					},
+					Relation: permission,
+					Subject: &permify_payload.Subject{
+						Type:     subject,
+						Id:       subjectId,
+						Relation: "",
+					},
+				},
+			},
+		},
+	)
+	if err != nil {
+		return "", err
+	}
+	return rr.SnapToken, err
+}
+
+func GetSubjectPermissionList(entity string, entityId string, subject string, subjectId string) map[string]permify_payload.CheckResult {
+	client := GetPermifyInstance()
+	var output map[string]permify_payload.CheckResult
+	cr, err := client.Permission.SubjectPermission(
+		context.Background(),
+		&permify_payload.PermissionSubjectPermissionRequest{
+			TenantId: "t1",
+			Metadata: &permify_payload.PermissionSubjectPermissionRequestMetadata{
+				SnapToken:      "",
+				SchemaVersion:  "",
+				OnlyPermission: false,
+				Depth:          20,
+			},
+			Entity: &permify_payload.Entity{
+				Type: entity,
+				Id:   entityId,
+			},
+			Subject: &permify_payload.Subject{
+				Type:     subject,
+				Id:       subjectId,
+				Relation: "",
+			},
+		},
+	)
+	if err != nil {
+		Logger.Error(err.Error())
+		return output
+	}
+	output = cr.GetResults()
+	return output
+}
+
+func GetListOfEntitiesWithPermission(subject string, subjectId string, permission string, entity string) ([]string, error) {
+	client := GetPermifyInstance()
+	var entityIds []string
+	str, err := client.Permission.LookupEntity(
+		context.Background(),
+		&permify_payload.PermissionLookupEntityRequest{
+			TenantId: "t1",
+			Metadata: &permify_payload.PermissionLookupEntityRequestMetadata{
+				SchemaVersion: "",
+				Depth:         20,
+				SnapToken:     "",
+			},
+			EntityType: entity,
+			Permission: permission,
+			Subject: &permify_payload.Subject{
+				Type: subject,
+				Id:   subjectId,
+			},
+		},
+	)
+	if err != nil {
+		Logger.Error(err.Error())
+		return entityIds, err
+	}
+	entityIds = str.GetEntityIds()
+	return entityIds, nil
+}
+
+func CheckPermission(entity string, entityId string, subject string, subjectId string, permission string) (bool, error) {
+	cr, err := GetPermifyInstance().Permission.Check(
+		context.Background(),
+		&permify_payload.PermissionCheckRequest{
+			TenantId: "t1",
+			Metadata: &permify_payload.PermissionCheckRequestMetadata{
+				SchemaVersion: "",
+				SnapToken:     "",
+				Depth:         20,
+			},
+			Entity: &permify_payload.Entity{
+				Type: entity,
+				Id:   entityId,
+			},
+			Permission: permission,
+			Subject: &permify_payload.Subject{
+				Type:     subject,
+				Id:       subjectId,
+				Relation: "",
+			},
+		},
+	)
+	if err != nil {
+		Logger.Error(err.Error())
+		return false, err
+	}
+	return cr.Can == permify_payload.CheckResult_CHECK_RESULT_ALLOWED, nil
 }

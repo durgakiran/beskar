@@ -18,7 +18,7 @@ func logger() *zap.Logger {
 
 func sendFailedReponse(w http.ResponseWriter, r *http.Request, code int, message string) {
 	render.Status(r, code)
-	render.Render(w, r, core.NewFailedResponse(int(GetStatus(message)), core.FAILURE, message))
+	render.Render(w, r, core.NewFailedResponse(int(core.GetStatus(message)), core.FAILURE, message))
 }
 
 func sendSuccessResponse(w http.ResponseWriter, r *http.Request, code int, data interface{}) {
@@ -30,7 +30,7 @@ func createSpace(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	claims, ok := ctx.Value("claims").(core.Claims)
 	if !ok {
-		sendFailedReponse(w, r, http.StatusForbidden, ErrorCode_name[ErrorCode_ERROR_CODE_UNAUTHORIZED])
+		sendFailedReponse(w, r, http.StatusForbidden, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNAUTHORIZED])
 		return
 	}
 	userId := claims.Claims.UserId
@@ -38,7 +38,7 @@ func createSpace(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 	if err != nil {
 		logger().Error(err.Error())
-		sendFailedReponse(w, r, http.StatusBadRequest, ErrorCode_name[ErrorCode_ERROR_CODE_UNAUTHORIZED])
+		sendFailedReponse(w, r, http.StatusBadRequest, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNAUTHORIZED])
 		return
 	}
 	ownerId := uuid.MustParse(userId)
@@ -61,7 +61,7 @@ func getSpaces(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	claims, ok := ctx.Value("claims").(core.Claims)
 	if !ok {
-		sendFailedReponse(w, r, http.StatusForbidden, ErrorCode_name[ErrorCode_ERROR_CODE_UNAUTHORIZED])
+		sendFailedReponse(w, r, http.StatusForbidden, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNAUTHORIZED])
 		return
 	}
 	userId := claims.Claims.UserId
@@ -74,10 +74,34 @@ func getSpaces(w http.ResponseWriter, r *http.Request) {
 	sendSuccessResponse(w, r, http.StatusOK, spaces)
 }
 
+func getPageList(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	claims, ok := ctx.Value("claims").(core.Claims)
+	if !ok {
+		sendFailedReponse(w, r, http.StatusForbidden, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNAUTHORIZED])
+		return
+	}
+	userId := claims.Claims.UserId
+	spaceId := uuid.MustParse(chi.URLParam(r, "spaceId"))
+	userIdParsed := uuid.MustParse(userId)
+	validSpaceUserPermissions := core.ValidateUserSpacePermissions(spaceId, userIdParsed, "view")
+	if !validSpaceUserPermissions {
+		sendFailedReponse(w, r, http.StatusForbidden, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNAUTHORIZED])
+		return
+	}
+	data, err := getDocumentList(spaceId, userIdParsed)
+	if err != nil {
+		sendFailedReponse(w, r, http.StatusInternalServerError, err.Error())
+		return
+	}
+	sendSuccessResponse(w, r, http.StatusOK, data)
+}
+
 func Router() *chi.Mux {
 	r := chi.NewRouter()
 	r.Use(core.AuthMiddleWare)
 	r.Get("/list", getSpaces)
 	r.Post("/create", createSpace)
+	r.Get("/{spaceId}/page/list", getPageList)
 	return r
 }

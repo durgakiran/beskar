@@ -35,7 +35,7 @@ interface PageResponse {
 
 export default function AddPage({ isOpen, setIsOpen, spaceId, parentId, editPage }: IAddPage) {
     const [name, setName] = useState("");
-    const [{ data, errors, isLoading: loading }, createPage] = usePost<Response<PageResponse>, Page>(`editor/save`);
+    const [{ data, errors, isLoading: loading }, createPage] = usePost<Response<PageResponse>, Page>(`editor/space/${spaceId}/page/create`);
     const [added, setAdded] = useState(false);
 
     const handleInput = useCallback((value: string) => {

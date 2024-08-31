@@ -1,10 +1,13 @@
 package editor
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 
+	permify_payload "buf.build/gen/go/permifyco/permify/protocolbuffers/go/base/v1"
+	"github.com/durgakiran/beskar/core"
 	"github.com/google/uuid"
 )
 
@@ -47,6 +50,31 @@ func ValidateNewDoc(data []byte) (InputDocument, error) {
 }
 
 func ValidateUserSpacePermissions(spaceId uuid.UUID, userId uuid.UUID) bool {
-	space := GetSpace(spaceId)
-	return space.UserId == userId
+	client := core.GetPermifyInstance()
+	cr, err := client.Permission.Check(
+		context.Background(),
+		&permify_payload.PermissionCheckRequest{
+			TenantId: "t1",
+			Metadata: &permify_payload.PermissionCheckRequestMetadata{
+				SchemaVersion: "",
+				SnapToken:     "",
+				Depth:         20,
+			},
+			Entity: &permify_payload.Entity{
+				Type: "space",
+				Id:   spaceId.String(),
+			},
+			Permission: "view",
+			Subject: &permify_payload.Subject{
+				Type:     "user",
+				Id:       userId.String(),
+				Relation: "",
+			},
+		},
+	)
+	if err != nil {
+		logger().Error(err.Error())
+		return false
+	}
+	return cr.Can == permify_payload.CheckResult_CHECK_RESULT_ALLOWED
 }

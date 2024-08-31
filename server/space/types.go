@@ -13,3 +13,11 @@ type Space struct {
 	DateUpdated time.Time `json:"dateUpdated" db:"date_updated"`
 	CreatedBy   uuid.UUID `json:"createdBy" db:"user_id"`
 }
+
+type PageList struct {
+	PageId   int64     `json:"pageId" db:"id"`
+	OwnerId  uuid.UUID `json:"ownerId" db:"owner_id"`
+	Title    string    `json:"title" db:"title"`
+	ParentId int64     `json:"parentId" db:"parent_id"`
+	Draft    int8      `json:"draft" db:"draft"`
+}

@@ -9,6 +9,7 @@ import { Sidebar, Spinner } from "flowbite-react";
 import { HiHome, HiOutlinePlusSm, HiOutlineChevronDown, HiOutlineChevronRight, HiCog } from "react-icons/hi";
 import { signIn, useSession } from "next-auth/react";
 import Link from "next/link";
+import { Response, useGet } from "@http/hooks";
 interface Docs {
     title: string;
     id: number;
@@ -78,6 +79,13 @@ function SideNavItem({ pages, spaceId, openAddPage }: { pages: Array<IPages>; sp
     );
 }
 
+interface IPageList {
+    pageId: number;
+    ownerId: string;
+    title: string;
+    parentId: number;
+}
+
 export default function SideNav(param: Props) {
     // const user = useUser();
     const { data: sessionData, status } = useSession();
@@ -85,7 +93,8 @@ export default function SideNav(param: Props) {
     const [isDropdownOpen, setIsDropdownOpen] = useState(true);
     const [showCreateDialog, setShowCreateDialog] = useState(false);
     const router = useRouter();
-    const [getPages, { data, loading, error, refetch }] = useLazyQuery<SpaceData>(GRAPHQL_GET_PAGES_BY_SPACE_ID, { client: client, variables: { id: param.id } });
+    // const [getPages, { data, loading, error, refetch }] = useLazyQuery<SpaceData>(GRAPHQL_GET_PAGES_BY_SPACE_ID, { client: client, variables: { id: param.id } });
+    const [{ data, isLoading: loading, errors: error }, fetchData] = useGet<Response<IPageList[]>>(`space/${param.id}/page/list`);
     const [mutateFunction] = useMutation(GRAPHQL_DELETE_PAGE, { client: client });
     const pathName = useSelectedLayoutSegment();
     const [pagesData, setPagesData] = useState<Array<Pages>>([]);
@@ -94,12 +103,12 @@ export default function SideNav(param: Props) {
     const [pages, setPages] = useState<IPages[]>();
 
     useEffect(() => {
-        if (status === "authenticated" && sessionData) {
-            getPages();
+        if (param.id && status === "authenticated" && sessionData) {
+            fetchData();
         } else if (status !== "loading") {
             router.push("/");
         }
-    }, [sessionData, status]);
+    }, [sessionData, status, param.id]);
 
     useEffect(() => {
         if (error && error.message.includes("JWTExpired")) {
@@ -111,13 +120,13 @@ export default function SideNav(param: Props) {
         if (data) {
             const pagemap = new Map<number, Array<IPages>>();
             const pages: Array<IPages> = [];
-            data.core_page
+            data.data
                 .map((page): IPages => {
                     return {
-                        id: page.id,
-                        parentId: page.parent_id,
+                        id: page.pageId,
+                        parentId: page.parentId,
                         details: {
-                            title: page.page_doc_maps && page.page_doc_maps[0] && page.page_doc_maps[0].title ? page.page_doc_maps[0].title : "",
+                            title: page.title ? page.title : "",
                         },
                         children: [],
                     };

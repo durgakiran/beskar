@@ -11,6 +11,7 @@ entity space {
 
     permission delete = owner
     permission edit = owner or admin
+    permission edit_page = owner or admin or editor
     permission view = owner or admin or editor or commentor or viewer
     permission invite_admin = owner
     permission invite_member = owner or admin

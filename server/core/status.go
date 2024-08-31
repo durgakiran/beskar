@@ -1,4 +1,4 @@
-package space
+package core
 
 // GetStatus - Get status code and message from error
 func GetStatus(status string) Code {
