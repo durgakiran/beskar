@@ -44,14 +44,14 @@ func createSpace(w http.ResponseWriter, r *http.Request) {
 	ownerId := uuid.MustParse(userId)
 	space, err := validateSpace(data)
 	if err != nil {
-		sendFailedReponse(w, r, http.StatusBadRequest, err.Error())
+		sendFailedReponse(w, r, http.StatusForbidden, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNAUTHORIZED])
 		return
 	}
 	space.CreatedBy = ownerId
 	fmt.Println(space)
 	spaceId, err := createSpaceEntry(space)
 	if err != nil {
-		sendFailedReponse(w, r, http.StatusInternalServerError, err.Error())
+		sendFailedReponse(w, r, http.StatusInternalServerError, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNSPECIFIED])
 		return
 	}
 	sendSuccessResponse(w, r, http.StatusOK, spaceId)
@@ -68,7 +68,7 @@ func getSpaces(w http.ResponseWriter, r *http.Request) {
 	ownerId := uuid.MustParse(userId)
 	spaces, err := ListSpaces(ownerId)
 	if err != nil {
-		sendFailedReponse(w, r, http.StatusInternalServerError, err.Error())
+		sendFailedReponse(w, r, http.StatusInternalServerError, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNSPECIFIED])
 		return
 	}
 	sendSuccessResponse(w, r, http.StatusOK, spaces)
@@ -91,7 +91,7 @@ func getPageList(w http.ResponseWriter, r *http.Request) {
 	}
 	data, err := getDocumentList(spaceId, userIdParsed)
 	if err != nil {
-		sendFailedReponse(w, r, http.StatusInternalServerError, err.Error())
+		sendFailedReponse(w, r, http.StatusInternalServerError, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNSPECIFIED])
 		return
 	}
 	sendSuccessResponse(w, r, http.StatusOK, data)

@@ -19,3 +19,12 @@ func ValidateUserPagePermission(pageId string, userId uuid.UUID, permission stri
 	}
 	return cr
 }
+
+func ValidateUserEntityPermission(entity string, entityId string, userId uuid.UUID, permission string) bool {
+	cr, err := CheckPermission(entity, entityId, "user", userId.String(), permission)
+	if err != nil {
+		Logger.Error(err.Error())
+		return false
+	}
+	return cr
+}

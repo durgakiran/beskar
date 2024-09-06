@@ -9,6 +9,7 @@ import (
 
 	"github.com/durgakiran/beskar/core"
 	editor "github.com/durgakiran/beskar/editor"
+	"github.com/durgakiran/beskar/invite"
 	media "github.com/durgakiran/beskar/media/controller"
 	profile "github.com/durgakiran/beskar/profile/controller"
 	space "github.com/durgakiran/beskar/space"
@@ -71,6 +72,7 @@ func main() {
 	r.Mount("/profile", profile.Router())
 	r.Mount("/editor", editor.Router())
 	r.Mount("/space", space.Router())
+	r.Mount("/invite", invite.Router())
 
 	logger.Info(fmt.Sprintf("Serving on port: %s", port))
 	err = http.ListenAndServe(port, r)

@@ -15,6 +15,7 @@ const (
 	ErrorCode_ERROR_CODE_PERMISSION_SERVER_ISSUE ErrorCode = 2001
 	ErrorCode_ERROR_CODE_UNAUTHORIZED            ErrorCode = 2002
 	ErrorCode_ERROR_CODE_MISSING_INPUT           ErrorCode = 2003
+	ErrorCode_ERROR_CODE_INVALID_INPUT           ErrorCode = 2004
 
 	// not found
 	ErrorCode_ERROR_CODE_NO_DATA ErrorCode = 4001

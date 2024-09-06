@@ -1,0 +1,7 @@
+package invite
+
+const (
+	STATUS_ACCEPTED = "ACCEPTED"
+	STATUS_REMOVED  = "REMOVED"
+	STATUS_REJECTED = "REJECTED"
+)

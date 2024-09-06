@@ -94,7 +94,7 @@ func (d Doc) Update(conn pgx.Tx, ctx context.Context) (int64, error) {
 
 func fetchDocument(conn pgx.Tx, ctx context.Context, pageId int64, spaceId uuid.UUID, ownerId uuid.UUID) (Document, error) {
 	var doc Document
-	row, err := conn.Query(ctx, getDocument, spaceId, pageId, ownerId)
+	row, err := conn.Query(ctx, getDocument, spaceId, pageId)
 	if err != nil {
 		logger().Error(err.Error())
 		return doc, err
@@ -109,7 +109,7 @@ func fetchDocument(conn pgx.Tx, ctx context.Context, pageId int64, spaceId uuid.
 
 func fetchDocumentToEdit(conn pgx.Tx, ctx context.Context, pageId int64, spaceId uuid.UUID, ownerId uuid.UUID) (Document, error) {
 	var doc Document
-	row, err := conn.Query(ctx, getDocumentDataToEdit, spaceId, pageId, ownerId)
+	row, err := conn.Query(ctx, getDocumentDataToEdit, spaceId, pageId)
 	if err != nil {
 		logger().Error(err.Error())
 		return doc, err

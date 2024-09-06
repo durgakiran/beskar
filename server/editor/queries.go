@@ -14,7 +14,7 @@ const (
 						FROM 
 							core.page p, core.page_doc_map d
 						WHERE 
-							p.space_id = $1 AND p.id = $2 AND p.id = d.page_id AND d.draft = 0 AND d.owner_id = $3 ORDER BY d.version DESC LIMIT 1`
+							p.space_id = $1 AND p.id = $2 AND p.id = d.page_id AND d.draft = 0 ORDER BY d.version DESC LIMIT 1`
 	getDocumentDataToEdit = `SELECT 
 								d.title AS title, 
 								d.owner_id AS ownerId, 
@@ -24,7 +24,7 @@ const (
 							FROM 
 								core.page p, core.page_doc_map d
 							WHERE 
-								p.space_id = $1 AND p.id = $2 AND p.id = d.page_id AND d.draft = 1 AND d.owner_id = $3 ORDER BY d.version DESC LIMIT 1`
+								p.space_id = $1 AND p.id = $2 AND p.id = d.page_id AND d.draft = 1 ORDER BY d.version DESC LIMIT 1`
 	getDocumentNodes = `SELECT 
 							c.doc_id AS docId, 
 							c.id AS contentId, 
