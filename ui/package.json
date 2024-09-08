@@ -20,6 +20,7 @@
         "@emoji-mart/data": "^1.2.1",
         "@emoji-mart/react": "^1.1.1",
         "@floating-ui/react": "^0.26.16",
+        "@hocuspocus/provider": "^2.13.5",
         "@radix-ui/react-popover": "^1.0.7",
         "@supabase/supabase-js": "^2.39.1",
         "@tippyjs/react": "^4.2.6",
@@ -27,8 +28,8 @@
         "@tiptap/extension-character-count": "^2.1.13",
         "@tiptap/extension-code-block": "^2.1.13",
         "@tiptap/extension-code-block-lowlight": "^2.1.13",
-        "@tiptap/extension-collaboration": "^2.1.13",
-        "@tiptap/extension-collaboration-cursor": "^2.1.13",
+        "@tiptap/extension-collaboration": "^2.6.6",
+        "@tiptap/extension-collaboration-cursor": "^2.6.6",
         "@tiptap/extension-color": "^2.1.13",
         "@tiptap/extension-document": "^2.1.13",
         "@tiptap/extension-dropcursor": "^2.1.13",
@@ -79,7 +80,8 @@
         "react-is": "^18.3.1",
         "styled-components": "^5.3.11",
         "tippy.js": "^6.3.7",
-        "y-webrtc": "^10.3.0"
+        "y-prosemirror": "^1.2.12",
+        "yjs": "^13.6.18"
     },
     "devDependencies": {
         "@types/jsonwebtoken": "^9.0.5",

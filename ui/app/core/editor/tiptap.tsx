@@ -43,6 +43,18 @@ import { CustomInput } from "./note/Note";
 import { TableColumnMenu, TableRowMenu } from "./Table/menus";
 import { Table, TableCell, TableHeader, TableRow } from "./Table";
 import { NodeIdExtension } from "@editor/extensions";
+import * as Y from "yjs";
+import { HocuspocusProvider } from "@hocuspocus/provider";
+import Collaboration from "@tiptap/extension-collaboration";
+import CollaborationCursor from "@tiptap/extension-collaboration-cursor";
+
+const doc = new Y.Doc();
+
+const provider = new HocuspocusProvider({
+    url: "ws://127.0.0.1:1234",
+    name: "example-document",
+    document: doc,
+});
 
 const extensions = [
     Bold,
@@ -51,7 +63,6 @@ const extensions = [
     Dropcursor,
     Gapcursor,
     Hardbreak,
-    History,
     Horizontalrule,
     Italic,
     ListItem,
@@ -61,6 +72,13 @@ const extensions = [
     TextAlign.configure({
         types: ["heading", "paragraph"],
         alignments: ["left", "right", "center", "justify"],
+    }),
+    Collaboration.configure({
+        document: doc,
+    }),
+    CollaborationCursor.configure({
+        provider,
+        user: { name: "kiran", color: "#ffcc00" },
     }),
     Paragraph,
     blockQuote,
@@ -89,7 +107,7 @@ const extensions = [
     TableCell,
     TableHeader,
     TableRow,
-    NodeIdExtension
+    NodeIdExtension,
 ];
 
 interface TipTapProps {
@@ -165,18 +183,17 @@ export function TipTap({ setEditorContext, content, pageId, id, editable = true,
     //     // })
     // }, []);
 
-
     useEffect(() => {
         if (updated && editable) {
             updateContent(debouncedValue, debouncedTitle);
         }
-    }, [debouncedValue, debouncedTitle])
+    }, [debouncedValue, debouncedTitle]);
 
     useEffect(() => {
         if (content && editor) {
             setTimeout(() => {
                 editor.commands.setContent(content);
-                console.log(editor.getJSON())
+                console.log(editor.getJSON());
             });
         }
     }, [content, editor]);
