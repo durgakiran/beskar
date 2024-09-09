@@ -9,7 +9,6 @@ import Code from "@tiptap/extension-code";
 import Dropcursor from "@tiptap/extension-dropcursor";
 import Gapcursor from "@tiptap/extension-gapcursor";
 import Hardbreak from "@tiptap/extension-hard-break";
-import History from "@tiptap/extension-history";
 import Horizontalrule from "@tiptap/extension-horizontal-rule";
 import Italic from "@tiptap/extension-italic";
 import ListItem from "@tiptap/extension-list-item";
@@ -31,7 +30,7 @@ import { GrStrikeThrough, GrItalic, GrBold } from "react-icons/gr";
 import { useDebounce } from "app/core/hooks/debounce";
 import { useEffect, useRef, useState } from "react";
 import { GRAPHQL_UPDATE_DOC_DATA, GRAPHQL_UPDATE_DOC_TITLE } from "@queries/space";
-import { client } from "@http";
+import { client, useGetCall } from "@http";
 import { useMutation } from "@apollo/client";
 import { BubbleMenu } from "./bubbleMenu/bubbleMenu";
 import "./styles.css";
@@ -76,10 +75,6 @@ const extensions = [
     Collaboration.configure({
         document: doc,
     }),
-    CollaborationCursor.configure({
-        provider,
-        user: { name: "kiran", color: "#ffcc00" },
-    }),
     Paragraph,
     blockQuote,
     Text,
@@ -121,6 +116,14 @@ interface TipTapProps {
 }
 
 const MAX_DEFAULT_WIDTH = 760;
+const USER_URI = process.env.NEXT_PUBLIC_USER_SERVER_URL;
+
+interface UserInfo {
+    email: string;
+    id: string;
+    name: string;
+    username: string;
+}
 
 export function TipTap({ setEditorContext, content, pageId, id, editable = true, title, updateContent }: TipTapProps) {
     const [editedData, setEditedData] = useState(null);
@@ -131,9 +134,16 @@ export function TipTap({ setEditorContext, content, pageId, id, editable = true,
     const [updated, setUpdated] = useState(false);
     const [mutateFunction, { data, loading, error }] = useMutation(GRAPHQL_UPDATE_DOC_DATA, { client: client });
     const [mutateTitleFn, { data: titleData, loading: titleLoading, error: TitleError }] = useMutation(GRAPHQL_UPDATE_DOC_TITLE, { client: client });
+    const [status, res] = useGetCall<UserInfo>(USER_URI + "/profile/details");
 
     const editor = useEditor({
-        extensions: extensions,
+        extensions: [
+            ...extensions, 
+            CollaborationCursor.configure({
+                provider,
+                user: { name: res ? res.data.name : "", color: "#ffcc00" },
+            })
+        ],
         content: content,
         editable: editable,
         onUpdate: ({ editor }) => {
