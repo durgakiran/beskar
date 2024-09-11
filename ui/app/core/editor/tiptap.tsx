@@ -9,7 +9,6 @@ import Code from "@tiptap/extension-code";
 import Dropcursor from "@tiptap/extension-dropcursor";
 import Gapcursor from "@tiptap/extension-gapcursor";
 import Hardbreak from "@tiptap/extension-hard-break";
-import History from "@tiptap/extension-history";
 import Horizontalrule from "@tiptap/extension-horizontal-rule";
 import Italic from "@tiptap/extension-italic";
 import ListItem from "@tiptap/extension-list-item";
@@ -31,7 +30,7 @@ import { GrStrikeThrough, GrItalic, GrBold } from "react-icons/gr";
 import { useDebounce } from "app/core/hooks/debounce";
 import { useEffect, useRef, useState } from "react";
 import { GRAPHQL_UPDATE_DOC_DATA, GRAPHQL_UPDATE_DOC_TITLE } from "@queries/space";
-import { client } from "@http";
+import { client, useGetCall } from "@http";
 import { useMutation } from "@apollo/client";
 import { BubbleMenu } from "./bubbleMenu/bubbleMenu";
 import "./styles.css";
@@ -43,6 +42,18 @@ import { CustomInput } from "./note/Note";
 import { TableColumnMenu, TableRowMenu } from "./Table/menus";
 import { Table, TableCell, TableHeader, TableRow } from "./Table";
 import { NodeIdExtension } from "@editor/extensions";
+import * as Y from "yjs";
+import { HocuspocusProvider } from "@hocuspocus/provider";
+import Collaboration from "@tiptap/extension-collaboration";
+import CollaborationCursor from "@tiptap/extension-collaboration-cursor";
+
+const doc = new Y.Doc();
+
+const provider = new HocuspocusProvider({
+    url: "ws://127.0.0.1:1234",
+    name: "example-document",
+    document: doc,
+});
 
 const extensions = [
     Bold,
@@ -51,7 +62,6 @@ const extensions = [
     Dropcursor,
     Gapcursor,
     Hardbreak,
-    History,
     Horizontalrule,
     Italic,
     ListItem,
@@ -61,6 +71,9 @@ const extensions = [
     TextAlign.configure({
         types: ["heading", "paragraph"],
         alignments: ["left", "right", "center", "justify"],
+    }),
+    Collaboration.configure({
+        document: doc,
     }),
     Paragraph,
     blockQuote,
@@ -89,7 +102,7 @@ const extensions = [
     TableCell,
     TableHeader,
     TableRow,
-    NodeIdExtension
+    NodeIdExtension,
 ];
 
 interface TipTapProps {
@@ -103,6 +116,14 @@ interface TipTapProps {
 }
 
 const MAX_DEFAULT_WIDTH = 760;
+const USER_URI = process.env.NEXT_PUBLIC_USER_SERVER_URL;
+
+interface UserInfo {
+    email: string;
+    id: string;
+    name: string;
+    username: string;
+}
 
 export function TipTap({ setEditorContext, content, pageId, id, editable = true, title, updateContent }: TipTapProps) {
     const [editedData, setEditedData] = useState(null);
@@ -113,9 +134,16 @@ export function TipTap({ setEditorContext, content, pageId, id, editable = true,
     const [updated, setUpdated] = useState(false);
     const [mutateFunction, { data, loading, error }] = useMutation(GRAPHQL_UPDATE_DOC_DATA, { client: client });
     const [mutateTitleFn, { data: titleData, loading: titleLoading, error: TitleError }] = useMutation(GRAPHQL_UPDATE_DOC_TITLE, { client: client });
+    const [status, res] = useGetCall<UserInfo>(USER_URI + "/profile/details");
 
     const editor = useEditor({
-        extensions: extensions,
+        extensions: [
+            ...extensions, 
+            CollaborationCursor.configure({
+                provider,
+                user: { name: res ? res.data.name : "", color: "#ffcc00" },
+            })
+        ],
         content: content,
         editable: editable,
         onUpdate: ({ editor }) => {
@@ -165,18 +193,17 @@ export function TipTap({ setEditorContext, content, pageId, id, editable = true,
     //     // })
     // }, []);
 
-
     useEffect(() => {
         if (updated && editable) {
             updateContent(debouncedValue, debouncedTitle);
         }
-    }, [debouncedValue, debouncedTitle])
+    }, [debouncedValue, debouncedTitle]);
 
     useEffect(() => {
         if (content && editor) {
             setTimeout(() => {
                 editor.commands.setContent(content);
-                console.log(editor.getJSON())
+                console.log(editor.getJSON());
             });
         }
     }, [content, editor]);

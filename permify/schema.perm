@@ -1,0 +1,28 @@
+entity user {}
+entity tenant {
+    relation space @space
+}
+entity space {
+    relation owner @user
+    relation admin @user
+    relation editor @user
+    relation commentor @user
+    relation viewer @user
+
+    permission delete = owner
+    permission edit = owner or admin
+    permission edit_page = owner or admin or editor
+    permission view = owner or admin or editor or commentor or viewer
+    permission invite_admin = owner
+    permission invite_member = owner or admin
+}
+entity page {
+    relation owner @space#owner @space#admin @space#editor
+    relation parent @page
+    relation space @space
+
+    permission edit = space.edit or space.editor
+    permission view = space.view
+    permission delete = owner or space.owner
+}
+

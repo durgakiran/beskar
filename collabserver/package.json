@@ -1,0 +1,21 @@
+{
+  "name": "collabserver",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/server.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "typescript": "^5.5.4"
+  },
+  "dependencies": {
+    "@hocuspocus/extension-logger": "^2.13.5",
+    "@hocuspocus/server": "^2.13.5",
+    "@hocuspocus/transformer": "^2.13.5"
+  }
+}

@@ -1,0 +1,52 @@
+{
+  "metadata": {
+    "v": "1",
+    "cell_type": "zapy:request",
+    "tags": []
+  },
+  "endpoint": "http://localhost:3476/v1/tenants/t1/schemas/read",
+  "method": "POST",
+  "params": [
+    {
+      "active": true,
+      "key": "",
+      "value": ""
+    }
+  ],
+  "headers": [
+    {
+      "active": true,
+      "key": "Content-Type",
+      "value": "{{ ctx.auto() }}"
+    },
+    {
+      "active": true,
+      "key": "Authorization",
+      "value": "Bearer secret"
+    },
+    {
+      "active": true,
+      "key": "",
+      "value": ""
+    }
+  ],
+  "script": [
+    ""
+  ],
+  "variables": [
+    {
+      "active": true,
+      "key": "",
+      "value": ""
+    }
+  ],
+  "body_type": "application/json",
+  "body": [
+    "{",
+    "    \"metadata\": {",
+    "        \"schema_version\": \"cr5ekhhjapfs73cj6v40\"",
+    "    }",
+    "}",
+    ""
+  ]
+}

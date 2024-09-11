@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext"
+    xmlns:pro="http://www.liquibase.org/xml/ns/pro"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd
+                        http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd
+                        http://www.liquibase.org/xml/ns/pro http://www.liquibase.org/xml/ns/pro/liquibase-pro-latest.xsd">
+
+
+    <changeSet id="1-create-notifications-schema" author="Kiran Kumar">
+        <comment>Create notification schema</comment>
+        <sql>
+                <![CDATA[ 
+                    CREATE SCHEMA IF NOT EXISTS notifications;
+                ]]>
+            </sql>
+        <rollback></rollback>
+    </changeSet>
+
+    <changeSet id="2-grant-usage-to-app-user-notifications-schema" author="Kiran Kumar">
+        <sql>
+            ALTER DEFAULT PRIVILEGES FOR USER beskar_admin IN SCHEMA notifications GRANT SELECT, INSERT, UPDATE, DELETE  ON TABLES TO ${app_user};
+            ALTER DEFAULT PRIVILEGES FOR USER beskar_admin IN SCHEMA notifications GRANT ALL ON SEQUENCES TO ${app_user};
+        </sql>
+        <rollback />
+    </changeSet>
+
+    <changeSet id="3-create-invites-table" author="Kiran Kumar">
+        <preConditions>
+            <sqlCheck expectedResult="0">
+                SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'invites';
+            </sqlCheck>
+        </preConditions>
+        <comment>Create invites table</comment>
+        <createTable tableName="invites" schemaName="notifications">
+            <column name="sender_id" type="uuid">
+                <constraints nullable="false"/>
+            </column>
+            <column name="token" type="VARCHAR(35)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="user_id" type="uuid">
+                <constraints nullable="false"/>
+            </column>
+            <column name="entity" type="varchar(35)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="entity_id" type="varchar(100)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="status" type="varchar(10)">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+    </changeSet>
+
+    <changeSet id="4-grant-usage-on-schema-notifications" author="Kiran Kumar">
+        <sql>
+            GRANT USAGE ON schema notifications TO ${app_user};
+        </sql>
+        <rollback />
+    </changeSet>
+
+    <changeSet id="5-remove-not-null-constraint" author="Kiran Kumar">
+        <dropNotNullConstraint tableName="invites" schemaName="notifications" columnName="status" />
+    </changeSet>
+</databaseChangeLog>

@@ -14,7 +14,7 @@ services:
     networks:
       - dbnet
     healthcheck:
-      test: pg_isready -h localhost -p 5432
+      test: pg_isready -h localhost -p 5432 -U admin
       interval: 2s
       timeout: 5s
       retries: 15

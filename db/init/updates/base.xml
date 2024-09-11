@@ -111,4 +111,12 @@
             </executeCommand>
         </changeSet>
 
+        <changeSet id="${database_name}-create-notifications-schema" author="Kiran Kumar" runOnChange="false" failOnError="true">
+            <comment>Create notifications schema</comment>
+            <executeCommand executable="bash">
+                <arg value="-c" />
+                <arg value="export PGPASSWORD=&quot;${admin_user_pwd}&quot;; psql -h ${db_host} -p ${db_port} -U ${admin_user} -d ${database_name} -c &quot;CREATE SCHEMA notifications&quot;" />
+            </executeCommand>
+        </changeSet>
+
 </databaseChangeLog>
