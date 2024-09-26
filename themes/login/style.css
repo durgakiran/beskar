@@ -1,0 +1,58 @@
+body, html {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start; 
+    font-family: Arial, sans-serif;
+}
+.container {
+    padding: 20px;
+    text-align: center;
+    width: 100%;
+}
+header {
+    background-color: white;
+    color: white;
+    padding: 20px;
+    width: 100%;
+    box-sizing: border-box;
+}
+.teddox-logo {
+    position: relative;
+    margin-top: 10px;
+}
+.teddox-logo img {
+    width: 100px; 
+    height: auto;
+}
+form {
+    margin-top: 20px; 
+}
+.github-logo {
+    width: 24px;
+    vertical-align: middle;
+    margin-right: 5px;
+}
+button.github-login {
+    padding: 10px;
+    margin: 5px;
+    border: 1px solid #24ce11;
+    border-radius: 5px;
+    background-color: #13c013;
+    color: rgb(20, 220, 56);
+    cursor: pointer;
+    display: inline-block;
+}
+button.github-login:hover {
+    background-color: #20bb32;
+}
+.github-login-text {
+    color:white
+}
+.Image{
+    width: 100px;
+    vertical-align: middle;
+    margin-right: 5px;
+}
