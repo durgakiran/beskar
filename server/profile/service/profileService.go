@@ -28,6 +28,6 @@ func GetProfileData(token string) (core.UserInfoOut, error) {
 	var u core.UserInfo
 	json.NewDecoder(resp.Body).Decode(&u)
 	var outUserData core.UserInfoOut
-	outUserData = core.UserInfoOut(u)
+	// outUserData = core.UserInfoOut(u)
 	return outUserData, nil
 }

@@ -19,111 +19,113 @@ func logger() *zap.Logger {
 	return core.Logger
 }
 
-func sendFailedReponse(w http.ResponseWriter, r *http.Request, code int, message string) {
-	render.Status(r, code)
-	render.Render(w, r, core.NewFailedResponse(code, core.FAILURE, message))
-}
-
-func sendSuccessResponse(w http.ResponseWriter, r *http.Request, code int, data interface{}) {
-	render.Status(r, code)
-	render.Render(w, r, core.NewSucessResponse(core.SUCCESS, data))
-}
-
 func getDocumentToView(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	claims, ok := ctx.Value("claims").(core.Claims)
-	if !ok {
-		sendFailedReponse(w, r, http.StatusForbidden, "Invalid user Id")
+	user, err := core.GetUserInfo(ctx)
+	if err != nil {
+		core.SendFailedReponse(w, r, http.StatusForbidden, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNAUTHORIZED])
 		return
 	}
-	userId := claims.Claims.UserId
+	if user.Id == "" {
+		core.SendFailedReponse(w, r, http.StatusForbidden, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNAUTHORIZED])
+		return
+	}
+	userId := user.AId
 	ownerId := uuid.MustParse(userId)
 	spaceId := uuid.MustParse(chi.URLParam(r, "spaceId"))
 	pageId := chi.URLParam(r, "pageId")
 	validSpaceUserPermissions := core.ValidateUserPagePermission(pageId, ownerId, "view")
 	if !validSpaceUserPermissions {
-		sendFailedReponse(w, r, http.StatusForbidden, "Invalid space permissions")
+		core.SendFailedReponse(w, r, http.StatusForbidden, "Invalid space permissions")
 		return
 	}
 	page, err := strconv.ParseInt(pageId, 10, 64)
 	if err != nil {
-		sendFailedReponse(w, r, http.StatusInternalServerError, "Unable to get document")
+		core.SendFailedReponse(w, r, http.StatusInternalServerError, "Unable to get document")
 		return
 	}
 	outputDocument, err := GetDocument(page, spaceId, ownerId)
 	if errors.Is(err, pgx.ErrNoRows) {
-		sendSuccessResponse(w, r, http.StatusOK, nil)
+		core.SendSuccessResponse(w, r, http.StatusOK, nil)
 		return
 	}
 	if err != nil {
-		sendFailedReponse(w, r, http.StatusInternalServerError, "Unable to get document")
+		core.SendFailedReponse(w, r, http.StatusInternalServerError, "Unable to get document")
 		return
 	}
-	sendSuccessResponse(w, r, http.StatusOK, outputDocument)
+	core.SendSuccessResponse(w, r, http.StatusOK, outputDocument)
 }
 
 func getDocumentToEdit(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	claims, ok := ctx.Value("claims").(core.Claims)
-	if !ok {
-		sendFailedReponse(w, r, http.StatusForbidden, "Invalid user Id")
+	user, err := core.GetUserInfo(ctx)
+	if err != nil {
+		core.SendFailedReponse(w, r, http.StatusForbidden, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNAUTHORIZED])
 		return
 	}
-	userId := claims.Claims.UserId
+	if user.Id == "" {
+		core.SendFailedReponse(w, r, http.StatusForbidden, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNAUTHORIZED])
+		return
+	}
+	userId := user.AId
 	ownerId := uuid.MustParse(userId)
 	spaceId := uuid.MustParse(chi.URLParam(r, "spaceId"))
 	pageId := chi.URLParam(r, "pageId")
 	validSpaceUserPermissions := core.ValidateUserPagePermission(pageId, ownerId, "edit")
 	if !validSpaceUserPermissions {
-		sendFailedReponse(w, r, http.StatusForbidden, "Invalid space permissions")
+		core.SendFailedReponse(w, r, http.StatusForbidden, "Invalid space permissions")
 		return
 	}
 	page, err := strconv.ParseInt(pageId, 10, 64)
 	if err != nil {
-		sendFailedReponse(w, r, http.StatusInternalServerError, "Unable to get document")
+		core.SendFailedReponse(w, r, http.StatusInternalServerError, "Unable to get document")
 		return
 	}
 	outputDocument, err := GetDocumentToEdit(page, spaceId, ownerId)
 	if errors.Is(err, pgx.ErrNoRows) {
-		sendSuccessResponse(w, r, http.StatusOK, nil)
+		core.SendSuccessResponse(w, r, http.StatusOK, nil)
 		return
 	}
 	if err != nil {
-		sendFailedReponse(w, r, http.StatusInternalServerError, "Unable to get document")
+		core.SendFailedReponse(w, r, http.StatusInternalServerError, "Unable to get document")
 		return
 	}
-	sendSuccessResponse(w, r, http.StatusOK, outputDocument)
+	core.SendSuccessResponse(w, r, http.StatusOK, outputDocument)
 }
 
 func saveDoc(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	claims, ok := ctx.Value("claims").(core.Claims)
-	if !ok {
-		sendFailedReponse(w, r, http.StatusForbidden, "Invalid user Id")
+	user, err := core.GetUserInfo(ctx)
+	if err != nil {
+		core.SendFailedReponse(w, r, http.StatusForbidden, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNAUTHORIZED])
 		return
 	}
-	userId := claims.Claims.UserId
+	if user.Id == "" {
+		core.SendFailedReponse(w, r, http.StatusForbidden, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNAUTHORIZED])
+		return
+	}
+	userId := user.AId
 	data, err := io.ReadAll(r.Body)
 	defer r.Body.Close()
 	if err != nil {
-		sendFailedReponse(w, r, http.StatusBadRequest, "Unable to read request body")
+		core.SendFailedReponse(w, r, http.StatusBadRequest, "Unable to read request body")
 		return
 	}
 	inputDoc, err := ValidateNewDoc(data)
 	if err != nil {
-		sendFailedReponse(w, r, http.StatusBadRequest, "Unable to process request body")
+		core.SendFailedReponse(w, r, http.StatusBadRequest, "Unable to process request body")
 		return
 	}
 	inputDoc.OwnerId = uuid.MustParse(userId)
 	validSpaceUserPermissions := core.ValidateUserSpacePermissions(inputDoc.SpaceId, inputDoc.OwnerId, "edit_page")
 	if !validSpaceUserPermissions {
-		sendFailedReponse(w, r, http.StatusForbidden, "Invalid space permissions")
+		core.SendFailedReponse(w, r, http.StatusForbidden, "Invalid space permissions")
 		return
 	}
 	pageId, err := inputDoc.Create()
 	if err != nil {
 		logger().Error(err.Error())
-		sendFailedReponse(w, r, http.StatusInternalServerError, "Unable to create new page")
+		core.SendFailedReponse(w, r, http.StatusInternalServerError, "Unable to create new page")
 		return
 	}
 	type PageId struct {
@@ -135,42 +137,45 @@ func saveDoc(w http.ResponseWriter, r *http.Request) {
 
 func publishDoc(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	claims, ok := ctx.Value("claims").(core.Claims)
-	if !ok {
-		render.Status(r, http.StatusForbidden)
-		render.Render(w, r, core.NewFailedResponse(http.StatusForbidden, core.FAILURE, "Invalid user Id"))
+	user, err := core.GetUserInfo(ctx)
+	if err != nil {
+		core.SendFailedReponse(w, r, http.StatusForbidden, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNAUTHORIZED])
 		return
 	}
-	userId := claims.Claims.UserId
+	if user.Id == "" {
+		core.SendFailedReponse(w, r, http.StatusForbidden, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNAUTHORIZED])
+		return
+	}
+	userId := user.AId
 	data, err := io.ReadAll(r.Body)
 	defer r.Body.Close()
 	if err != nil {
 		render.Status(r, http.StatusInternalServerError)
-		render.Render(w, r, core.NewFailedResponse(http.StatusInternalServerError, core.FAILURE, "Unable to read request body"))
+		render.Render(w, r, core.NewFailedResponse(http.StatusInternalServerError, core.FAILURE, core.FAILURE, "Unable to read request body"))
 		return
 	}
 	inputDoc, err := ValidateNewDoc(data)
 	if err != nil {
 		render.Status(r, http.StatusBadRequest)
-		render.Render(w, r, core.NewFailedResponse(http.StatusBadRequest, core.FAILURE, "Unable to process request body"))
+		render.Render(w, r, core.NewFailedResponse(http.StatusBadRequest, core.FAILURE, core.FAILURE, "Unable to process request body"))
 		return
 	}
 	inputDoc.OwnerId = uuid.MustParse(userId)
 	validSpaceUserPermissions := core.ValidateUserPagePermission(fmt.Sprintf("%v", inputDoc.Id), inputDoc.OwnerId, "edit")
 	if !validSpaceUserPermissions {
 		render.Status(r, http.StatusForbidden)
-		render.Render(w, r, core.NewFailedResponse(http.StatusForbidden, core.FAILURE, "Invalid space permissions"))
+		render.Render(w, r, core.NewFailedResponse(http.StatusForbidden, core.FAILURE, core.FAILURE, "Invalid space permissions"))
 		return
 	}
 	pageId, err := inputDoc.Publish()
 	if err != nil && err.Error() == "nothing new to update" {
 		render.Status(r, http.StatusConflict)
-		render.Render(w, r, core.NewFailedResponse(http.StatusConflict, core.FAILURE, "There is nothing new to update"))
+		render.Render(w, r, core.NewFailedResponse(http.StatusConflict, core.FAILURE, core.FAILURE, "There is nothing new to update"))
 		return
 	}
 	if err != nil {
 		render.Status(r, http.StatusInternalServerError)
-		render.Render(w, r, core.NewFailedResponse(http.StatusInternalServerError, core.FAILURE, "Unable to update document"))
+		render.Render(w, r, core.NewFailedResponse(http.StatusInternalServerError, core.FAILURE, core.FAILURE, "Unable to update document"))
 		return
 	}
 
@@ -183,37 +188,40 @@ func publishDoc(w http.ResponseWriter, r *http.Request) {
 
 func updateDraftDoc(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	claims, ok := ctx.Value("claims").(core.Claims)
-	if !ok {
-		render.Status(r, http.StatusForbidden)
-		render.Render(w, r, core.NewFailedResponse(http.StatusForbidden, core.FAILURE, "Invalid user Id"))
+	user, err := core.GetUserInfo(ctx)
+	if err != nil {
+		core.SendFailedReponse(w, r, http.StatusForbidden, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNAUTHORIZED])
 		return
 	}
-	userId := claims.Claims.UserId
+	if user.Id == "" {
+		core.SendFailedReponse(w, r, http.StatusForbidden, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNAUTHORIZED])
+		return
+	}
+	userId := user.AId
 	data, err := io.ReadAll(r.Body)
 	defer r.Body.Close()
 	if err != nil {
 		render.Status(r, http.StatusInternalServerError)
-		render.Render(w, r, core.NewFailedResponse(http.StatusInternalServerError, core.FAILURE, "Unable to read request body"))
+		render.Render(w, r, core.NewFailedResponse(http.StatusInternalServerError, core.FAILURE, core.FAILURE, "Unable to read request body"))
 		return
 	}
 	inputDoc, err := ValidateNewDraftDoc(data)
 	if err != nil {
 		render.Status(r, http.StatusBadRequest)
-		render.Render(w, r, core.NewFailedResponse(http.StatusBadRequest, core.FAILURE, "Unable to process request body"))
+		render.Render(w, r, core.NewFailedResponse(http.StatusBadRequest, core.FAILURE, core.FAILURE, "Unable to process request body"))
 		return
 	}
 	inputDoc.OwnerId = uuid.MustParse(userId)
 	validSpaceUserPermissions := core.ValidateUserPagePermission(fmt.Sprintf("%v", inputDoc.Id), inputDoc.OwnerId, "edit")
 	if !validSpaceUserPermissions {
 		render.Status(r, http.StatusForbidden)
-		render.Render(w, r, core.NewFailedResponse(http.StatusForbidden, core.FAILURE, "Invalid space permissions"))
+		render.Render(w, r, core.NewFailedResponse(http.StatusForbidden, core.FAILURE, core.FAILURE, "Invalid space permissions"))
 		return
 	}
 	pageId, err := inputDoc.Update()
 	if err != nil {
 		render.Status(r, http.StatusInternalServerError)
-		render.Render(w, r, core.NewFailedResponse(http.StatusInternalServerError, core.FAILURE, "Unable to update document"))
+		render.Render(w, r, core.NewFailedResponse(http.StatusInternalServerError, core.FAILURE, core.FAILURE, "Unable to update document"))
 		return
 	}
 
@@ -226,7 +234,7 @@ func updateDraftDoc(w http.ResponseWriter, r *http.Request) {
 
 func Router() *chi.Mux {
 	r := chi.NewRouter()
-	r.Use(core.AuthMiddleWare)
+	r.Use(core.Authenticated)
 	r.Get("/space/{spaceId}/page/{pageId}", getDocumentToView)
 	r.Get("/space/{spaceId}/page/{pageId}/edit", getDocumentToEdit)
 	r.Post("/space/{spaceId}/page/create", saveDoc)

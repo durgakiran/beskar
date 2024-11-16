@@ -74,11 +74,11 @@ func processInvitation(userId string, token string, decision string) error {
 	connPool := core.GetPool()
 	ctx := context.Background()
 	conn, err := connPool.Acquire(ctx)
-	defer conn.Conn().Close(ctx)
 	if err != nil {
 		logger().Error(err.Error())
 		return errors.New(core.ErrorCode_name[core.ErrorCode_ERROR_CODE_CONNECTION_ISSUE])
 	}
+	defer conn.Release()
 	rows, err := conn.Query(ctx, GET_TOKEN_STATUS, userId, token)
 	if err != nil {
 		logger().Error(err.Error())
@@ -132,13 +132,19 @@ func (i Invite) invite() (string, error) {
 	}
 	connPool := core.GetPool()
 	ctx := context.Background()
-	tx, err := connPool.Begin(ctx)
+	conn, err := connPool.Acquire(ctx)
 	if err != nil {
-		logger().Error(err.Error())
+		logger().Error("Unable to acquire a connection: " + err.Error())
 		return token, err
 	}
-
+	tx, err := conn.Begin(ctx)
+	if err != nil {
+		logger().Error(err.Error())
+		defer conn.Release()
+		return token, err
+	}
 	defer tx.Rollback(ctx)
+	defer conn.Release()
 	// create entry in the database
 	tag, err := tx.Exec(ctx, CREATE_INVITE, i.SenderId, token, i.UserId, i.Entity, i.EntityId)
 	if err != nil {

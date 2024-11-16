@@ -7,7 +7,6 @@ import { usePathname, useRouter, useSelectedLayoutSegment } from "next/navigatio
 import AddPage from "./addPage";
 import { Sidebar, Spinner } from "flowbite-react";
 import { HiHome, HiOutlinePlusSm, HiOutlineChevronDown, HiOutlineChevronRight, HiCog } from "react-icons/hi";
-import { signIn, useSession } from "next-auth/react";
 import Link from "next/link";
 import { Response, useGet } from "@http/hooks";
 interface Docs {
@@ -87,37 +86,21 @@ interface IPageList {
 }
 
 export default function SideNav(param: Props) {
-    // const user = useUser();
-    const { data: sessionData, status } = useSession();
     const [isOpen, setIsOpen] = useState(false);
     const [isDropdownOpen, setIsDropdownOpen] = useState(true);
-    const [showCreateDialog, setShowCreateDialog] = useState(false);
     const router = useRouter();
     // const [getPages, { data, loading, error, refetch }] = useLazyQuery<SpaceData>(GRAPHQL_GET_PAGES_BY_SPACE_ID, { client: client, variables: { id: param.id } });
     const [{ data, isLoading: loading, errors: error }, fetchData] = useGet<Response<IPageList[]>>(`space/${param.id}/page/list`);
-    const [mutateFunction] = useMutation(GRAPHQL_DELETE_PAGE, { client: client });
-    const pathName = useSelectedLayoutSegment();
-    const [pagesData, setPagesData] = useState<Array<Pages>>([]);
-    const pahtName2 = usePathname();
+    // const [mutateFunction] = useMutation(GRAPHQL_DELETE_PAGE, { client: client });
     const [parentId, setParentId] = useState<number>();
     const [pages, setPages] = useState<IPages[]>();
 
     useEffect(() => {
-        if (param.id && status === "authenticated" && sessionData) {
-            fetchData();
-        } else if (status !== "loading") {
-            router.push("/");
-        }
-    }, [sessionData, status, param.id]);
+        fetchData();
+    }, []);
 
     useEffect(() => {
-        if (error && error.message.includes("JWTExpired")) {
-            signIn("keycloak");
-        }
-    }, [error]);
-
-    useEffect(() => {
-        if (data) {
+        if (data && data.data) {
             const pagemap = new Map<number, Array<IPages>>();
             const pages: Array<IPages> = [];
             data.data
@@ -130,14 +113,6 @@ export default function SideNav(param: Props) {
                         },
                         children: [],
                     };
-                    // if (page.parentId && page.page_doc_maps && page.page_doc_maps[0].title) {
-                    //     const parent = pagemap.get(page.parentId);
-                    //     if (parent) {
-                    //         parent.push({ id: page.id, details: { title: page.page_doc_maps[0].title }, children: [] });
-                    //     } else {
-                    //         pagemap.set(page.parentId, [{ id: page.id, details: { title: page.page_doc_maps[0].title }, children: [] }]);
-                    //     }
-                    // }
                 })
                 .forEach((page) => {
                     if (pagemap.get(page.parentId)) {

@@ -116,6 +116,12 @@ fi
 echo "Add client authentication to true"
 $KQ update clients/$id -s "publicClient=false" -r $REALM $CONFIG
 
+echo "enable revoke refresh token"
+echo "set refresh token max reuse to 1"
+
+echo "Choose PKCE settings"
+# $KQ update clients/$id -s "pkce=S256" -r $REALM $CONFIG
+
 until curl -XGET --output /dev/null --silent --head --fail http://graphql-engine:8080/healthz?strict=false; do
     echo 'waiting for graphql server to be ready... 😫'
     sleep 5

@@ -8,10 +8,17 @@
         http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd
         http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd
         http://www.liquibase.org/xml/ns/pro http://www.liquibase.org/xml/ns/pro/liquibase-pro-latest.xsd">
+
     
-    <include file="updates/space.xml" />
-    <!-- <include file="updates/auth.xml" /> -->
-    <include file="updates/notifications.xml" />
-    <include file="updates/user.xml" />
+        <changeSet id="1-user-id-uuid-map" author="Kiran Kumar">
+            <createTable tableName="user_id_map" schemaName="core">
+                <column name="zita_id" type="VARCHAR(30)">
+                    <constraints primaryKey="true" nullable="false"/>
+                </column>
+                <column name="user_id" type="uuid">
+                    <constraints unique="true" nullable="false"/>
+                </column>
+            </createTable>
+        </changeSet>
 
 </databaseChangeLog>

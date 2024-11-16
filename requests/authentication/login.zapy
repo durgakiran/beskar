@@ -1,0 +1,66 @@
+{
+  "metadata": {
+    "v": "1",
+    "cell_type": "zapy:request",
+    "tags": []
+  },
+  "endpoint": "http://app.tededox.com/ui/login/password",
+  "method": "POST",
+  "params": [
+    {
+      "active": true,
+      "key": "",
+      "value": ""
+    }
+  ],
+  "headers": [
+    {
+      "active": true,
+      "key": "Content-Type",
+      "value": "application/x-www-form-urlencoded"
+    },
+    {
+      "active": true,
+      "key": "Accept",
+      "value": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8"
+    },
+    {
+      "active": true,
+      "key": "",
+      "value": ""
+    }
+  ],
+  "script": [
+    ""
+  ],
+  "variables": [
+    {
+      "active": true,
+      "key": "",
+      "value": ""
+    }
+  ],
+  "body_type": "application/x-www-form-urlencoded",
+  "body": [
+    {
+      "active": true,
+      "key": "authRequestID",
+      "value": ""
+    },
+    {
+      "active": true,
+      "key": "loginName",
+      "value": ""
+    },
+    {
+      "active": true,
+      "key": "password",
+      "value": ""
+    },
+    {
+      "active": true,
+      "key": "",
+      "value": ""
+    }
+  ]
+}

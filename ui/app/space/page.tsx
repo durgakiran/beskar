@@ -1,13 +1,9 @@
 "use client";
 import { useEffect, useState } from "react";
-import { client, useGetCall } from "@http";
-import { useQuery } from "@apollo/client";
-import { GRAPHQL_GET_SPACES } from "@queries/space";
 import AddSpace from "@components/addSpace";
 import { useRouter } from "next/navigation";
 import { Avatar, Button, Card, Spinner } from "flowbite-react";
 import Slate from "@components/slate";
-import { useLogout } from "app/core/auth/useKeycloak";
 import { signIn } from "next-auth/react";
 import { Response, useGet } from "@http/hooks";
 
@@ -32,7 +28,6 @@ export default function Page() {
     const router = useRouter();
     const [isOpen, setIsOpen] = useState(false);
     const [tableData, setTableData] = useState([]);
-    // const { loading, error, data, refetch } = useQuery(GRAPHQL_GET_SPACES, { client: client });
     const [ { isLoading: loading, errors: error, data }, fetchData ] = useGet<Response<IData[]>>("space/list");
 
     useEffect(() => {

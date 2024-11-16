@@ -1,5 +1,7 @@
 import { useCallback, useState } from "react";
 
+const USER_URI = process.env.NEXT_PUBLIC_USER_SERVER_URL;
+
 /**
  *
  * @param path
@@ -13,7 +15,7 @@ export function usePUT<T, P>(path: string, headers: Record<string, any> = {}): [
 
     const mutateData = useCallback((payLoad: P) => {
         setIsDataFetching(true);
-        fetch("http://localhost:9095/" + path, {
+        fetch(USER_URI + "/" +  + path, {
             method: "PUT",
             credentials: "omit",
             body: JSON.stringify(payLoad),

@@ -1,64 +1,24 @@
 "use client";
-import { useLazyQuery, useQuery } from "@apollo/client";
 import { TipTap } from "@editor";
-import { client } from "@http";
 import { useGet } from "@http/hooks";
-import { GRAPHQL_GET_PAGE, GRAPHQL_GET_PAGE_BREADCRUM } from "@queries/space";
-import { Breadcrumb, BreadcrumbItem, Button, Spinner, Tooltip } from "flowbite-react";
-import { signIn, useSession } from "next-auth/react";
+import { Breadcrumb, Button, Spinner, Tooltip } from "flowbite-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { HiHome, HiPencil, HiOutlineTrash } from "react-icons/hi";
 
-interface IDoc {
-    data: any;
-    id: number;
-    title: string;
-    version: Date;
-}
-
-interface IBreadCrumSpaceData {
+interface BreadCrumbData {
     name: string;
     id: number;
-}
-
-interface IBreadCrumSpace {
-    name: string;
-    id: string;
-}
-
-interface IBreadCrum {
-    core_space: Array<IBreadCrumSpace>;
-}
-
-interface IPage {
-    date_created: Date;
-    draft: number;
-    id: number;
-    owner_id: string;
-    parent_id: string | null;
-    space_id: string;
-    status: string | null;
-    docs: Array<IDoc>;
-}
-
-interface IData {
-    core_page: Array<IPage>;
+    parentId: number;
 }
 
 export default function Page({ params }: { params: { page: string; spaceId: string } }) {
-    const { data: sessionData, status } = useSession();
     const workerRef = useRef<Worker>();
     const [workerInitiated, setWorkerInitiated] = useState(false);
     const [content, setContent] = useState();
     const router = useRouter();
-    const [editorData, setEditorData] = useState({});
-    // const [getPage, { loading, error, data }] = useLazyQuery<IData, { pageId: string }>(GRAPHQL_GET_PAGE, { client: client, fetchPolicy: "no-cache", variables: { pageId: params.page } });
     const [{ isLoading, data, errors }, fetchData] = useGet<{ data: any; status: string }>(`editor/space/${params.spaceId}/page/${params.page}`);
-    const [getBreadCrum, { loading: loadingBreadCrum, error: errorBreadCrum, data: dataBreadCrum }] = useLazyQuery<IBreadCrum, { id: string }>(GRAPHQL_GET_PAGE_BREADCRUM, {
-        client: client,
-        variables: { id: params.spaceId },
-    });
+    const [{ isLoading: loadingBreadCrum, data: dataBreadCrum, errors: breadCrumErrors }, getBreadCrum] = useGet<{ data: BreadCrumbData[]; status: string }>(`page/${params.page}/breadCrumbs`);
 
     const editPage = () => {
         router.push(`/edit/${params.spaceId}/${params.page}`);
@@ -92,36 +52,17 @@ export default function Page({ params }: { params: { page: string; spaceId: stri
     }, []);
 
     useEffect(() => {
-        console.log(status);
-        if (status === "authenticated") {
-            if (workerInitiated) {
-                fetchData();
-                getBreadCrum();
-            }
-        } else if (status !== "loading") {
-            router.push("/space");
+        if (workerInitiated) {
+            fetchData();
+            getBreadCrum();
         }
-    }, [status, workerInitiated]);
+    }, [workerInitiated]);
 
     useEffect(() => {
         if (data) {
             workerRef.current.postMessage({ type: "doc", data: data.data });
         }
     }, [data]);
-
-    useEffect(() => {
-        try {
-            if (errors && errors.message.includes("JWTExpired")) {
-                signIn("keycloak");
-            }
-            // if (data) {
-            //     const eData = typeof data.core_page[0].docs[0].data === "string" ? JSON.parse(data.core_page[0].docs[0].data) : data.core_page[0].docs[0].data;
-            //     setEditorData(eData);
-            // }
-        } catch (e) {
-            // console.log(e);
-        }
-    }, [data, errors]);
 
     if (isLoading || status === "loading") {
         <div className="text-center">
@@ -132,12 +73,22 @@ export default function Page({ params }: { params: { page: string; spaceId: stri
         <div className="min-h-screen mx-auto ">
             <div className="py-2 mb-4 flex flex-nowrap justify-between box-border shadow-sm   ">
                 <div>
-                    {!loadingBreadCrum && dataBreadCrum && dataBreadCrum.core_space && dataBreadCrum.core_space[0] ? (
+                    {!loadingBreadCrum && dataBreadCrum && dataBreadCrum.data && dataBreadCrum.data.length ? (
                         <Breadcrumb aria-label="page navigation">
                             <Breadcrumb.Item href="/" icon={HiHome}>
                                 Home
                             </Breadcrumb.Item>
-                            <Breadcrumb.Item href={`space/${dataBreadCrum.core_space[0].id}`}>{dataBreadCrum.core_space[0].name}</Breadcrumb.Item>
+                            {dataBreadCrum.data
+                                .sort((a: BreadCrumbData, b: BreadCrumbData) => {
+                                    return a.id > b.id ? 1 : -1;
+                                })
+                                .map((item: BreadCrumbData) => {
+                                    return (
+                                        <Breadcrumb.Item key={item.id} href={`space/${params.spaceId}/view/${item.id}`}>
+                                            {item.name}
+                                        </Breadcrumb.Item>
+                                    );
+                                })}
                         </Breadcrumb>
                     ) : null}
                 </div>

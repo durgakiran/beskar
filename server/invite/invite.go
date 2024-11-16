@@ -16,8 +16,12 @@ func logger() *zap.Logger {
 }
 
 func sendFailedReponse(w http.ResponseWriter, r *http.Request, code int, message string) {
+	status, statusCode := core.GetStatus(message)
+	if code == http.StatusInternalServerError {
+		code = statusCode
+	}
 	render.Status(r, code)
-	render.Render(w, r, core.NewFailedResponse(int(core.GetStatus(message)), core.FAILURE, message))
+	render.Render(w, r, core.NewFailedResponse(int(status), core.FAILURE, core.FAILURE, message))
 }
 
 func sendSuccessResponse(w http.ResponseWriter, r *http.Request, code int, data interface{}) {

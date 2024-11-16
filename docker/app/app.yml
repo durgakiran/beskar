@@ -56,7 +56,8 @@ services:
     networks:
       - custom_local_network
     ports:
-      - "8085:8085" # hits keycloak server      
+      - "8085:8085" # hits ui and api server  
+      - "80:80" # hits zitadel server   
     volumes:
       - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
     healthcheck:
@@ -97,6 +98,76 @@ services:
       - 3478:3478
     networks:
       - custom_local_network
+  zitadel:
+    restart: always
+    image: ghcr.io/zitadel/zitadel:latest
+    command: 'start-from-init --masterkey "bJEJYXs8PAyWgY0mdF3SWcEhn99Kkqp5" --tlsMode disabled'
+    environment:
+      ZITADEL_EXTERNALDOMAIN: app.tededox.com
+      # In case something doesn't work as expected,
+      # it can be handy to be able to read the access logs.
+      ZITADEL_LOGSTORE_ACCESS_STDOUT_ENABLED: true
+      ZITADEL_DATABASE_POSTGRES_HOST: postgres
+      ZITADEL_DATABASE_POSTGRES_PORT: 5432
+      ZITADEL_DATABASE_POSTGRES_DATABASE: zitadel
+      ZITADEL_DATABASE_POSTGRES_USER_USERNAME: ${DB_ADMIN_USERNAME}
+      ZITADEL_DATABASE_POSTGRES_USER_PASSWORD: ${DB_ADMIN_PASSWORD}
+      ZITADEL_DATABASE_POSTGRES_USER_SSL_MODE: disable
+      ZITADEL_DATABASE_POSTGRES_ADMIN_USERNAME: admin
+      ZITADEL_DATABASE_POSTGRES_ADMIN_PASSWORD: password
+      ZITADEL_DATABASE_POSTGRES_ADMIN_SSL_MODE: disable
+      ZITADEL_EXTERNALSECURE: false
+    ports:
+      - 8084:8080
+    networks:
+      - custom_local_network
+  ui:
+    container_name: tededox-ui
+    build:
+      context: ui
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    volumes:
+      - /Users/kiran/projects/beskar/ui/:/app
+    healthcheck:
+      test: ["CMD-SHELL", "curl -XGET --output /dev/null --silent --head --fail http://localhost:3000/ || exit 1"]
+      interval: 20s
+      timeout: 10s
+      retries: 6
+    networks:
+      - custom_local_network
+    extra_hosts:
+      - "app.tededox.com:172.24.0.7"
+  server:
+    container_name: tededox-server
+    build:
+      context: server
+      dockerfile: Dockerfile
+    environment:
+      KC_REALM_URL: http://app.tededox.com
+      KC_CLIENT_ID: 292828815569256454
+      PG_HOST: postgres
+      PG_PORT: 5432
+      PG_DB: beskar
+      PG_USER: app_user
+      PG_PASSWORD: app_user_pwd
+      PERMIFY_ENDPOINT: permify_guard:3478
+      PERMIFY_SECRET: secret
+    ports:
+      - "9095:9095"
+    volumes:
+      - /Users/kiran/projects/beskar/server/:/app
+    healthcheck:
+      test: ["CMD-SHELL", "curl -XGET --output /dev/null --silent --head --fail http://localhost:9095/ || exit 1"]
+      interval: 20s
+      timeout: 10s
+      retries: 6
+    networks:
+      - custom_local_network
+    extra_hosts:
+      - "app.tededox.com:172.24.0.7"
+
 
 
 networks:

@@ -25,7 +25,7 @@ export default function MenuBar() {
     return (
         <Navbar fluid rounded className="fixed w-full bg-white z-50 shadow-sm">
             <Navbar.Brand href="/">
-                <span className="self-center whitespace-nowrap text-xl font-semibold dark:text-white">TedDox!</span>
+                <span className="self-center whitespace-nowrap text-xl font-semibold dark:text-white">TedEDox!</span>
             </Navbar.Brand>
             <div className="flex items-center space-x-4">
                 <Navbar.Collapse>

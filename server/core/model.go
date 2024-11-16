@@ -25,6 +25,7 @@ type UserInfo struct {
 	Email      string `json:"email"`
 	Id         string `json:"sub"`
 	IsVerified bool   `json:"email_verified"`
+	AId        string `json:"aid"`
 }
 
 type UserInfoOut struct {

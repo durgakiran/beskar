@@ -28,13 +28,19 @@ func createSpaceEntry(s Space) (uuid.UUID, error) {
 	var spaceId uuid.UUID
 	connPool := core.GetPool()
 	ctx := context.Background()
-	tx, err := connPool.Begin(ctx)
-	defer tx.Rollback(ctx)
+	conn, err := connPool.Acquire(ctx)
+	if err != nil {
+		logger().Error("Unable to acquire a connection: " + err.Error())
+	}
+	tx, err := conn.Begin(ctx)
 	if err != nil {
 		// error while acquiring database connection
 		logger().Error(err.Error())
+		defer conn.Release()
 		return spaceId, errors.New(core.ErrorCode_name[core.ErrorCode_ERROR_CODE_CONNECTION_ISSUE])
 	}
+	defer tx.Rollback(ctx)
+	defer conn.Release()
 	s.DateCreated = time.Now()
 	s.DateUpdated = time.Now()
 	spaceId, err = s.Create(tx, ctx)
@@ -63,12 +69,11 @@ func ListSpaces(userId uuid.UUID) ([]Space, error) {
 	connPool := core.GetPool()
 	ctx := context.Background()
 	conn, err := connPool.Acquire(ctx)
-	defer conn.Conn().Close(ctx)
 	if err != nil {
-		// error while acquiring database connection
-		logger().Error(err.Error())
+		logger().Error("Unable to acquire a connection: " + err.Error())
 		return spaces, errors.New(core.ErrorCode_name[core.ErrorCode_ERROR_CODE_CONNECTION_ISSUE])
 	}
+	defer conn.Release()
 
 	rows, err := conn.Query(ctx, GET_SPACES, spaceIds)
 	if err != nil {
@@ -105,11 +110,11 @@ func getDocumentList(spaceId uuid.UUID, userId uuid.UUID) ([]PageList, error) {
 	connPool := core.GetPool()
 	ctx := context.Background()
 	conn, err := connPool.Acquire(ctx)
-	defer conn.Conn().Close(ctx)
 	if err != nil {
 		logger().Error(err.Error())
 		return pageList, errors.New(core.ErrorCode_name[core.ErrorCode_ERROR_CODE_CONNECTION_ISSUE])
 	}
+	defer conn.Release()
 	rows, err := conn.Query(ctx, GET_PAGE_LIST_QUERY, spaceId, pageIds)
 	defer rows.Close()
 	if err != nil {
@@ -122,4 +127,17 @@ func getDocumentList(spaceId uuid.UUID, userId uuid.UUID) ([]PageList, error) {
 		return pageList, errors.New(core.ErrorCode_name[core.ErrorCode_ERROR_WHILE_READING_ROWS])
 	}
 	return pageList, nil
+}
+
+func getSpaceUsers(spaceId uuid.UUID) ([]User, error) {
+	tuples, err := core.GetSubjectsAssociatedWithEntity("space", spaceId.String())
+	if err != nil {
+		logger().Error(err.Error())
+		return nil, errors.New(core.ErrorCode_name[core.ErrorCode_ERROR_CODE_PERMISSION_SERVER_ISSUE])
+	}
+	users := make([]User, 0)
+	for _, tuple := range tuples {
+		users = append(users, User{Id: uuid.MustParse(tuple.Subject.Id), Name: tuple.Subject.Id, Role: tuple.Relation})
+	}
+	return users, nil
 }

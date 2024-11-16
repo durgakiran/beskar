@@ -22,3 +22,4 @@ ui/public/workers
 ui/public/jbi.wasm
 logs
 *.wasm
+collabserver/dist

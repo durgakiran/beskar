@@ -243,8 +243,9 @@ func GetSpace(id uuid.UUID) Space {
 	ctx := context.Background()
 	conn, err := connPool.Acquire(ctx)
 	if err != nil {
-		panic("Unable to acquire a connection: " + err.Error())
+		logger().Error("Unable to acquire a connection: " + err.Error())
 	}
+	defer conn.Release()
 	var space Space
 	row := conn.QueryRow(ctx, getSpace, id)
 	err = row.Scan(&space.Id, &space.Name, &space.DateCreated, &space.DateUpdate, &space.UserId)
@@ -257,11 +258,17 @@ func GetSpace(id uuid.UUID) Space {
 func (document InputDocument) Create() (int64, error) {
 	connPool := core.GetPool()
 	ctx := context.Background()
-	tx, err := connPool.Begin(ctx)
-	defer tx.Rollback(ctx)
+	conn, err := connPool.Acquire(ctx)
 	if err != nil {
-		panic("Unable to start transaction" + err.Error())
+		logger().Error("Unable to acquire a connection: " + err.Error())
 	}
+	tx, err := conn.Begin(ctx)
+	if err != nil {
+		defer conn.Release()
+		logger().Error("Unable to start transaction" + err.Error())
+	}
+	defer tx.Rollback(ctx)
+	defer conn.Release()
 	// create page
 	page := Page{SpaceId: document.SpaceId, OwnerId: document.OwnerId, ParentId: document.ParentId, DateCreated: time.Now(), Status: 0}
 	pageId, err := page.Create(tx, ctx)
@@ -288,11 +295,17 @@ func (document InputDocument) Create() (int64, error) {
 func (document InputDocument) Publish() (int64, error) {
 	connPool := core.GetPool()
 	ctx := context.Background()
-	tx, err := connPool.Begin(ctx)
-	defer tx.Rollback(ctx)
+	conn, err := connPool.Acquire(ctx)
 	if err != nil {
-		panic("Unable to start transaction" + err.Error())
+		logger().Error("Unable to acquire a connection: " + err.Error())
 	}
+	tx, err := conn.Begin(ctx)
+	if err != nil {
+		defer conn.Release()
+		logger().Error("Unable to start transaction" + err.Error())
+	}
+	defer tx.Rollback(ctx)
+	defer conn.Release()
 	// create or update doc
 	// we need to create a doc if there is none exists in draft state
 	// we need to update a doc if exists in draft state
@@ -357,11 +370,17 @@ func (document InputDocument) Publish() (int64, error) {
 func (document InputDraftDocument) Update() (int64, error) {
 	connPool := core.GetPool()
 	ctx := context.Background()
-	tx, err := connPool.Begin(ctx)
-	defer tx.Rollback(ctx)
+	conn, err := connPool.Acquire(ctx)
 	if err != nil {
-		panic("Unable to start transaction" + err.Error())
+		logger().Error("Unable to acquire a connection: " + err.Error())
 	}
+	tx, err := conn.Begin(ctx)
+	if err != nil {
+		defer conn.Release()
+		logger().Error("Unable to start transaction" + err.Error())
+	}
+	defer tx.Rollback(ctx)
+	defer conn.Release()
 	// create or update doc
 	// we need to create a doc if there is none exists in draft state
 	// we need to update a doc if exists in draft state
@@ -404,11 +423,17 @@ func GetDocument(pageId int64, spaceId uuid.UUID, ownerId uuid.UUID) (OutputDocu
 	connPool := core.GetPool()
 	// TODO: Attach permissions to response
 	ctx := context.Background()
-	tx, err := connPool.Begin(ctx)
-	defer tx.Rollback(ctx)
+	conn, err := connPool.Acquire(ctx)
 	if err != nil {
+		logger().Error("Unable to start transaction" + err.Error())
+	}
+	tx, err := conn.Begin(ctx)
+	if err != nil {
+		defer conn.Release()
 		panic("Unable to start transaction" + err.Error())
 	}
+	defer tx.Rollback(ctx)
+	defer conn.Release()
 	doc, err := fetchDocument(tx, ctx, pageId, spaceId, ownerId)
 	if err != nil {
 		return outputDocument, err
@@ -431,12 +456,18 @@ func GetDocumentToEdit(pageId int64, spaceId uuid.UUID, ownerId uuid.UUID) (Outp
 	var outputDocument OutputDocumentToEdit
 	connPool := core.GetPool()
 	ctx := context.Background()
-	tx, err := connPool.Begin(ctx)
-	isDraft := true
-	defer tx.Rollback(ctx)
+	conn, err := connPool.Acquire(ctx)
 	if err != nil {
+		logger().Error("Unable to start transaction" + err.Error())
+	}
+	tx, err := conn.Begin(ctx)
+	isDraft := true
+	if err != nil {
+		defer conn.Release()
 		panic("Unable to start transaction" + err.Error())
 	}
+	defer tx.Rollback(ctx)
+	defer conn.Release()
 	doc, err := fetchDocumentToEdit(tx, ctx, pageId, spaceId, ownerId)
 	if errors.Is(err, pgx.ErrNoRows) {
 		doc, err = fetchDocument(tx, ctx, pageId, spaceId, ownerId)
