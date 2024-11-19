@@ -139,5 +139,63 @@ func getSpaceUsers(spaceId uuid.UUID) ([]User, error) {
 	for _, tuple := range tuples {
 		users = append(users, User{Id: uuid.MustParse(tuple.Subject.Id), Name: tuple.Subject.Id, Role: tuple.Relation})
 	}
+	// get zita ids
+	ids := make([]string, 0)
+	for _, user := range users {
+		ids = append(ids, user.Id.String())
+	}
+	zIds, err := core.GetZitaIds(ids)
+	if err != nil {
+		logger().Error(err.Error())
+		return nil, errors.New(core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNSPECIFIED])
+	}
+	// get user details from zitadel
+	zitaIds := make([]string, 0)
+	ZitaIdsMap := make(map[string]string)
+	for _, zId := range zIds {
+		zitaIds = append(zitaIds, zId.Id)
+		ZitaIdsMap[zId.UserId] = zId.Id
+	}
+	usersDetails, err := core.SearchUsersByIds(zitaIds)
+	if err != nil {
+		logger().Error(err.Error())
+		return nil, errors.New(core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNSPECIFIED])
+	}
+	for i, user := range users {
+		if zId, ok := ZitaIdsMap[user.Id.String()]; ok {
+			for _, result := range usersDetails.Result {
+				if result.UserId == zId {
+					users[i].Name = result.Human.Profile.DisplayName
+					break
+				}
+			}
+		}
+	}
 	return users, nil
+}
+
+func getSpaceDetails(spaceId uuid.UUID) (Space, error) {
+	var space Space
+	connPool := core.GetPool()
+	ctx := context.Background()
+	conn, err := connPool.Acquire(ctx)
+	if err != nil {
+		logger().Error(err.Error())
+		return space, errors.New(core.ErrorCode_name[core.ErrorCode_ERROR_CODE_CONNECTION_ISSUE])
+	}
+	defer conn.Release()
+	rows, err := conn.Query(ctx, GET_SPACE, spaceId)
+	if err != nil {
+		logger().Error(err.Error())
+		return space, errors.New(core.ErrorCode_name[core.ErrorCode_ERROR_WHILE_FETCHING_ROWS])
+	}
+	space, err = pgx.CollectExactlyOneRow(rows, pgx.RowToStructByNameLax[Space])
+	if errors.Is(err, pgx.ErrNoRows) {
+		return space, errors.New(core.ErrorCode_name[core.ErrorCode_ERROR_CODE_NO_DATA])
+	}
+	if err != nil {
+		logger().Error(err.Error())
+		return space, errors.New(core.ErrorCode_name[core.ErrorCode_ERROR_WHILE_READING_ROWS])
+	}
+	return space, nil
 }

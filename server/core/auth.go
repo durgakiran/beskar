@@ -3,7 +3,6 @@ package core
 import (
 	"context"
 	"crypto/tls"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"os"
@@ -13,8 +12,6 @@ import (
 
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/go-chi/render"
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	zoidc "github.com/zitadel/oidc/v3/pkg/oidc"
 	"github.com/zitadel/zitadel-go/v3/pkg/authentication"
 	openid "github.com/zitadel/zitadel-go/v3/pkg/authentication/oidc"
@@ -96,9 +93,7 @@ func AuthMiddleWare(next http.Handler) http.Handler {
 // zitadel configuration
 
 const (
-	key          = "0nw71mQig3EAfFiQmJHsmzJ89ERNq2tQ"
-	createUserId = "INSERT INTO core.user_id_map (zita_id, user_id) VALUES ($1, $2);"
-	getUserId    = "SELECT user_id FROM core.user_id_map WHERE zita_id = $1;"
+	key = "0nw71mQig3EAfFiQmJHsmzJ89ERNq2tQ"
 )
 
 var authN *authentication.Authenticator[*openid.UserInfoContext[*zoidc.IDTokenClaims, *zoidc.UserInfo]]
@@ -141,58 +136,4 @@ func Authenticated(next http.Handler) http.Handler {
 			render.Render(w, r, NewFailedResponse(401, FAILURE, "Not authenticated", ""))
 		}
 	})
-}
-
-func GetBeskarUser(zitadelId string) (string, error) {
-	var userId string
-	connPool := GetPool()
-	ctx := context.Background()
-	conn, err := connPool.Acquire(ctx)
-	if err != nil {
-		Logger.Error("Unable to acquire a connection: " + err.Error())
-		return userId, err
-	}
-	err = conn.QueryRow(ctx, getUserId, zitadelId).Scan(&userId)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			// create new user id
-			_, err = conn.Exec(ctx, createUserId, zitadelId, uuid.New().String())
-			if err != nil {
-				Logger.Error("Unable to create new user id: " + err.Error())
-				return userId, err
-			}
-			// get new user id
-			err = conn.QueryRow(ctx, getUserId, zitadelId).Scan(&userId)
-			if err != nil {
-				Logger.Error("Unable to get user id: " + err.Error())
-				return userId, err
-			}
-		}
-		Logger.Error("Unable to get user id: " + err.Error())
-	}
-	return userId, err
-}
-
-func GetUserInfo(ctx context.Context) (UserInfo, error) {
-	var user UserInfo
-	mw := ZitadelMiddleware()
-	authContex := mw.Context(ctx)
-	data, err := json.MarshalIndent(authContex.UserInfo, "", "	")
-	if err != nil {
-		Logger.Error(err.Error())
-		return user, err
-	}
-	err = json.Unmarshal(data, &user)
-	if err != nil {
-		Logger.Error(err.Error())
-		return user, err
-	}
-	// get app id
-	id, err := GetBeskarUser(user.Id)
-	if err != nil {
-		Logger.Error(err.Error())
-		return user, err
-	}
-	user.AId = id
-	return user, err
 }

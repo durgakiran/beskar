@@ -15,6 +15,13 @@ const get = async (cookies: { name: string; value: string }[]) => {
 
     console.log(res);
 
+    if (res.status === 401) {
+        return {
+            response: res.status,
+            data: null,
+        };
+    }
+
     return {
         response: res.status,
         data: await res.json(),

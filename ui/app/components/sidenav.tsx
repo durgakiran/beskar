@@ -1,9 +1,6 @@
 "use client";
-import { useLazyQuery, useMutation } from "@apollo/client";
-import { client } from "@http";
-import { GRAPHQL_DELETE_PAGE, GRAPHQL_GET_PAGES, GRAPHQL_GET_PAGES_BY_SPACE_ID } from "@queries/space";
-import { useCallback, useEffect, useState } from "react";
-import { usePathname, useRouter, useSelectedLayoutSegment } from "next/navigation";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import AddPage from "./addPage";
 import { Sidebar, Spinner } from "flowbite-react";
 import { HiHome, HiOutlinePlusSm, HiOutlineChevronDown, HiOutlineChevronRight, HiCog } from "react-icons/hi";
@@ -89,9 +86,7 @@ export default function SideNav(param: Props) {
     const [isOpen, setIsOpen] = useState(false);
     const [isDropdownOpen, setIsDropdownOpen] = useState(true);
     const router = useRouter();
-    // const [getPages, { data, loading, error, refetch }] = useLazyQuery<SpaceData>(GRAPHQL_GET_PAGES_BY_SPACE_ID, { client: client, variables: { id: param.id } });
     const [{ data, isLoading: loading, errors: error }, fetchData] = useGet<Response<IPageList[]>>(`space/${param.id}/page/list`);
-    // const [mutateFunction] = useMutation(GRAPHQL_DELETE_PAGE, { client: client });
     const [parentId, setParentId] = useState<number>();
     const [pages, setPages] = useState<IPages[]>();
 
@@ -161,7 +156,7 @@ export default function SideNav(param: Props) {
         router.push(`/edit/${param.id}/${page}`);
     };
 
-    if (loading || status == "loading") {
+    if (loading) {
         return <Spinner size="lg" />;
     }
 
@@ -174,9 +169,9 @@ export default function SideNav(param: Props) {
                             <Sidebar.Item href={`/space/${param.id}`} icon={HiHome}>
                                 Overview
                             </Sidebar.Item>
-                            {/* <Sidebar.Item href={`/space/${param.id}/settings`} icon={HiCog}>
+                            <Sidebar.Item href={`/space/${param.id}/settings`} icon={HiCog}>
                                 Settings
-                            </Sidebar.Item> */}
+                            </Sidebar.Item>
                             <div className="sidenav-content-container">
                                 <div className="content-header flex flex-row items-center">
                                     <button onClick={toggleDropdown}>{isDropdownOpen ? <HiOutlineChevronDown /> : <HiOutlineChevronRight />}</button>

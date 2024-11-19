@@ -121,10 +121,38 @@ func listUsers(w http.ResponseWriter, r *http.Request) {
 	}
 	data, err := getSpaceUsers(spaceId)
 	if err != nil {
-		core.SendFailedReponse(w, r, http.StatusInternalServerError, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNSPECIFIED])
+		core.SendFailedReponse(w, r, http.StatusInternalServerError, err.Error())
 		return
 	}
 	core.SendSuccessResponse(w, r, http.StatusOK, data)
+}
+
+func getSpaceDetailsController(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	user, err := core.GetUserInfo(ctx)
+	if err != nil {
+		core.SendFailedReponse(w, r, http.StatusForbidden, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNAUTHORIZED])
+		return
+	}
+	if user.Id == "" {
+		core.SendFailedReponse(w, r, http.StatusForbidden, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNAUTHORIZED])
+		return
+	}
+	userId := user.AId
+	spaceId := uuid.MustParse(chi.URLParam(r, "spaceId"))
+	userIdParsed := uuid.MustParse(userId)
+	validSpaceUserPermissions := core.ValidateUserSpacePermissions(spaceId, userIdParsed, "view")
+	if !validSpaceUserPermissions {
+		core.SendFailedReponse(w, r, http.StatusForbidden, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNAUTHORIZED])
+		return
+	}
+
+	space, err := getSpaceDetails(spaceId)
+	if err != nil {
+		core.SendFailedReponse(w, r, 0, err.Error())
+		return
+	}
+	core.SendSuccessResponse(w, r, http.StatusOK, space)
 }
 
 func Router() *chi.Mux {
@@ -134,5 +162,6 @@ func Router() *chi.Mux {
 	r.Post("/create", createSpace)
 	r.Get("/{spaceId}/page/list", getPageList)
 	r.Get("/{spaceId}/users", listUsers)
+	r.Get("/{spaceId}/details", getSpaceDetailsController)
 	return r
 }

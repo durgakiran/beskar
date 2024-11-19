@@ -144,6 +144,8 @@ services:
     build:
       context: server
       dockerfile: Dockerfile
+    env_file:
+      - .env.local
     environment:
       KC_REALM_URL: http://app.tededox.com
       KC_CLIENT_ID: 292828815569256454
@@ -154,6 +156,9 @@ services:
       PG_PASSWORD: app_user_pwd
       PERMIFY_ENDPOINT: permify_guard:3478
       PERMIFY_SECRET: secret
+      ISSUER_URL: http://app.tededox.com
+      CLIENT_ID: 292828815569256454
+      SERVER_PAT: ${ZITADEL_USER_PAT}
     ports:
       - "9095:9095"
     volumes:
