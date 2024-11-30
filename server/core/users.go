@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -27,11 +28,22 @@ type Query struct {
 }
 
 type Filter struct {
-	InUserIdsQuery InUserIdsQUeryFilter `json:"inUserIdsQuery"`
+	InUserIdsQuery    *InUserIdsQUeryFilter `json:"inUserIdsQuery,omitempty"`
+	EmailQuery        *EmailQueryFilter     `json:"emailQuery,omitempty"`
+	InUserEmailsQuery *InUserEmailsQuery    `json:"inUserEmailsQuery,omitempty"`
 }
 
 type InUserIdsQUeryFilter struct {
 	UserIds []string `json:"userIds"`
+}
+
+type EmailQueryFilter struct {
+	EmailAddress string `json:"emailAddress"`
+	Method       string `json:"method"`
+}
+
+type InUserEmailsQuery struct {
+	UserEmails []string `json:"userEmails"`
 }
 
 type UserSearchQuery struct {
@@ -45,8 +57,15 @@ type Profile struct {
 	Gender      string `json:"gender"`
 }
 
+type EmailAddress struct {
+	Email      string `json:"email"`
+	IsVerified bool   `json:"isVerified"`
+}
+
 type Human struct {
-	Profile Profile `json:"profile"`
+	UserId  string       `json:"userId"`
+	Profile Profile      `json:"profile"`
+	Email   EmailAddress `json:"email"`
 }
 
 type User struct {
@@ -72,7 +91,7 @@ func SearchUsersByIds(userIds []string) (UserSearchResponse, error) {
 	var providerURL = os.Getenv("ISSUER_URL")
 	// providerURL := "http://app.tededox.com"
 	filter := Filter{
-		InUserIdsQuery: InUserIdsQUeryFilter{
+		InUserIdsQuery: &InUserIdsQUeryFilter{
 			UserIds: userIds,
 		},
 	}
@@ -121,6 +140,61 @@ func SearchUsersByIds(userIds []string) (UserSearchResponse, error) {
 	return users, nil
 }
 
+func SearchUserByEmail(search string, limit uint32, offset uint64) (UserSearchResponse, error) {
+	var providerURL = os.Getenv("ISSUER_URL")
+	// providerURL := "http://app.tededox.com"
+	filter := Filter{
+		InUserEmailsQuery: &InUserEmailsQuery{
+			UserEmails: []string{search},
+		},
+	}
+	filters := make([]Filter, 0)
+	filters = append(filters, filter)
+	var query = UserSearchQuery{
+		Query: Query{
+			Offset: offset,
+			Limit:  limit,
+			ASC:    true,
+		},
+		SortingColumn: "USER_FIELD_NAME_UNSPECIFIED",
+		Queries:       filters,
+	}
+	jsonData, err := json.Marshal(query)
+	if err != nil {
+		Logger.Error(err.Error())
+		return UserSearchResponse{}, err
+	}
+	fmt.Println(string(jsonData))
+	req, err := http.NewRequest(http.MethodPost, providerURL+"/v2/users", bytes.NewReader(jsonData))
+	if err != nil {
+		Logger.Error(err.Error())
+		return UserSearchResponse{}, err
+	}
+	req.Header.Set("Authorization", "Bearer "+os.Getenv("SERVER_PAT"))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Add("Accept", "application/json")
+	httpClient := &http.Client{}
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		Logger.Error(err.Error())
+		return UserSearchResponse{}, err
+	}
+	defer resp.Body.Close()
+	var users UserSearchResponse
+	data, err := io.ReadAll(resp.Body)
+	fmt.Println(string(data))
+	if err != nil {
+		Logger.Error(err.Error())
+		return UserSearchResponse{}, err
+	}
+	err = json.Unmarshal(data, &users)
+	if err != nil {
+		Logger.Error(err.Error())
+		return UserSearchResponse{}, err
+	}
+	return users, nil
+}
+
 func GetBeskarUser(zitadelId string) (string, error) {
 	var userId string
 	connPool := GetPool()
@@ -130,6 +204,7 @@ func GetBeskarUser(zitadelId string) (string, error) {
 		Logger.Error("Unable to acquire a connection: " + err.Error())
 		return userId, err
 	}
+	defer conn.Release()
 	err = conn.QueryRow(ctx, getUserId, zitadelId).Scan(&userId)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -184,6 +259,7 @@ func GetZitaIds(userIds []string) ([]ZitaUser, error) {
 		Logger.Error("Unable to acquire a connection: " + err.Error())
 		return zitaIds, err
 	}
+	defer conn.Release()
 	rows, err := conn.Query(ctx, getZitaIds, userIds)
 	if err != nil {
 		Logger.Error("Unable to get zitad ids: " + err.Error())

@@ -1,7 +1,6 @@
 package profile
 
 import (
-	"encoding/json"
 	"net/http"
 	"strings"
 
@@ -22,16 +21,7 @@ func getProfileData(w http.ResponseWriter, r *http.Request) {
 }
 
 func getProfileHandler(w http.ResponseWriter, r *http.Request) {
-	mw := core.ZitadelMiddleware()
-	authContex := mw.Context(r.Context())
-	data, err := json.MarshalIndent(authContex.UserInfo, "", "	")
-	if err != nil {
-		render.Status(r, http.StatusInternalServerError)
-		render.Render(w, r, core.NewFailedResponse(500, core.FAILURE, err.Error(), ""))
-		return
-	}
-	var user core.UserInfo
-	err = json.Unmarshal(data, &user)
+	user, err := core.GetUserInfo(r.Context())
 	if err != nil {
 		render.Status(r, http.StatusInternalServerError)
 		render.Render(w, r, core.NewFailedResponse(500, core.FAILURE, err.Error(), ""))
@@ -42,7 +32,7 @@ func getProfileHandler(w http.ResponseWriter, r *http.Request) {
 	userOut.Name = user.Name
 	userOut.Username = user.Username
 	userOut.IsVerified = user.IsVerified
-	userOut.Id = user.Id
+	userOut.Id = user.AId // send application id as id
 	render.Status(r, http.StatusOK)
 	render.Render(w, r, core.NewSucessResponse(core.SUCCESS, userOut))
 }

@@ -13,7 +13,6 @@ const get = async (cookies: { name: string; value: string }[]) => {
         },
     });
 
-    console.log(res);
 
     if (res.status === 401) {
         return {

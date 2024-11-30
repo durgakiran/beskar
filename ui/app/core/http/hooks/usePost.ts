@@ -18,7 +18,7 @@ export function usePost<T, P>(path: string, headers: Record<string, any> = {}): 
         fetch(USER_URI + "/" + path, {
             method: "POST",
             body: JSON.stringify(payLoad),
-            headers: { Authorization: `Bearer ${localStorage.getItem("access_token")}`, "Content-Type": "application/json", ...headers },
+            headers: { "Content-Type": "application/json", ...headers },
         })
             .then((res) => {
                 setIsDataFetching(false);
@@ -28,7 +28,7 @@ export function usePost<T, P>(path: string, headers: Record<string, any> = {}): 
                         .then((data) => setData(data as T))
                         .catch((e) => setData(res.text() as T));
                 } else {
-                    setErrors(new Error(`Request failed with status ${res.status}`))
+                    setErrors(new Error(`Request failed with status ${res.status}`));
                 }
             })
             .catch((err) => {

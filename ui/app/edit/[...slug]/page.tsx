@@ -8,7 +8,6 @@ import { Spinner } from "flowbite-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import "./styles.css";
-import { useSession } from "next-auth/react";
 import { Response, useGet } from "@http/hooks";
 import { usePUT } from "app/core/http/hooks/usePut";
 
@@ -58,16 +57,24 @@ interface DocumentDTO {
     data: any;
 }
 
+interface User {
+    name: string;
+    username: string;
+    email: string;
+    id: string;
+    emailVerified: boolean;
+}
+
 export default function Page({ params }: { params: { slug: string[] } }) {
     const [editorData, setEditorData] = useState({});
     const [editorContext, setEditorContext] = useState<Editor>();
     const [ { data, errors, isLoading: loading }, fetchData ] = useGet<Response<IData>>(`editor/space/${params.slug[0]}/page/${params.slug[1]}/edit`)
     const [ { errors: upadteErrors, isLoading: updating }, updateDraftData ] = usePUT<Response<UpdateDocDTO>, IPayload>(`editor/update`)
     const [ { data:  publishigData,errors: publishErrors, isLoading: publishing }, publishDraftData ] = usePUT<Response<UpdateDocDTO>, IPayloadPublish>(`editor/publish`)
+    const [ { data: profileData, errors: profileErrors, isLoading: profileLoading }, getProfile ] = useGet<Response<User>>(`profile/details`)
     const [loaded, setLoaded] = useState(false);
     const [title, setTitle] = useState<string>();
     const router = useRouter();
-    const { data: sessionData, status } = useSession();
     const workerRef = useRef<Worker>();
     const [workerInitiated, setWorkerInitiated] = useState(false);
     const [updatedData, setUpdatedData] = useState<DocumentDTO>();
@@ -83,7 +90,7 @@ export default function Page({ params }: { params: { slug: string[] } }) {
         const payLoad: IPayload = {
             data: content,
             id: Number(params.slug[1]),
-            ownerId: sessionData.user.id,
+            ownerId: profileData.data.id,
             spaceId: params.slug[0],
             title: title
         }
@@ -114,20 +121,12 @@ export default function Page({ params }: { params: { slug: string[] } }) {
         }
     }, [upadteErrors])
 
-    useEffect(() => {
-        if (status === "authenticated" && !loaded && !loading && workerInitiated) {
-            fetchData();
-        } 
-        if (!(status == "authenticated" || status == "loading")) {
-            router.push("/");
-        }
-    }, [status, workerInitiated]);
 
     useEffect(() => {
-        if (status == "authenticated" && !publishing && publishableDocument) {
-            publishDraftData({ title: title, id: Number(params.slug[1]), spaceId: params.slug[0], ownerId: sessionData.user.id, nodeData: publishableDocument, docId: page.data.docId, parentId: page.data.parentId  })
+        if (!profileLoading && !publishing && publishableDocument) {
+            publishDraftData({ title: title, id: Number(params.slug[1]), spaceId: params.slug[0], ownerId: profileData.data.id, nodeData: publishableDocument, docId: page.data.docId, parentId: page.data.parentId  })
         }
-    }, [status, publishableDocument]);
+    }, [profileLoading, publishableDocument]);
 
     useEffect(() => {
         if (publishigData) {
@@ -180,7 +179,11 @@ export default function Page({ params }: { params: { slug: string[] } }) {
         }
     }, [data]);
 
-    if (loading || status === "loading") {
+    useEffect(() => {
+        getProfile();
+    }, []);
+
+    if (loading || profileLoading) {
         <div className="text-center">
             <Spinner size="lg" />
         </div>;

@@ -90,6 +90,7 @@ export default function SideNav(param: Props) {
     const [parentId, setParentId] = useState<number>();
     const [pages, setPages] = useState<IPages[]>();
 
+
     useEffect(() => {
         fetchData();
     }, []);
@@ -119,7 +120,6 @@ export default function SideNav(param: Props) {
                 });
             const rootPages: IPages[] = [];
             pages.forEach((page) => {
-                console.log(pagemap.get(page.parentId));
                 if (!pagemap.get(page.parentId)) {
                     // it is not child of anyone
                     rootPages.push(page);
@@ -131,10 +131,6 @@ export default function SideNav(param: Props) {
             setPages(rootPages);
         }
     }, [data]);
-
-    useEffect(() => {
-        console.log(pages);
-    }, [pages]);
 
     const toggleDropdown = () => {
         setIsDropdownOpen(!isDropdownOpen);
@@ -169,7 +165,7 @@ export default function SideNav(param: Props) {
                             <Sidebar.Item href={`/space/${param.id}`} icon={HiHome}>
                                 Overview
                             </Sidebar.Item>
-                            <Sidebar.Item href={`/space/${param.id}/settings`} icon={HiCog}>
+                            <Sidebar.Item href={`/space/${param.id}/settings/users`} icon={HiCog}>
                                 Settings
                             </Sidebar.Item>
                             <div className="sidenav-content-container">

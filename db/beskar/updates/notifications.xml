@@ -66,4 +66,22 @@
     <changeSet id="5-remove-not-null-constraint" author="Kiran Kumar">
         <dropNotNullConstraint tableName="invites" schemaName="notifications" columnName="status" />
     </changeSet>
+
+    <changeSet id="6-remove-not-null-constriant-user-id" author="Kiran Kumar">
+        <dropNotNullConstraint tableName="invites" schemaName="notifications" columnName="user_id" />
+    </changeSet>
+
+    <changeSet id="7-add-email-id-column" author="kiran kumar">
+        <addColumn tableName="invites" schemaName="notifications" >
+            <column name="email_id" type="text">
+                <constraints nullable="false" />
+            </column>
+        </addColumn>
+    </changeSet>
+
+    <changeSet id="8-add-role-column" author="kiran kumar">
+        <addColumn tableName="invites" schemaName="notifications" >
+            <column name="role" type="varchar(30)" />
+        </addColumn>
+    </changeSet>
 </databaseChangeLog>

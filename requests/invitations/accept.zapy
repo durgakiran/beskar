@@ -4,7 +4,7 @@
     "cell_type": "zapy:request",
     "tags": []
   },
-  "endpoint": "http://localhost:9095/invite/user/accept?token=99bc9025795cdf8eadc59563aec81c83",
+  "endpoint": "http://localhost:9095/api/v1/invite/user/accept?token=8d794e8dd5ee059ba1215ae6a781f72d",
   "method": "GET",
   "params": [
     {
@@ -20,9 +20,19 @@
       "value": "{{ ctx.auto() }}"
     },
     {
-      "active": true,
+      "active": false,
       "key": "Authorization",
       "value": "Bearer {{ctx.store.access_token}}"
+    },
+    {
+      "active": true,
+      "key": "Cookie",
+      "value": "zitadel.login.csrf=MTczMjIwNzUxMXxJbGxPYWtNMVExSnpZMjR4ZFdGSWMwbFBOMk5SWlRCSFNtTnZVRzVCZHpjeWJtVTBiVGxQU2psalZEQTlJZ289fORzL_pMHW6UkXULBiPrm80vJ5OnaEUhTQczSXM9q9mg; mode=auto-dark; zitadel.useragent=MTczMjIwNzUyN3xVaUtoSVZjaDN6aDU1UUwtNnkzWElkbjc2clBPSFZVSkM1b19VVk0xQ3ZmbEVHQ21VaC0zeHNVSWNXa1ZKMGhHN1hBd29kTjlXUEtjaEdJLXRqZkdaS09vaVNEdlFRPT186ky2AevpWxL0rp72DB5ddHcVGJZv0BF1Las9YeEkHzQ=; zitadel.session=2ltrKXsUdRVlnQdkKBVWIC3WaU0uEm5k5_FSptM0sRCmh-o0IPdh4H6pzUAFECqHkPfgTw"
+    },
+    {
+      "active": true,
+      "key": "",
+      "value": ""
     }
   ],
   "script": [

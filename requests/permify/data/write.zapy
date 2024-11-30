@@ -22,7 +22,7 @@
     {
       "active": true,
       "key": "Authorization",
-      "value": "Bearer {{ctx.store.access_token}}"
+      "value": "Bearer secret"
     },
     {
       "active": false,
@@ -50,12 +50,12 @@
     "        {",
     "            \"entity\": {",
     "                \"type\": \"space\",",
-    "                \"id\": \"f458794c-7127-4ea1-934c-ab44a8c3bfb0\"",
+    "                \"id\": \"ff390016-8b14-44b3-9201-bb5e99301c5b\"",
     "            },",
-    "            \"relation\": \"owner\",",
+    "            \"relation\": \"admin\",",
     "            \"subject\": {",
     "                \"type\": \"user\",",
-    "                \"id\": \"6203346b-242e-4d2a-8cf5-af0818fcc748\"",
+    "                \"id\": \"ca25876a-483b-4f9b-a0ab-fc98c7b14070\"",
     "            }",
     "        }",
     "    ]",

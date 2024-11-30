@@ -18,7 +18,8 @@ const (
 	ErrorCode_ERROR_CODE_INVALID_INPUT           ErrorCode = 2004
 
 	// not found
-	ErrorCode_ERROR_CODE_NO_DATA ErrorCode = 4001
+	ErrorCode_ERROR_CODE_NO_DATA        ErrorCode = 4001
+	ErrorCode_ERROR_CODE_ALREADY_EXISTS ErrorCode = 4002
 )
 
 var ErrorCode_name = map[ErrorCode]string{
@@ -30,7 +31,9 @@ var ErrorCode_name = map[ErrorCode]string{
 	2001: "ERROR_CODE_PERMISSION_SERVER_ISSUE",
 	2002: "ERROR_CODE_UNAUTHORIZED",
 	2003: "ERROR_CODE_MISSING_INPUT",
+	2004: "ERROR_CODE_INVALID_INPUT",
 	4001: "ERROR_CODE_NO_DATA",
+	4002: "ERROR_CODE_ALREADY_EXISTS",
 }
 
 var ErrorName_Code = map[string]ErrorCode{
@@ -42,7 +45,9 @@ var ErrorName_Code = map[string]ErrorCode{
 	"ERROR_CODE_PERMISSION_SERVER_ISSUE": 2001,
 	"ERROR_CODE_UNAUTHORIZED":            2002,
 	"ERROR_CODE_MISSING_INPUT":           2003,
+	"ERROR_CODE_INVALID_INPUT":           2004,
 	"ERROR_CODE_NO_DATA":                 4001,
+	"ERROR_CODE_ALREADY_EXISTS":          4002,
 }
 
 type Code uint32

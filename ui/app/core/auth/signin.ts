@@ -105,10 +105,8 @@ export async function signIn<P extends RedirectableProviderType | undefined = un
         const url = data.url ?? callbackUrl;
         // change url base
         const urlObj = new URL(url);
-        console.log(urlObj);
         urlObj.hostname = 'localhost';
         urlObj.port = '8084';
-        console.log(urlObj)
         window.location.href = url;
         // If url contains a hash, the browser does not reload the page. We reload manually
         if (url.includes("#")) window.location.reload();

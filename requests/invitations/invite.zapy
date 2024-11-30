@@ -4,7 +4,7 @@
     "cell_type": "zapy:request",
     "tags": []
   },
-  "endpoint": "http://localhost:9095/invite/user/create",
+  "endpoint": "http://localhost:9095/api/v1/invite/user/create",
   "method": "POST",
   "params": [
     {
@@ -20,9 +20,14 @@
       "value": "{{ ctx.auto() }}"
     },
     {
-      "active": true,
+      "active": false,
       "key": "Authorization",
       "value": "Bearer {{ctx.store.access_token}}"
+    },
+    {
+      "active": true,
+      "key": "Cookie",
+      "value": "zitadel.login.csrf=MTczMjIwNzI4NHxJbEprVWxaM1JWQXlaV2h6Vkc1cFIxRnNjVXB2TkROSVZWUlROVXRyV2pVMWRGSndaa05aUjJsQ1JFazlJZ289fNCVQs_j6_lSk_Xp4rW6yvTH7Gdn0RcHvFV72EZMpBr8; mode=auto-dark; zitadel.useragent=MTczMjIwNzQxNHx5anZrYTR2MHJCUTN6RndTQXBHSDlMc0RLNHVUbjlDdndDdFh1VEoxRmgtelFRNzZOcU00Z0pCSWR4bkI3emFxeHBmSTBlVVU2aWNiZFV6YndxcFZhOXUzMGswZW1nPT18BvcXzsZVWIG6IE1ntc7npz1BTu0H0wjntFhQv4rb9No=; zitadel.session=jl110tKhB9cO69f7EjWTEZ0kIJIFeEajsqDJ_VB8sFCQpe3GGnCzjx9HPeKEPU74pmU7sA"
     },
     {
       "active": true,
@@ -43,9 +48,9 @@
   "body_type": "application/json",
   "body": [
     "{",
-    "    \"userId\": \"971d2839-63c7-428d-b747-4aa6d7be275d\",",
+    "    \"userId\": \"ca25876a-483b-4f9b-a0ab-fc98c7b14070\",",
     "    \"entity\": \"space\",",
-    "    \"entityId\": \"f458794c-7127-4ea1-934c-ab44a8c3bfb0\"",
+    "    \"entityId\": \"ff390016-8b14-44b3-9201-bb5e99301c5b\"",
     "}",
     ""
   ]

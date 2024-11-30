@@ -1,7 +1,6 @@
 "use client";
 import { useGetCall } from "@http";
 import { useLogout } from "app/core/auth/useKeycloak";
-import { useEffect } from "react";
 import { Avatar, Dropdown, Navbar } from 'flowbite-react';
 import Link from "next/link";
 
@@ -18,9 +17,6 @@ export default function MenuBar() {
     const [status, res] = useGetCall<UserInfo>(USER_URI + "/profile/details");
     const logout = useLogout();
 
-    useEffect(() => {
-        console.log(res);
-    }, [res])
 
     return (
         <Navbar fluid rounded className="fixed w-full bg-white z-50 shadow-sm">

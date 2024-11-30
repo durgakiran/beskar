@@ -1,4 +1,3 @@
-import ModifiedIcon from "@components/modifiedIcon";
 import { Editor } from "@tiptap/react";
 import { useEffect, useState } from "react";
 import { useContentAlignTypes } from "./hooks/useContentAlignTypes";

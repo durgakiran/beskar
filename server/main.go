@@ -15,6 +15,7 @@ import (
 	page "github.com/durgakiran/beskar/page"
 	profile "github.com/durgakiran/beskar/profile/controller"
 	space "github.com/durgakiran/beskar/space"
+	"github.com/durgakiran/beskar/user"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
@@ -105,12 +106,13 @@ func main() {
 	// r.Use(QueryParamLogger)
 	r.Mount("/auth/", core.ZitadelAuthenticator())
 	r.Mount("/api/v1", auth.Router())
-	r.Mount("/api/v1/media", media.Router())
+	r.Mount("/api/v1/media", mw.CheckAuthentication()(media.Router()))
 	r.Mount("/api/v1/profile", mw.CheckAuthentication()(profile.Router()))
 	r.Mount("/api/v1/editor", mw.CheckAuthentication()(editor.Router()))
 	r.Mount("/api/v1/space", mw.CheckAuthentication()(space.Router()))
-	r.Mount("/api/v1/invite", invite.Router())
+	r.Mount("/api/v1/invite", mw.CheckAuthentication()(invite.Router()))
 	r.Mount("/api/v1/page", mw.CheckAuthentication()(page.Router()))
+	r.Mount("/api/v1/user", user.Router())
 
 	logger().Info(fmt.Sprintf("Serving on port: %s", port))
 	err = http.ListenAndServe(port, r)

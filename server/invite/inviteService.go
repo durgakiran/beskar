@@ -123,12 +123,27 @@ func (i Invite) invite() (string, error) {
 		logger().Error("unable to create token")
 		return token, errors.New(core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNSPECIFIED])
 	}
-	exists, err := core.CheckPermission(i.Entity, i.EntityId, "user", i.UserId.String(), "view")
+	users, err := core.SearchUserByEmail(i.Email, 1, 0)
 	if err != nil {
-		return token, errors.New(core.ErrorCode_name[core.ErrorCode_ERROR_CODE_PERMISSION_SERVER_ISSUE])
+		logger().Error(err.Error())
 	}
-	if exists {
-		return token, errors.New(core.ErrorCode_name[core.ErrorCode_ERROR_CODE_INVALID_INPUT])
+	for _, user := range users.Result {
+		if user.Human.Email.Email == i.Email {
+			id, err := core.GetBeskarUser(user.UserId)
+			if err != nil {
+				logger().Error(err.Error())
+			} else {
+				i.UserId = uuid.MustParse(id)
+			}
+		}
+	}
+	if i.UserId != uuid.Nil {
+		permissions := core.GetSubjectPermissionList(i.Entity, i.EntityId, "user", i.UserId.String())
+		if len(permissions) != 0 {
+			logger().Error("user is already a member of the space")
+			// user is already a member of the space
+			return token, errors.New(core.ErrorCode_name[core.ErrorCode_ERROR_CODE_INVALID_INPUT])
+		}
 	}
 	connPool := core.GetPool()
 	ctx := context.Background()
@@ -146,7 +161,7 @@ func (i Invite) invite() (string, error) {
 	defer tx.Rollback(ctx)
 	defer conn.Release()
 	// create entry in the database
-	tag, err := tx.Exec(ctx, CREATE_INVITE, i.SenderId, token, i.UserId, i.Entity, i.EntityId)
+	tag, err := tx.Exec(ctx, CREATE_INVITE, i.SenderId, token, i.UserId, i.Entity, i.EntityId, i.Email, i.Role)
 	if err != nil {
 		logger().Error(err.Error())
 		return token, err
@@ -162,7 +177,7 @@ func (i Invite) invite() (string, error) {
 }
 
 func (i Invite) token() string {
-	str := i.Entity + i.EntityId + i.UserId.String() + i.SenderId.String()
+	str := i.Entity + i.EntityId + i.Email + i.SenderId.String() + i.Role
 	h := md5.New()
 	_, err := h.Write([]byte(str))
 	if err != nil {

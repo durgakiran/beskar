@@ -31,19 +31,23 @@ func sendSuccessResponse(w http.ResponseWriter, r *http.Request, code int, data 
 
 func acceptInvitation(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	claims, ok := ctx.Value("claims").(core.Claims)
-	if !ok {
-		sendFailedReponse(w, r, http.StatusForbidden, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNAUTHORIZED])
+	user, err := core.GetUserInfo(ctx)
+	if err != nil {
+		core.SendFailedReponse(w, r, http.StatusForbidden, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNAUTHORIZED])
 		return
 	}
-	userId := claims.Claims.UserId
+	if user.Id == "" {
+		core.SendFailedReponse(w, r, http.StatusForbidden, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNAUTHORIZED])
+		return
+	}
+	userId := user.AId
 	token := r.URL.Query().Get("token")
 	if token == "" {
 		sendFailedReponse(w, r, http.StatusBadRequest, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNAUTHORIZED])
 		return
 	}
 	// process token
-	err := processInvitation(userId, token, STATUS_ACCEPTED)
+	err = processInvitation(userId, token, STATUS_ACCEPTED)
 	if err != nil {
 		sendFailedReponse(w, r, http.StatusForbidden, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNAUTHORIZED])
 		return
@@ -53,28 +57,27 @@ func acceptInvitation(w http.ResponseWriter, r *http.Request) {
 
 func createInvitation(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	claims, ok := ctx.Value("claims").(core.Claims)
-	if !ok {
-		sendFailedReponse(w, r, http.StatusForbidden, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNAUTHORIZED])
+	user, err := core.GetUserInfo(ctx)
+	if err != nil {
+		core.SendFailedReponse(w, r, http.StatusForbidden, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNAUTHORIZED])
 		return
 	}
-	userId := claims.Claims.UserId
+	if user.Id == "" {
+		core.SendFailedReponse(w, r, http.StatusForbidden, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNAUTHORIZED])
+		return
+	}
+	userId := user.AId
 	data, err := io.ReadAll(r.Body)
 	defer r.Body.Close()
 	if err != nil {
 		logger().Error(err.Error())
-		sendFailedReponse(w, r, http.StatusBadRequest, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNAUTHORIZED])
+		sendFailedReponse(w, r, http.StatusBadRequest, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_INVALID_INPUT])
 		return
 	}
 	invite, err := validateInput(data)
-	if invite.UserId == uuid.Nil {
-		logger().Error("Invalid user id")
-		sendFailedReponse(w, r, http.StatusBadRequest, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNAUTHORIZED])
-		return
-	}
-	if invite.EntityId == "" {
-		logger().Error("Invalid entity id")
-		sendFailedReponse(w, r, http.StatusBadRequest, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNAUTHORIZED])
+	if err != nil {
+		logger().Error(err.Error())
+		sendFailedReponse(w, r, http.StatusBadRequest, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_MISSING_INPUT])
 		return
 	}
 	invite.SenderId = uuid.MustParse(userId)
@@ -86,7 +89,7 @@ func createInvitation(w http.ResponseWriter, r *http.Request) {
 	}
 	token, err := invite.invite()
 	if err != nil {
-		sendFailedReponse(w, r, http.StatusInternalServerError, err.Error())
+		core.SendFailedReponse(w, r, 0, err.Error())
 		return
 	}
 	sendSuccessResponse(w, r, http.StatusOK, token)
@@ -94,19 +97,23 @@ func createInvitation(w http.ResponseWriter, r *http.Request) {
 
 func rejectInvitation(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	claims, ok := ctx.Value("claims").(core.Claims)
-	if !ok {
-		sendFailedReponse(w, r, http.StatusForbidden, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNAUTHORIZED])
+	user, err := core.GetUserInfo(ctx)
+	if err != nil {
+		core.SendFailedReponse(w, r, http.StatusForbidden, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNAUTHORIZED])
 		return
 	}
-	userId := claims.Claims.UserId
+	if user.Id == "" {
+		core.SendFailedReponse(w, r, http.StatusForbidden, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNAUTHORIZED])
+		return
+	}
+	userId := user.AId
 	token := r.URL.Query().Get("token")
 	if token == "" {
 		sendFailedReponse(w, r, http.StatusBadRequest, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNAUTHORIZED])
 		return
 	}
 	// process token
-	err := processInvitation(userId, token, STATUS_REJECTED)
+	err = processInvitation(userId, token, STATUS_REJECTED)
 	if err != nil {
 		sendFailedReponse(w, r, http.StatusForbidden, err.Error())
 		return
@@ -116,19 +123,23 @@ func rejectInvitation(w http.ResponseWriter, r *http.Request) {
 
 func removeInvitation(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	claims, ok := ctx.Value("claims").(core.Claims)
-	if !ok {
-		sendFailedReponse(w, r, http.StatusForbidden, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNAUTHORIZED])
+	user, err := core.GetUserInfo(ctx)
+	if err != nil {
+		core.SendFailedReponse(w, r, http.StatusForbidden, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNAUTHORIZED])
 		return
 	}
-	userId := claims.Claims.UserId
+	if user.Id == "" {
+		core.SendFailedReponse(w, r, http.StatusForbidden, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNAUTHORIZED])
+		return
+	}
+	userId := user.AId
 	token := r.URL.Query().Get("token")
 	if token == "" {
 		sendFailedReponse(w, r, http.StatusBadRequest, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNAUTHORIZED])
 		return
 	}
 	// process token
-	err := processInvitation(userId, token, STATUS_REMOVED)
+	err = processInvitation(userId, token, STATUS_REMOVED)
 	if err != nil {
 		sendFailedReponse(w, r, http.StatusForbidden, err.Error())
 		return
@@ -138,7 +149,7 @@ func removeInvitation(w http.ResponseWriter, r *http.Request) {
 
 func Router() *chi.Mux {
 	r := chi.NewRouter()
-	r.Use(core.AuthMiddleWare)
+	r.Use(core.Authenticated)
 	r.Post("/user/create", createInvitation)
 	r.Get("/user/accept", acceptInvitation)
 	r.Get("/user/reject", rejectInvitation)

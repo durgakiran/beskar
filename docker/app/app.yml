@@ -54,7 +54,9 @@ services:
       shield:
         condition: service_started
     networks:
-      - custom_local_network
+      custom_local_network:
+        aliases:
+          - app.tededox.com
     ports:
       - "8085:8085" # hits ui and api server  
       - "80:80" # hits zitadel server   
@@ -137,8 +139,6 @@ services:
       retries: 6
     networks:
       - custom_local_network
-    extra_hosts:
-      - "app.tededox.com:172.24.0.7"
   server:
     container_name: tededox-server
     build:
@@ -161,6 +161,7 @@ services:
       SERVER_PAT: ${ZITADEL_USER_PAT}
     ports:
       - "9095:9095"
+      - "40000:40000"
     volumes:
       - /Users/kiran/projects/beskar/server/:/app
     healthcheck:
@@ -170,8 +171,6 @@ services:
       retries: 6
     networks:
       - custom_local_network
-    extra_hosts:
-      - "app.tededox.com:172.24.0.7"
 
 
 
