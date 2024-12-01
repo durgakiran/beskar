@@ -15,11 +15,10 @@ export function usePUT<T, P>(path: string, headers: Record<string, any> = {}): [
 
     const mutateData = useCallback((payLoad: P) => {
         setIsDataFetching(true);
-        fetch(USER_URI + "/" +  + path, {
+        fetch(USER_URI + "/" + path, {
             method: "PUT",
-            credentials: "omit",
             body: JSON.stringify(payLoad),
-            headers: { Authorization: `Bearer ${localStorage.getItem("access_token")}`, "Content-Type": "application/json", ...headers },
+            headers: { "Content-Type": "application/json", ...headers },
         })
             .then((res) => {
                 setIsDataFetching(false);

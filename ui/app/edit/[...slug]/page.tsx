@@ -104,6 +104,10 @@ export default function Page({ params }: { params: { slug: string[] } }) {
     }
 
     useEffect(() => {
+        fetchData();
+    }, []);
+
+    useEffect(() => {
         if (data) {
             setUpdatedData({ data: editorData, id: data.data.docId, pageId: data.data.id });
         }
@@ -216,7 +220,8 @@ export default function Page({ params }: { params: { slug: string[] } }) {
                             content={editorData}
                             pageId={params.slug[1]}
                             id={data.data.docId}
-                            updateContent={(content, title) => updateContent(content, title)}
+                            user={profileData.data}
+                            updateContent={(content, title) => { console.log("updating content"); updateContent(content, title)}}
                         />
                     </div>
                 </div>
