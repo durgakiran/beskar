@@ -6,4 +6,6 @@ const (
 	GET_TOKEN_STATUS_BY_SENDER = "SELECT status, entity, user_id, entity_id  FROM notifications.invites WHERE sender_id = $1 AND token = $2"
 	UPDATE_INVITE              = "UPDATE notifications.invites SET status = $1 WHERE token = $2 and user_id = $3"
 	UPDATE_INVITE_BY_SENDER    = "UPDATE notifications.invites SET status = $1 WHERE token = $2 and sender_id = $3"
+	GET_INVITES_QUERY          = "SELECT sender_id, entity, entity_id, email_id, role, status FROM notifications.invites WHERE entity_id = $1 AND status IS NULL"
+	REMOVE_INVITATION          = "DELETE FROM notifications.invites WHERE sender_id = $1 AND email_id = $2 AND entity_id = $3 AND role = $4"
 )

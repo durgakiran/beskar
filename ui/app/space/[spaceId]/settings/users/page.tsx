@@ -48,12 +48,12 @@ export default function Page({ params }: { params: { spaceId: string } }) {
     }, []);
 
     useEffect(() => {
-        console.log(inviteData, inviteErrors);
-    }, [inviteData, inviteErrors])
+        console.log(profileData);
+    }, [profileData])
 
     useEffect(() => {
-        console.log(router);
-    }, [data]);
+        console.log(inviteData, inviteErrors);
+    }, [inviteData, inviteErrors])
 
     if (isLoading || profileLoading) {
         return (
@@ -71,7 +71,15 @@ export default function Page({ params }: { params: { spaceId: string } }) {
             </Breadcrumb>
             <div className="mt-4 flex flex-row justify-between items-center">
                 <h2>Active Users</h2>
-                <Button size="xs" onClick={() => setOpenModal(true)} outline><Icon name="Plus" className="mr-2 h-5 w-5" />  User</Button>
+                {
+                    data && data.data ? data.data.filter((user: User) => user.id === profileData.data.id).map((user: User) => {
+                        if (user.role === "owner" || user.role === "admin") {
+                            return (
+                                <Button key={user.id} size="xs" onClick={() => setOpenModal(true)} outline><Icon name="Plus" className="mr-2 h-5 w-5" />  User</Button>
+                            )
+                        }
+                    }) : null
+                }
             </div>
             <div className="overflow-x-auto mt-4">
                 <Table>

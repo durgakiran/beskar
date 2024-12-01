@@ -2,7 +2,7 @@ import { Sidebar } from "flowbite-react";
 import { usePathname } from "next/navigation";
 import { useEffect } from "react";
 
-export default function SideNav() {
+export default function SideNav(param: { id: string }) {
     const pathName = usePathname();
 
     useEffect((() => {
@@ -14,10 +14,10 @@ export default function SideNav() {
             <Sidebar aria-label="Settings navigation">
                 <Sidebar.Items>
                     <Sidebar.ItemGroup>
-                        <Sidebar.Item active={pathName.split("/")[-1] === "users"} href="#">
+                        <Sidebar.Item active={pathName.split("/")[-1] === "users"} href={`/space/${param.id}/settings/users`}>
                             Active Users
                         </Sidebar.Item>
-                        <Sidebar.Item href="#">
+                        <Sidebar.Item href={`/space/${param.id}/settings/invites`}>
                             Invited Users
                         </Sidebar.Item>
                     </Sidebar.ItemGroup>

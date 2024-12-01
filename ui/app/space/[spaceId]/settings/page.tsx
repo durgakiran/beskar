@@ -1,9 +1,8 @@
 "use client";
 
-import SideNav from "@components/settings/sidenav";
 import User from "@components/settings/User";
 import { Response, useGet } from "@http/hooks";
-import { Breadcrumb, Spinner, Table } from "flowbite-react";
+import { Spinner, Table } from "flowbite-react";
 import { useEffect } from "react";
 
 interface User {

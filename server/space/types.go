@@ -23,7 +23,8 @@ type PageList struct {
 }
 
 type User struct {
-	Id   uuid.UUID `json:"id" db:"id"`
-	Name string    `json:"name" db:"name"`
-	Role string    `json:"role" db:"role"`
+	Id    uuid.UUID `json:"id" db:"id"`
+	Name  string    `json:"name" db:"name"`
+	Role  string    `json:"role" db:"role"`
+	Email string    `json:"email" db:"email"`
 }

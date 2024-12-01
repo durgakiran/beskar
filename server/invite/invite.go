@@ -133,18 +133,59 @@ func removeInvitation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	userId := user.AId
-	token := r.URL.Query().Get("token")
-	if token == "" {
-		sendFailedReponse(w, r, http.StatusBadRequest, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNAUTHORIZED])
+	userIDUUID := uuid.MustParse(userId)
+	data, err := io.ReadAll(r.Body)
+	defer r.Body.Close()
+	if err != nil {
+		logger().Error(err.Error())
+		sendFailedReponse(w, r, http.StatusBadRequest, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_INVALID_INPUT])
 		return
 	}
-	// process token
-	err = processInvitation(userId, token, STATUS_REMOVED)
+	invite, err := validateInput(data)
+	if err != nil {
+		logger().Error(err.Error())
+		core.SendFailedReponse(w, r, http.StatusBadRequest, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_MISSING_INPUT])
+		return
+	}
+	isAllowed := core.ValidateUserSpacePermissions(uuid.MustParse(invite.EntityId), userIDUUID, core.SPACE_INVITE_MEMBER)
+	if !isAllowed {
+		core.SendFailedReponse(w, r, http.StatusForbidden, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNAUTHORIZED])
+		return
+	}
+	err = invite.removeInvitation()
 	if err != nil {
 		sendFailedReponse(w, r, http.StatusForbidden, err.Error())
 		return
 	}
 	sendSuccessResponse(w, r, http.StatusOK, "")
+}
+
+func listSpaceInvites(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	user, err := core.GetUserInfo(ctx)
+	if err != nil {
+		core.SendFailedReponse(w, r, http.StatusForbidden, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNAUTHORIZED])
+		return
+	}
+	if user.Id == "" {
+		core.SendFailedReponse(w, r, http.StatusForbidden, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNAUTHORIZED])
+		return
+	}
+	userId := user.AId
+	userIDUUID := uuid.MustParse(userId)
+	spaceId := uuid.MustParse(chi.URLParam(r, "spaceId"))
+	// check permission allowed only for space admin or owner
+	isAllowed := core.ValidateUserSpacePermissions(spaceId, userIDUUID, core.SPACE_INVITE_MEMBER)
+	if !isAllowed {
+		core.SendFailedReponse(w, r, http.StatusForbidden, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNAUTHORIZED])
+		return
+	}
+	data, err := getSpaceInvites(spaceId)
+	if err != nil {
+		core.SendFailedReponse(w, r, http.StatusInternalServerError, err.Error())
+		return
+	}
+	core.SendSuccessResponse(w, r, http.StatusOK, data)
 }
 
 func Router() *chi.Mux {
@@ -153,6 +194,7 @@ func Router() *chi.Mux {
 	r.Post("/user/create", createInvitation)
 	r.Get("/user/accept", acceptInvitation)
 	r.Get("/user/reject", rejectInvitation)
-	r.Get("/user/remove", removeInvitation)
+	r.Delete("/user/remove", removeInvitation)
+	r.Get("/space/{spaceId}/list", listSpaceInvites)
 	return r
 }
