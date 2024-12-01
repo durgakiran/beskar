@@ -4,14 +4,18 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
-	"log/slog"
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/go-chi/render"
+	zoidc "github.com/zitadel/oidc/v3/pkg/oidc"
+	"github.com/zitadel/zitadel-go/v3/pkg/authentication"
+	openid "github.com/zitadel/zitadel-go/v3/pkg/authentication/oidc"
+	"github.com/zitadel/zitadel-go/v3/pkg/zitadel"
 )
 
 type tokenType struct {
@@ -42,7 +46,7 @@ func (t *tokenType) authenticate() error {
 	ctx := oidc.ClientContext(context.Background(), client)
 	provider, err := oidc.NewProvider(ctx, os.Getenv("KC_REALM_URL"))
 	if err != nil {
-		slog.Error("authorisation failed while getting the provider: " + err.Error())
+		Logger.Error("authorisation failed while getting the provider: " + err.Error())
 		return errors.New(err.Error())
 
 	}
@@ -53,7 +57,7 @@ func (t *tokenType) authenticate() error {
 	verifier := provider.Verifier(oidcConfig)
 	idToken, err := verifier.Verify(ctx, t.value)
 	if err != nil {
-		slog.Error("authorisation failed while verifying the token: " + err.Error())
+		Logger.Error("authorisation failed while verifying the token: " + err.Error())
 		return errors.New(err.Error())
 	}
 	var claims Claims
@@ -71,17 +75,65 @@ func AuthMiddleWare(next http.Handler) http.Handler {
 		token := r.Header.Get("Authorization")
 		if len(token) == 0 {
 			render.Status(r, http.StatusUnauthorized)
-			render.Render(w, r, NewFailedResponse(401, "Authorization token not provided", ""))
+			render.Render(w, r, NewFailedResponse(401, FAILURE, "Authorization token not provided", ""))
 			return
 		}
 		Itoken := tokenType{value: strings.Split(token, " ")[1]}
 		err := Itoken.authenticate()
 		if err != nil {
 			render.Status(r, http.StatusUnauthorized)
-			render.Render(w, r, NewFailedResponse(401, err.Error(), ""))
+			render.Render(w, r, NewFailedResponse(401, FAILURE, err.Error(), ""))
 			return
 		}
 		ctx := context.WithValue(r.Context(), "claims", Itoken.Claims)
 		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
+// zitadel configuration
+
+const (
+	key = "0nw71mQig3EAfFiQmJHsmzJ89ERNq2tQ"
+)
+
+var authN *authentication.Authenticator[*openid.UserInfoContext[*zoidc.IDTokenClaims, *zoidc.UserInfo]]
+var authNLock = &sync.Mutex{}
+
+func ZitadelAuthenticator() *authentication.Authenticator[*openid.UserInfoContext[*zoidc.IDTokenClaims, *zoidc.UserInfo]] {
+	if authN == nil {
+		authNLock.Lock()
+		defer authNLock.Unlock()
+		if authN == nil {
+			authNClient, err := authentication.New(
+				context.Background(),
+				zitadel.New("app.tededox.com", zitadel.WithInsecure("80")),
+				key,
+				openid.DefaultAuthentication("292828815569256454", "http://app.tededox.com:8085/auth/callback", key),
+				authentication.WithLogger[*openid.UserInfoContext[*zoidc.IDTokenClaims, *zoidc.UserInfo]](SlogLogger),
+				authentication.WithExternalSecure[*openid.UserInfoContext[*zoidc.IDTokenClaims, *zoidc.UserInfo]](false),
+			)
+			authN = authNClient
+			if err != nil {
+				Logger.Error(err.Error())
+				os.Exit(1)
+			}
+
+		}
+	}
+	return authN
+}
+
+func ZitadelMiddleware() *authentication.Interceptor[*openid.UserInfoContext[*zoidc.IDTokenClaims, *zoidc.UserInfo]] {
+	return authentication.Middleware(ZitadelAuthenticator())
+}
+
+func Authenticated(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if authentication.IsAuthenticated(r.Context()) {
+			next.ServeHTTP(w, r)
+		} else {
+			render.Status(r, http.StatusUnauthorized)
+			render.Render(w, r, NewFailedResponse(401, FAILURE, "Not authenticated", ""))
+		}
 	})
 }

@@ -5,12 +5,13 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
-	"log/slog"
 	"math/rand"
 	"mime/multipart"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/durgakiran/beskar/core"
 )
 
 type Image struct {
@@ -49,11 +50,11 @@ func (i *Image) createFileName() error {
 func (i *Image) createPath() {
 	err := os.Mkdir("public", fs.ModePerm)
 	if err != nil {
-		slog.Error("Failed to create public directory")
+		core.Logger.Error("Failed to create public directory")
 	}
 	os.Mkdir("public/images", fs.ModePerm)
 	if err != nil {
-		slog.Error("Failed to create images directory")
+		core.Logger.Error("Failed to create images directory")
 	}
 
 }
@@ -66,7 +67,7 @@ func (i *Image) SaveImage() error {
 	i.createPath()
 	file, err := os.Create("public/images/" + i.Name)
 	if err != nil {
-		slog.Error("Failed to create file")
+		core.Logger.Error("Failed to create file")
 		return errors.New("Failed to create file")
 	}
 	defer file.Close()

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -12,13 +13,15 @@ import (
 )
 
 const (
-	defaultMaxConns          = int32(50)
+	defaultMaxConns          = int32(20)
 	defaultMinConns          = int32(2)
 	defaultMaxConnLifetime   = time.Hour
 	defaultMaxConnIdleTime   = time.Second * 30
 	defaultHealthCheckPeriod = time.Minute
 	defaultConnectTimeout    = time.Second * 5
 )
+
+var poolLock = &sync.Mutex{}
 
 func ConnectionString() string {
 	return fmt.Sprintf("postgres://%v:%v@%v:%v/%v", os.Getenv("PG_USER"), os.Getenv("PG_PASSWORD"), os.Getenv("PG_HOST"), os.Getenv("PG_PORT"), os.Getenv("PG_DB"))
@@ -57,12 +60,16 @@ func Config() *pgxpool.Config {
 var connPool *pgxpool.Pool
 
 func GetPool() *pgxpool.Pool {
-	if connPool != nil {
-		return connPool
-	}
-	connPool, err := pgxpool.NewWithConfig(context.Background(), Config())
-	if err != nil {
-		log.Fatal("Error while creating connection to the database!!")
+	if connPool == nil {
+		poolLock.Lock()
+		defer poolLock.Unlock()
+		if connPool == nil {
+			pool, err := pgxpool.NewWithConfig(context.Background(), Config())
+			if err != nil {
+				log.Fatal("Error while creating connection to the database!!")
+			}
+			connPool = pool
+		}
 	}
 	return connPool
 }

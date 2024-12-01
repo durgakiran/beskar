@@ -12,5 +12,6 @@
     <include file="updates/space.xml" />
     <!-- <include file="updates/auth.xml" /> -->
     <include file="updates/notifications.xml" />
+    <include file="updates/user.xml" />
 
 </databaseChangeLog>

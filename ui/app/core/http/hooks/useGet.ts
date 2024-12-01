@@ -1,22 +1,28 @@
 import { useCallback, useState } from "react";
 
+const USER_URI = process.env.NEXT_PUBLIC_USER_SERVER_URL;
+
 /**
  *
  * @param path
  * @param headers
  * @returns isLoading, Data type and any errors
  */
-export function useGet<T>(path: string, headers: Record<string, any> = {}): [{ isLoading: boolean; data: T; errors: any }, fetchData: () => void] {
+export function useGet<T>(path: string, headers: Record<string, any> = {}): [{ isLoading: boolean; data: T; errors: any, response: number }, fetchData: () => void] {
     const [isDataFetching, setIsDataFetching] = useState<boolean>(false);
     const [data, setData] = useState<T>();
     const [errors, setErrors] = useState();
+    const [response, setResponse] = useState<number>();
 
     const fetchData = useCallback(() => {
         setIsDataFetching(true);
-        fetch("http://localhost:9095/" + path, { credentials: "omit", headers: { Authorization: `Bearer ${localStorage.getItem("access_token")}`, "Content-Type": "application/json", ...headers } })
+        fetch(USER_URI + "/" + path, { credentials: "include", headers: { "Content-Type": "application/json", ...headers } })
             .then((res) => {
                 setIsDataFetching(false);
-                res.json().then(data => setData(data as T)).catch(e => setErrors(e))
+                setResponse(res.status);
+                res.json()
+                    .then((data) => setData(data as T))
+                    .catch((e) => setErrors(e));
             })
             .catch((err) => {
                 setIsDataFetching(false);
@@ -24,5 +30,5 @@ export function useGet<T>(path: string, headers: Record<string, any> = {}): [{ i
             });
     }, []);
 
-    return [{ isLoading: isDataFetching, data, errors }, fetchData];
+    return [{ isLoading: isDataFetching, data, errors, response }, fetchData];
 }

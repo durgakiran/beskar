@@ -7,12 +7,14 @@ import (
 )
 
 type Invite struct {
-	UserId   uuid.UUID `json:"userId"`
+	UserId   uuid.UUID `json:"userId,omitempty"`
 	Entity   string    `json:"entity"`
 	EntityId string    `json:"entityId"`
 	Token    string    `json:"token"`
 	SenderId uuid.UUID `json:"senderId"`
 	Status   string    `json:"status"`
+	Email    string    `json:"email"`
+	Role     string    `json:"role"`
 }
 
 type InviteDBO struct {
@@ -33,4 +35,13 @@ type InviteInput struct {
 	UserId   uuid.UUID
 	Entity   string
 	Entityid string
+}
+
+type InviteDBOV3 struct {
+	Entity   string         `json:"entity" db:"entity"`
+	EntityId string         `json:"entityId" db:"entity_id"`
+	SenderId uuid.UUID      `json:"senderId" db:"sender_id"`
+	Status   sql.NullString `json:"status" db:"status"`
+	Email    string         `json:"email" db:"email_id"`
+	Role     string         `json:"role" db:"role"`
 }

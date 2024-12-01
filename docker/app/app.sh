@@ -12,7 +12,7 @@ CONTAINER=devappbuild
 echo "running from 📂 $DIRECTORY"
 
 # bring up app servers
-docker compose -f $WD/app.yml --env-file $WD/.env -p beskar-app up -d
+docker compose -f $WD/app.yml --verbose --env-file $WD/.env -p beskar-app up -d
 
 
 # building docker file

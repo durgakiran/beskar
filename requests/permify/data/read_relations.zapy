@@ -22,7 +22,7 @@
     {
       "active": true,
       "key": "Authorization",
-      "value": "Bearer {{ctx.store.access_token}}"
+      "value": "Bearer secret"
     },
     {
       "active": false,
@@ -47,13 +47,10 @@
     "        \"snap_token\": \"\"",
     "    },",
     "    \"filter\": {",
-    "        \"relation\": \"owner\",",
-    "        \"subject\": {",
-    "            \"type\": \"user\",",
-    "            \"ids\": [",
-    "                \"6203346b-242e-4d2a-8cf5-af0818fcc748\"",
-    "            ],",
-    "            \"relation\": \"\"",
+    "",
+    "        \"entity\": {",
+    "            \"type\": \"space\",",
+    "            \"ids\": [\"f458794c-7127-4ea1-934c-ab44a8c3bfb0\"]",
     "        }",
     "    }",
     "}"

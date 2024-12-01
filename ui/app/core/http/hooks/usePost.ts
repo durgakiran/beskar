@@ -1,5 +1,7 @@
 import { useCallback, useState } from "react";
 
+const USER_URI = process.env.NEXT_PUBLIC_USER_SERVER_URL;
+
 /**
  *
  * @param path
@@ -13,11 +15,10 @@ export function usePost<T, P>(path: string, headers: Record<string, any> = {}): 
 
     const mutateData = useCallback((payLoad: P) => {
         setIsDataFetching(true);
-        fetch("http://localhost:9095/" + path, {
+        fetch(USER_URI + "/" + path, {
             method: "POST",
-            credentials: "omit",
             body: JSON.stringify(payLoad),
-            headers: { Authorization: `Bearer ${localStorage.getItem("access_token")}`, "Content-Type": "application/json", ...headers },
+            headers: { "Content-Type": "application/json", ...headers },
         })
             .then((res) => {
                 setIsDataFetching(false);
@@ -27,7 +28,7 @@ export function usePost<T, P>(path: string, headers: Record<string, any> = {}): 
                         .then((data) => setData(data as T))
                         .catch((e) => setData(res.text() as T));
                 } else {
-                    setErrors(new Error(`Request failed with status ${res.status}`))
+                    setErrors(new Error(`Request failed with status ${res.status}`));
                 }
             })
             .catch((err) => {

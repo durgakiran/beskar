@@ -5,7 +5,6 @@ import (
 	"errors"
 
 	"github.com/durgakiran/beskar/core"
-	"github.com/google/uuid"
 )
 
 func validateInput(data []byte) (Invite, error) {
@@ -15,13 +14,16 @@ func validateInput(data []byte) (Invite, error) {
 		logger().Error(err.Error())
 		return invite, err
 	}
-	if invite.UserId == uuid.Nil {
+	if invite.Email == "" {
 		return invite, errors.New(core.ErrorCode_name[core.ErrorCode_ERROR_CODE_MISSING_INPUT])
 	}
 	if invite.Entity == "" {
 		return invite, errors.New(core.ErrorCode_name[core.ErrorCode_ERROR_CODE_MISSING_INPUT])
 	}
 	if invite.EntityId == "" {
+		return invite, errors.New(core.ErrorCode_name[core.ErrorCode_ERROR_CODE_MISSING_INPUT])
+	}
+	if invite.Role == "" {
 		return invite, errors.New(core.ErrorCode_name[core.ErrorCode_ERROR_CODE_MISSING_INPUT])
 	}
 	return invite, nil

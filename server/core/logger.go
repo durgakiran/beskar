@@ -5,9 +5,11 @@ import (
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+	"golang.org/x/exp/slog"
 )
 
 var Logger *zap.Logger
+var SlogLogger *slog.Logger
 
 func InitializeLogger() {
 	config := zap.NewDevelopmentEncoderConfig()
@@ -24,4 +26,17 @@ func InitializeLogger() {
 		zapcore.NewCore(fileEncode, writer, defaultLogLevel),
 	)
 	Logger = zap.New(core, zap.AddCaller(), zap.AddStacktrace(zapcore.ErrorLevel))
+}
+
+func InitializeSlogLogger() {
+	opts := &slog.HandlerOptions{
+		AddSource: true,
+		Level:     slog.LevelDebug,
+	}
+	authLogsFile, err := os.OpenFile("logs/authLogs.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		panic(err)
+	}
+	var handler slog.Handler = slog.NewJSONHandler(authLogsFile, opts)
+	SlogLogger = slog.New(handler)
 }

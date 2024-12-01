@@ -1,19 +1,36 @@
 // src/components/SessionGuard.tsx
-"use client";
-import { signIn, useSession } from "next-auth/react";
-import { ReactNode, useEffect } from "react";
+import { redirect } from "next/navigation";
+import { ReactNode, Suspense } from "react";
+import { cookies } from "next/headers";
+import { Spinner } from "flowbite-react";
 
-export default function SessionGuard({ children }: { children: ReactNode }) {
-    const { data, status } = useSession();
-    useEffect(() => {
-        if (status !== "loading") {
-            if (!data || (data as any)?.error === "RefreshAccessTokenError") {
-                signIn("keycloak");
-            } else {
-                localStorage.setItem("access_token", data.accessToken)
-            }
+const USER_URI = process.env.NEXT_PUBLIC_USER_SERVER_URL;
+
+const authenticted = async (cookies: {name: string, value: string}[]) => {
+    const res = await fetch(`${USER_URI}/authenticated`, {
+        method: "GET",
+        cache: "no-cache",
+        redirect: "follow",
+        headers: {
+            Cookie: cookies.map((cookie) => `${cookie.name}=${cookie.value}`).join("; ")
         }
-    }, [data, status]);
+    });
 
-    return <>{children}</>;
+    return res;
+}
+
+export default async function SessionGuard({ children }: { children: ReactNode }) {
+    const cookieStore =  cookies();
+    
+    const res = await authenticted(cookieStore.getAll());
+    if (res.status === 401) {
+        redirect("/auth/login");
+    }
+
+
+    return (
+        <Suspense fallback={<Spinner />}>
+            {children}
+        </Suspense>
+    );
 }

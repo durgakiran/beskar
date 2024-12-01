@@ -74,11 +74,11 @@ func processInvitation(userId string, token string, decision string) error {
 	connPool := core.GetPool()
 	ctx := context.Background()
 	conn, err := connPool.Acquire(ctx)
-	defer conn.Conn().Close(ctx)
 	if err != nil {
 		logger().Error(err.Error())
 		return errors.New(core.ErrorCode_name[core.ErrorCode_ERROR_CODE_CONNECTION_ISSUE])
 	}
+	defer conn.Release()
 	rows, err := conn.Query(ctx, GET_TOKEN_STATUS, userId, token)
 	if err != nil {
 		logger().Error(err.Error())
@@ -97,14 +97,6 @@ func processInvitation(userId string, token string, decision string) error {
 	if invite.Status.Valid {
 		return errors.New(core.ErrorCode_name[core.ErrorCode_ERROR_CODE_INVALID_INPUT])
 	} else {
-		// switch invite.Status.String {
-		// case STATUS_ACCEPTED:
-		// 	return errors.New(core.ErrorCode_name[core.ErrorCode_ERROR_CODE_INVALID_INPUT])
-		// case STATUS_REJECTED:
-		// 	return errors.New(core.ErrorCode_name[core.ErrorCode_ERROR_CODE_INVALID_INPUT])
-		// case STATUS_REMOVED:
-		// 	return errors.New(core.ErrorCode_name[core.ErrorCode_ERROR_CODE_INVALID_INPUT])
-		// }
 		switch decision {
 		case STATUS_ACCEPTED:
 			return invite._acceptInvitation(userId, token, conn)
@@ -117,30 +109,70 @@ func processInvitation(userId string, token string, decision string) error {
 	return errors.New(core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNSPECIFIED])
 }
 
+func (i Invite) removeInvitation() error {
+	connPool := core.GetPool()
+	ctx := context.Background()
+	conn, err := connPool.Acquire(ctx)
+	if err != nil {
+		logger().Error(err.Error())
+		return errors.New(core.ErrorCode_name[core.ErrorCode_ERROR_CODE_CONNECTION_ISSUE])
+	}
+	defer conn.Release()
+	tag, err := conn.Exec(context.Background(), REMOVE_INVITATION, i.SenderId, i.Email, i.EntityId, i.Role)
+	if err != nil {
+		logger().Error(err.Error())
+		return errors.New(core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNSPECIFIED])
+	}
+	rowsAffected := tag.RowsAffected()
+	logger().Info(fmt.Sprintf("Updated rows %v", rowsAffected))
+	return nil
+}
+
 func (i Invite) invite() (string, error) {
 	token := i.token()
 	if token == "" {
 		logger().Error("unable to create token")
 		return token, errors.New(core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNSPECIFIED])
 	}
-	exists, err := core.CheckPermission(i.Entity, i.EntityId, "user", i.UserId.String(), "view")
+	users, err := core.SearchUserByEmail(i.Email, 1, 0)
 	if err != nil {
-		return token, errors.New(core.ErrorCode_name[core.ErrorCode_ERROR_CODE_PERMISSION_SERVER_ISSUE])
+		logger().Error(err.Error())
 	}
-	if exists {
-		return token, errors.New(core.ErrorCode_name[core.ErrorCode_ERROR_CODE_INVALID_INPUT])
+	for _, user := range users.Result {
+		if user.Human.Email.Email == i.Email {
+			id, err := core.GetBeskarUser(user.UserId)
+			if err != nil {
+				logger().Error(err.Error())
+			} else {
+				i.UserId = uuid.MustParse(id)
+			}
+		}
+	}
+	if i.UserId != uuid.Nil {
+		permissions := core.GetSubjectPermissionList(i.Entity, i.EntityId, "user", i.UserId.String())
+		if len(permissions) != 0 {
+			logger().Error("user is already a member of the space")
+			// user is already a member of the space
+			return token, errors.New(core.ErrorCode_name[core.ErrorCode_ERROR_CODE_INVALID_INPUT])
+		}
 	}
 	connPool := core.GetPool()
 	ctx := context.Background()
-	tx, err := connPool.Begin(ctx)
+	conn, err := connPool.Acquire(ctx)
 	if err != nil {
-		logger().Error(err.Error())
+		logger().Error("Unable to acquire a connection: " + err.Error())
 		return token, err
 	}
-
+	tx, err := conn.Begin(ctx)
+	if err != nil {
+		logger().Error(err.Error())
+		defer conn.Release()
+		return token, err
+	}
 	defer tx.Rollback(ctx)
+	defer conn.Release()
 	// create entry in the database
-	tag, err := tx.Exec(ctx, CREATE_INVITE, i.SenderId, token, i.UserId, i.Entity, i.EntityId)
+	tag, err := tx.Exec(ctx, CREATE_INVITE, i.SenderId, token, i.UserId, i.Entity, i.EntityId, i.Email, i.Role)
 	if err != nil {
 		logger().Error(err.Error())
 		return token, err
@@ -156,7 +188,7 @@ func (i Invite) invite() (string, error) {
 }
 
 func (i Invite) token() string {
-	str := i.Entity + i.EntityId + i.UserId.String() + i.SenderId.String()
+	str := i.Entity + i.EntityId + i.Email + i.SenderId.String() + i.Role
 	h := md5.New()
 	_, err := h.Write([]byte(str))
 	if err != nil {
@@ -164,4 +196,27 @@ func (i Invite) token() string {
 	}
 	hashValue := h.Sum(nil)
 	return hex.EncodeToString(hashValue)
+}
+
+func getSpaceInvites(spaceId uuid.UUID) ([]InviteDBOV3, error) {
+	connPool := core.GetPool()
+	ctx := context.Background()
+	conn, err := connPool.Acquire(ctx)
+	if err != nil {
+		logger().Error(err.Error())
+		return nil, errors.New(core.ErrorCode_name[core.ErrorCode_ERROR_CODE_CONNECTION_ISSUE])
+	}
+	defer conn.Release()
+	rows, err := conn.Query(ctx, GET_INVITES_QUERY, spaceId)
+	if err != nil {
+		logger().Error(err.Error())
+		return nil, errors.New(core.ErrorCode_name[core.ErrorCode_ERROR_WHILE_FETCHING_ROWS])
+	}
+	defer rows.Close()
+	invites, err := pgx.CollectRows(rows, pgx.RowToStructByNameLax[InviteDBOV3])
+	if err != nil {
+		logger().Error(err.Error())
+		return nil, errors.New(core.ErrorCode_name[core.ErrorCode_ERROR_WHILE_READING_ROWS])
+	}
+	return invites, nil
 }

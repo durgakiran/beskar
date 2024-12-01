@@ -16,8 +16,12 @@ func logger() *zap.Logger {
 }
 
 func sendFailedReponse(w http.ResponseWriter, r *http.Request, code int, message string) {
+	status, statusCode := core.GetStatus(message)
+	if code == http.StatusInternalServerError {
+		code = statusCode
+	}
 	render.Status(r, code)
-	render.Render(w, r, core.NewFailedResponse(int(core.GetStatus(message)), core.FAILURE, message))
+	render.Render(w, r, core.NewFailedResponse(int(status), core.FAILURE, core.FAILURE, message))
 }
 
 func sendSuccessResponse(w http.ResponseWriter, r *http.Request, code int, data interface{}) {
@@ -27,19 +31,23 @@ func sendSuccessResponse(w http.ResponseWriter, r *http.Request, code int, data 
 
 func acceptInvitation(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	claims, ok := ctx.Value("claims").(core.Claims)
-	if !ok {
-		sendFailedReponse(w, r, http.StatusForbidden, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNAUTHORIZED])
+	user, err := core.GetUserInfo(ctx)
+	if err != nil {
+		core.SendFailedReponse(w, r, http.StatusForbidden, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNAUTHORIZED])
 		return
 	}
-	userId := claims.Claims.UserId
+	if user.Id == "" {
+		core.SendFailedReponse(w, r, http.StatusForbidden, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNAUTHORIZED])
+		return
+	}
+	userId := user.AId
 	token := r.URL.Query().Get("token")
 	if token == "" {
 		sendFailedReponse(w, r, http.StatusBadRequest, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNAUTHORIZED])
 		return
 	}
 	// process token
-	err := processInvitation(userId, token, STATUS_ACCEPTED)
+	err = processInvitation(userId, token, STATUS_ACCEPTED)
 	if err != nil {
 		sendFailedReponse(w, r, http.StatusForbidden, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNAUTHORIZED])
 		return
@@ -49,28 +57,27 @@ func acceptInvitation(w http.ResponseWriter, r *http.Request) {
 
 func createInvitation(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	claims, ok := ctx.Value("claims").(core.Claims)
-	if !ok {
-		sendFailedReponse(w, r, http.StatusForbidden, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNAUTHORIZED])
+	user, err := core.GetUserInfo(ctx)
+	if err != nil {
+		core.SendFailedReponse(w, r, http.StatusForbidden, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNAUTHORIZED])
 		return
 	}
-	userId := claims.Claims.UserId
+	if user.Id == "" {
+		core.SendFailedReponse(w, r, http.StatusForbidden, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNAUTHORIZED])
+		return
+	}
+	userId := user.AId
 	data, err := io.ReadAll(r.Body)
 	defer r.Body.Close()
 	if err != nil {
 		logger().Error(err.Error())
-		sendFailedReponse(w, r, http.StatusBadRequest, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNAUTHORIZED])
+		sendFailedReponse(w, r, http.StatusBadRequest, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_INVALID_INPUT])
 		return
 	}
 	invite, err := validateInput(data)
-	if invite.UserId == uuid.Nil {
-		logger().Error("Invalid user id")
-		sendFailedReponse(w, r, http.StatusBadRequest, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNAUTHORIZED])
-		return
-	}
-	if invite.EntityId == "" {
-		logger().Error("Invalid entity id")
-		sendFailedReponse(w, r, http.StatusBadRequest, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNAUTHORIZED])
+	if err != nil {
+		logger().Error(err.Error())
+		sendFailedReponse(w, r, http.StatusBadRequest, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_MISSING_INPUT])
 		return
 	}
 	invite.SenderId = uuid.MustParse(userId)
@@ -82,7 +89,7 @@ func createInvitation(w http.ResponseWriter, r *http.Request) {
 	}
 	token, err := invite.invite()
 	if err != nil {
-		sendFailedReponse(w, r, http.StatusInternalServerError, err.Error())
+		core.SendFailedReponse(w, r, 0, err.Error())
 		return
 	}
 	sendSuccessResponse(w, r, http.StatusOK, token)
@@ -90,19 +97,23 @@ func createInvitation(w http.ResponseWriter, r *http.Request) {
 
 func rejectInvitation(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	claims, ok := ctx.Value("claims").(core.Claims)
-	if !ok {
-		sendFailedReponse(w, r, http.StatusForbidden, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNAUTHORIZED])
+	user, err := core.GetUserInfo(ctx)
+	if err != nil {
+		core.SendFailedReponse(w, r, http.StatusForbidden, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNAUTHORIZED])
 		return
 	}
-	userId := claims.Claims.UserId
+	if user.Id == "" {
+		core.SendFailedReponse(w, r, http.StatusForbidden, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNAUTHORIZED])
+		return
+	}
+	userId := user.AId
 	token := r.URL.Query().Get("token")
 	if token == "" {
 		sendFailedReponse(w, r, http.StatusBadRequest, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNAUTHORIZED])
 		return
 	}
 	// process token
-	err := processInvitation(userId, token, STATUS_REJECTED)
+	err = processInvitation(userId, token, STATUS_REJECTED)
 	if err != nil {
 		sendFailedReponse(w, r, http.StatusForbidden, err.Error())
 		return
@@ -112,19 +123,36 @@ func rejectInvitation(w http.ResponseWriter, r *http.Request) {
 
 func removeInvitation(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	claims, ok := ctx.Value("claims").(core.Claims)
-	if !ok {
-		sendFailedReponse(w, r, http.StatusForbidden, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNAUTHORIZED])
+	user, err := core.GetUserInfo(ctx)
+	if err != nil {
+		core.SendFailedReponse(w, r, http.StatusForbidden, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNAUTHORIZED])
 		return
 	}
-	userId := claims.Claims.UserId
-	token := r.URL.Query().Get("token")
-	if token == "" {
-		sendFailedReponse(w, r, http.StatusBadRequest, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNAUTHORIZED])
+	if user.Id == "" {
+		core.SendFailedReponse(w, r, http.StatusForbidden, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNAUTHORIZED])
 		return
 	}
-	// process token
-	err := processInvitation(userId, token, STATUS_REMOVED)
+	userId := user.AId
+	userIDUUID := uuid.MustParse(userId)
+	data, err := io.ReadAll(r.Body)
+	defer r.Body.Close()
+	if err != nil {
+		logger().Error(err.Error())
+		sendFailedReponse(w, r, http.StatusBadRequest, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_INVALID_INPUT])
+		return
+	}
+	invite, err := validateInput(data)
+	if err != nil {
+		logger().Error(err.Error())
+		core.SendFailedReponse(w, r, http.StatusBadRequest, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_MISSING_INPUT])
+		return
+	}
+	isAllowed := core.ValidateUserSpacePermissions(uuid.MustParse(invite.EntityId), userIDUUID, core.SPACE_INVITE_MEMBER)
+	if !isAllowed {
+		core.SendFailedReponse(w, r, http.StatusForbidden, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNAUTHORIZED])
+		return
+	}
+	err = invite.removeInvitation()
 	if err != nil {
 		sendFailedReponse(w, r, http.StatusForbidden, err.Error())
 		return
@@ -132,12 +160,41 @@ func removeInvitation(w http.ResponseWriter, r *http.Request) {
 	sendSuccessResponse(w, r, http.StatusOK, "")
 }
 
+func listSpaceInvites(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	user, err := core.GetUserInfo(ctx)
+	if err != nil {
+		core.SendFailedReponse(w, r, http.StatusForbidden, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNAUTHORIZED])
+		return
+	}
+	if user.Id == "" {
+		core.SendFailedReponse(w, r, http.StatusForbidden, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNAUTHORIZED])
+		return
+	}
+	userId := user.AId
+	userIDUUID := uuid.MustParse(userId)
+	spaceId := uuid.MustParse(chi.URLParam(r, "spaceId"))
+	// check permission allowed only for space admin or owner
+	isAllowed := core.ValidateUserSpacePermissions(spaceId, userIDUUID, core.SPACE_INVITE_MEMBER)
+	if !isAllowed {
+		core.SendFailedReponse(w, r, http.StatusForbidden, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNAUTHORIZED])
+		return
+	}
+	data, err := getSpaceInvites(spaceId)
+	if err != nil {
+		core.SendFailedReponse(w, r, http.StatusInternalServerError, err.Error())
+		return
+	}
+	core.SendSuccessResponse(w, r, http.StatusOK, data)
+}
+
 func Router() *chi.Mux {
 	r := chi.NewRouter()
-	r.Use(core.AuthMiddleWare)
+	r.Use(core.Authenticated)
 	r.Post("/user/create", createInvitation)
 	r.Get("/user/accept", acceptInvitation)
 	r.Get("/user/reject", rejectInvitation)
-	r.Get("/user/remove", removeInvitation)
+	r.Delete("/user/remove", removeInvitation)
+	r.Get("/space/{spaceId}/list", listSpaceInvites)
 	return r
 }

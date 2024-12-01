@@ -226,3 +226,29 @@ func CheckPermission(entity string, entityId string, subject string, subjectId s
 	}
 	return cr.Can == permify_payload.CheckResult_CHECK_RESULT_ALLOWED, nil
 }
+
+func GetSubjectsAssociatedWithEntity(entity string, entityId string) ([]*permify_payload.Tuple, error) {
+
+	client := GetPermifyInstance()
+	data, err := client.Data.ReadRelationships(
+		context.Background(),
+		&permify_payload.RelationshipReadRequest{
+			TenantId: "t1",
+			Metadata: &permify_payload.RelationshipReadRequestMetadata{
+				SnapToken: "",
+			},
+			Filter: &permify_payload.TupleFilter{
+				Entity: &permify_payload.EntityFilter{
+					Type: entity,
+					Ids:  []string{entityId},
+				},
+			},
+		},
+	)
+
+	if err != nil {
+		Logger.Error(err.Error())
+		return nil, err
+	}
+	return data.Tuples, nil
+}

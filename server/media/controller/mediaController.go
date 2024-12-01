@@ -1,7 +1,6 @@
 package media
 
 import (
-	"log/slog"
 	"net/http"
 
 	"github.com/durgakiran/beskar/core"
@@ -19,9 +18,9 @@ func getImage(w http.ResponseWriter, r *http.Request) {
 	imageId := chi.URLParam(r, "imageid")
 	data, err := media.GetImage(imageId)
 	if err != nil {
-		slog.Error("Error retrieving file: %s", err)
+		core.Logger.Error("Error retrieving file: " + err.Error())
 		render.Status(r, http.StatusNoContent)
-		render.Render(w, r, core.NewFailedResponse(http.StatusNoContent, err.Error(), ""))
+		render.Render(w, r, core.NewFailedResponse(http.StatusNoContent, core.FAILURE, err.Error(), ""))
 		return
 	}
 
@@ -33,9 +32,9 @@ func getImage(w http.ResponseWriter, r *http.Request) {
 func saveImage(w http.ResponseWriter, r *http.Request) {
 	file, header, err := r.FormFile("file")
 	if err != nil {
-		slog.Error("Error retrieving file: %s", err)
+		core.Logger.Error("Error retrieving file: " + err.Error())
 		render.Status(r, http.StatusInternalServerError)
-		render.Render(w, r, core.NewFailedResponse(500, err.Error(), ""))
+		render.Render(w, r, core.NewFailedResponse(500, core.FAILURE, err.Error(), ""))
 		return
 	}
 	defer file.Close()
@@ -43,7 +42,7 @@ func saveImage(w http.ResponseWriter, r *http.Request) {
 	err = image.SaveImage()
 	if err != nil {
 		render.Status(r, http.StatusInternalServerError)
-		render.Render(w, r, core.NewFailedResponse(500, err.Error(), ""))
+		render.Render(w, r, core.NewFailedResponse(500, core.FAILURE, err.Error(), ""))
 		return
 	}
 	data := fileNameType{
