@@ -25,17 +25,16 @@ interface Invite {
 
 export default function Page({ params }: { params: { spaceId: string } }) {
     const [{ isLoading, data, errors }, fetchData] = useGet<Response<Invite[]>>(`invite/space/${params.spaceId}/list`);
-    const [ { data: profileData, errors: profileErrors, isLoading: profileLoading }, getProfile ] = useGet<Response<User[]>>(`profile/details`);
+    const [{ data: profileData, errors: profileErrors, isLoading: profileLoading }, getProfile] = useGet<Response<User[]>>(`profile/details`);
 
     const refresh = () => {
         fetchData();
-    }
+    };
 
     useEffect(() => {
         fetchData();
         getProfile();
     }, []);
-
 
     if (isLoading || profileLoading) {
         return (
@@ -52,7 +51,7 @@ export default function Page({ params }: { params: { spaceId: string } }) {
                 <Breadcrumb.Item href="#">Invites</Breadcrumb.Item>
             </Breadcrumb>
             <div className="mt-4 flex flex-row justify-between items-center">
-                <h2>Invited Users</h2>
+                <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Invited Users</h2>
             </div>
             <div className="overflow-x-auto mt-4">
                 <Table>
@@ -64,13 +63,12 @@ export default function Page({ params }: { params: { spaceId: string } }) {
                     <Table.Body className="divide-y">
                         {data && data.data
                             ? data.data.map((user: Invite) => {
-                                  return (
-                                      <InvitedUserRow key={user.email} user={user} refresh={refresh} />
-                                  );
+                                  return <InvitedUserRow key={user.email} user={user} refresh={refresh} />;
                               })
                             : null}
                     </Table.Body>
                 </Table>
+                {data && data.data && data.data.length === 0 ? <div className="text-center mt-4 mb-4 text-lg text-gray-700">No invites</div> : null}
             </div>
         </div>
     );

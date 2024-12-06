@@ -31,7 +31,7 @@ export default function Page() {
                 <Breadcrumb.Item href="#">User</Breadcrumb.Item>
                 <Breadcrumb.Item href="#">Notifications</Breadcrumb.Item>
             </Breadcrumb>
-            <h2>Notifications</h2>
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Notifications</h2>
             <div className="dark:bg-gray-800">
                 {isLoading ? (
                     <div className="m-auto">
@@ -57,6 +57,7 @@ export default function Page() {
                                     : null}
                             </Table.Body>
                         </Table>
+                        {data && data.data && data.data.invites && data.data.invites.length === 0 ? <div className="text-center mt-4 mb-4 text-lg text-gray-700">There are no invitations</div> : null}
                     </div>
                 )}
             </div>

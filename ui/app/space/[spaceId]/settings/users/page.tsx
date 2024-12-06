@@ -71,7 +71,7 @@ export default function Page({ params }: { params: { spaceId: string } }) {
                 <Breadcrumb.Item href="#">Users</Breadcrumb.Item>
             </Breadcrumb>
             <div className="mt-4 flex flex-row justify-between items-center">
-                <h2>Active Users</h2>
+                <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Active Users</h2>
                 {data && data.data
                     ? data.data
                           .filter((user: User) => user.id === profileData.data.id)
@@ -107,7 +107,7 @@ export default function Page({ params }: { params: { spaceId: string } }) {
                                           <Table.Cell>{user.email}</Table.Cell>
                                           <Table.Cell>{user.role}</Table.Cell>
                                           <Table.Cell>
-                                              <Button outline color="red" size={"xs"}>
+                                              <Button outline color="red" size={"xs"} disabled>
                                                   <Icon className="color-red" name="BadgeX" />
                                               </Button>
                                           </Table.Cell>
