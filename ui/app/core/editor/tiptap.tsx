@@ -70,9 +70,6 @@ const extensions = [
         types: ["heading", "paragraph"],
         alignments: ["left", "right", "center", "justify"],
     }),
-    Collaboration.configure({
-        document: doc,
-    }),
     Paragraph,
     blockQuote,
     Text,
@@ -130,21 +127,30 @@ export function TipTap({ setEditorContext, user, content, pageId, id, editable =
     const debouncedValue = useDebounce(editedData, 10000);
     const debouncedTitle = useDebounce(title, 10000);
     const [updated, setUpdated] = useState(false);
-    // const [status, res] = useGetCall<UserInfo>(USER_URI + "/profile/details");
 
     const editedDataFn = (data: JSONContent) => {
         console.log(data);
         setEditedData(data);
-    }
+    };
+
+    useEffect(() => {
+        console.log("rendered");
+    }, []);
 
     const editor = useEditor({
-        extensions: [
-            ...extensions, 
-            CollaborationCursor.configure({
-                provider,
-                user: { name: user ? user.name : "", color: "#ffcc00" },
-            })
-        ],
+        extensions: extensions.concat(
+            editable
+                ? [
+                      Collaboration.configure({
+                          document: provider.document,
+                      }),
+                      CollaborationCursor.configure({
+                          provider,
+                          user: { name: user ? user.name : "", color: `#${Math.floor(Math.random() * 16777215).toString(16)}` },
+                      }),
+                  ]
+                : [],
+        ),
         content: content,
         editable: editable,
         onUpdate: ({ editor }) => {

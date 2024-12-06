@@ -2,10 +2,12 @@
 import InviteUser from "@components/settings/inviteUser";
 import User from "@components/settings/User";
 import { Icon } from "@components/ui/Icon";
+import ToastComponent from "@components/ui/ToastComponent";
 import { Response, useGet, usePost } from "@http/hooks";
-import { Breadcrumb, Button, Spinner, Table } from "flowbite-react";
+import { Breadcrumb, Button, Spinner, Table, Toast } from "flowbite-react";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
+import { HiExclamation } from "react-icons/hi";
 
 interface User {
     id: string;
@@ -24,11 +26,10 @@ interface Invite {
 
 export default function Page({ params }: { params: { spaceId: string } }) {
     const router = usePathname();
-    const [ openModal, setOpenModal ] = useState(false);
+    const [openModal, setOpenModal] = useState(false);
     const [{ isLoading, data, errors }, fetchData] = useGet<Response<User[]>>(`space/${params.spaceId}/users`);
-    const [ { data: profileData, errors: profileErrors, isLoading: profileLoading }, getProfile ] = useGet<Response<User>>(`profile/details`);
-    const [ { isLoading: inviteLoading, data: inviteData, errors: inviteErrors } , sendInvite] = usePost<string, Invite>(`invite/user/create`);
-
+    const [{ data: profileData, errors: profileErrors, isLoading: profileLoading }, getProfile] = useGet<Response<User>>(`profile/details`);
+    const [{ isLoading: inviteLoading, data: inviteData, errors: inviteErrors }, sendInvite] = usePost<string, Invite>(`invite/user/create`);
 
     const handleInvite = (email: string, role: string) => {
         setOpenModal(false);
@@ -37,10 +38,10 @@ export default function Page({ params }: { params: { spaceId: string } }) {
             role: role,
             entityId: params.spaceId,
             entity: "space",
-            senderId: profileData.data.id
-        }
+            senderId: profileData.data.id,
+        };
         sendInvite(invite);
-    }
+    };
 
     useEffect(() => {
         fetchData();
@@ -49,11 +50,11 @@ export default function Page({ params }: { params: { spaceId: string } }) {
 
     useEffect(() => {
         console.log(profileData);
-    }, [profileData])
+    }, [profileData]);
 
     useEffect(() => {
         console.log(inviteData, inviteErrors);
-    }, [inviteData, inviteErrors])
+    }, [inviteData, inviteErrors]);
 
     if (isLoading || profileLoading) {
         return (
@@ -71,15 +72,19 @@ export default function Page({ params }: { params: { spaceId: string } }) {
             </Breadcrumb>
             <div className="mt-4 flex flex-row justify-between items-center">
                 <h2>Active Users</h2>
-                {
-                    data && data.data ? data.data.filter((user: User) => user.id === profileData.data.id).map((user: User) => {
-                        if (user.role === "owner" || user.role === "admin") {
-                            return (
-                                <Button key={user.id} size="xs" onClick={() => setOpenModal(true)} outline><Icon name="Plus" className="mr-2 h-5 w-5" />  User</Button>
-                            )
-                        }
-                    }) : null
-                }
+                {data && data.data
+                    ? data.data
+                          .filter((user: User) => user.id === profileData.data.id)
+                          .map((user: User) => {
+                              if (user.role === "owner" || user.role === "admin") {
+                                  return (
+                                      <Button key={user.id} size="xs" onClick={() => setOpenModal(true)} outline>
+                                          <Icon name="Plus" className="mr-2 h-5 w-5" /> User
+                                      </Button>
+                                  );
+                              }
+                          })
+                    : null}
             </div>
             <div className="overflow-x-auto mt-4">
                 <Table>
@@ -114,6 +119,8 @@ export default function Page({ params }: { params: { spaceId: string } }) {
                 </Table>
             </div>
             <InviteUser open={openModal} setOpen={setOpenModal} handleInvite={handleInvite} />
+            {inviteErrors && <ToastComponent icon="AlertTriangle" message="Unable to invite user" toggle type="warning" />}
+            {inviteData && <ToastComponent icon="Check" message="Successfully invited user to space" toggle type="success" />}
         </div>
     );
 }

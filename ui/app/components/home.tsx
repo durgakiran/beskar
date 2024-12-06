@@ -14,7 +14,7 @@ const get = async (cookies: { name: string; value: string }[]) => {
     });
 
 
-    if (res.status === 401) {
+    if (res.status < 200 || res.status > 300) {
         return {
             response: res.status,
             data: null,

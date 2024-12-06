@@ -52,7 +52,7 @@ export default function Page({ params }: { params: { spaceId: string } }) {
                 <Breadcrumb.Item href="#">Invites</Breadcrumb.Item>
             </Breadcrumb>
             <div className="mt-4 flex flex-row justify-between items-center">
-                <h2>Active Users</h2>
+                <h2>Invited Users</h2>
             </div>
             <div className="overflow-x-auto mt-4">
                 <Table>
