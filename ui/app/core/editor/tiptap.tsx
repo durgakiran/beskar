@@ -130,7 +130,7 @@ export function TipTap({ setEditorContext, user, content, pageId, id, editable =
                 Collaboration.configure({
                     document: provider.document,
                 }),
-                CollaborationCursor.configure({
+                CollaborationCursor.extend().configure({
                     provider: provider,
                     user: { name: user ? user.name : "", color: `#${Math.floor(Math.random() * 16777215).toString(16)}` },
                 }),
