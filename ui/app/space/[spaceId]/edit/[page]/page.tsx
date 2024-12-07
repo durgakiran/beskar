@@ -13,13 +13,11 @@ export default function Page({ params }: { params: PageParams }) {
     useEffect(() => {
         workerRef.current = new Worker("/workers/editor.js", { type: "module" });
         workerRef.current.onmessage = (e) => {
-            console.log(e);
             switch (e.data.type) {
                 case "initiated":
                     setWorkerInitiated(true);
                     break;
                 case "editorData":
-                    console.log(JSON.parse(e.data.data));
                     setContent(JSON.parse(e.data.data));
                     break;
                 default:
@@ -27,7 +25,7 @@ export default function Page({ params }: { params: PageParams }) {
             }
         };
         workerRef.current.onerror = (e) => {
-            console.log(e);
+            console.error(e);
         };
         workerRef.current.postMessage({ type: "init" });
         return () => {
@@ -43,7 +41,6 @@ export default function Page({ params }: { params: PageParams }) {
 
     useEffect(() => {
         if (data) {
-            console.log(data);
             workerRef.current.postMessage({ type: "doc", data: data.data });
         }
     }, [data]);
@@ -73,6 +70,8 @@ export default function Page({ params }: { params: PageParams }) {
                     editable={false}
                     updateContent={(content, title) => console.log(content, title)}
                     setEditorContext={() => {}}
+                    provider={null}
+                    user={null}
                 />
             </div>
         );

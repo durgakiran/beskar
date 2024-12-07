@@ -48,13 +48,6 @@ export default function Page({ params }: { params: { spaceId: string } }) {
         getProfile();
     }, []);
 
-    useEffect(() => {
-        console.log(profileData);
-    }, [profileData]);
-
-    useEffect(() => {
-        console.log(inviteData, inviteErrors);
-    }, [inviteData, inviteErrors]);
 
     if (isLoading || profileLoading) {
         return (

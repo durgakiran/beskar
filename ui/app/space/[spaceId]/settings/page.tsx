@@ -18,10 +18,6 @@ export default function Page({ params }: { params: { spaceId: string } }) {
         fetchData();
     }, []);
 
-    useEffect(() => {
-        console.log(data);
-    }, [data]);
-
     if (isLoading) {
         return (
             <div>

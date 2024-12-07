@@ -28,8 +28,7 @@ import blockQuote from "@tiptap/extension-blockquote";
 import { Button, Tooltip } from "flowbite-react";
 import { GrStrikeThrough, GrItalic, GrBold } from "react-icons/gr";
 import { useDebounce } from "app/core/hooks/debounce";
-import { useEffect, useRef, useState } from "react";
-import { useGetCall } from "@http";
+import {  useEffect, useMemo, useRef, useState } from "react";
 import { BubbleMenu } from "./bubbleMenu/bubbleMenu";
 import "./styles.css";
 import { ModifiedUnderlineIcon } from "./Button/modifiedIconButton";
@@ -40,18 +39,9 @@ import { CustomInput } from "./note/Note";
 import { TableColumnMenu, TableRowMenu } from "./Table/menus";
 import { Table, TableCell, TableHeader, TableRow } from "./Table";
 import { NodeIdExtension } from "@editor/extensions";
-import * as Y from "yjs";
 import { HocuspocusProvider } from "@hocuspocus/provider";
 import Collaboration from "@tiptap/extension-collaboration";
 import CollaborationCursor from "@tiptap/extension-collaboration-cursor";
-
-const doc = new Y.Doc();
-
-const provider = new HocuspocusProvider({
-    url: "ws://app.tededox.com:1234",
-    name: "example-document",
-    document: doc,
-});
 
 const extensions = [
     Bold,
@@ -109,10 +99,10 @@ interface TipTapProps {
     editable?: boolean;
     title: string;
     updateContent: (content: any, title: string) => void;
+    provider: HocuspocusProvider;
 }
 
 const MAX_DEFAULT_WIDTH = 760;
-const USER_URI = process.env.NEXT_PUBLIC_USER_SERVER_URL;
 
 interface UserInfo {
     email: string;
@@ -121,37 +111,55 @@ interface UserInfo {
     username: string;
 }
 
-export function TipTap({ setEditorContext, user, content, pageId, id, editable = true, title, updateContent }: TipTapProps) {
+export function TipTap({ setEditorContext, user, content, pageId, id, editable = true, title, updateContent, provider }: TipTapProps) {
     const [editedData, setEditedData] = useState(null);
     const menuContainerRef = useRef(null);
     const debouncedValue = useDebounce(editedData, 10000);
     const debouncedTitle = useDebounce(title, 10000);
     const [updated, setUpdated] = useState(false);
+    const countRenderRef = useRef(0);
+    countRenderRef.current += 1;
 
     const editedDataFn = (data: JSONContent) => {
-        console.log(data);
         setEditedData(data);
     };
 
-    useEffect(() => {
-        console.log("rendered");
-    }, []);
+    const collabExtensions = useMemo(() => {
+        if (provider) {
+            return [
+                Collaboration.configure({
+                    document: provider.document,
+                }),
+                CollaborationCursor.configure({
+                    provider: provider,
+                    user: { name: user ? user.name : "", color: `#${Math.floor(Math.random() * 16777215).toString(16)}` },
+                }),
+            ];
+        } else {
+            return [];
+        }
+    }, [provider, user]);
+
+    const manageContent = useMemo(() => {
+        if (editable) {
+            return {
+                onCreate: ({ editor: currentEditor }: { editor: Editor }) => {
+                    if (!provider.document.getMap("config").get("initialContentLoaded")) {
+                        provider.document.getMap("config").set("initialContentLoaded", true);
+                        currentEditor.commands.setContent(content);
+                    }
+                },
+            };
+        } else {
+            return { content: content };
+        }
+    }, [editable, provider]);
 
     const editor = useEditor({
-        extensions: extensions.concat(
-            editable
-                ? [
-                      Collaboration.configure({
-                          document: provider.document,
-                      }),
-                      CollaborationCursor.configure({
-                          provider,
-                          user: { name: user ? user.name : "", color: `#${Math.floor(Math.random() * 16777215).toString(16)}` },
-                      }),
-                  ]
-                : [],
-        ),
-        content: content,
+        immediatelyRender: true,
+        shouldRerenderOnTransaction: false,
+        extensions: extensions.concat(editable ? collabExtensions : []),
+        ...manageContent,
         editable: editable,
         onUpdate: ({ editor }) => {
             setUpdated(true);
@@ -184,20 +192,10 @@ export function TipTap({ setEditorContext, user, content, pageId, id, editable =
     });
 
     useEffect(() => {
-        console.log(updated, editable);
         if (updated && editable) {
             updateContent(debouncedValue, debouncedTitle);
         }
     }, [debouncedValue, debouncedTitle]);
-
-    useEffect(() => {
-        if (content && editor) {
-            setTimeout(() => {
-                editor.commands.setContent(content);
-                console.log(editor.getJSON());
-            });
-        }
-    }, [content, editor]);
 
     useEffect(() => {
         setEditorContext(editor);
@@ -205,6 +203,7 @@ export function TipTap({ setEditorContext, user, content, pageId, id, editable =
 
     return (
         <div ref={menuContainerRef}>
+            <div>Rendered: {countRenderRef.current}</div>
             {editor && (
                 <BubbleMenu className="bubble-menu" editor={editor} tippyOptions={{ duration: 100 }}>
                     <Tooltip content="Bold">

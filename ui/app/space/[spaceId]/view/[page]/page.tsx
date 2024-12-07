@@ -29,13 +29,11 @@ export default function Page({ params }: { params: { page: string; spaceId: stri
     useEffect(() => {
         workerRef.current = new Worker("/workers/editor.js", { type: "module" });
         workerRef.current.onmessage = (e) => {
-            console.log(e);
             switch (e.data.type) {
                 case "initiated":
                     setWorkerInitiated(true);
                     break;
                 case "editorData":
-                    console.log(JSON.parse(e.data.data));
                     setContent(JSON.parse(e.data.data));
                     break;
                 default:
@@ -43,7 +41,7 @@ export default function Page({ params }: { params: { page: string; spaceId: stri
             }
         };
         workerRef.current.onerror = (e) => {
-            console.log(e);
+            console.error(e);
         };
         workerRef.current.postMessage({ type: "init" });
         return () => {
@@ -119,6 +117,8 @@ export default function Page({ params }: { params: { page: string; spaceId: stri
                         content={content}
                         pageId={params.page}
                         id={data.data.docId}
+                        provider={null}
+                        user={null}
                     />
                 </div>
             )}
