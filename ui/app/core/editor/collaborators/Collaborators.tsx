@@ -7,9 +7,6 @@ export interface CollaboratorsProps {
 }
 
 export default function Collaborators(props: CollaboratorsProps) {
-    useEffect(() => {
-        console.log(props);
-    }, [props]);
 
     if (props && props.collaborators && props.collaborators.length > 0) {
         return (

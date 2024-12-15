@@ -5,9 +5,6 @@ import { useEffect } from "react";
 export default function SideNav(param: { id: string }) {
     const pathName = usePathname();
 
-    useEffect((() => {
-        console.log(pathName.split("/")[-1])
-    }))
 
     return (
         <div>

@@ -1,5 +1,5 @@
 "use client";
-import { Editor, EditorContent, useEditor } from "@tiptap/react";
+import { Editor, EditorContent, JSONContent, useEditor } from "@tiptap/react";
 import Typography from "@tiptap/extension-typography";
 import TextAlign from "@tiptap/extension-text-align";
 import Paragraph from "@tiptap/extension-paragraph";
@@ -28,10 +28,7 @@ import blockQuote from "@tiptap/extension-blockquote";
 import { Button, Tooltip } from "flowbite-react";
 import { GrStrikeThrough, GrItalic, GrBold } from "react-icons/gr";
 import { useDebounce } from "app/core/hooks/debounce";
-import { useEffect, useRef, useState } from "react";
-import { GRAPHQL_UPDATE_DOC_DATA, GRAPHQL_UPDATE_DOC_TITLE } from "@queries/space";
-import { client, useGetCall } from "@http";
-import { useMutation } from "@apollo/client";
+import {  useEffect, useMemo, useRef, useState } from "react";
 import { BubbleMenu } from "./bubbleMenu/bubbleMenu";
 import "./styles.css";
 import { ModifiedUnderlineIcon } from "./Button/modifiedIconButton";
@@ -42,18 +39,8 @@ import { CustomInput } from "./note/Note";
 import { TableColumnMenu, TableRowMenu } from "./Table/menus";
 import { Table, TableCell, TableHeader, TableRow } from "./Table";
 import { NodeIdExtension } from "@editor/extensions";
-import * as Y from "yjs";
-import { HocuspocusProvider } from "@hocuspocus/provider";
 import Collaboration from "@tiptap/extension-collaboration";
 import CollaborationCursor from "@tiptap/extension-collaboration-cursor";
-
-const doc = new Y.Doc();
-
-const provider = new HocuspocusProvider({
-    url: "ws://127.0.0.1:1234",
-    name: "example-document",
-    document: doc,
-});
 
 const extensions = [
     Bold,
@@ -71,9 +58,6 @@ const extensions = [
     TextAlign.configure({
         types: ["heading", "paragraph"],
         alignments: ["left", "right", "center", "justify"],
-    }),
-    Collaboration.configure({
-        document: doc,
     }),
     Paragraph,
     blockQuote,
@@ -107,6 +91,7 @@ const extensions = [
 
 interface TipTapProps {
     setEditorContext: (editorContext: Editor) => void;
+    user: UserInfo;
     content: Object;
     pageId: string;
     id: number;
@@ -116,7 +101,6 @@ interface TipTapProps {
 }
 
 const MAX_DEFAULT_WIDTH = 760;
-const USER_URI = process.env.NEXT_PUBLIC_USER_SERVER_URL;
 
 interface UserInfo {
     email: string;
@@ -125,30 +109,45 @@ interface UserInfo {
     username: string;
 }
 
-export function TipTap({ setEditorContext, content, pageId, id, editable = true, title, updateContent }: TipTapProps) {
+export function TipTap({ setEditorContext, user, content, pageId, id, editable = true, title, updateContent }: TipTapProps) {
     const [editedData, setEditedData] = useState(null);
-    // const workerRef = useRef<Worker>();
     const menuContainerRef = useRef(null);
     const debouncedValue = useDebounce(editedData, 10000);
     const debouncedTitle = useDebounce(title, 10000);
     const [updated, setUpdated] = useState(false);
-    const [mutateFunction, { data, loading, error }] = useMutation(GRAPHQL_UPDATE_DOC_DATA, { client: client });
-    const [mutateTitleFn, { data: titleData, loading: titleLoading, error: TitleError }] = useMutation(GRAPHQL_UPDATE_DOC_TITLE, { client: client });
-    const [status, res] = useGetCall<UserInfo>(USER_URI + "/profile/details");
+    const countRenderRef = useRef(0);
+    countRenderRef.current += 1;
+
+    const editedDataFn = (data: JSONContent) => {
+        setEditedData(data);
+    };
+
+    const manageContent = useMemo(() => {
+        if (editable) {
+            return {
+                onCreate: ({ editor: currentEditor }: { editor: Editor }) => {
+                    // provider.connect();
+                    // provider.
+                },
+                content: content,
+            };
+        } else {
+            return { content: content };
+        }
+    }, [editable]);
 
     const editor = useEditor({
-        extensions: [
-            ...extensions, 
-            CollaborationCursor.configure({
-                provider,
-                user: { name: res ? res.data.name : "", color: "#ffcc00" },
-            })
-        ],
-        content: content,
+        immediatelyRender: true,
+        shouldRerenderOnTransaction: false,
+        extensions: extensions.concat(editable ? [] : []),
+        ...manageContent,
         editable: editable,
         onUpdate: ({ editor }) => {
             setUpdated(true);
-            setEditedData(editor.getJSON());
+            editedDataFn(editor.getJSON());
+        },
+        onDestroy: () => {
+            // TODO: Update data
         },
         editorProps: {
             handlePaste(view, event, slice) {
@@ -176,23 +175,6 @@ export function TipTap({ setEditorContext, content, pageId, id, editable = true,
         },
     });
 
-    // useEffect(() => {
-    //     // workerRef.current = new Worker('/workers/editor.js', { type: "module" });
-    //     // workerRef.current.onmessage = (e) => {
-    //     //     console.log(e);
-    //     // };
-    //     // workerRef.current.onerror = (e) => {
-    //     //     console.log(e);
-    //     // };
-    //     // workerRef.current.postMessage({ type: "init", data: { id: id, pageId: pageId } });
-    //     // return () => {
-    //     //     workerRef.current.terminate();
-    //     // };
-    //     // LoadWasm().then(() => {
-    //     //     setIsWasmLoading(false);
-    //     // })
-    // }, []);
-
     useEffect(() => {
         if (updated && editable) {
             updateContent(debouncedValue, debouncedTitle);
@@ -200,37 +182,12 @@ export function TipTap({ setEditorContext, content, pageId, id, editable = true,
     }, [debouncedValue, debouncedTitle]);
 
     useEffect(() => {
-        if (content && editor) {
-            setTimeout(() => {
-                editor.commands.setContent(content);
-                console.log(editor.getJSON());
-            });
-        }
-    }, [content, editor]);
-
-    useEffect(() => {
         setEditorContext(editor);
     }, [editor, setEditorContext]);
 
-    useEffect(() => {
-        if (updated && editable) {
-            // we can call wasm file here
-            // mutateFunction({ variables: { id: id, pageId: pageId, data: debouncedValue, title: debouncedTitle } })
-            //     .then((data) => console.log(data))
-            //     .catch((error) => console.log(error)); // TODO: handle JWT expired error
-        }
-    }, [debouncedValue]);
-
-    useEffect(() => {
-        if (editable) {
-            // mutateTitleFn({ variables: { id: id, pageId: pageId, title: debouncedTitle } })
-            //     .then((data) => console.log(data))
-            //     .catch((error) => console.log(error));
-        }
-    }, [debouncedTitle]);
-
     return (
         <div ref={menuContainerRef}>
+            <div>Rendered: {countRenderRef.current}</div>
             {editor && (
                 <BubbleMenu className="bubble-menu" editor={editor} tippyOptions={{ duration: 100 }}>
                     <Tooltip content="Bold">

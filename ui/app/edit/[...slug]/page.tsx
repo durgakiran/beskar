@@ -6,7 +6,7 @@ import TextArea from "@editor/textarea/TextArea";
 import { Editor } from "@tiptap/react";
 import { Spinner } from "flowbite-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import "./styles.css";
 import { Response, useGet } from "@http/hooks";
 import { usePUT } from "app/core/http/hooks/usePut";
@@ -48,7 +48,7 @@ interface IPayloadPublish {
 }
 
 interface UpdateDocDTO {
-    page: number
+    page: number;
 }
 
 interface DocumentDTO {
@@ -65,13 +65,13 @@ interface User {
     emailVerified: boolean;
 }
 
-export default function Page({ params }: { params: { slug: string[] } }) {
+export default function Page({ params: { slug } }: { params: { slug: string[] } }) {
     const [editorData, setEditorData] = useState({});
     const [editorContext, setEditorContext] = useState<Editor>();
-    const [ { data, errors, isLoading: loading }, fetchData ] = useGet<Response<IData>>(`editor/space/${params.slug[0]}/page/${params.slug[1]}/edit`)
-    const [ { errors: upadteErrors, isLoading: updating }, updateDraftData ] = usePUT<Response<UpdateDocDTO>, IPayload>(`editor/update`)
-    const [ { data:  publishigData,errors: publishErrors, isLoading: publishing }, publishDraftData ] = usePUT<Response<UpdateDocDTO>, IPayloadPublish>(`editor/publish`)
-    const [ { data: profileData, errors: profileErrors, isLoading: profileLoading }, getProfile ] = useGet<Response<User>>(`profile/details`)
+    const [{ data, errors, isLoading: loading }, fetchData] = useGet<Response<IData>>(`editor/space/${slug[0]}/page/${slug[1]}/edit`);
+    const [{ errors: upadteErrors, isLoading: updating }, updateDraftData] = usePUT<Response<UpdateDocDTO>, IPayload>(`editor/update`);
+    const [{ data: publishigData, errors: publishErrors, isLoading: publishing }, publishDraftData] = usePUT<Response<UpdateDocDTO>, IPayloadPublish>(`editor/publish`);
+    const [{ data: profileData, errors: profileErrors, isLoading: profileLoading }, getProfile] = useGet<Response<User>>(`profile/details`);
     const [loaded, setLoaded] = useState(false);
     const [title, setTitle] = useState<string>();
     const router = useRouter();
@@ -81,27 +81,34 @@ export default function Page({ params }: { params: { slug: string[] } }) {
     const [updatedTitle, setUpdatedTitle] = useState<string>();
     const [publishableDocument, setPublishableDocument] = useState<any>();
     const [page, setPage] = useState<Response<IData>>();
+    
+    const rendered = useRef(0);
+    rendered.current += 1;
 
     const handleClose = () => {
-        router.push(`/space/${params.slug[0]}/view/${params.slug[1]}`);
+        router.push(`/space/${slug[0]}/view/${slug[1]}`);
     };
 
     const updateContent = (content: any, title: string) => {
         const payLoad: IPayload = {
             data: content,
-            id: Number(params.slug[1]),
+            id: Number(slug[1]),
             ownerId: profileData.data.id,
-            spaceId: params.slug[0],
-            title: title
-        }
+            spaceId: slug[0],
+            title: title,
+        };
         setUpdatedData({ data: content, id: page.data.docId, pageId: page.data.id });
         setUpdatedTitle(title);
         updateDraftData(payLoad);
-    }
+    };
 
     const handleUpdate = () => {
-        workerRef.current.postMessage({ type: "data", data: updatedData })
-    }
+        workerRef.current.postMessage({ type: "data", data: updatedData });
+    };
+
+    useEffect(() => {
+        fetchData();
+    }, []);
 
     useEffect(() => {
         if (data) {
@@ -113,27 +120,33 @@ export default function Page({ params }: { params: { slug: string[] } }) {
         if (data) {
             setPage(data);
         }
-    }, [data])
+    }, [data]);
 
     useEffect(() => {
         if (upadteErrors) {
-            console.error("Something went wrong while updating data ",upadteErrors)
+            console.error("Something went wrong while updating data ", upadteErrors);
         }
-    }, [upadteErrors])
-
+    }, [upadteErrors]);
 
     useEffect(() => {
         if (!profileLoading && !publishing && publishableDocument) {
-            publishDraftData({ title: title, id: Number(params.slug[1]), spaceId: params.slug[0], ownerId: profileData.data.id, nodeData: publishableDocument, docId: page.data.docId, parentId: page.data.parentId  })
+            publishDraftData({
+                title: title,
+                id: Number(slug[1]),
+                spaceId: slug[0],
+                ownerId: profileData.data.id,
+                nodeData: publishableDocument,
+                docId: page.data.docId,
+                parentId: page.data.parentId,
+            });
         }
     }, [profileLoading, publishableDocument]);
 
     useEffect(() => {
         if (publishigData) {
-            router.push(`/space/${params.slug[0]}/view/${params.slug[1]}`);
+            router.push(`/space/${slug[0]}/view/${slug[1]}`);
         }
-    }, [publishigData])
-
+    }, [publishigData]);
 
     useEffect(() => {
         workerRef.current = new Worker("/workers/editor.js", { type: "module" });
@@ -146,7 +159,7 @@ export default function Page({ params }: { params: { slug: string[] } }) {
                     setEditorData(e.data.data ? JSON.parse(e.data.data) : undefined);
                     break;
                 case "contentData":
-                    setPublishableDocument(JSON.parse(e.data.data).data)
+                    setPublishableDocument(JSON.parse(e.data.data).data);
                 default:
                     break;
             }
@@ -190,12 +203,13 @@ export default function Page({ params }: { params: { slug: string[] } }) {
     }
 
     if (errors) {
-        return <div>Something went wrong</div>
+        return <div>Something went wrong</div>;
     }
 
     return (
         <div style={{ minHeight: 300 }}>
-            {title && (
+            Rendered: {rendered.current}
+            {title && editorData && (
                 <div data-testid="editor-window">
                     <div
                         className="header"
@@ -203,7 +217,7 @@ export default function Page({ params }: { params: { slug: string[] } }) {
                         style={{ position: "sticky", zIndex: 1, top: 0, display: "grid", placeItems: "center", marginBottom: "2rem", backgroundColor: "white" }}
                     >
                         <EditorContext.Provider value={editorContext}>
-                            <Editorheader handleClose={handleClose} handleUpdate={handleUpdate}/>
+                            <Editorheader handleClose={handleClose} handleUpdate={handleUpdate} />
                         </EditorContext.Provider>
                     </div>
                     <div style={{ maxWidth: "1024px", margin: "auto" }}>
@@ -214,9 +228,13 @@ export default function Page({ params }: { params: { slug: string[] } }) {
                             title={title}
                             setEditorContext={(editorContext: Editor) => setEditorContext(editorContext)}
                             content={editorData}
-                            pageId={params.slug[1]}
+                            pageId={slug[1]}
                             id={data.data.docId}
-                            updateContent={(content, title) => updateContent(content, title)}
+                            user={profileData.data}
+                            updateContent={(content, title) => {
+                                console.log("updating content");
+                                updateContent(content, title);
+                            }}
                         />
                     </div>
                 </div>

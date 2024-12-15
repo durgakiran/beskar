@@ -9,7 +9,6 @@ export const useTippyWrapperV2 = (ref: RefObject<HTMLElement>, elementId: string
 
     const mutationObserverCallback = (mutations: MutationRecord[]) => {
         const element = document.querySelectorAll(`#${elementId.replace(/:/g, "\\:")}`);
-        console.log(element);
         if (element.length) {
             setElementRendered(true);
         } else {
@@ -20,14 +19,11 @@ export const useTippyWrapperV2 = (ref: RefObject<HTMLElement>, elementId: string
     useMutationObserver(ref, mutationObserverCallback);
 
     useEffect(() => {
-        console.log(ref, " element rendered ", elementRendered);
         if (elementRendered) {
             window.requestAnimationFrame(() => {
                 if (!isEditable) {
                     return;
                 }
-
-                console.log(instancesRef.current);
 
                 if (!content) {
                     return;
@@ -79,9 +75,7 @@ export const useTippyWrapperV2 = (ref: RefObject<HTMLElement>, elementId: string
 
 export const useTippyWrapper = (elementId: string, content?: any, isEditable = false, additionalClasses?: string): void => {
     const instancesRef = useRef<Array<Instance> | undefined>();
-    console.log(elementId);
     window.requestAnimationFrame(() => {
-        console.log(elementId);
         if (!isEditable) {
             return;
         }
@@ -89,8 +83,6 @@ export const useTippyWrapper = (elementId: string, content?: any, isEditable = f
         if (!content || instancesRef.current?.length) {
             return;
         }
-
-        console.log(instancesRef);
 
         instancesRef.current = tippy(document.querySelectorAll(`#${elementId.replace(/:/g, "\\:")}`), {
             content: () => {
@@ -114,7 +106,6 @@ export const useTippyWrapper = (elementId: string, content?: any, isEditable = f
     });
     useEffect(
         () => () => {
-            console.log(instancesRef.current);
             instancesRef.current?.every((i) => i.destroy());
         },
         [],

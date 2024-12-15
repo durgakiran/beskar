@@ -41,13 +41,14 @@ func acceptInvitation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	userId := user.AId
+	emailId := user.Email
 	token := r.URL.Query().Get("token")
 	if token == "" {
 		sendFailedReponse(w, r, http.StatusBadRequest, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNAUTHORIZED])
 		return
 	}
 	// process token
-	err = processInvitation(userId, token, STATUS_ACCEPTED)
+	err = processInvitation(userId, emailId, token, STATUS_ACCEPTED)
 	if err != nil {
 		sendFailedReponse(w, r, http.StatusForbidden, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNAUTHORIZED])
 		return
@@ -113,7 +114,7 @@ func rejectInvitation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// process token
-	err = processInvitation(userId, token, STATUS_REJECTED)
+	err = processInvitation(userId, user.Email, token, STATUS_REJECTED)
 	if err != nil {
 		sendFailedReponse(w, r, http.StatusForbidden, err.Error())
 		return
@@ -188,6 +189,26 @@ func listSpaceInvites(w http.ResponseWriter, r *http.Request) {
 	core.SendSuccessResponse(w, r, http.StatusOK, data)
 }
 
+func listUserInvites(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	user, err := core.GetUserInfo(ctx)
+	if err != nil {
+		core.SendFailedReponse(w, r, http.StatusForbidden, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNAUTHORIZED])
+		return
+	}
+	if user.Id == "" {
+		core.SendFailedReponse(w, r, http.StatusForbidden, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNAUTHORIZED])
+		return
+	}
+	userId := user.AId
+	data, err := getUserInvites(userId, user.Email)
+	if err != nil {
+		core.SendFailedReponse(w, r, http.StatusInternalServerError, err.Error())
+		return
+	}
+	core.SendSuccessResponse(w, r, http.StatusOK, data)
+}
+
 func Router() *chi.Mux {
 	r := chi.NewRouter()
 	r.Use(core.Authenticated)
@@ -196,5 +217,6 @@ func Router() *chi.Mux {
 	r.Get("/user/reject", rejectInvitation)
 	r.Delete("/user/remove", removeInvitation)
 	r.Get("/space/{spaceId}/list", listSpaceInvites)
+	r.Get("/user/invites", listUserInvites)
 	return r
 }

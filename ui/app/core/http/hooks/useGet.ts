@@ -8,15 +8,15 @@ const USER_URI = process.env.NEXT_PUBLIC_USER_SERVER_URL;
  * @param headers
  * @returns isLoading, Data type and any errors
  */
-export function useGet<T>(path: string, headers: Record<string, any> = {}): [{ isLoading: boolean; data: T; errors: any, response: number }, fetchData: () => void] {
+export function useGet<T>(path: string, headers: Record<string, any> = {}): [{ isLoading: boolean; data: T; errors: any, response: number }, fetchData: (queryParams?: Record<string, any>) => void] {
     const [isDataFetching, setIsDataFetching] = useState<boolean>(false);
     const [data, setData] = useState<T>();
     const [errors, setErrors] = useState();
     const [response, setResponse] = useState<number>();
 
-    const fetchData = useCallback(() => {
+    const fetchData = useCallback((queryParams?: Record<string, any>) => {
         setIsDataFetching(true);
-        fetch(USER_URI + "/" + path, { credentials: "include", headers: { "Content-Type": "application/json", ...headers } })
+        fetch(USER_URI + "/" + path + (queryParams ? `?${new URLSearchParams(queryParams).toString()}` : ""), { credentials: "include", headers: { "Content-Type": "application/json", ...headers } })
             .then((res) => {
                 setIsDataFetching(false);
                 setResponse(res.status);

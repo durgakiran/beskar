@@ -23,7 +23,6 @@ export default function useMutationObserver<TElement extends HTMLElement>(ref: R
 
     // eslint-disable-next-line react-hooks/rules-of-hooks
     useEffect(() => {
-        console.log(ref.current);
         if (ref.current) {
             const observer = new MutationObserver(callback);
             // observer whole document to make sure we are observing elements from tippy
