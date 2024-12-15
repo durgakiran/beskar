@@ -117,7 +117,6 @@ export default function Page({ params }: { params: { page: string; spaceId: stri
                         content={content}
                         pageId={params.page}
                         id={data.data.docId}
-                        provider={null}
                         user={null}
                     />
                 </div>

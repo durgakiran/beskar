@@ -70,7 +70,6 @@ export default function Page({ params }: { params: PageParams }) {
                     editable={false}
                     updateContent={(content, title) => console.log(content, title)}
                     setEditorContext={() => {}}
-                    provider={null}
                     user={null}
                 />
             </div>

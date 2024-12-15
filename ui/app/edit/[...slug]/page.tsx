@@ -10,8 +10,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import "./styles.css";
 import { Response, useGet } from "@http/hooks";
 import { usePUT } from "app/core/http/hooks/usePut";
-import { HocuspocusProvider } from "@hocuspocus/provider";
-import * as Y from "yjs";
 
 interface DraftData {
     data: any;
@@ -83,9 +81,11 @@ export default function Page({ params: { slug } }: { params: { slug: string[] } 
     const [updatedTitle, setUpdatedTitle] = useState<string>();
     const [publishableDocument, setPublishableDocument] = useState<any>();
     const [page, setPage] = useState<Response<IData>>();
+    
+    const rendered = useRef(0);
+    rendered.current += 1;
 
     const handleClose = () => {
-        provider.disconnect();
         router.push(`/space/${slug[0]}/view/${slug[1]}`);
     };
 
@@ -196,21 +196,6 @@ export default function Page({ params: { slug } }: { params: { slug: string[] } 
         getProfile();
     }, []);
 
-    const doc = useMemo(() => {
-        return new Y.Doc();
-    }, []);
-
-    const provider = useMemo(() => {
-        return new HocuspocusProvider({
-            url: "ws://app.tededox.com:1234",
-            name: slug[1],
-            document: doc,
-            onSynced: () => {
-                console.log("synced");
-            }
-        });
-    }, [slug, doc]);
-
     if (loading || profileLoading) {
         <div className="text-center">
             <Spinner size="lg" />
@@ -223,7 +208,8 @@ export default function Page({ params: { slug } }: { params: { slug: string[] } 
 
     return (
         <div style={{ minHeight: 300 }}>
-            {title && (
+            Rendered: {rendered.current}
+            {title && editorData && (
                 <div data-testid="editor-window">
                     <div
                         className="header"
@@ -249,7 +235,6 @@ export default function Page({ params: { slug } }: { params: { slug: string[] } 
                                 console.log("updating content");
                                 updateContent(content, title);
                             }}
-                            provider={provider}
                         />
                     </div>
                 </div>

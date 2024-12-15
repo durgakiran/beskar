@@ -39,7 +39,6 @@ import { CustomInput } from "./note/Note";
 import { TableColumnMenu, TableRowMenu } from "./Table/menus";
 import { Table, TableCell, TableHeader, TableRow } from "./Table";
 import { NodeIdExtension } from "@editor/extensions";
-import { HocuspocusProvider } from "@hocuspocus/provider";
 import Collaboration from "@tiptap/extension-collaboration";
 import CollaborationCursor from "@tiptap/extension-collaboration-cursor";
 
@@ -99,7 +98,6 @@ interface TipTapProps {
     editable?: boolean;
     title: string;
     updateContent: (content: any, title: string) => void;
-    provider: HocuspocusProvider;
 }
 
 const MAX_DEFAULT_WIDTH = 760;
@@ -111,7 +109,7 @@ interface UserInfo {
     username: string;
 }
 
-export function TipTap({ setEditorContext, user, content, pageId, id, editable = true, title, updateContent, provider }: TipTapProps) {
+export function TipTap({ setEditorContext, user, content, pageId, id, editable = true, title, updateContent }: TipTapProps) {
     const [editedData, setEditedData] = useState(null);
     const menuContainerRef = useRef(null);
     const debouncedValue = useDebounce(editedData, 10000);
@@ -124,46 +122,32 @@ export function TipTap({ setEditorContext, user, content, pageId, id, editable =
         setEditedData(data);
     };
 
-    const collabExtensions = useMemo(() => {
-        if (provider) {
-            return [
-                Collaboration.configure({
-                    document: provider.document,
-                }),
-                CollaborationCursor.extend().configure({
-                    provider: provider,
-                    user: { name: user ? user.name : "", color: `#${Math.floor(Math.random() * 16777215).toString(16)}` },
-                }),
-            ];
-        } else {
-            return [];
-        }
-    }, [provider, user]);
-
     const manageContent = useMemo(() => {
         if (editable) {
             return {
                 onCreate: ({ editor: currentEditor }: { editor: Editor }) => {
-                    if (!provider.document.getMap("config").get("initialContentLoaded")) {
-                        provider.document.getMap("config").set("initialContentLoaded", true);
-                        currentEditor.commands.setContent(content);
-                    }
+                    // provider.connect();
+                    // provider.
                 },
+                content: content,
             };
         } else {
             return { content: content };
         }
-    }, [editable, provider]);
+    }, [editable]);
 
     const editor = useEditor({
         immediatelyRender: true,
         shouldRerenderOnTransaction: false,
-        extensions: extensions.concat(editable ? collabExtensions : []),
+        extensions: extensions.concat(editable ? [] : []),
         ...manageContent,
         editable: editable,
         onUpdate: ({ editor }) => {
             setUpdated(true);
             editedDataFn(editor.getJSON());
+        },
+        onDestroy: () => {
+            // TODO: Update data
         },
         editorProps: {
             handlePaste(view, event, slice) {
