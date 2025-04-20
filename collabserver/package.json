@@ -4,18 +4,21 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && npm run copy-wasm",
+    "copy-wasm": "copyfiles -u 1 \"src/wasm/**/*\" dist/",
     "start": "node dist/server.js"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "devDependencies": {
+    "@types/node": "^22.14.1",
+    "copyfiles": "^2.4.1",
     "typescript": "^5.5.4"
   },
   "dependencies": {
-    "@hocuspocus/extension-logger": "^2.13.5",
-    "@hocuspocus/server": "^2.13.5",
-    "@hocuspocus/transformer": "^2.13.5"
+    "@hocuspocus/extension-logger": "^3.0.8-rc.0",
+    "@hocuspocus/server": "^3.0.8-rc.0",
+    "@hocuspocus/transformer": "^3.0.8-rc.0"
   }
 }
