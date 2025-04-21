@@ -23,8 +23,10 @@ export default function Page({ params: { slug } }: { params: { slug: string[] } 
     // profile of the current user
     const [{ data: profileData, errors: profileErrors, isLoading: profileLoading }, getProfile] = useGet<Response<User>>(`profile/details`);
 
-    // editor
+    // start of editor handling
     const [editorContext, setEditorContext] = useState<Editor>();
+    const [isSynced, setIsSynced] = useState<boolean>(false);
+    // end of edito handling
 
     // to check the nunber of times component rendered
     const rendered = useRef(0);
@@ -40,7 +42,6 @@ export default function Page({ params: { slug } }: { params: { slug: string[] } 
             console.log(profileErrors);
         }
     }, [profileErrors]);
-
     // end of profile handling
 
     useEffect(() => {
@@ -58,6 +59,7 @@ export default function Page({ params: { slug } }: { params: { slug: string[] } 
             },
             onSynced(data) {
                 console.log("Document synced:", data);
+                setIsSynced(true);
             },
             onUnsyncedChanges(data) {
                 console.log("Document has unsynced changes:", data);
@@ -78,7 +80,7 @@ export default function Page({ params: { slug } }: { params: { slug: string[] } 
         };
     }, [socket, slug]);
 
-    if (profileLoading || !provider) {
+    if (profileLoading || !provider || !isSynced) {
         return (
             <div className="text-center">
                 <Spinner size="lg" />
@@ -89,8 +91,6 @@ export default function Page({ params: { slug } }: { params: { slug: string[] } 
     if (profileErrors) {
         return <div>Something went wrong</div>;
     }
-
-    // provider.attach();
 
     return (
         <div style={{ minHeight: 300 }}>

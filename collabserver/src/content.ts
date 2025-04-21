@@ -13,16 +13,13 @@ export async function getDocFromDatabase(docName: string, requestHeaders: any) {
                 "Accept": "application/json",
             }
         });
-        console.log(response.status);
         const res = await response.json();
-        console.log(res);
         if (res.data.draft) {
             const eData = typeof res.data.data.data === "string" ? JSON.parse(res.data.data.data) : res.data.data.data;
-            console.log("eData", eData);
             return eData;
         } else {
-            const data = getEditorDoc(res.data.data);
-            console.log(data);
+            const input = { title: res.data.title, ownerId: res.data.ownerId, parentId: res.data.parentId, id: res.data.id, docId: res.data.docId, spaceId: res.data.spaceId, nodeData: res.data.nodeData };
+            const data = getEditorDoc(JSON.stringify(input));
             return typeof data === "string" ? JSON.parse(data) : data;
         }
     } catch (error) {

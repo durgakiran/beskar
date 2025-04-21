@@ -16,6 +16,7 @@ import { OrderedList } from "@tiptap/extension-ordered-list";
 import { Strike } from "@tiptap/extension-strike";
 import { Blockquote } from "@tiptap/extension-blockquote";
 import { CodeBlock } from "@tiptap/extension-code-block";
+import { TextStyle } from "@tiptap/extension-text-style";
 import { getDocFromDatabase, initWasm } from "./content";
 
 const server = new Server({
@@ -38,15 +39,11 @@ const server = new Server({
         console.log(`Server will handle a sync message: "${payload}"!`)
     },
     async onLoadDocument(data) {
-        console.log("load document", data.documentName);
-        console.log(data.requestHeaders);
         // get data from database
         const doc = await getDocFromDatabase(data.documentName, data.requestHeaders);
-        console.log(JSON.stringify(doc));
-        console.log(typeof doc);
         const ydoc = TiptapTransformer.toYdoc(
             doc, 
-            "doc", 
+            "default", 
             [
                 Document, 
                 Bold, 
@@ -62,7 +59,8 @@ const server = new Server({
                 Blockquote,
                 Text,
                 Heading,
-                CodeBlock
+                CodeBlock,
+                TextStyle
             ]
         );
         return ydoc;
