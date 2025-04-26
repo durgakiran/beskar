@@ -128,6 +128,7 @@ export function TipTap({ setEditorContext, user, content, pageId, id, editable =
         return [
             Collaboration.configure({
                 document: provider?.document,
+                field: "default"
             }),
             CollaborationCursor.configure({
                 provider: provider,

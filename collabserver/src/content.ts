@@ -1,6 +1,6 @@
 import "./wasm/wasm_exec.js";
 
-export async function getDocFromDatabase(docName: string, requestHeaders: any) {
+export async function getDocFromDatabase(docName: string, requestHeaders: any): Promise<[any, string]> {
     console.log(typeof requestHeaders);
     // fetch doc from service using edit api
     try {
@@ -14,17 +14,18 @@ export async function getDocFromDatabase(docName: string, requestHeaders: any) {
             }
         });
         const res = await response.json();
+        const title = res.data.title;
         if (res.data.draft) {
             const eData = typeof res.data.data.data === "string" ? JSON.parse(res.data.data.data) : res.data.data.data;
-            return eData;
+            return [eData, title];
         } else {
             const input = { title: res.data.title, ownerId: res.data.ownerId, parentId: res.data.parentId, id: res.data.id, docId: res.data.docId, spaceId: res.data.spaceId, nodeData: res.data.nodeData };
             const data = getEditorDoc(JSON.stringify(input));
-            return typeof data === "string" ? JSON.parse(data) : data;
+            return typeof data === "string" ? [JSON.parse(data), title] : [data, title];
         }
     } catch (error) {
         console.error(error);
-        return null;
+        return [null, ""];
     }
 }
 

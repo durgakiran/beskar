@@ -1,12 +1,17 @@
 "use client";
 
 import { TipTap } from "@editor";
+import { EditorContext } from "@editor/context/editorContext";
 import { SocketContext } from "@editor/context/SocketContext";
+import { Editorheader } from "@editor/header";
+import TextArea from "@editor/textarea/TextArea";
 import { HocuspocusProvider } from "@hocuspocus/provider";
 import { Response, useGet } from "@http/hooks";
 import { Editor } from "@tiptap/react";
 import { Spinner } from "flowbite-react";
 import { useContext, useEffect, useRef, useState } from "react";
+import * as y from "yjs"
+import "./styles.css";
 
 interface User {
     name: string;
@@ -26,7 +31,9 @@ export default function Page({ params: { slug } }: { params: { slug: string[] } 
     // start of editor handling
     const [editorContext, setEditorContext] = useState<Editor>();
     const [isSynced, setIsSynced] = useState<boolean>(false);
-    // end of edito handling
+    const [title, setTitle] = useState<string>();
+    const [titleTextProvider, setTitleTextProvider] = useState<y.Text>();
+    // end of editor handling
 
     // to check the nunber of times component rendered
     const rendered = useRef(0);
@@ -48,28 +55,12 @@ export default function Page({ params: { slug } }: { params: { slug: string[] } 
         const _p = new HocuspocusProvider({
             websocketProvider: socket,
             name: slug[1] + "-space-" + slug[0],
-            onMessage(data) {
-                console.log("WebSocket message received:", data);
-            },
-            onOpen(data) {
-                console.log("WebSocket connection opened:", data);
-            },
-            onClose(data) {
-                console.log("WebSocket connection closed:", data);
-            },
             onSynced(data) {
-                console.log("Document synced:", data);
                 setIsSynced(true);
+                // Get title text after document is synced
+                const titleProvider = _p.document?.getText("title");
+                setTitleTextProvider(titleProvider);
             },
-            onUnsyncedChanges(data) {
-                console.log("Document has unsynced changes:", data);
-            },
-            onConnect() {
-                console.log("Provider connected to document");
-            },
-            onDisconnect() {
-                console.log("Provider disconnected from document");
-            }
         });
         setProvider(_p);
         _p.attach();
@@ -79,6 +70,29 @@ export default function Page({ params: { slug } }: { params: { slug: string[] } 
             socket.disconnect();
         };
     }, [socket, slug]);
+
+    useEffect(() => {
+        if (!titleTextProvider) return;
+
+        // Create title observer
+        const titleObserver = () => {
+            const newTitle = titleTextProvider.toString();
+            setTitle(newTitle);
+        };
+        
+        // Set initial title and observe changes
+        titleObserver(); // Call immediately to set initial title
+        titleTextProvider.observe(titleObserver);
+        
+        // Clean up function
+        return () => {
+            titleTextProvider.unobserve(titleObserver);
+        };
+    }, [titleTextProvider]);
+
+    useEffect(() => {
+        console.log("title:", title);
+    }, [title]);
 
     if (profileLoading || !provider || !isSynced) {
         return (
@@ -103,14 +117,26 @@ export default function Page({ params: { slug } }: { params: { slug: string[] } 
                             data-testid="sticky-header"
                             style={{ position: "sticky", zIndex: 1, top: 0, display: "grid", placeItems: "center", marginBottom: "2rem", backgroundColor: "white" }}
                         >
-                            {/* <EditorContext.Provider value={editorContext}>
-                                    <Editorheader handleClose={handleClose} handleUpdate={handleUpdate} />
-                                </EditorContext.Provider> */}
+                            <EditorContext.Provider value={editorContext}>
+                                <Editorheader handleClose={() => console.log("close")} handleUpdate={() => console.log("update")} />
+                            </EditorContext.Provider>
                         </div>
                         <div style={{ maxWidth: "1024px", margin: "auto" }}>
-                            <div>{/* <TextArea value={title} handleInput={(value: string) => setTitle(value)} /> */}</div>
+                            <div>
+                                <TextArea 
+                                    value={title || ""} 
+                                    handleInput={(value: string) => {
+                                        setTitle(value);
+                                        // Update the shared title when user edits
+                                        if (titleTextProvider) {
+                                            titleTextProvider.delete(0, titleTextProvider.length);
+                                            titleTextProvider.insert(0, value);
+                                        }
+                                    }} 
+                                />
+                            </div>
                             <TipTap
-                                title={"Example title"}
+                                title={title || ""}
                                 setEditorContext={(editorContext: Editor) => setEditorContext(editorContext)}
                                 content={""}
                                 pageId={slug[1]}

@@ -18,7 +18,11 @@
   },
   "dependencies": {
     "@hocuspocus/extension-logger": "^3.0.8-rc.0",
+    "@hocuspocus/extension-redis": "^3.0.8-rc.0",
     "@hocuspocus/server": "^3.0.8-rc.0",
-    "@hocuspocus/transformer": "^3.0.8-rc.0"
+    "@hocuspocus/transformer": "^3.0.8-rc.0",
+    "@tiptap/extension-text-style": "^2.11.7",
+    "dotenv": "^16.3.1",
+    "ioredis": "^5.3.2"
   }
 }

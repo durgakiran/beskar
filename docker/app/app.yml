@@ -148,6 +148,14 @@ services:
       - "1234:1234"
     volumes:
       - /Users/kiran/projects/beskar/collabserver/:/app
+    environment:
+      - REDIS_HOST=tededox-redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-redis_secure_password}
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: always
     healthcheck:
       test: ["CMD-SHELL", "curl -XGET --output /dev/null --silent --head --fail http://localhost:1234/ || exit 1"]
       interval: 20s
@@ -155,6 +163,24 @@ services:
       retries: 6
     networks:
       - custom_local_network
+  redis:
+    container_name: tededox-redis
+    image: redis:latest
+    command: redis-server --requirepass ${REDIS_PASSWORD:-redis_secure_password} --appendonly yes --loglevel verbose
+    environment:
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-redis_secure_password}
+    ports:
+      - "6379:6379"
+    volumes:
+      - ./redis-data:/data  # For persistence
+      - ./redis-logs:/var/log/redis  # For logs
+    networks:
+      - custom_local_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-redis_secure_password}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
   server:
     container_name: tededox-server
     build:

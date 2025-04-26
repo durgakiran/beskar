@@ -18,6 +18,11 @@ import { Blockquote } from "@tiptap/extension-blockquote";
 import { CodeBlock } from "@tiptap/extension-code-block";
 import { TextStyle } from "@tiptap/extension-text-style";
 import { getDocFromDatabase, initWasm } from "./content";
+import { RedisStorage } from "./redis-storage";
+import * as Y from "yjs";
+
+// Initialize Redis storage
+const redisStorage = new RedisStorage(`redis://${process.env.REDIS_HOST}:${process.env.REDIS_PORT}?password=${process.env.REDIS_PASSWORD}`);
 
 const server = new Server({
     port: 1234,
@@ -35,12 +40,30 @@ const server = new Server({
             onStoreDocument: true,
         })
     ],
-    async beforeSync({ payload, document, documentName, type }) {
-        console.log(`Server will handle a sync message: "${payload}"!`)
+    async onStoreDocument(data) {
+        console.log("Storing document:", data.documentName);
+        await redisStorage.storeDocument(data.documentName, data.document);
     },
     async onLoadDocument(data) {
-        // get data from database
-        const doc = await getDocFromDatabase(data.documentName, data.requestHeaders);
+        console.log("Loading document:", data.documentName);
+        
+        // First try to load from Redis
+        const redisDoc = await redisStorage.loadDocument(data.documentName);
+        
+        // Check if document exists in Redis by looking for title
+        const hasTitle = redisDoc.getText('title').length > 0;
+        
+        // If document exists in Redis, use it
+        if (hasTitle) {
+            console.log("Document found in Redis");
+            return redisDoc;
+        }
+        
+        // If not in Redis, load from database
+        console.log("Document not found in Redis, loading from database");
+        const [doc, title] = await getDocFromDatabase(data.documentName, data.requestHeaders);
+        
+        // Convert database document to Y.Doc
         const ydoc = TiptapTransformer.toYdoc(
             doc, 
             "default", 
@@ -63,63 +86,36 @@ const server = new Server({
                 TextStyle
             ]
         );
+        
+        // Create title Y doc and merge it
+        const titleYdoc = new Y.Doc();
+        console.log("Title of the document: ", title);
+        titleYdoc.getText('title').insert(0, title || '');
+        Y.applyUpdate(ydoc, Y.encodeStateAsUpdate(titleYdoc));
+        
+        // Store the loaded document in Redis for future use
+        await redisStorage.storeDocument(data.documentName, ydoc);
+        
         return ydoc;
     },
 });
 
 server.listen().then(() => {
     initWasm().then(() => {
-        console.log("wasm initialized");
+        console.log("WASM initialized");
     });
 });
-// const server = new Hocuspocus({
-//     port: 1234,
-//     extensions: [
-//         new Logger({
-//             onLoadDocument: false,
-//             onConnect: false,
-//             onDisconnect: false,
-//             onUpgrade: false,
-//             onRequest: false,
-//             onDestroy: false,
-//             onConfigure: false,
-//             onChange: false,
-//         })
-//     ],
-//     async onConnect(data) {
-//         console.log("connected", data.documentName);
-//     },
-//     async onAuthenticate(data) {
-//         console.log("authenticate", data.documentName);
-//     },
-//     async onStoreDocument(data) {
-//         console.log("store document", data.documentName);
-//     },
-//     async onLoadDocument(data) {
-//         console.log("load document", data.documentName);
-//         // Check if document exists in memory
-//         if (documentMap.has(data.documentName)) {
-//             return documentMap.get(data.documentName);
-//         }
-        
-//         // Create new document if it doesn't exist
-//         const doc = new Y.Doc();
-//         documentMap.set(data.documentName, doc);
-//         console.log(doc);
-//         return doc;
-//     },
-//     async onChange(data) {
-//         const prosemirrorJSON = TiptapTransformer.fromYdoc(data.document);
-//         console.log(JSON.stringify(prosemirrorJSON));
-//     },
-//     async onDisconnect() {
-//         console.log("disconnected");
-//     },
-//     async onDestroy() {
-//         console.log("destroyed");
-//     }
-// });
 
+// Handle cleanup on process termination
+process.on('SIGTERM', async () => {
+    console.log('SIGTERM received. Cleaning up...');
+    await redisStorage.close();
+    process.exit(0);
+});
 
-// server.listen();
+process.on('SIGINT', async () => {
+    console.log('SIGINT received. Cleaning up...');
+    await redisStorage.close();
+    process.exit(0);
+});
 
