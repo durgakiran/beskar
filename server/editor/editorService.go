@@ -307,23 +307,29 @@ func (document InputDocument) Publish() (int64, error) {
 	defer tx.Rollback(ctx)
 	defer conn.Release()
 	// create or update doc
-	// we need to create a doc if there is none exists in draft state
-	// we need to update a doc if exists in draft state
+	// update the doc in draft state
 	existingDocument, err := fetchDocumentToEdit(tx, ctx, document.Id, document.SpaceId, document.OwnerId)
+	var docId int64
 	if errors.Is(err, pgx.ErrNoRows) {
-		return document.Id, errors.New("nothing new to update")
-	}
-	if err != nil {
+		// return document.Id, errors.New("nothing new to update")
+		doc := Doc{PageId: document.Id, OwnerId: document.OwnerId, Version: time.Now(), Title: document.Title, Draft: 0}
+		docId, err = doc.Create(tx, ctx)
+		if err != nil {
+			return document.Id, err
+		}
+	} else if err != nil {
 		return document.Id, err
-	}
-	doc := Doc{PageId: document.Id, DocId: existingDocument.DocId, OwnerId: document.OwnerId, Version: time.Now(), Title: document.Title, Draft: 0}
-	_, err = doc.Update(tx, ctx)
-	if err != nil {
-		return document.Id, err
+	} else {
+		doc := Doc{PageId: document.Id, DocId: existingDocument.DocId, OwnerId: document.OwnerId, Version: time.Now(), Title: document.Title, Draft: 0}
+		docId = existingDocument.DocId
+		_, err = doc.Update(tx, ctx)
+		if err != nil {
+			return document.Id, err
+		}
 	}
 	// create content
 	for _, child := range document.Nodes.Content {
-		child.DocId = existingDocument.DocId
+		child.DocId = docId
 		_, err := child.Create(tx, ctx)
 		if err != nil {
 			fmt.Println(child.DocId, child.ContentId)
@@ -332,7 +338,7 @@ func (document InputDocument) Publish() (int64, error) {
 		}
 	}
 	for _, child := range document.Nodes.Text {
-		child.DocId = existingDocument.DocId
+		child.DocId = docId
 		_, err := child.Create(tx, ctx)
 		if err != nil {
 			// return pageId and error
@@ -340,7 +346,7 @@ func (document InputDocument) Publish() (int64, error) {
 		}
 	}
 	// delete drafts for given docId
-	draftContent := ContentDraft{DocId: existingDocument.DocId}
+	draftContent := ContentDraft{DocId: docId}
 	rowsEffected, err := draftContent.Delete(tx, ctx)
 	if err != nil {
 		return document.Id, err

@@ -1,24 +1,9 @@
 import { Server } from "@hocuspocus/server";
 import { Logger } from "@hocuspocus/extension-logger";
 import { TiptapTransformer } from "@hocuspocus/transformer";
-import { Document } from "@tiptap/extension-document";
-import { Heading } from "@tiptap/extension-heading";
-import { Paragraph } from "@tiptap/extension-paragraph";
-import { Text } from "@tiptap/extension-text";
-import { Bold } from "@tiptap/extension-bold";
-import { BulletList } from "@tiptap/extension-bullet-list";
-import { Code } from "@tiptap/extension-code";
-import { Dropcursor } from "@tiptap/extension-dropcursor";
-import { Gapcursor } from "@tiptap/extension-gapcursor";
-import { Italic } from "@tiptap/extension-italic";
-import { ListItem } from "@tiptap/extension-list-item";
-import { OrderedList } from "@tiptap/extension-ordered-list";
-import { Strike } from "@tiptap/extension-strike";
-import { Blockquote } from "@tiptap/extension-blockquote";
-import { CodeBlock } from "@tiptap/extension-code-block";
-import { TextStyle } from "@tiptap/extension-text-style";
 import { getDocFromDatabase, initWasm } from "./content";
 import { RedisStorage } from "./redis-storage";
+import { extensions } from "./extensions";
 import * as Y from "yjs";
 
 // Initialize Redis storage
@@ -61,30 +46,13 @@ const server = new Server({
         
         // If not in Redis, load from database
         console.log("Document not found in Redis, loading from database");
-        const [doc, title] = await getDocFromDatabase(data.documentName, data.requestHeaders);
+        const [doc, title, docId, parentId] = await getDocFromDatabase(data.documentName, data.requestHeaders);
         
         // Convert database document to Y.Doc
         const ydoc = TiptapTransformer.toYdoc(
             doc, 
             "default", 
-            [
-                Document, 
-                Bold, 
-                BulletList, 
-                Code, 
-                Dropcursor, 
-                Gapcursor, 
-                Italic, 
-                ListItem,
-                OrderedList,
-                Strike,
-                Paragraph,
-                Blockquote,
-                Text,
-                Heading,
-                CodeBlock,
-                TextStyle
-            ]
+            extensions
         );
         
         // Create title Y doc and merge it
@@ -92,6 +60,11 @@ const server = new Server({
         console.log("Title of the document: ", title);
         titleYdoc.getText('title').insert(0, title || '');
         Y.applyUpdate(ydoc, Y.encodeStateAsUpdate(titleYdoc));
+
+        const metadata = new Y.Doc();
+        metadata.getText('docId').insert(0, docId.toString());
+        metadata.getText('parentId').insert(0, parentId.toString());
+        Y.applyUpdate(ydoc, Y.encodeStateAsUpdate(metadata));
         
         // Store the loaded document in Redis for future use
         await redisStorage.storeDocument(data.documentName, ydoc);

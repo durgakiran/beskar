@@ -12,6 +12,8 @@ import { Spinner } from "flowbite-react";
 import { useContext, useEffect, useRef, useState } from "react";
 import * as y from "yjs"
 import "./styles.css";
+import { usePUT } from "app/core/http/hooks/usePut";
+import { useRouter } from "next/navigation";
 
 interface User {
     name: string;
@@ -21,19 +23,63 @@ interface User {
     emailVerified: boolean;
 }
 
+interface IPayload {
+    title: string;
+    ownerId: string;
+    parentId?: number;
+    id: number;
+    docId?: number;
+    spaceId: string;
+    data: any;
+}
+
+interface DocumentDTO {
+    id: number;
+    pageId: number;
+    data: any;
+}
+
+interface UpdateDocDTO {
+    page: number;
+}
+
+interface IPayloadPublish {
+    title: string;
+    ownerId: string;
+    parentId?: number;
+    id: number;
+    docId?: number;
+    spaceId: string;
+    nodeData: any;
+}
+
 export default function Page({ params: { slug } }: { params: { slug: string[] } }) {
     const socket = useContext(SocketContext);
     const [provider, setProvider] = useState<HocuspocusProvider>();
+    const router = useRouter();
 
     // profile of the current user
     const [{ data: profileData, errors: profileErrors, isLoading: profileLoading }, getProfile] = useGet<Response<User>>(`profile/details`);
 
     // start of editor handling
+    const [{ data: publishigData, errors: publishErrors, isLoading: publishing }, publishDraftData] = usePUT<Response<UpdateDocDTO>, IPayloadPublish>(`editor/publish`);
     const [editorContext, setEditorContext] = useState<Editor>();
     const [isSynced, setIsSynced] = useState<boolean>(false);
     const [title, setTitle] = useState<string>();
     const [titleTextProvider, setTitleTextProvider] = useState<y.Text>();
+    const [publishableDocument, setPublishableDocument] = useState<any>();
+    const [updatedData, setUpdatedData] = useState<DocumentDTO>();
+    const [updatedTitle, setUpdatedTitle] = useState<string>();
+    const [docId, setDocId] = useState<number>();
+    const [parentId, setParentId] = useState<number>();
+    const [docIdProvider, setDocIdProvider] = useState<y.Text>();
+    const [parentIdProvider, setParentIdProvider] = useState<y.Text>();
     // end of editor handling
+
+    // wasm handling
+    const [workerInitiated, setWorkerInitiated] = useState<boolean>(false);
+    const workerRef = useRef<Worker>();
+    // end of wasm handling
 
     // to check the nunber of times component rendered
     const rendered = useRef(0);
@@ -51,6 +97,43 @@ export default function Page({ params: { slug } }: { params: { slug: string[] } 
     }, [profileErrors]);
     // end of profile handling
 
+    // editor handling functions
+    const handleUpdate = () => {
+        workerRef.current.postMessage({ type: "data", data: updatedData });
+    };
+
+    const updateContent = (content: any, title: string) => {
+        const payLoad: IPayload = {
+            data: content,
+            id: Number(slug[1]),
+            ownerId: profileData.data.id,
+            spaceId: slug[0],
+            docId: docId,
+            parentId: parentId,
+            title: title,
+        };
+        setUpdatedData({ data: content, pageId: Number(slug[1]), id: docId });
+        setUpdatedTitle(title);
+    };
+
+    const handleClose = () => {
+        router.push(`/space/${slug[0]}/view/${slug[1]}`);
+    };
+
+    useEffect(() => {
+        if (!publishing && publishableDocument) {
+            publishDraftData({
+                title: title,
+                id: Number(slug[1]),
+                spaceId: slug[0],
+                ownerId: profileData.data.id,
+                nodeData: publishableDocument,
+                docId: docId,
+                parentId: parentId,
+            });
+        }
+    }, [publishableDocument]);
+
     useEffect(() => {
         const _p = new HocuspocusProvider({
             websocketProvider: socket,
@@ -60,6 +143,10 @@ export default function Page({ params: { slug } }: { params: { slug: string[] } 
                 // Get title text after document is synced
                 const titleProvider = _p.document?.getText("title");
                 setTitleTextProvider(titleProvider);
+                const docIdProvider = _p.document?.getText("docId");
+                setDocIdProvider(docIdProvider);
+                const parentIdProvider = _p.document?.getText("parentId");
+                setParentIdProvider(parentIdProvider);
             },
         });
         setProvider(_p);
@@ -91,8 +178,54 @@ export default function Page({ params: { slug } }: { params: { slug: string[] } 
     }, [titleTextProvider]);
 
     useEffect(() => {
-        console.log("title:", title);
-    }, [title]);
+        if (!docIdProvider) return;
+
+        const docIdObserver = () => {
+            const newDocId = docIdProvider.toString();
+            setDocId(Number(newDocId));
+        };
+
+        const parentIdObserver = () => {
+            const newParentId = parentIdProvider.toString();
+            setParentId(Number(newParentId));
+        };  
+
+        docIdObserver();
+        parentIdObserver();
+
+        return () => {
+            docIdProvider.unobserve(docIdObserver); 
+            parentIdProvider.unobserve(parentIdObserver);
+        };
+    }, [docIdProvider, parentIdProvider]);
+    // end of editor handling functions
+
+
+    // wasm worker
+    useEffect(() => {
+        workerRef.current = new Worker("/workers/editor.js", { type: "module" });
+        workerRef.current.onmessage = (e) => {
+            switch (e.data.type) {
+                case "initiated":
+                    setWorkerInitiated(true);
+                    break;
+                // case "editorData":
+                //     setEditorData(e.data.data ? JSON.parse(e.data.data) : undefined);
+                //     break;
+                case "contentData":
+                    setPublishableDocument(JSON.parse(e.data.data).data);
+                default:
+                    break;
+            }
+        };
+        workerRef.current.onerror = (e) => {
+            console.error(e);
+        };
+        workerRef.current.postMessage({ type: "init" });
+        return () => {
+            workerRef.current.terminate();
+        };
+    }, []);
 
     if (profileLoading || !provider || !isSynced) {
         return (
@@ -118,7 +251,7 @@ export default function Page({ params: { slug } }: { params: { slug: string[] } 
                             style={{ position: "sticky", zIndex: 1, top: 0, display: "grid", placeItems: "center", marginBottom: "2rem", backgroundColor: "white" }}
                         >
                             <EditorContext.Provider value={editorContext}>
-                                <Editorheader handleClose={() => console.log("close")} handleUpdate={() => console.log("update")} />
+                                <Editorheader handleClose={handleClose} handleUpdate={handleUpdate} />
                             </EditorContext.Provider>
                         </div>
                         <div style={{ maxWidth: "1024px", margin: "auto" }}>
@@ -144,7 +277,7 @@ export default function Page({ params: { slug } }: { params: { slug: string[] } 
                                 id={49}
                                 user={profileData.data}
                                 updateContent={(content, title) => {
-                                    // updateContent(content, title);
+                                    updateContent(content, title);
                                 }}
                                 provider={provider}
                             />
