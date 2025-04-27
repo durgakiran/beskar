@@ -288,7 +288,6 @@ export default function Page({ params: { slug } }: { params: { slug: string[] } 
         </div>
     );
 }
-
 // import { TipTap } from "@editor";
 // import { EditorContext } from "@editor/context/editorContext";
 // import { Editorheader } from "@editor/header";
@@ -574,3 +573,4 @@ export default function Page({ params: { slug } }: { params: { slug: string[] } 
 //         </div>
 //     );
 // }
+

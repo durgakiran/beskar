@@ -54,7 +54,7 @@ const NoteBlock = (props) => {
             <NodeViewWrapper className="react-note-component-with-content" ref={refs.setReference} {...getReferenceProps()} id={id} style={{ backgroundColor: props.node.attrs.color }}>
                 <div className="flex items-start">
                     <div className="mx-2 my-2 p-2 box-border">{emoji}</div>
-                    <NodeViewContent className="content" />
+                    <NodeViewContent className="content flex-grow" />
                 </div>
             </NodeViewWrapper>
             {(isOpen && props.editor.isEditable) && (

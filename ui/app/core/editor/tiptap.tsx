@@ -38,12 +38,13 @@ import { SlashCommand } from "./extensions/slashCommand/command";
 import { CustomInput } from "./note/Note";
 import { TableColumnMenu, TableRowMenu } from "./Table/menus";
 import { Table, TableCell, TableHeader, TableRow } from "./Table";
-import { NodeIdExtension } from "@editor/extensions";
+import { CustomAttributes } from "@editor/extensions";
 import Collaboration from "@tiptap/extension-collaboration";
 import CollaborationCursor from "@tiptap/extension-collaboration-cursor";
 import { HocuspocusProvider } from "@hocuspocus/provider";
 
 const extensions = [
+    CustomAttributes,
     Bold,
     BulletList,
     Code,
@@ -87,7 +88,6 @@ const extensions = [
     TableCell,
     TableHeader,
     TableRow,
-    NodeIdExtension,
 ];
 
 interface TipTapProps {
