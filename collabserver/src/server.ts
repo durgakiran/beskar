@@ -47,25 +47,26 @@ const server = new Server({
         // If not in Redis, load from database
         console.log("Document not found in Redis, loading from database");
         const [doc, title, docId, parentId] = await getDocFromDatabase(data.documentName, data.requestHeaders);
-        
-        // Convert database document to Y.Doc
-        const ydoc = TiptapTransformer.toYdoc(
-            doc, 
-            "default", 
-            extensions
-        );
-        
-        // Create title Y doc and merge it
-        const titleYdoc = new Y.Doc();
-        console.log("Title of the document: ", title);
-        titleYdoc.getText('title').insert(0, title || '');
-        Y.applyUpdate(ydoc, Y.encodeStateAsUpdate(titleYdoc));
 
-        const metadata = new Y.Doc();
-        metadata.getText('docId').insert(0, docId.toString());
-        metadata.getText('parentId').insert(0, parentId.toString());
-        Y.applyUpdate(ydoc, Y.encodeStateAsUpdate(metadata));
-        
+        let ydoc = new Y.Doc();
+        console.log("doc", doc);
+        // if doc is null, initialize a new doc
+        if (doc === null) {
+            // do nothing
+            // Create title Y doc and merge it
+            const titleYdoc = new Y.Doc();
+            console.log("Title of the document: ", title);
+            titleYdoc.getText('title').insert(0, title || '');
+            Y.applyUpdate(ydoc, Y.encodeStateAsUpdate(titleYdoc));
+            
+            const metadata = new Y.Doc();
+            metadata.getText('docId').insert(0, docId.toString());
+            metadata.getText('parentId').insert(0, parentId.toString());
+            Y.applyUpdate(ydoc, Y.encodeStateAsUpdate(metadata)); 
+        } else {
+            const data = Buffer.from(doc.data, 'base64');
+            Y.applyUpdate(ydoc, data);
+        }
         // Store the loaded document in Redis for future use
         await redisStorage.storeDocument(data.documentName, ydoc);
         

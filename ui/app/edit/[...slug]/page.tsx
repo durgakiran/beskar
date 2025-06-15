@@ -63,6 +63,7 @@ export default function Page({ params: { slug } }: { params: { slug: string[] } 
 
     // start of editor handling
     const [{ data: publishigData, errors: publishErrors, isLoading: publishing }, publishDraftData] = usePUT<Response<UpdateDocDTO>, IPayloadPublish>(`editor/publish`);
+    const [{ errors: upadteErrors, isLoading: updating }, updateDraftData] = usePUT<Response<UpdateDocDTO>, IPayload>(`editor/update`);
     const [editorContext, setEditorContext] = useState<Editor>();
     const [isSynced, setIsSynced] = useState<boolean>(false);
     const [title, setTitle] = useState<string>();
@@ -99,7 +100,12 @@ export default function Page({ params: { slug } }: { params: { slug: string[] } 
 
     // editor handling functions
     const handleUpdate = () => {
-        workerRef.current.postMessage({ type: "data", data: updatedData });
+        if (updatedData) {
+            workerRef.current.postMessage({ type: "data", data: updatedData });
+        } else {
+            // there is no updatedData on load and so we need to get data from editor context it self
+            workerRef.current.postMessage({ type: "data", data: { data: editorContext.getJSON(), pageId: Number(slug[1]), id: docId } });
+        }
     };
 
     const updateContent = (content: any, title: string) => {
@@ -114,6 +120,7 @@ export default function Page({ params: { slug } }: { params: { slug: string[] } 
         };
         setUpdatedData({ data: content, pageId: Number(slug[1]), id: docId });
         setUpdatedTitle(title);
+        updateDraftData({...payLoad, data: Buffer.from(y.encodeStateAsUpdate(provider.document)).toString('base64')});
     };
 
     const handleClose = () => {
@@ -133,6 +140,13 @@ export default function Page({ params: { slug } }: { params: { slug: string[] } 
             });
         }
     }, [publishableDocument]);
+
+    // redirect to view page after publishing
+    useEffect(() => {
+        if (publishigData && !publishing ) {
+            router.push(`/space/${slug[0]}/view/${slug[1]}`);
+        }
+    }, [publishigData, publishing]);
 
     useEffect(() => {
         const _p = new HocuspocusProvider({

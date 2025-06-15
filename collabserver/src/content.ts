@@ -14,18 +14,11 @@ export async function getDocFromDatabase(docName: string, requestHeaders: any): 
             }
         });
         const res = await response.json();
-        const { title, docId, parentId} = res.data;
-        if (res.data.draft) {
-            const eData = typeof res.data.data.data === "string" ? JSON.parse(res.data.data.data) : res.data.data.data;
-            return [eData, title, docId, parentId];
-        } else {
-            const input = { title: res.data.title, ownerId: res.data.ownerId, parentId: res.data.parentId, id: res.data.id, docId: res.data.docId, spaceId: res.data.spaceId, nodeData: res.data.nodeData };
-            const data = getEditorDoc(JSON.stringify(input));
-            console.log("data", data);
-            return typeof data === "string" ? [JSON.parse(data), title, docId, parentId] : [data, title, docId, parentId];
-        }
+        console.log("returning data", res.data.data);
+        const { title, docId, parentId, data} = res.data;
+        return [data, title, docId, parentId];
     } catch (error) {
-        console.error(error);
+        console.error("error in getDocFromDatabase", error);
         return [null, "", 0, 0];
     }
 }

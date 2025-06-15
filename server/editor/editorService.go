@@ -153,7 +153,7 @@ func fetchContent(conn pgx.Tx, ctx context.Context, docId int64) (NodeData, erro
 
 func fetchContentToEdit(conn pgx.Tx, ctx context.Context, docId int64) (ContentDraft, error) {
 	var nodes ContentDraft
-	rows, err := conn.Query(ctx, getDraftDocument, docId)
+	rows, err := conn.Query(ctx, getBinaryDocument, docId)
 	if err != nil {
 		logger().Error(err.Error())
 		return nodes, err
@@ -346,12 +346,15 @@ func (document InputDocument) Publish() (int64, error) {
 		}
 	}
 	// delete drafts for given docId
-	draftContent := ContentDraft{DocId: docId}
-	rowsEffected, err := draftContent.Delete(tx, ctx)
-	if err != nil {
-		return document.Id, err
-	}
-	logger().Info(fmt.Sprintf("Number rows deleted %v", rowsEffected))
+	// ===== put delete on hold for now =====
+	// draftContent := ContentDraft{DocId: docId}
+	// rowsEffected, err := draftContent.Delete(tx, ctx)
+	// if err != nil {
+	// 	return document.Id, err
+	// }
+	// logger().Info(fmt.Sprintf("Number rows deleted %v", rowsEffected))
+	// ===== put delete on hold for now =====
+
 	// for _, child := range document.Updated {
 	// 	child.DocId = document.DocId
 	// 	_, err := child.Update(tx, ctx)
@@ -485,19 +488,24 @@ func GetDocumentToEdit(pageId int64, spaceId uuid.UUID, ownerId uuid.UUID) (Outp
 	if doc.DocId == 0 { // zero value
 		return outputDocument, err
 	}
-	if isDraft {
-		nodes, err := fetchContentToEdit(tx, ctx, doc.DocId)
-		if err != nil {
-			return outputDocument, err
-		}
-		outputDocument.Data = nodes
-	} else {
-		nodes, err := fetchContent(tx, ctx, doc.DocId)
-		if err != nil {
-			return outputDocument, err
-		}
-		outputDocument.Nodes = nodes
+	// if isDraft {
+	// 	nodes, err := fetchContentToEdit(tx, ctx, doc.DocId)
+	// 	if err != nil {
+	// 		return outputDocument, err
+	// 	}
+	// 	outputDocument.Data = nodes
+	// } else {
+	// 	nodes, err := fetchContent(tx, ctx, doc.DocId)
+	// 	if err != nil {
+	// 		return outputDocument, err
+	// 	}
+	// 	outputDocument.Nodes = nodes
+	// }
+	nodes, err := fetchContentToEdit(tx, ctx, doc.DocId)
+	if err != nil {
+		return outputDocument, err
 	}
+	outputDocument.Data = nodes
 	outputDocument.Document = doc
 	outputDocument.Draft = isDraft
 	tx.Commit(ctx)
