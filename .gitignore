@@ -23,3 +23,6 @@ ui/public/jbi.wasm
 logs
 *.wasm
 collabserver/dist
+
+redis-data
+redis-logs

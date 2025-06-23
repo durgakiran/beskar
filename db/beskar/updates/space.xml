@@ -390,4 +390,15 @@
         </sql>
         <rollback />
     </changeSet>
+
+    <changeSet id="30-add-binary-column-to-content-draft-table" author="Kiran Kumar">
+        <addColumn tableName="content_draft" schemaName="core">
+            <column name="data_binary" type="bytea" />
+        </addColumn>
+    </changeSet>
+
+    <changeSet id="31-remove-not-null-constaint-to-data-column-content-draft-table" author="Kiran Kumar">
+        <dropNotNullConstraint tableName="content_draft" schemaName="core" columnName="data" />
+    </changeSet>
+    
 </databaseChangeLog>

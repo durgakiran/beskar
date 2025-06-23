@@ -1,58 +1,58 @@
 version: '3.9'
 
 services:
-  graphql-engine:
-    image: hasura/graphql-engine:v2.36.0
-    ports:
-      - "8080:8080"
-    restart: always
-    env_file:
-      - .env.local
-    environment:
-      ## postgres database to store Hasura metadata
-      HASURA_GRAPHQL_METADATA_DATABASE_URL: ${HASURA_GRAPHQL_METADATA_DATABASE_URL}
-      ## this env var can be used to add the above postgres database to Hasura as a data source. this can be removed/updated based on your needs
-      PG_DATABASE_URL: ${PG_DATABASE_URL}
-      ## enable the console served by server
-      HASURA_GRAPHQL_ENABLE_CONSOLE: ${HASURA_GRAPHQL_ENABLE_CONSOLE} # set to "false" to disable console
-      ## enable debugging mode. It is recommended to disable this in production
-      HASURA_GRAPHQL_DEV_MODE: ${HASURA_GRAPHQL_DEV_MODE}
-      HASURA_GRAPHQL_ENABLED_LOG_TYPES: ${HASURA_GRAPHQL_ENABLED_LOG_TYPES}
-      ## uncomment next line to run console offline (i.e load console assets from server instead of CDN)
-      # HASURA_GRAPHQL_CONSOLE_ASSETS_DIR: /srv/console-assets
-      # HASURA_GRAPHQL_JWT_SECRET: '{ "type": "HS256", "key": "3aa52dfd53ea35e6fcc9cc38c3167aff" }'
-      HASURA_GRAPHQL_JWT_SECRET: ${HASURA_GRAPHQL_JWT_SECRET}
-      ## uncomment next line to set an admin secret
-      HASURA_GRAPHQL_ADMIN_SECRET: ${HASURA_GRAPHQL_ADMIN_SECRET}
-      HASURA_GRAPHQL_METADATA_DEFAULTS: ${HASURA_GRAPHQL_METADATA_DEFAULTS}
-    depends_on:
-      shield:
-        condition: service_started
-    networks:
-      - custom_local_network
-  shield:
-    image: quay.io/keycloak/keycloak:24.0.2
-    container_name: keycloak_auth
-    environment:
-      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN}
-      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
-      KC_DB: ${KC_DB}
-      KC_DB_URL: ${KC_DB_URL}
-      KC_DB_USERNAME: ${DB_ADMIN_USERNAME}
-      KC_DB_PASSWORD: ${DB_ADMIN_PASSWORD}
-      KC_LOG_LEVEL: DEBUG
-    ports:
-      - "8083:8080"
-    command:
-      - start-dev
-    networks:
-      - custom_local_network
+  # graphql-engine:
+  #   image: hasura/graphql-engine:v2.36.0
+  #   ports:
+  #     - "8080:8080"
+  #   restart: always
+  #   env_file:
+  #     - .env.local
+  #   environment:
+  #     ## postgres database to store Hasura metadata
+  #     HASURA_GRAPHQL_METADATA_DATABASE_URL: ${HASURA_GRAPHQL_METADATA_DATABASE_URL}
+  #     ## this env var can be used to add the above postgres database to Hasura as a data source. this can be removed/updated based on your needs
+  #     PG_DATABASE_URL: ${PG_DATABASE_URL}
+  #     ## enable the console served by server
+  #     HASURA_GRAPHQL_ENABLE_CONSOLE: ${HASURA_GRAPHQL_ENABLE_CONSOLE} # set to "false" to disable console
+  #     ## enable debugging mode. It is recommended to disable this in production
+  #     HASURA_GRAPHQL_DEV_MODE: ${HASURA_GRAPHQL_DEV_MODE}
+  #     HASURA_GRAPHQL_ENABLED_LOG_TYPES: ${HASURA_GRAPHQL_ENABLED_LOG_TYPES}
+  #     ## uncomment next line to run console offline (i.e load console assets from server instead of CDN)
+  #     # HASURA_GRAPHQL_CONSOLE_ASSETS_DIR: /srv/console-assets
+  #     # HASURA_GRAPHQL_JWT_SECRET: '{ "type": "HS256", "key": "3aa52dfd53ea35e6fcc9cc38c3167aff" }'
+  #     HASURA_GRAPHQL_JWT_SECRET: ${HASURA_GRAPHQL_JWT_SECRET}
+  #     ## uncomment next line to set an admin secret
+  #     HASURA_GRAPHQL_ADMIN_SECRET: ${HASURA_GRAPHQL_ADMIN_SECRET}
+  #     HASURA_GRAPHQL_METADATA_DEFAULTS: ${HASURA_GRAPHQL_METADATA_DEFAULTS}
+  #   depends_on:
+  #     shield:
+  #       condition: service_started
+  #   networks:
+  #     - custom_local_network
+  # shield:
+  #   image: quay.io/keycloak/keycloak:24.0.2
+  #   container_name: keycloak_auth
+  #   environment:
+  #     KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN}
+  #     KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+  #     KC_DB: ${KC_DB}
+  #     KC_DB_URL: ${KC_DB_URL}
+  #     KC_DB_USERNAME: ${DB_ADMIN_USERNAME}
+  #     KC_DB_PASSWORD: ${DB_ADMIN_PASSWORD}
+  #     KC_LOG_LEVEL: DEBUG
+  #   ports:
+  #     - "8083:8080"
+  #   command:
+  #     - start-dev
+  #   networks:
+  #     - custom_local_network
   proxy:
     container_name: proxy
     image: nginx:1.24
-    depends_on:
-      shield:
-        condition: service_started
+    # depends_on:
+    #   shield:
+    #     condition: service_started
     networks:
       custom_local_network:
         aliases:
@@ -92,9 +92,9 @@ services:
       PERMIFY_SERVER_GRPS_PORT: 3478
       PERMIFY_SERVER_GRPC_TLS_ENABLED: false
       PERMIFY_LOG_ENABLED: false
-    depends_on:
-      shield:
-        condition: service_started
+    # depends_on:
+    #   shield:
+    #     condition: service_started
     ports:
       - 3476:3476
       - 3478:3478
@@ -148,6 +148,14 @@ services:
       - "1234:1234"
     volumes:
       - /Users/kiran/projects/beskar/collabserver/:/app
+    environment:
+      - REDIS_HOST=tededox-redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-redis_secure_password}
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: always
     healthcheck:
       test: ["CMD-SHELL", "curl -XGET --output /dev/null --silent --head --fail http://localhost:1234/ || exit 1"]
       interval: 20s
@@ -155,6 +163,24 @@ services:
       retries: 6
     networks:
       - custom_local_network
+  redis:
+    container_name: tededox-redis
+    image: redis:latest
+    command: redis-server --requirepass ${REDIS_PASSWORD:-redis_secure_password} --appendonly yes --loglevel verbose
+    environment:
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-redis_secure_password}
+    ports:
+      - "6379:6379"
+    volumes:
+      - ./redis-data:/data  # For persistence
+      - ./redis-logs:/var/log/redis  # For logs
+    networks:
+      - custom_local_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-redis_secure_password}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
   server:
     container_name: tededox-server
     build:

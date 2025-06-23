@@ -84,14 +84,14 @@ type InputDocument struct {
 }
 
 type ContentDraft struct {
-	Id    int64       `json:"id" db:"id"`
-	DocId int64       `json:"docId" db:"doc_id"`
-	Data  interface{} `json:"data" data:"data"`
+	Id    int64  `json:"id" db:"id"`
+	DocId int64  `json:"docId" db:"doc_id"`
+	Data  []byte `json:"data" data:"data"`
 }
 
 type InputDraftDocument struct {
 	Document
-	Data interface{} `json:"data"`
+	Data []byte `json:"data"`
 }
 
 type OutputDocument struct {

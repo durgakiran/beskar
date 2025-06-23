@@ -26,7 +26,7 @@ export function usePUT<T, P>(path: string, headers: Record<string, any> = {}): [
                     res.clone()
                         .json()
                         .then((data) => setData(data as T))
-                        .catch((e) => setData(res.text() as T));
+                        .catch((e) => setErrors(e));
                 } else {
                     setErrors(new Error(`Request failed with status ${res.status}`))
                 }

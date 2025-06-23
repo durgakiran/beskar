@@ -1,8 +1,5 @@
 'use client'
-import { useMutation } from "@apollo/client";
-import { client } from "@http";
 import { Response, usePost } from "@http/hooks";
-import { GRAPHQL_ADD_SPACE } from "@queries/space";
 import { Button, Label, Modal, TextInput } from "flowbite-react";
 import { MouseEvent, useCallback, useEffect, useRef, useState } from "react";
 
@@ -22,7 +19,6 @@ interface Data {
 
 export default function AddSpace({ isOpen, setIsOpen }: IAddSpace) {
     const [name, setName] = useState('');
-    // const [mutateFunction, { data, loading, error }] = useMutation(GRAPHQL_ADD_SPACE, { client: client });
     const [{ data, errors: error, isLoading: loading }, mutateData] = usePost<Response<Data>, Payload>("space/create")
     const spaceNameRef = useRef();
 

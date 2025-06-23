@@ -1,1 +1,1 @@
-export { NodeIdExtension } from "./globalAttributes/nodeId";
+export { CustomAttributes } from "./globalAttributes/nodeId";

@@ -36,7 +36,9 @@ export function BubbleMenu(props: BubbleMenuProps) {
             tippyOptions,
         });
         menuEditor.registerPlugin(plugin);
-        return () => menuEditor.unregisterPlugin(pluginKey);
+        return () => {
+            menuEditor.unregisterPlugin(pluginKey);
+        };
     }, [props.editor, currentEditor, element]);
 
     return (

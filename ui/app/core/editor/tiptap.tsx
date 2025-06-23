@@ -38,11 +38,13 @@ import { SlashCommand } from "./extensions/slashCommand/command";
 import { CustomInput } from "./note/Note";
 import { TableColumnMenu, TableRowMenu } from "./Table/menus";
 import { Table, TableCell, TableHeader, TableRow } from "./Table";
-import { NodeIdExtension } from "@editor/extensions";
+import { CustomAttributes } from "@editor/extensions";
 import Collaboration from "@tiptap/extension-collaboration";
 import CollaborationCursor from "@tiptap/extension-collaboration-cursor";
+import { HocuspocusProvider } from "@hocuspocus/provider";
 
 const extensions = [
+    CustomAttributes,
     Bold,
     BulletList,
     Code,
@@ -86,7 +88,6 @@ const extensions = [
     TableCell,
     TableHeader,
     TableRow,
-    NodeIdExtension,
 ];
 
 interface TipTapProps {
@@ -98,6 +99,7 @@ interface TipTapProps {
     editable?: boolean;
     title: string;
     updateContent: (content: any, title: string) => void;
+    provider?: HocuspocusProvider
 }
 
 const MAX_DEFAULT_WIDTH = 760;
@@ -109,7 +111,7 @@ interface UserInfo {
     username: string;
 }
 
-export function TipTap({ setEditorContext, user, content, pageId, id, editable = true, title, updateContent }: TipTapProps) {
+export function TipTap({ setEditorContext, user, content, pageId, id, editable = true, title, updateContent, provider }: TipTapProps) {
     const [editedData, setEditedData] = useState(null);
     const menuContainerRef = useRef(null);
     const debouncedValue = useDebounce(editedData, 10000);
@@ -122,24 +124,37 @@ export function TipTap({ setEditorContext, user, content, pageId, id, editable =
         setEditedData(data);
     };
 
+    const collaborationExtensions = () => {
+        return [
+            Collaboration.configure({
+                document: provider?.document,
+                field: "default"
+            }),
+            CollaborationCursor.configure({
+                provider: provider,
+                user: { id: user.id, name: user.name, color: `#${Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0')}` },
+            }),
+        ];
+    }
+
     const manageContent = useMemo(() => {
         if (editable) {
             return {
                 onCreate: ({ editor: currentEditor }: { editor: Editor }) => {
-                    // provider.connect();
-                    // provider.
+                    if (provider) {
+                        // provider.connect();
+                    }
                 },
-                content: content,
             };
         } else {
             return { content: content };
         }
-    }, [editable]);
+    }, []);
 
     const editor = useEditor({
         immediatelyRender: true,
         shouldRerenderOnTransaction: false,
-        extensions: extensions.concat(editable ? [] : []),
+        extensions: extensions.concat(editable ? collaborationExtensions() : []),
         ...manageContent,
         editable: editable,
         onUpdate: ({ editor }) => {

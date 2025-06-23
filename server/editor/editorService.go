@@ -153,7 +153,7 @@ func fetchContent(conn pgx.Tx, ctx context.Context, docId int64) (NodeData, erro
 
 func fetchContentToEdit(conn pgx.Tx, ctx context.Context, docId int64) (ContentDraft, error) {
 	var nodes ContentDraft
-	rows, err := conn.Query(ctx, getDraftDocument, docId)
+	rows, err := conn.Query(ctx, getBinaryDocument, docId)
 	if err != nil {
 		logger().Error(err.Error())
 		return nodes, err
@@ -307,23 +307,29 @@ func (document InputDocument) Publish() (int64, error) {
 	defer tx.Rollback(ctx)
 	defer conn.Release()
 	// create or update doc
-	// we need to create a doc if there is none exists in draft state
-	// we need to update a doc if exists in draft state
+	// update the doc in draft state
 	existingDocument, err := fetchDocumentToEdit(tx, ctx, document.Id, document.SpaceId, document.OwnerId)
+	var docId int64
 	if errors.Is(err, pgx.ErrNoRows) {
-		return document.Id, errors.New("nothing new to update")
-	}
-	if err != nil {
+		// return document.Id, errors.New("nothing new to update")
+		doc := Doc{PageId: document.Id, OwnerId: document.OwnerId, Version: time.Now(), Title: document.Title, Draft: 0}
+		docId, err = doc.Create(tx, ctx)
+		if err != nil {
+			return document.Id, err
+		}
+	} else if err != nil {
 		return document.Id, err
-	}
-	doc := Doc{PageId: document.Id, DocId: existingDocument.DocId, OwnerId: document.OwnerId, Version: time.Now(), Title: document.Title, Draft: 0}
-	_, err = doc.Update(tx, ctx)
-	if err != nil {
-		return document.Id, err
+	} else {
+		doc := Doc{PageId: document.Id, DocId: existingDocument.DocId, OwnerId: document.OwnerId, Version: time.Now(), Title: document.Title, Draft: 0}
+		docId = existingDocument.DocId
+		_, err = doc.Update(tx, ctx)
+		if err != nil {
+			return document.Id, err
+		}
 	}
 	// create content
 	for _, child := range document.Nodes.Content {
-		child.DocId = existingDocument.DocId
+		child.DocId = docId
 		_, err := child.Create(tx, ctx)
 		if err != nil {
 			fmt.Println(child.DocId, child.ContentId)
@@ -332,7 +338,7 @@ func (document InputDocument) Publish() (int64, error) {
 		}
 	}
 	for _, child := range document.Nodes.Text {
-		child.DocId = existingDocument.DocId
+		child.DocId = docId
 		_, err := child.Create(tx, ctx)
 		if err != nil {
 			// return pageId and error
@@ -340,12 +346,15 @@ func (document InputDocument) Publish() (int64, error) {
 		}
 	}
 	// delete drafts for given docId
-	draftContent := ContentDraft{DocId: existingDocument.DocId}
-	rowsEffected, err := draftContent.Delete(tx, ctx)
-	if err != nil {
-		return document.Id, err
-	}
-	logger().Info(fmt.Sprintf("Number rows deleted %v", rowsEffected))
+	// ===== put delete on hold for now =====
+	// draftContent := ContentDraft{DocId: docId}
+	// rowsEffected, err := draftContent.Delete(tx, ctx)
+	// if err != nil {
+	// 	return document.Id, err
+	// }
+	// logger().Info(fmt.Sprintf("Number rows deleted %v", rowsEffected))
+	// ===== put delete on hold for now =====
+
 	// for _, child := range document.Updated {
 	// 	child.DocId = document.DocId
 	// 	_, err := child.Update(tx, ctx)
@@ -479,19 +488,24 @@ func GetDocumentToEdit(pageId int64, spaceId uuid.UUID, ownerId uuid.UUID) (Outp
 	if doc.DocId == 0 { // zero value
 		return outputDocument, err
 	}
-	if isDraft {
-		nodes, err := fetchContentToEdit(tx, ctx, doc.DocId)
-		if err != nil {
-			return outputDocument, err
-		}
-		outputDocument.Data = nodes
-	} else {
-		nodes, err := fetchContent(tx, ctx, doc.DocId)
-		if err != nil {
-			return outputDocument, err
-		}
-		outputDocument.Nodes = nodes
+	// if isDraft {
+	// 	nodes, err := fetchContentToEdit(tx, ctx, doc.DocId)
+	// 	if err != nil {
+	// 		return outputDocument, err
+	// 	}
+	// 	outputDocument.Data = nodes
+	// } else {
+	// 	nodes, err := fetchContent(tx, ctx, doc.DocId)
+	// 	if err != nil {
+	// 		return outputDocument, err
+	// 	}
+	// 	outputDocument.Nodes = nodes
+	// }
+	nodes, err := fetchContentToEdit(tx, ctx, doc.DocId)
+	if err != nil {
+		return outputDocument, err
 	}
+	outputDocument.Data = nodes
 	outputDocument.Document = doc
 	outputDocument.Draft = isDraft
 	tx.Commit(ctx)

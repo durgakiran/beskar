@@ -10,7 +10,11 @@ const (
 	deleteContent  = "DELETE FROM core.content WHERE id = $1 AND doc_id = $2"
 	updateDocQuery = "UPDATE core.page_doc_map SET title = $1, version = $2, draft = $5 WHERE doc_id = $3 AND page_id = $4"
 	getDocument    = `SELECT 
-							d.title AS title, d.owner_id AS ownerId, d.page_id id, d.doc_id AS docId, p.space_id AS spaceId
+							d.title AS title, 
+							d.owner_id AS ownerId, 
+							d.page_id id, 
+							d.doc_id AS docId, 
+							p.space_id AS spaceId
 						FROM 
 							core.page p, core.page_doc_map d
 						WHERE 
@@ -45,8 +49,8 @@ const (
 					FROM
 						core.text_node c
 					WHERE c.doc_id = $1`
-	insertDraftDocument = `INSERT INTO core.content_draft (doc_id, data) VALUES ($1, $2) RETURNING id`
-	updateDraftDocument = `UPDATE core.content_draft SET data = $2 WHERE doc_id = $1 RETURNING id`
-	getDraftDocument    = `SELECT id, doc_id, data FROM core.content_draft cd WHERE cd.doc_id = $1`
+	insertDraftDocument = `INSERT INTO core.content_draft (doc_id, data_binary) VALUES ($1, $2) RETURNING id`
+	updateDraftDocument = `UPDATE core.content_draft SET data_binary = $2 WHERE doc_id = $1 RETURNING id`
+	getBinaryDocument   = `SELECT id, doc_id, data_binary as data FROM core.content_draft cd WHERE cd.doc_id = $1`
 	deleteDraftDocument = `DELETE FROM core.content_draft WHERE doc_id = $1`
 )

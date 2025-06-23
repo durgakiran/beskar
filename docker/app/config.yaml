@@ -1,0 +1,52 @@
+# The server section specifies the HTTP and gRPC server settings
+# including whether or not TLS is enabled and the certificate and key file locations.
+server:
+  rate_limit: 100
+  http:
+    enabled: true
+    port: 3476
+    tls:
+      enabled: false
+  grpc:
+    port: 3478
+    tls:
+      enabled: false
+
+# The logger section sets the logging level for the service.
+logger:
+  level: info
+
+# The profiler section enables or disables the pprof profiler and
+# sets the port number for the profiler endpoint.
+profiler:
+  enabled: true
+  port: 6060
+
+# authentication
+authn:
+  method: oidc
+  enabled: true
+  oidc:
+    issuer: "http://shield:8080/realms/devbeskarrealm"
+    audience: "besarappclient"
+    refresh_interval: 10m
+    backoff_max_retries: 5
+    valid_methods: ["RS256","HS256"]
+
+
+# The database section specifies the database engine and connection settings,
+# including the URI for the database, whether or not to auto-migrate the database,
+# and connection pool settings.
+database:
+  engine: postgres
+  uri: postgres://beskar_admin:beskar_admin_pwd@localhost:5433/auth
+  auto_migrate: false
+  max_open_connections: 20
+  max_idle_connections: 1
+  max_connection_lifetime: 300s
+  max_connection_idle_time: 60s
+  garbage_collection:
+    enabled: true
+    interval: 200h
+    window: 200h
+    timeout: 5m
