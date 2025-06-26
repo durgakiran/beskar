@@ -1,9 +1,10 @@
-"use client"
-import { useLogout } from "app/core/auth/useKeycloak";
-import { useGetCall } from "@http";
-import { Avatar, Dropdown, Navbar, Tooltip } from "flowbite-react";
+"use client";
+import { Avatar, Dropdown, Navbar, Spinner, Tooltip } from "flowbite-react";
 import Link from "next/link";
 import ModifiedIcon from "./modifiedIcon";
+import { Response, useGet } from "@http/hooks";
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
 
 interface UserInfo {
     email: string;
@@ -15,8 +16,17 @@ interface UserInfo {
 const USER_URI = process.env.NEXT_PUBLIC_USER_SERVER_URL;
 
 export default function MenuBar() {
-    const [status, res] = useGetCall<UserInfo>(USER_URI + "/profile/details");
-    const logout = useLogout();
+    const [{ isLoading, data, errors, response }, fetchData] = useGet<Response<UserInfo>>("profile/details");
+    // const [{ isLoading: isLoggingOut, data: logoutData, errors: logoutErrors, response: logoutResponse }, logout ] = useGet<Response<void>>("auth/logout");
+    // const router = useRouter();
+
+    const logout = () => {
+        window.location.href = `${window.location.origin}/auth/logout`;
+    };
+
+    useEffect(() => {
+        fetchData();
+    }, []);
 
     return (
         <Navbar fluid rounded className="fixed w-full bg-white z-50 shadow-sm">
@@ -27,6 +37,9 @@ export default function MenuBar() {
                 <Navbar.Collapse>
                     <Navbar.Link href="/space" as={Link}>
                         Spaces
+                    </Navbar.Link>
+                    <Navbar.Link href="/focus" as={Link}>
+                        Focus
                     </Navbar.Link>
                     {/* <Navbar.Link href="#">Pricing</Navbar.Link> */}
                     <Navbar.Link href="#">Contact</Navbar.Link>
@@ -45,13 +58,14 @@ export default function MenuBar() {
                     <Dropdown
                         arrowIcon={false}
                         inline
-                        label={<Avatar alt="User settings" size="sm" placeholderInitials={res && res.data && res.data.name ? res.data.name.charAt(0).toUpperCase() : ""} rounded />}
+                        label={<Avatar alt="User settings" size="sm" placeholderInitials={data && data.data && data.data.name ? data.data.name.charAt(0).toUpperCase() : ""} rounded />}
                     >
-                        {res && res.data ? (
+                        {isLoading && <Spinner size="sm" />}
+                        {data && data.data ? (
                             <>
                                 <Dropdown.Header>
-                                    <span className="block text-sm">{res.data.name}</span>
-                                    <span className="block truncate text-sm font-medium">{res.data.email}</span>
+                                    <span className="block text-sm">{data.data.name}</span>
+                                    <span className="block truncate text-sm font-medium">{data.data.email}</span>
                                 </Dropdown.Header>
                                 <Dropdown.Item>Dashboard</Dropdown.Item>
                                 <Dropdown.Item>Settings</Dropdown.Item>
