@@ -13,5 +13,6 @@
     <!-- <include file="updates/auth.xml" /> -->
     <include file="updates/notifications.xml" />
     <include file="updates/user.xml" />
+    <include file="updates/tasks.xml" />
 
 </databaseChangeLog>

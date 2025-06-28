@@ -481,9 +481,9 @@ func GetDocumentToEdit(pageId int64, spaceId uuid.UUID, ownerId uuid.UUID) (Outp
 	if errors.Is(err, pgx.ErrNoRows) {
 		doc, err = fetchDocument(tx, ctx, pageId, spaceId, ownerId)
 		isDraft = false
-	}
-	if err != nil {
-		return outputDocument, err
+		if err != nil {
+			return outputDocument, err
+		}
 	}
 	if doc.DocId == 0 { // zero value
 		return outputDocument, err

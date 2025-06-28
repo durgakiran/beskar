@@ -10,6 +10,7 @@ import (
 	auth "github.com/durgakiran/beskar/auth"
 	"github.com/durgakiran/beskar/core"
 	editor "github.com/durgakiran/beskar/editor"
+	focus "github.com/durgakiran/beskar/focus"
 	"github.com/durgakiran/beskar/invite"
 	media "github.com/durgakiran/beskar/media/controller"
 	page "github.com/durgakiran/beskar/page"
@@ -112,6 +113,7 @@ func main() {
 	r.Mount("/api/v1/space", mw.CheckAuthentication()(space.Router()))
 	r.Mount("/api/v1/invite", mw.CheckAuthentication()(invite.Router()))
 	r.Mount("/api/v1/page", mw.CheckAuthentication()(page.Router()))
+	r.Mount("/api/v1/focus", mw.CheckAuthentication()(focus.Router()))
 	r.Mount("/api/v1/user", user.Router())
 
 	logger().Info(fmt.Sprintf("Serving on port: %s", port))

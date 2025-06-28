@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react";
 import { Modal, Button, TextInput, Textarea, Progress } from "flowbite-react";
 import { HiTrash } from "react-icons/hi";
-import { Task } from "../types";
+import { Task } from "../../focus/types";
 
 interface TaskModalProps {
     task: Task;
@@ -37,8 +37,8 @@ export default function TaskModal({ task, show, onClose, onUpdate, onDelete }: T
         onDelete(task.id);
     };
 
-    const progress = task.completedTime && task.estimatedTime
-        ? Math.round((task.completedTime / task.estimatedTime) * 100)
+    const progress = task.totalCompletedTime && task.estimatedTime
+        ? Math.round((task.totalCompletedTime / task.estimatedTime) * 100)
         : 0;
 
     const formatTime = (minutes: number) => {

@@ -1,0 +1,284 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext"
+    xmlns:pro="http://www.liquibase.org/xml/ns/pro"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd
+        http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd
+        http://www.liquibase.org/xml/ns/pro http://www.liquibase.org/xml/ns/pro/liquibase-pro-latest.xsd">
+
+    <!-- Create focus schema -->
+    <changeSet id="focus-0-create-focus-schema" author="Focus App">
+        <sql>
+            CREATE SCHEMA IF NOT EXISTS focus;
+        </sql>
+    </changeSet>
+
+    <!-- Grant permissions to app_user -->
+    <changeSet id="focus-0-1-grant-focus-schema-permissions" author="Focus App">
+        <sql>
+            GRANT USAGE ON SCHEMA focus TO ${app_user};
+            GRANT CREATE ON SCHEMA focus TO ${app_user};
+            GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA focus TO ${app_user};
+            GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA focus TO ${app_user};
+            ALTER DEFAULT PRIVILEGES FOR USER beskar_admin IN SCHEMA focus GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO ${app_user};
+            ALTER DEFAULT PRIVILEGES FOR USER beskar_admin IN SCHEMA focus GRANT ALL ON SEQUENCES TO ${app_user};
+        </sql>
+    </changeSet>
+
+    <!-- Create ENUM types for task status and priority -->
+    <changeSet id="focus-1-create-task-status-enum" author="Focus App">
+        <sql>
+            CREATE TYPE focus_task_status AS ENUM ('pending', 'in-progress', 'completed');
+        </sql>
+    </changeSet>
+
+    <changeSet id="focus-2-create-task-priority-enum" author="Focus App">
+        <sql>
+            CREATE TYPE focus_task_priority AS ENUM ('low', 'medium', 'high');
+        </sql>
+    </changeSet>
+
+    <changeSet id="focus-3-create-session-type-enum" author="Focus App">
+        <sql>
+            CREATE TYPE focus_session_type AS ENUM ('pomodoro', 'break', 'long_break');
+        </sql>
+    </changeSet>
+
+    <changeSet id="focus-4-create-session-status-enum" author="Focus App">
+        <sql>
+            CREATE TYPE focus_session_status AS ENUM ('active', 'completed', 'interrupted');
+        </sql>
+    </changeSet>
+
+    <changeSet id="focus-5-create-session-task-status-enum" author="Focus App">
+        <sql>
+            CREATE TYPE focus_session_task_status AS ENUM ('active', 'completed', 'paused');
+        </sql>
+    </changeSet>
+
+    <!-- Create focus_tasks table -->
+    <changeSet id="focus-6-create-focus-tasks-table" author="Focus App">
+        <createTable tableName="focus_tasks" schemaName="focus">
+            <column name="id" type="uuid">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="user_id" type="uuid">
+                <constraints nullable="false"/>
+            </column>
+            <column name="title" type="VARCHAR(255)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="description" type="TEXT">
+                <constraints nullable="true"/>
+            </column>
+            <column name="estimated_time" type="INTEGER">
+                <constraints nullable="false" checkConstraint="estimated_time > 0"/>
+            </column>
+            <column name="total_completed_time" type="INTEGER" defaultValue="0">
+                <constraints nullable="false" checkConstraint="total_completed_time >= 0"/>
+            </column>
+            <column name="status" type="focus_task_status">
+                <constraints nullable="false"/>
+            </column>
+            <column name="priority" type="focus_task_priority">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_at" type="TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_at" type="TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+            <column name="deleted_at" type="TIMESTAMP">
+                <constraints nullable="true"/>
+            </column>
+        </createTable>
+    </changeSet>
+
+    <!-- Create focus_sessions table -->
+    <changeSet id="focus-7-create-focus-sessions-table" author="Focus App">
+        <createTable tableName="focus_sessions" schemaName="focus">
+            <column name="id" type="uuid">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="user_id" type="uuid">
+                <constraints nullable="false"/>
+            </column>
+            <column name="session_type" type="focus_session_type">
+                <constraints nullable="false"/>
+            </column>
+            <column name="duration" type="INTEGER">
+                <constraints nullable="false" checkConstraint="duration > 0"/>
+            </column>
+            <column name="actual_duration" type="INTEGER">
+                <constraints nullable="true" checkConstraint="actual_duration > 0"/>
+            </column>
+            <column name="started_at" type="TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+            <column name="ended_at" type="TIMESTAMP">
+                <constraints nullable="true"/>
+            </column>
+            <column name="status" type="focus_session_status">
+                <constraints nullable="false"/>
+            </column>
+            <column name="notes" type="TEXT">
+                <constraints nullable="true"/>
+            </column>
+        </createTable>
+    </changeSet>
+
+    <!-- Create focus_session_tasks junction table -->
+    <changeSet id="focus-8-create-focus-session-tasks-table" author="Focus App">
+        <createTable tableName="focus_session_tasks" schemaName="focus">
+            <column name="id" type="uuid">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="session_id" type="uuid">
+                <constraints nullable="false"/>
+            </column>
+            <column name="task_id" type="uuid">
+                <constraints nullable="false"/>
+            </column>
+            <column name="time_spent" type="INTEGER">
+                <constraints nullable="false" checkConstraint="time_spent > 0"/>
+            </column>
+            <column name="started_at" type="TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+            <column name="ended_at" type="TIMESTAMP">
+                <constraints nullable="true"/>
+            </column>
+            <column name="status" type="focus_session_task_status">
+                <constraints nullable="false"/>
+            </column>
+            <column name="notes" type="TEXT">
+                <constraints nullable="true"/>
+            </column>
+        </createTable>
+    </changeSet>
+
+
+
+    <changeSet id="focus-11-add-focus-session-tasks-foreign-keys" author="Focus App">
+        <addForeignKeyConstraint 
+            baseTableSchemaName="focus" 
+            baseTableName="focus_session_tasks" 
+            baseColumnNames="session_id" 
+            referencedTableSchemaName="focus" 
+            referencedTableName="focus_sessions" 
+            referencedColumnNames="id" 
+            constraintName="fk_focus_session_tasks_session_id"/>
+        
+        <addForeignKeyConstraint 
+            baseTableSchemaName="focus" 
+            baseTableName="focus_session_tasks" 
+            baseColumnNames="task_id" 
+            referencedTableSchemaName="focus" 
+            referencedTableName="focus_tasks" 
+            referencedColumnNames="id" 
+            constraintName="fk_focus_session_tasks_task_id"/>
+    </changeSet>
+
+    <!-- Create indexes for better performance -->
+    <changeSet id="focus-12-create-focus-tasks-indexes" author="Focus App">
+        <createIndex tableName="focus_tasks" schemaName="focus" indexName="idx_focus_tasks_user_id">
+            <column name="user_id"/>
+        </createIndex>
+        
+        <createIndex tableName="focus_tasks" schemaName="focus" indexName="idx_focus_tasks_status">
+            <column name="status"/>
+        </createIndex>
+        
+        <createIndex tableName="focus_tasks" schemaName="focus" indexName="idx_focus_tasks_created_at">
+            <column name="created_at"/>
+        </createIndex>
+        
+        <createIndex tableName="focus_tasks" schemaName="focus" indexName="idx_focus_tasks_deleted_at">
+            <column name="deleted_at"/>
+        </createIndex>
+    </changeSet>
+
+    <changeSet id="focus-13-create-focus-sessions-indexes" author="Focus App">
+        <createIndex tableName="focus_sessions" schemaName="focus" indexName="idx_focus_sessions_user_id">
+            <column name="user_id"/>
+        </createIndex>
+        
+        <createIndex tableName="focus_sessions" schemaName="focus" indexName="idx_focus_sessions_started_at">
+            <column name="started_at"/>
+        </createIndex>
+        
+        <createIndex tableName="focus_sessions" schemaName="focus" indexName="idx_focus_sessions_status">
+            <column name="status"/>
+        </createIndex>
+    </changeSet>
+
+    <changeSet id="focus-14-create-focus-session-tasks-indexes" author="Focus App">
+        <createIndex tableName="focus_session_tasks" schemaName="focus" indexName="idx_focus_session_tasks_session_id">
+            <column name="session_id"/>
+        </createIndex>
+        
+        <createIndex tableName="focus_session_tasks" schemaName="focus" indexName="idx_focus_session_tasks_task_id">
+            <column name="task_id"/>
+        </createIndex>
+        
+        <createIndex tableName="focus_session_tasks" schemaName="focus" indexName="idx_focus_session_tasks_started_at">
+            <column name="started_at"/>
+        </createIndex>
+        
+        <createIndex tableName="focus_session_tasks" schemaName="focus" indexName="idx_focus_session_tasks_session_task">
+            <column name="session_id"/>
+            <column name="task_id"/>
+        </createIndex>
+    </changeSet>
+
+    <!-- Add unique constraint to prevent duplicate session-task combinations -->
+    <changeSet id="focus-15-add-focus-session-tasks-unique-constraint" author="Focus App">
+        <addUniqueConstraint 
+            tableName="focus_session_tasks" 
+            schemaName="focus" 
+            columnNames="session_id, task_id" 
+            constraintName="uk_focus_session_tasks_session_task"/>
+    </changeSet>
+
+    <!-- Add order column to focus_tasks table for proper task ordering -->
+    <changeSet id="focus-16-add-task-order-column" author="Focus App">
+        <!-- First add the column as nullable -->
+        <addColumn tableName="focus_tasks" schemaName="focus">
+            <column name="task_order" type="INTEGER">
+                <constraints nullable="true"/>
+            </column>
+        </addColumn>
+        
+        <!-- Set initial order values based on creation time -->
+        <sql>
+            UPDATE focus.focus_tasks 
+            SET task_order = (
+                SELECT row_number() OVER (ORDER BY created_at) - 1
+                FROM focus.focus_tasks t2 
+                WHERE t2.id = focus.focus_tasks.id
+            );
+        </sql>
+        
+        <!-- Now add the NOT NULL constraint -->
+        <addNotNullConstraint 
+            tableName="focus_tasks" 
+            schemaName="focus" 
+            columnName="task_order"/>
+        
+        <!-- Create index for task_order -->
+        <createIndex tableName="focus_tasks" schemaName="focus" indexName="idx_focus_tasks_order">
+            <column name="task_order"/>
+        </createIndex>
+        
+        <!-- Create composite index for user_id and task_order for efficient ordering -->
+        <createIndex tableName="focus_tasks" schemaName="focus" indexName="idx_focus_tasks_user_order">
+            <column name="user_id"/>
+            <column name="task_order"/>
+        </createIndex>
+    </changeSet>
+
+</databaseChangeLog>

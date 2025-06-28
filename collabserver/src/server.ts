@@ -51,8 +51,7 @@ const server = new Server({
         let ydoc = new Y.Doc();
         console.log("doc", doc);
         // if doc is null, initialize a new doc
-        if (doc === null) {
-            // do nothing
+        if (doc === null || doc.data === null) {
             // Create title Y doc and merge it
             const titleYdoc = new Y.Doc();
             console.log("Title of the document: ", title);

@@ -39,7 +39,7 @@ export default function PomodoroClock({ tasks, onTimeUpdate }: PomodoroClockProp
                             const currentTask = tasks.find(t => t.id === currentTaskId);
                             if (currentTask) {
                                 const sessionTime = isBreak ? 5 * 60 : 25 * 60; // 5 min break or 25 min focus
-                                const newCompletedTime = (currentTask.completedTime || 0) + sessionTime;
+                                const newCompletedTime = (currentTask.totalCompletedTime || 0) + sessionTime;
                                 onTimeUpdate(currentTaskId, newCompletedTime);
                             }
                         }

@@ -69,7 +69,7 @@ export default function TaskCard({
     };
 
     // Calculate progress percentage
-    const progress = task.completedTime ? (task.completedTime / task.estimatedTime) * 100 : 0;
+    const progress = task.totalCompletedTime ? (task.totalCompletedTime / task.estimatedTime) * 100 : 0;
 
     // Color logic
     let bg = "bg-white text-gray-900";
@@ -107,7 +107,7 @@ export default function TaskCard({
             <div className={`flex-1 truncate font-medium text-sm ${task.status === 'completed' ? 'line-through text-gray-300' : ''}`}>{task.title}</div>
             {/* Time */}
             <div className="ml-2 text-xs font-medium text-gray-400 whitespace-nowrap opacity-80">
-                {formatTime(task.completedTime || 0)} / {formatTime(task.estimatedTime)}
+                {formatTime(task.totalCompletedTime || 0)} / {formatTime(task.estimatedTime)}
             </div>
         </div>
     );
