@@ -2,21 +2,23 @@ import { usePUT } from "@http/hooks";
 import { useFocusContext } from "../../core/context/FocusContext";
 import { Task, TaskOrderItem } from "../types";
 import { useFetchTasks } from "./useFetchTasks";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 
 export function useReorderTasks() {
     const { tasks, setTasks, setError } = useFocusContext();
     const [{ isLoading, errors }, putReorder] = usePUT<any, { taskOrders: TaskOrderItem[] }>("focus/tasks");
     const { fetchTasks } = useFetchTasks();
+    const wasLoadingRef = useRef(false);
 
     // Only show pending and in-progress tasks
     const activeTasks = tasks.filter((task) => task.status === "pending" || task.status === "in-progress");
 
     useEffect(() => {
-        if (!isLoading) {
+        if (wasLoadingRef.current && !isLoading) {
             fetchTasks();
         }
-    }, [isLoading]);
+        wasLoadingRef.current = isLoading;
+    }, [isLoading, fetchTasks]);
 
     // Reorder tasks using the API
     const reorderActiveTasks = async (fromIndex: number, toIndex: number) => {
@@ -48,9 +50,6 @@ export function useReorderTasks() {
             // Sort by taskOrder
             newTasks.sort((a, b) => a.taskOrder - b.taskOrder);
             setTasks(newTasks);
-
-            // Refresh from server after a short delay to ensure consistency
-            // setTimeout(() => fetchTasks(), 1000);
         } catch (error) {
             setError("Failed to reorder tasks");
             // Revert to original order on error

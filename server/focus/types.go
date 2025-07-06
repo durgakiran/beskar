@@ -99,7 +99,7 @@ type CreateSessionRequest struct {
 
 // EndSessionRequest represents the request to end a session
 type EndSessionRequest struct {
-	ActualDuration int    `json:"actualDuration" validate:"required,min=1,max=1440"`
+	ActualDuration int    `json:"actualDuration" validate:"required,min=0,max=1440"`
 	Status         string `json:"status" validate:"required,oneof=completed interrupted"`
 }
 

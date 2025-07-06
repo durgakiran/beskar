@@ -29,6 +29,63 @@ export interface ReorderTasksRequest {
     taskOrders: TaskOrderItem[];
 }
 
+// Session Types
+export interface Session {
+    id: string;
+    userId: string;
+    sessionType: 'pomodoro' | 'break' | 'long_break';
+    duration: number; // in minutes
+    actualDuration?: number; // in minutes
+    startedAt: string; // ISO date string
+    endedAt?: string; // ISO date string
+    status: 'active' | 'completed' | 'interrupted';
+    notes?: string;
+}
+
+export interface SessionTask {
+    id: string;
+    sessionId: string;
+    taskId: string;
+    timeSpent: number; // in minutes
+    startedAt: string; // ISO date string
+    endedAt?: string; // ISO date string
+    status: 'active' | 'completed' | 'paused';
+    notes?: string;
+    taskTitle: string;
+    taskDescription: string;
+    taskPriority: string;
+}
+
+// Session Request/Response Types
+export interface CreateSessionRequest {
+    sessionType: 'pomodoro' | 'break' | 'long_break';
+    duration: number; // in minutes
+    notes?: string;
+}
+
+export interface EndSessionRequest {
+    actualDuration: number; // in minutes
+    status: 'completed' | 'interrupted';
+}
+
+export interface AddTaskToSessionRequest {
+    taskId: string;
+    timeSpent: number; // in minutes
+    notes?: string;
+}
+
+export interface UpdateSessionTaskRequest {
+    timeSpent: number; // in minutes
+    status: 'active' | 'completed' | 'paused';
+}
+
+export interface SessionListResponse {
+    sessions: Session[];
+    total: number;
+    limit: number;
+    offset: number;
+}
+
 export interface FocusStats {
     totalTasks: number;
     completedTasks: number;

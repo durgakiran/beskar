@@ -3,6 +3,9 @@ import { useState, useEffect, useRef } from "react";
 import { Button } from "flowbite-react";
 import { HiPlay, HiPause, HiRefresh } from "react-icons/hi";
 import { Task } from "../types";
+import { useCreateSession, useEndSession } from "../hooks";
+import { useFocusContext } from "../../core/context/FocusContext";
+import { useVoiceAssistant } from "app/core/hooks/useVoiceAssistant";
 
 interface PomodoroClockProps {
     tasks: Task[];
@@ -14,7 +17,14 @@ export default function PomodoroClock({ tasks, onTimeUpdate }: PomodoroClockProp
     const [timeLeft, setTimeLeft] = useState(25 * 60); // 25 minutes in seconds
     const [isBreak, setIsBreak] = useState(false);
     const [currentTaskId, setCurrentTaskId] = useState<string | null>(null);
+    const [midSessionTriggers, setMidSessionTriggers] = useState<Set<string>>(new Set());
     const intervalRef = useRef<NodeJS.Timeout | null>(null);
+    const { playSessionStart, playMidSession, playSessionComplete, enabled } = useVoiceAssistant();
+    
+    // Session management
+    const { startSession, loading: creatingSession } = useCreateSession();
+    const { finishSession, loading: endingSession } = useEndSession();
+    const { currentSession, setCurrentSession } = useFocusContext();
 
     // Get current active task
     const getCurrentTask = () => {
@@ -24,15 +34,59 @@ export default function PomodoroClock({ tasks, onTimeUpdate }: PomodoroClockProp
         return activeTasks.length > 0 ? activeTasks[0] : null;
     };
 
+    useEffect(() => {
+        console.log("currentSession", currentSession);
+    }, [currentSession]);
+
     const currentTask = getCurrentTask();
+
+    // Check for mid-session audio triggers
+    const checkMidSessionTriggers = (elapsedTime: number, totalTime: number) => {
+        if (isBreak || !enabled) return; // Only during focus sessions
+        
+        const sessionKey = `${currentSession?.id}-${currentTaskId}`;
+        const percentage = (elapsedTime / totalTime) * 100;
+        
+        // Trigger at 50% completion with a small delay
+        if (percentage >= 50 && !midSessionTriggers.has(`${sessionKey}-50`)) {
+            playMidSession(1000); // 1 second delay
+            setMidSessionTriggers(prev => new Set([...prev, `${sessionKey}-50`]));
+        }
+        
+        // Trigger at 75% completion with a small delay
+        if (percentage >= 75 && !midSessionTriggers.has(`${sessionKey}-75`)) {
+            playMidSession(1000); // 1 second delay
+            setMidSessionTriggers(prev => new Set([...prev, `${sessionKey}-75`]));
+        }
+    };
 
     useEffect(() => {
         if (isRunning) {
             intervalRef.current = setInterval(() => {
                 setTimeLeft((prevTime) => {
+                    const totalTime = isBreak ? 5 * 60 : 25 * 60;
+                    const elapsedTime = totalTime - prevTime;
+                    
+                    // Check for mid-session triggers
+                    checkMidSessionTriggers(elapsedTime, totalTime);
+                    
                     if (prevTime <= 1) {
                         // Timer finished
                         setIsRunning(false);
+                        
+                        // End current session
+                        if (currentSession) {
+                            const startTime = new Date(currentSession.startedAt).getTime();
+                            const now = Date.now();
+                            const actualDuration = Math.floor((now - startTime) / 60000);
+                            
+                            finishSession(currentSession.id, {
+                                actualDuration,
+                                status: 'completed'
+                            });
+                            playSessionComplete(1000); // 1 second delay after session completes
+                            setCurrentSession(null);
+                        }
                         
                         if (currentTaskId) {
                             // Update task time
@@ -53,6 +107,7 @@ export default function PomodoroClock({ tasks, onTimeUpdate }: PomodoroClockProp
                         } else {
                             // Focus finished, start break
                             setIsBreak(true);
+                            setMidSessionTriggers(new Set());
                             setTimeLeft(5 * 60);
                             return 5 * 60;
                         }
@@ -71,17 +126,32 @@ export default function PomodoroClock({ tasks, onTimeUpdate }: PomodoroClockProp
                 clearInterval(intervalRef.current);
             }
         };
-    }, [isRunning, isBreak, currentTaskId, tasks, onTimeUpdate]);
+    }, [isRunning, isBreak, currentTaskId, tasks, onTimeUpdate, currentSession, finishSession, setCurrentSession, enabled, midSessionTriggers]);
 
     const startTimer = () => {
         if (!currentTask) return;
         
         setCurrentTaskId(currentTask.id);
         setIsRunning(true);
+        
+        // Reset mid-session triggers for new session
+        setMidSessionTriggers(new Set());
+        
+        // Start a new session
+        const sessionType = isBreak ? 'break' : 'pomodoro';
+        const duration = isBreak ? 5 : 25;
+        
+        startSession({
+            sessionType,
+            duration,
+            notes: `Working on: ${currentTask.title}`
+        });
+
+        playSessionStart(500); // 0.5 second delay after session starts
     };
 
     const pauseTimer = () => {
-        setIsRunning(false);
+        resetTimer();
     };
 
     const resetTimer = () => {
@@ -89,6 +159,21 @@ export default function PomodoroClock({ tasks, onTimeUpdate }: PomodoroClockProp
         setIsBreak(false);
         setTimeLeft(25 * 60);
         setCurrentTaskId(null);
+        playSessionComplete();
+        setMidSessionTriggers(new Set());
+        
+        // End current session if it exists
+        if (currentSession) {
+            const startTime = new Date(currentSession.startedAt).getTime();
+            const now = Date.now();
+            const actualDuration = Math.floor((now - startTime) / 60000);
+            
+            finishSession(currentSession.id, {
+                actualDuration,
+                status: 'interrupted'
+            });
+            setCurrentSession(null);
+        }
     };
 
     const formatTime = (seconds: number) => {
@@ -113,8 +198,8 @@ export default function PomodoroClock({ tasks, onTimeUpdate }: PomodoroClockProp
                     </span>
                     <button
                         onClick={isRunning ? pauseTimer : startTimer}
-                        disabled={!currentTask}
-                        className="ml-2 w-14 h-14 rounded-full flex items-center justify-center bg-blue-100 hover:bg-blue-200 border-2 border-blue-300 transition-colors focus:outline-none"
+                        disabled={!currentTask || creatingSession || endingSession}
+                        className="ml-2 w-14 h-14 rounded-full flex items-center justify-center bg-blue-100 hover:bg-blue-200 border-2 border-blue-300 transition-colors focus:outline-none disabled:opacity-50"
                         title={isRunning ? 'Pause' : 'Start'}
                     >
                         {isRunning ? (

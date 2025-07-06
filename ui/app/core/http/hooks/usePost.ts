@@ -8,14 +8,14 @@ const USER_URI = process.env.NEXT_PUBLIC_USER_SERVER_URL;
  * @param headers
  * @returns isLoading, Data type and any errors
  */
-export function usePost<T, P>(path: string, headers: Record<string, any> = {}): [{ isLoading: boolean; data: T; errors: any }, mutateData: (payLoad: P) => void] {
+export function usePost<T, P>(path: string, headers: Record<string, any> = {}): [{ isLoading: boolean; data: T; errors: any }, mutateData: (payLoad: P, pathOverride?: string) => void] {
     const [isDataFetching, setIsDataFetching] = useState<boolean>(false);
     const [data, setData] = useState<T>();
     const [errors, setErrors] = useState<any>();
 
-    const mutateData = useCallback((payLoad: P) => {
+    const mutateData = useCallback((payLoad: P, pathOverride?: string) => {
         setIsDataFetching(true);
-        fetch(USER_URI + "/" + path, {
+        fetch(USER_URI + "/" + (pathOverride || path), {
             method: "POST",
             body: JSON.stringify(payLoad),
             headers: { "Content-Type": "application/json", ...headers },

@@ -2,22 +2,24 @@ import { usePost } from "@http/hooks";
 import { useFocusContext } from "../../core/context/FocusContext";
 import { Task, TaskFormData } from "../types";
 import { useFetchTasks } from "./useFetchTasks";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 
 export function useAddTask() {
     const { setError } = useFocusContext();
     const [{ data, errors, isLoading }, postTask] = usePost<Task, TaskFormData>("focus/tasks");
     const { fetchTasks } = useFetchTasks();
+    const wasLoadingRef = useRef(false);
 
     const addTask = (taskData: TaskFormData) => {
         postTask(taskData);
     };
 
 	useEffect(() => {
-		if (!isLoading) {
+		if (wasLoadingRef.current && !isLoading) {
 			fetchTasks();
 		}
-	}, [isLoading]);
+        wasLoadingRef.current = isLoading;
+	}, [isLoading, fetchTasks]);
 
     if (errors) {
         setError("Failed to add task");
