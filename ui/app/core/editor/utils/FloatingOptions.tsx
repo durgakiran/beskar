@@ -10,7 +10,7 @@ interface IProps {
 
 export function FlaotingOptions(props: IProps) {
     return (
-        <div className="flex shadow rounded-sm px-2 py-1 z-50 items-center gap-2">
+        <div className="flex shadow rounded-sm px-2 py-1 z-[9999] items-center gap-2">
             <NoteTypeButtons updateAttributes={props.updateAttributes} />
             <Emoji  updateAttributes={props.updateAttributes} />
             <ColorPicker bgColor={props.bgColor} handleColorSelection={props.handleColorSelection} />

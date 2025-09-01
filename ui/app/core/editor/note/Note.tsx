@@ -58,7 +58,7 @@ const NoteBlock = (props) => {
                 </div>
             </NodeViewWrapper>
             {(isOpen && props.editor.isEditable) && (
-                <div ref={refs.setFloating} style={floatingStyles} {...getFloatingProps()}>
+                <div ref={refs.setFloating} style={floatingStyles} {...getFloatingProps()} className="z-[9999]">
                     <FlaotingOptions bgColor={props.node.attrs.color} updateAttributes={props.updateAttributes} handleColorSelection={handleColorSelection} />
                 </div>
             )}

@@ -69,7 +69,7 @@ export default function ColorPicker(props: { bgColor: string; handleColorSelecti
                 </span>
             </button>
             {isOpen && (
-                <div ref={refs.setFloating} style={floatingStyles} {...getFloatingProps()}>
+                <div ref={refs.setFloating} style={floatingStyles} {...getFloatingProps()} className="z-[9999]">
                     <ColorOptions selected={bgColor} handleColorSelection={handleColorSelection} />
                 </div>
             )}

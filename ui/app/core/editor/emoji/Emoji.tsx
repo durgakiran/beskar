@@ -23,7 +23,7 @@ export default function Emoji(props: { updateAttributes: any }) {
                 <MdOutlineAddReaction />
             </button>
             {isOpen && (
-                <div ref={refs.setFloating} style={floatingStyles} {...getFloatingProps()}>
+                <div ref={refs.setFloating} style={floatingStyles} {...getFloatingProps()} className="z-[9999]">
                     <Picker data={data} theme="light" onEmojiSelect={handleEmojiUpdate} />
                 </div>
             )}

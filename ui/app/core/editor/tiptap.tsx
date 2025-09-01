@@ -36,7 +36,7 @@ import { uploadImageData } from "../http/uploadImageData";
 import { customImage, reactImage } from "./image/image";
 import { SlashCommand } from "./extensions/slashCommand/command";
 import { CustomInput } from "./note/Note";
-import { TableColumnMenu, TableRowMenu } from "./Table/menus";
+import { TableColumnMenu, TableRowMenu, TableMenu } from "./Table/menus";
 import { Table, TableCell, TableHeader, TableRow } from "./Table";
 import { CustomAttributes } from "@editor/extensions";
 import Collaboration from "@tiptap/extension-collaboration";
@@ -230,6 +230,7 @@ export function TipTap({ setEditorContext, user, content, pageId, id, editable =
             <EditorContent className="editor" editor={editor} />
             {editor && (
                 <>
+                    <TableMenu editor={editor} appendTo={menuContainerRef} />
                     <TableRowMenu editor={editor} appendTo={menuContainerRef} />
                     <TableColumnMenu editor={editor} appendTo={menuContainerRef} />
                 </>

@@ -393,8 +393,88 @@
     content: none !important;
 }
 .editor .ProseMirror .tableWrapper {
-    margin-top: 3rem;
-    margin-bottom: 3rem;
+    margin-top: 2rem;
+    margin-bottom: 2rem;
+    position: relative;
+    border: 1px solid transparent;
+    border-radius: 0.5rem;
+    transition: border-color 0.2s ease;
+    cursor: pointer;
+    z-index: 1;
+}
+
+.editor .ProseMirror .tableWrapper + .tableWrapper {
+    margin-top: 1rem;
+}
+
+.editor .ProseMirror .tableWrapper:hover {
+    border-color: rgba(0, 0, 0, 0.1);
+}
+
+.editor :is(.dark .ProseMirror .tableWrapper:hover) {
+    border-color: rgba(255, 255, 255, 0.2);
+}
+
+/* Copy button hover effect - blue borders */
+.editor .ProseMirror .tableWrapper.copy-hover {
+    border-color: #3b82f6 !important;
+    border-width: 2px;
+}
+
+.editor .ProseMirror .tableWrapper.copy-hover table {
+    border-color: #3b82f6 !important;
+    border-width: 2px !important;
+}
+
+.editor .ProseMirror .tableWrapper.copy-hover table td,
+.editor .ProseMirror .tableWrapper.copy-hover table th {
+    border-color: #3b82f6 !important;
+    border-width: 2px !important;
+}
+
+.editor :is(.dark .ProseMirror .tableWrapper.copy-hover) {
+    border-color: #60a5fa !important;
+    border-width: 2px;
+}
+
+.editor :is(.dark .ProseMirror .tableWrapper.copy-hover) table {
+    border-color: #60a5fa !important;
+}
+
+.editor :is(.dark .ProseMirror .tableWrapper.copy-hover) table td,
+.editor :is(.dark .ProseMirror .tableWrapper.copy-hover) table th {
+    border-color: #60a5fa !important;
+}
+
+/* Delete button hover effect - red borders */
+.editor .ProseMirror .tableWrapper.delete-hover {
+    border-color: #ef4444 !important;
+    border-width: 2px;
+}
+
+.editor .ProseMirror .tableWrapper.delete-hover table {
+    border-color: #ef4444 !important;
+    border-width: 2px !important;
+}
+
+.editor .ProseMirror .tableWrapper.delete-hover table td,
+.editor .ProseMirror .tableWrapper.delete-hover table th {
+    border-color: #ef4444 !important;
+    border-width: 2px !important;
+}
+
+.editor :is(.dark .ProseMirror .tableWrapper.delete-hover) {
+    border-color: #f87171 !important;
+    border-width: 2px;
+}
+
+.editor :is(.dark .ProseMirror .tableWrapper.delete-hover) table {
+    border-color: #f87171 !important;
+}
+
+.editor :is(.dark .ProseMirror .tableWrapper.delete-hover) table td,
+.editor :is(.dark .ProseMirror .tableWrapper.delete-hover) table th {
+    border-color: #f87171 !important;
 }
 .editor .ProseMirror table {
     box-sizing: border-box;
@@ -415,6 +495,7 @@
     padding: 0.5rem;
     text-align: left;
     vertical-align: top;
+    cursor: text;
 }
 .editor :is(.dark .ProseMirror table td),
 .editor :is(.dark .ProseMirror table th) {
@@ -468,7 +549,7 @@
 .editor .ProseMirror table .grip-column,
 .editor .ProseMirror table .grip-row {
     position: absolute;
-    z-index: 10;
+    z-index: 100;
     display: flex;
     cursor: pointer;
     align-items: center;
@@ -599,6 +680,44 @@
 .editor .ProseMirror > p {
     margin-top: 1.5rem;
     margin-bottom: 1.5rem;
+}
+
+.editor .ProseMirror > p + .tableWrapper {
+    margin-top: 1rem;
+}
+
+.editor .ProseMirror > .tableWrapper + p {
+    margin-top: 1rem;
+}
+
+.editor .ProseMirror > h1 + .tableWrapper,
+.editor .ProseMirror > h2 + .tableWrapper,
+.editor .ProseMirror > h3 + .tableWrapper,
+.editor .ProseMirror > h4 + .tableWrapper,
+.editor .ProseMirror > h5 + .tableWrapper,
+.editor .ProseMirror > h6 + .tableWrapper {
+    margin-top: 1rem;
+}
+
+.editor .ProseMirror > .tableWrapper + h1,
+.editor .ProseMirror > .tableWrapper + h2,
+.editor .ProseMirror > .tableWrapper + h3,
+.editor .ProseMirror > .tableWrapper + h4,
+.editor .ProseMirror > .tableWrapper + h5,
+.editor .ProseMirror > .tableWrapper + h6 {
+    margin-top: 1rem;
+}
+
+.editor .ProseMirror > blockquote + .tableWrapper,
+.editor .ProseMirror > ul + .tableWrapper,
+.editor .ProseMirror > ol + .tableWrapper {
+    margin-top: 1rem;
+}
+
+.editor .ProseMirror > .tableWrapper + blockquote,
+.editor .ProseMirror > .tableWrapper + ul,
+.editor .ProseMirror > .tableWrapper + ol {
+    margin-top: 1rem;
 }
 .editor .ProseMirror > p:first-child {
     margin-top: 0;
