@@ -14,7 +14,7 @@ export const TableMenu = React.memo(({ editor, appendTo }: MenuProps): JSX.Eleme
 
     const shouldShow = useCallback(
         ({ view, state, from }: ShouldShowProps) => {
-            if (!state || !from) {
+            if (!state || !from || !editor.isEditable) {
                 return false;
             }
 

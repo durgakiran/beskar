@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
+	"fmt"
 	"net/http"
 	"os"
 	"strings"
@@ -44,14 +45,13 @@ func (t *tokenType) authenticate() error {
 		Transport: tr,
 	}
 	ctx := oidc.ClientContext(context.Background(), client)
-	provider, err := oidc.NewProvider(ctx, os.Getenv("KC_REALM_URL"))
+	provider, err := oidc.NewProvider(ctx, os.Getenv("ISSUER_URL"))
 	if err != nil {
 		Logger.Error("authorisation failed while getting the provider: " + err.Error())
 		return errors.New(err.Error())
 
 	}
 	oidcConfig := &oidc.Config{
-		// ClientID: os.Getenv("KC_CLIENT_ID"),
 		SkipClientIDCheck: true,
 	}
 	verifier := provider.Verifier(oidcConfig)
@@ -92,25 +92,24 @@ func AuthMiddleWare(next http.Handler) http.Handler {
 
 // zitadel configuration
 
-const (
-	key = "0nw71mQig3EAfFiQmJHsmzJ89ERNq2tQ"
-)
-
 var authN *authentication.Authenticator[*openid.UserInfoContext[*zoidc.IDTokenClaims, *zoidc.UserInfo]]
 var authNLock = &sync.Mutex{}
 
 func ZitadelAuthenticator() *authentication.Authenticator[*openid.UserInfoContext[*zoidc.IDTokenClaims, *zoidc.UserInfo]] {
+	issuerURL := os.Getenv("ISSUER_URL")
+	clientID := os.Getenv("CLIENT_ID")
+	serverURL := os.Getenv("SERVER_URL")
 	if authN == nil {
 		authNLock.Lock()
 		defer authNLock.Unlock()
 		if authN == nil {
 			authNClient, err := authentication.New(
 				context.Background(),
-				zitadel.New("app.tededox.com", zitadel.WithInsecure("80")),
-				key,
-				openid.DefaultAuthentication("292828815569256454", "http://app.tededox.com:8085/auth/callback", key),
+				zitadel.New(issuerURL),
+				os.Getenv("KEY"),
+				openid.DefaultAuthentication(clientID, fmt.Sprintf("%s/auth/callback", serverURL), os.Getenv("KEY")),
 				authentication.WithLogger[*openid.UserInfoContext[*zoidc.IDTokenClaims, *zoidc.UserInfo]](SlogLogger),
-				authentication.WithExternalSecure[*openid.UserInfoContext[*zoidc.IDTokenClaims, *zoidc.UserInfo]](false),
+				authentication.WithExternalSecure[*openid.UserInfoContext[*zoidc.IDTokenClaims, *zoidc.UserInfo]](true),
 			)
 			authN = authNClient
 			if err != nil {

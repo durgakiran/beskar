@@ -10,7 +10,7 @@ import { Icon } from "@components/ui/Icon";
 export const TableColumnMenu = React.memo(({ editor, appendTo }: MenuProps): JSX.Element => {
     const shouldShow = useCallback(
         ({ view, state, from }: ShouldShowProps) => {
-            if (!state) {
+            if (!state || !editor.isEditable) {
                 return false;
             }
 

@@ -88,8 +88,7 @@ type ZitaUser struct {
 }
 
 func SearchUsersByIds(userIds []string) (UserSearchResponse, error) {
-	var providerURL = os.Getenv("ISSUER_URL")
-	// providerURL := "http://app.tededox.com"
+	var providerURL = fmt.Sprintf("https://%s", os.Getenv("ISSUER_URL"))
 	filter := Filter{
 		InUserIdsQuery: &InUserIdsQUeryFilter{
 			UserIds: userIds,
@@ -141,7 +140,7 @@ func SearchUsersByIds(userIds []string) (UserSearchResponse, error) {
 }
 
 func SearchUserByEmail(search string, limit uint32, offset uint64) (UserSearchResponse, error) {
-	var providerURL = os.Getenv("ISSUER_URL")
+	var providerURL = fmt.Sprintf("https://%s", os.Getenv("ISSUER_URL"))
 	// providerURL := "http://app.tededox.com"
 	filter := Filter{
 		InUserEmailsQuery: &InUserEmailsQuery{

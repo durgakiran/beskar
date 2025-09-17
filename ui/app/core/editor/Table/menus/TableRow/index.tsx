@@ -10,7 +10,7 @@ import { MenuProps, ShouldShowProps } from "@components/menus/types";
 export const TableRowMenu = React.memo(({ editor, appendTo }: MenuProps): JSX.Element => {
     const shouldShow = useCallback(
         ({ view, state, from }: ShouldShowProps) => {
-            if (!state || !from) {
+            if (!state || !from || !editor.isEditable) {
                 return false;
             }
 

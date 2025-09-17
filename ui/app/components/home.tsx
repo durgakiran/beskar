@@ -12,8 +12,6 @@ const get = async (cookies: { name: string; value: string }[]) => {
             Cookie: cookies.map((cookie) => `${cookie.name}=${cookie.value}`).join("; "),
         },
     });
-
-
     if (res.status < 200 || res.status > 300) {
         return {
             response: res.status,
@@ -32,7 +30,7 @@ export default async function Home() {
     const res = await get(cookieStore.getAll());
 
     if (res.response !== 200) {
-        return <h2>Not authenticated</h2>;
+        redirect("/auth/login");
     }
 
     if (res.response === 200) {

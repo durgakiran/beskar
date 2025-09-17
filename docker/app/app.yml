@@ -57,18 +57,22 @@ services:
       custom_local_network:
         aliases:
           - app.tededox.com
+          - app.durgakiran.com
+          - id.durgakiran.com
     ports:
       - "8085:8085" # hits ui and api server  
       - "80:80" # hits zitadel server   
+      - "443:443" # hits zitadel server
     volumes:
       - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./nginx/certs:/etc/nginx/ssl
     healthcheck:
       test: ["CMD-SHELL", "service nginx status || exit 1"]
       interval: 5s
       timeout: 3s
       retries: 5
   guard:
-    image: ghcr.io/permify/permify-beta:v1.0.2-2c9db609
+    image: ghcr.io/permify/permify #-beta:v1.0.2-2c9db609
     container_name: permify_guard
     environment:
       PERMIFY_DATABASE_ENGINE: postgres
@@ -77,13 +81,13 @@ services:
       PERMIFY_DATABASE_MAX_OPEN_CONNECTIONS: 20
       PERMIFY_AUTHN_ENABLED: true
       PERMIFY_AUTHN_METHOD: preshared
-      PERMIFY_AUTHN_PRESHARED_KEYS: "secret"
-      PERMIFY_AUTHN_OIDC_ISSUER: "http://shield:8080/realms/devbeskarrealm"
-      PERMIFY_AUTHN_OIDC_AUDIENCE: account
-      PERMIFY_AUTHN_OIDC_REFRESH_INTERVAL: 10m
-      PERMIFY_AUTHN_OIDC_BACKOFF_MAX_RETRIES: 5
-      PERMIFY_AUTHN_OIDC_BACKOFF_FREQUENCY: 12s
-      PERMIFY_AUTHN_OIDC_VALID_METHODS: "RS256"
+      PERMIFY_AUTHN_PRESHARED_KEYS: "${PERMIFY_SECRET}"
+      # PERMIFY_AUTHN_OIDC_ISSUER: "http://shield:8080/realms/devbeskarrealm"
+      # PERMIFY_AUTHN_OIDC_AUDIENCE: account
+      # PERMIFY_AUTHN_OIDC_REFRESH_INTERVAL: 10m
+      # PERMIFY_AUTHN_OIDC_BACKOFF_MAX_RETRIES: 5
+      # PERMIFY_AUTHN_OIDC_BACKOFF_FREQUENCY: 12s
+      # PERMIFY_AUTHN_OIDC_VALID_METHODS: "RS256"
       PERMIFY_LOGGER_LEVEL: info
       PERMIFY_SERVER_RATE_LIMIT: 100
       PERMIFY_SERVER_HTTP_ENABLED: true
@@ -103,9 +107,9 @@ services:
   zitadel:
     restart: always
     image: ghcr.io/zitadel/zitadel:latest
-    command: 'start-from-init --masterkey "bJEJYXs8PAyWgY0mdF3SWcEhn99Kkqp5" --tlsMode disabled'
+    command: 'start-from-init --masterkey "bJEJYXs8PAyWgY0mdF3SWcEhn99Kkqp5" --tlsMode external'
     environment:
-      ZITADEL_EXTERNALDOMAIN: app.tededox.com
+      ZITADEL_EXTERNALDOMAIN: id.durgakiran.com
       # In case something doesn't work as expected,
       # it can be handy to be able to read the access logs.
       ZITADEL_LOGSTORE_ACCESS_STDOUT_ENABLED: true
@@ -118,9 +122,11 @@ services:
       ZITADEL_DATABASE_POSTGRES_ADMIN_USERNAME: admin
       ZITADEL_DATABASE_POSTGRES_ADMIN_PASSWORD: password
       ZITADEL_DATABASE_POSTGRES_ADMIN_SSL_MODE: disable
-      ZITADEL_EXTERNALSECURE: false
+      ZITADEL_EXTERNALSECURE: true
     ports:
       - 8084:8080
+    volumes:
+      - ./nginx/certs/_wildcard.durgakiran.com.pem:/etc/ssl/certs/_wildcard.durgakiran.com.pem:ro
     networks:
       - custom_local_network
   ui:
@@ -130,8 +136,11 @@ services:
       dockerfile: Dockerfile
     ports:
       - "3000:3000"
+    environment:
+      - NODE_EXTRA_CA_CERTS=/etc/ssl/certs/_wildcard.durgakiran.com.pem
     volumes:
       - /Users/kiran/projects/beskar/ui/:/app
+      - ./nginx/certs/_wildcard.durgakiran.com.pem:/etc/ssl/certs/_wildcard.durgakiran.com.pem:ro
     healthcheck:
       test: ["CMD-SHELL", "curl -XGET --output /dev/null --silent --head --fail http://localhost:3000/ || exit 1"]
       interval: 20s
@@ -148,6 +157,7 @@ services:
       - "1234:1234"
     volumes:
       - /Users/kiran/projects/beskar/collabserver/:/app
+      - ./nginx/certs/_wildcard.durgakiran.com.pem:/etc/ssl/certs/_wildcard.durgakiran.com.pem:ro
     environment:
       - REDIS_HOST=tededox-redis
       - REDIS_PORT=6379
@@ -186,26 +196,25 @@ services:
     build:
       context: server
       dockerfile: Dockerfile
-    env_file:
-      - .env.local
     environment:
-      KC_REALM_URL: http://app.tededox.com
-      KC_CLIENT_ID: 292828815569256454
-      PG_HOST: postgres
-      PG_PORT: 5432
-      PG_DB: beskar
-      PG_USER: app_user
-      PG_PASSWORD: app_user_pwd
-      PERMIFY_ENDPOINT: permify_guard:3478
-      PERMIFY_SECRET: secret
-      ISSUER_URL: http://app.tededox.com
-      CLIENT_ID: 292828815569256454
+      PG_HOST: ${PG_HOST}
+      PG_PORT: ${PG_PORT}
+      PG_DB: ${PG_DB}
+      PG_USER: ${PG_DB_APP_USER}
+      PG_PASSWORD: ${PG_DB_APP_USER_PWD}
+      PERMIFY_ENDPOINT: ${PERMIFY_HOST}
+      PERMIFY_SECRET: ${PERMIFY_SECRET}
+      ISSUER_URL: ${ZITADEL_ISSUER} # http://app.tededox.com
+      CLIENT_ID: ${ZITADEL_CLIENT_ID}
       SERVER_PAT: ${ZITADEL_USER_PAT}
+      KEY: ${ZITADEL_CLIENT_SECRET}
+      SERVER_URL: ${BESKAR_SERVER}
     ports:
       - "9095:9095"
       - "40000:40000"
     volumes:
       - /Users/kiran/projects/beskar/server/:/app
+      - ./nginx/certs/_wildcard.durgakiran.com.pem:/etc/ssl/certs/_wildcard.durgakiran.com.pem:ro
     healthcheck:
       test: ["CMD-SHELL", "curl -XGET --output /dev/null --silent --head --fail http://localhost:9095/ || exit 1"]
       interval: 20s

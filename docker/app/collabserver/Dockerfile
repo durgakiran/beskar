@@ -3,7 +3,10 @@ FROM node:18-alpine
 WORKDIR /app
 
 # Install Redis CLI tools
-RUN apk add --no-cache redis
+RUN apk add --no-cache redis ca-certificates curl
+
+# Update the ca-certificates file
+RUN update-ca-certificates
 
 # Copy the wait script and make it executable
 COPY wait-for-redis.sh /app/wait-for-redis.sh

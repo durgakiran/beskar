@@ -30,7 +30,7 @@ func logger() *zap.Logger {
 func addCorsMiddleWare(r *chi.Mux) {
 	r.Use(cors.Handler(
 		cors.Options{
-			AllowedOrigins: []string{"http://app.tededox.com", "http://localhost:3000", "http://localhost:8085"},
+			AllowedOrigins: []string{"https://*.durgakiran.com", "http://app.tededox.com", "http://localhost:3000", "http://localhost:8085"},
 			// AllowOriginFunc:  func(r *http.Request, origin string) bool { return true },
 			AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 			AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
@@ -66,10 +66,6 @@ func QueryParamLogger(next http.Handler) http.Handler {
 		next.ServeHTTP(w, r)
 	})
 }
-
-const (
-	key = "0nw71mQig3EAfFiQmJHsmzJ89ERNq2tQ"
-)
 
 func main() {
 	err := godotenv.Load()

@@ -1,5 +1,4 @@
 "use client"
-import { useLogout } from "app/core/auth/useKeycloak";
 import { useGetCall } from "@http";
 import { Avatar, Dropdown, Navbar, Tooltip } from "flowbite-react";
 import Link from "next/link";
@@ -16,7 +15,10 @@ const USER_URI = process.env.NEXT_PUBLIC_USER_SERVER_URL;
 
 export default function MenuBar() {
     const [status, res] = useGetCall<UserInfo>(USER_URI + "/profile/details");
-    const logout = useLogout();
+
+    const handleLogout = () => {
+        window.location.href = "/auth/logout";
+    }
 
     return (
         <Navbar fluid rounded className="fixed w-full bg-white z-50 shadow-sm">
@@ -56,7 +58,7 @@ export default function MenuBar() {
                                 <Dropdown.Item>Dashboard</Dropdown.Item>
                                 <Dropdown.Item>Settings</Dropdown.Item>
                                 <Dropdown.Divider />
-                                <Dropdown.Item onClick={() => logout()}>Sign out</Dropdown.Item>
+                                <Dropdown.Item onClick={() => handleLogout()}>Sign out</Dropdown.Item>
                             </>
                         ) : null}
                     </Dropdown>
