@@ -3,6 +3,10 @@
     "version": "1.0.0",
     "description": "",
     "main": "index.js",
+    "engines": {
+        "node": ">=20.0.0",
+        "npm": ">=10.0.0"
+    },
     "scripts": {
         "dev": "next dev",
         "build": "next build",
@@ -72,6 +76,7 @@
         "jsonwebtoken": "^9.0.2",
         "keycloak-js": "^23.0.6",
         "lucide-react": "^0.306.0",
+        "mermaid": "11.10.1",
         "next": "^14.0.4",
         "next-auth": "^4.24.5",
         "npm": "^10.2.5",

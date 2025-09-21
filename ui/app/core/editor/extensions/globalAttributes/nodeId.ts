@@ -37,6 +37,7 @@ export const CustomAttributes = Extension.create({
                     "tableCell",
                     "tableHeader",
                     "tableRow",
+                    "mermaid",
                 ],
                 attributes: {
                     orderId: {

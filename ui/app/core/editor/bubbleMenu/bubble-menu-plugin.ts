@@ -42,7 +42,9 @@ export class BubbleMenuView {
 
         const isTable = this.editor.isActive("table");
 
-        if (!hasEditorFocus || empty || isEmptyTextBlock || !this.editor.isEditable || isTable) {
+        const isMermaid = this.editor.isActive("mermaid");
+
+        if (!hasEditorFocus || empty || isEmptyTextBlock || !this.editor.isEditable || isTable || isMermaid) {
             return false;
         }
         return true;

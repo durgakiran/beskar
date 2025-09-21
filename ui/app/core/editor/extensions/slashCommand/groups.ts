@@ -121,6 +121,19 @@ export const GROUPS: Group[] = [
                     editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: false }).run();
                 },
             },
+            {
+                name: "mermaid",
+                label: "Mermaid Diagram",
+                iconName: "GitBranch",
+                description: "Create a Mermaid diagram",
+                shouldBeHidden: (editor) => editor.isActive("columns"),
+                action: (editor) => {
+                    editor.chain().insertContentAt(editor.state.selection.head, { 
+                        type: "mermaid",
+                        attrs: { diagram: "" }
+                    }).focus().run();
+                },
+            },
         ],
     },
     //   {

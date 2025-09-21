@@ -42,6 +42,7 @@ import { CustomAttributes } from "@editor/extensions";
 import Collaboration from "@tiptap/extension-collaboration";
 import CollaborationCursor from "@tiptap/extension-collaboration-cursor";
 import { HocuspocusProvider } from "@hocuspocus/provider";
+import { MermaidNode } from "./mermaid";
 
 const extensions = [
     CustomAttributes,
@@ -88,6 +89,7 @@ const extensions = [
     TableCell,
     TableHeader,
     TableRow,
+    MermaidNode,
 ];
 
 interface TipTapProps {
@@ -166,26 +168,52 @@ export function TipTap({ setEditorContext, user, content, pageId, id, editable =
         },
         editorProps: {
             handlePaste(view, event, slice) {
-                // we will handle paste here.
+                // Handle image paste
                 let cbPayload = [...event.clipboardData.items];
                 cbPayload = cbPayload.filter((i) => /image/.test(i.type) && i.type != "");
-                if (!cbPayload.length || cbPayload.length === 0) return false; // not handled use default behaviour
-                uploadImageData(cbPayload[0].getAsFile())
-                    .then(([name, width, height]) => {
-                        const { schema } = view.state;
-                        if (width > MAX_DEFAULT_WIDTH) {
-                            const ratio = MAX_DEFAULT_WIDTH / width;
-                            width = 760;
-                            height = Math.round(ratio * height);
+                if (cbPayload.length > 0) {
+                    uploadImageData(cbPayload[0].getAsFile())
+                        .then(([name, width, height]) => {
+                            const { schema } = view.state;
+                            if (width > MAX_DEFAULT_WIDTH) {
+                                const ratio = MAX_DEFAULT_WIDTH / width;
+                                width = 760;
+                                height = Math.round(ratio * height);
+                            }
+                            const node = schema.nodes.image.create({ src: `${process.env.NEXT_PUBLIC_IMAGE_SERVER_URL}/media/image/${name}`, width, height }); // creates the image element
+                            const transaction = view.state.tr.replaceSelectionWith(node); // places it in the correct position
+                            view.dispatch(transaction);
+                        })
+                        .catch((err) => {
+                            console.error(err);
+                        });
+                    return true;
+                }
+
+                // Handle Mermaid node paste
+                const clipboardText = event.clipboardData.getData('text/plain');
+                if (clipboardText) {
+                    try {
+                        // Check if the clipboard contains a Mermaid node
+                        const parsed = JSON.parse(clipboardText);
+                        if (parsed.type === 'mermaid' && parsed.attrs) {
+                            const { schema } = view.state;
+                            const mermaidNode = schema.nodes.mermaid.create({
+                                diagram: parsed.attrs.diagram || "",
+                                title: parsed.attrs.title || "",
+                                layout: parsed.attrs.layout || "horizontal",
+                                zoom: parsed.attrs.zoom || 1
+                            });
+                            const transaction = view.state.tr.replaceSelectionWith(mermaidNode);
+                            view.dispatch(transaction);
+                            return true;
                         }
-                        const node = schema.nodes.image.create({ src: `${process.env.NEXT_PUBLIC_IMAGE_SERVER_URL}/media/image/${name}`, width, height }); // creates the image element
-                        const transaction = view.state.tr.replaceSelectionWith(node); // places it in the correct position
-                        view.dispatch(transaction);
-                    })
-                    .catch((err) => {
-                        console.error(err);
-                    });
-                return true;
+                    } catch (e) {
+                        // Not JSON, continue with default paste behavior
+                    }
+                }
+
+                return false; // Use default paste behavior
             },
         },
     });
