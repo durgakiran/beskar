@@ -199,11 +199,10 @@ export function TipTap({ setEditorContext, user, content, pageId, id, editable =
                         if (parsed.type === 'mermaid' && parsed.attrs) {
                             const { schema } = view.state;
                             const mermaidNode = schema.nodes.mermaid.create({
-                                diagram: parsed.attrs.diagram || "",
                                 title: parsed.attrs.title || "",
                                 layout: parsed.attrs.layout || "horizontal",
                                 zoom: parsed.attrs.zoom || 1
-                            });
+                            }, parsed.content || [{ type: 'text', text: '' }]);
                             const transaction = view.state.tr.replaceSelectionWith(mermaidNode);
                             view.dispatch(transaction);
                             return true;

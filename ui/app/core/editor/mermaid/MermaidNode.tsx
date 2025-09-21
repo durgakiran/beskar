@@ -1,6 +1,6 @@
 import { Node, NodeViewProps, mergeAttributes } from "@tiptap/core";
 import { NodeViewContent, NodeViewWrapper, ReactNodeViewRenderer } from "@tiptap/react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { autoUpdate, flip, offset, shift, useClick, useFloating, useInteractions } from "@floating-ui/react";
 import { GenericFloatingOptions } from "@editor/utils/GenericFloatingOptions";
 import { MdContentCopy, MdDelete, MdViewColumn, MdViewStream, MdZoomIn, MdZoomOut } from "react-icons/md";
@@ -186,7 +186,6 @@ const StartWithMenu = ({
 
 
 const MermaidNodeComponent = ({ node, updateAttributes, editor, getPos }: NodeViewProps) => {
-    const [diagram, setDiagram] = useState((node.attrs as any).diagram || "");
     const [title, setTitle] = useState((node.attrs as any).title || "");
     const [selectedType, setSelectedType] = useState("flowchart");
     const [error, setError] = useState<string | null>(null);
@@ -199,7 +198,6 @@ const MermaidNodeComponent = ({ node, updateAttributes, editor, getPos }: NodeVi
     const [isDragging, setIsDragging] = useState(false);
     const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
     const renderRef = useRef<HTMLDivElement>(null);
-    const textareaRef = useRef<HTMLTextAreaElement>(null);
     const wrapperRef = useRef<HTMLDivElement>(null);
     
     // Floating UI setup
@@ -278,7 +276,7 @@ const MermaidNodeComponent = ({ node, updateAttributes, editor, getPos }: NodeVi
               return () => {
                   editor.off('selectionUpdate', checkSelection);
               };
-          }, [editor, getPos, node.nodeSize]); // Add getPos and node.nodeSize to dependencies
+          }, [editor, getPos, node.nodeSize, isActive]); // Add getPos and node.nodeSize to dependencies
 
     // Close floating options when node becomes inactive
     useEffect(() => {
@@ -331,11 +329,11 @@ const MermaidNodeComponent = ({ node, updateAttributes, editor, getPos }: NodeVi
         const nodeData = {
             type: "mermaid",
             attrs: {
-                diagram: (node.attrs as any).diagram || "",
                 title: (node.attrs as any).title || "",
                 layout: (node.attrs as any).layout || "horizontal",
                 zoom: (node.attrs as any).zoom || 1
-            }
+            },
+            content: [{ type: 'text', text: getCurrentDiagram() }]
         };
         
         // Copy to clipboard as JSON
@@ -494,26 +492,33 @@ const MermaidNodeComponent = ({ node, updateAttributes, editor, getPos }: NodeVi
         }
     };
 
-    // Handle diagram text changes
-    const handleDiagramChange = (newDiagram: string) => {
-        setDiagram(newDiagram);
-        updateAttributes({ diagram: newDiagram, title });
-        renderDiagram(newDiagram);
-    };
+    // Get current diagram content from node
+    const getCurrentDiagram = useCallback(() => {
+        return node.textContent || "";
+    }, [node.textContent]);
 
     // Handle title changes
     const handleTitleChange = (newTitle: string) => {
         setTitle(newTitle);
-        updateAttributes({ diagram, title: newTitle });
+        updateAttributes({ title: newTitle });
     };
 
     // Handle diagram type selection
     const handleTypeChange = (type: string) => {
         setSelectedType(type);
         const example = diagramExamples[type as keyof typeof diagramExamples] || "";
-        setDiagram(example);
-        updateAttributes({ diagram: example, title });
-        renderDiagram(example);
+        
+        // Replace the content in the editor
+        const pos = getPos();
+        editor.chain()
+            .focus()
+            .deleteRange({ from: pos, to: pos + node.nodeSize })
+            .insertContentAt(pos, { 
+                type: 'mermaid', 
+                attrs: { title, layout, zoom },
+                content: [{ type: 'text', text: example }]
+            })
+            .run();
     };
 
 
@@ -547,18 +552,18 @@ const MermaidNodeComponent = ({ node, updateAttributes, editor, getPos }: NodeVi
         };
     }, [isDragging, dragStart]);
 
+    // Listen for content changes and render diagram
+    useEffect(() => {
+        const currentDiagram = getCurrentDiagram();
+        renderDiagram(currentDiagram);
+    }, [getCurrentDiagram]);
+
     // Initial render
     useEffect(() => {
-        renderDiagram(diagram);
-    }, [diagram]);
+        const currentDiagram = getCurrentDiagram();
+        renderDiagram(currentDiagram);
+    }, [getCurrentDiagram]);
 
-    // Auto-resize textarea
-    useEffect(() => {
-        if (textareaRef.current) {
-            textareaRef.current.style.height = "auto";
-            textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
-        }
-    }, [diagram]);
 
     return (
         <>
@@ -598,12 +603,9 @@ const MermaidNodeComponent = ({ node, updateAttributes, editor, getPos }: NodeVi
                             </div>
 
                             <div className="mermaid-code-editor">
-                                <textarea
-                                    ref={textareaRef}
-                                    value={diagram}
-                                    onChange={(e) => handleDiagramChange(e.target.value)}
+                                <NodeViewContent 
+                                    className="mermaid-code-content"
                                     placeholder="Enter your Mermaid diagram code here..."
-                                    className="mermaid-code-textarea"
                                 />
                                 {error && (
                                     <div className="mermaid-error-message">
@@ -725,9 +727,6 @@ export const MermaidNode = Node.create({
 
     addAttributes() {
         return {
-            diagram: {
-                default: "",
-            },
             title: {
                 default: "",
             },
