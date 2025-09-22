@@ -594,11 +594,8 @@ const MermaidNodeComponent = ({ node, updateAttributes, editor, getPos }: NodeVi
                         </div>
                     </div>
                 ) : (
-                    /* Non-Edit Mode: Show only the rendered diagram with title */
+                    /* Non-Edit Mode: Show only the rendered diagram with title at bottom */
                     <div className="mermaid-display-mode">
-                        {title && (
-                            <h3 className="mermaid-display-title">{title}</h3>
-                        )}
                         <div className="mermaid-display-container">
                             <div className="mermaid-diagram-controls">
                                 <button
@@ -641,6 +638,10 @@ const MermaidNodeComponent = ({ node, updateAttributes, editor, getPos }: NodeVi
                 )}
             </div>
         </NodeViewWrapper>
+        {/* Title outside the draggable container for display mode */}
+        {!editor.isEditable && title && (
+            <div className="mermaid-display-title-alt">{title}</div>
+        )}
         {(isOpen && editor.isEditable) && (
             <div ref={refs.setFloating} style={floatingStyles} {...getFloatingProps()} className="z-[9999]">
                 <GenericFloatingOptions options={floatingOptions} />
