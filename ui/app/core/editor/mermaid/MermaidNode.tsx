@@ -203,13 +203,14 @@ const MermaidNodeComponent = ({ node, updateAttributes, editor, getPos }: NodeVi
     // Floating UI setup
     const { refs, floatingStyles, context } = useFloating({ 
         whileElementsMounted: autoUpdate, 
-        open: isOpen && isActive, 
+        open: isOpen, 
+        onOpenChange: setIsOpen,
         middleware: [offset(10), flip(), shift()] 
     });
-    // Remove useClick to avoid conflicts with manual click handling
-    const { getReferenceProps, getFloatingProps } = useInteractions([]);
+    const click = useClick(context);
+    const { getReferenceProps, getFloatingProps } = useInteractions([click]);
 
-    // Handle wrapper click to make node active and open floating options
+    // Handle wrapper click for drag functionality
     const handleWrapperClick = (e: React.MouseEvent) => {
         // Check if this is a drag attempt
         const target = e.target as HTMLElement;
@@ -220,7 +221,7 @@ const MermaidNodeComponent = ({ node, updateAttributes, editor, getPos }: NodeVi
             return;
         }
         
-        // Don't activate if clicking on interactive elements
+        // For interactive elements, don't interfere with their focus
         const isInteractive = target.tagName === 'TEXTAREA' || 
                             target.tagName === 'INPUT' || 
                             target.tagName === 'SELECT' ||
@@ -228,88 +229,22 @@ const MermaidNodeComponent = ({ node, updateAttributes, editor, getPos }: NodeVi
                             target.closest('.mermaid-start-with-menu');
         
         if (isInteractive) {
-            // For interactive elements, just activate the node and let them handle their own focus
-            // editor.commands.setNodeSelection(getPos());
-            // editor.commands.focus();
-            setIsActive(true);
+            // Let interactive elements handle their own focus
             return;
         }
         
-        // For non-interactive elements, activate the node and toggle floating options
-        // editor.commands.setNodeSelection(getPos());
-        // editor.commands.focus();
-        setIsActive(true);
-        
-        // Toggle floating options
-        setIsOpen(!isOpen);
-    };
-
-    // Create custom reference props that don't interfere with textarea focus
-    const customReferenceProps = {
-        ref: refs.setReference,
-        onMouseDown: handleWrapperClick,
+        // For other elements, let Floating UI handle the click
+        // No need to manually manage isActive or isOpen
     };
 
 
-          // Check if node is selected/active
+
+          // Simple active state based on floating options being open
           useEffect(() => {
-              const checkSelection = () => {
-                  const { state } = editor.view;
-                  const { selection } = state;
-                  const pos = getPos();
-                  
-                  // Check if the selection is on this specific node
-                  const isNodeSelected = selection.from <= pos && selection.to >= pos + node.nodeSize;
-                  
-                  // Only update if the selection state actually changed
-                  if (isNodeSelected !== isActive) {
-                      setIsActive(isNodeSelected);
-                  }
-              };
+              setIsActive(isOpen);
+          }, [isOpen]);
 
-              // Check immediately
-              checkSelection();
 
-              // Listen for selection changes
-              editor.on('selectionUpdate', checkSelection);
-              
-              return () => {
-                  editor.off('selectionUpdate', checkSelection);
-              };
-          }, [editor, getPos, node.nodeSize, isActive]); // Add getPos and node.nodeSize to dependencies
-
-    // Close floating options when node becomes inactive
-    useEffect(() => {
-        if (!isActive && isOpen) {
-            setIsOpen(false);
-        }
-    }, [isActive, isOpen]);
-
-    // Handle clicks outside to close floating options
-    useEffect(() => {
-        const handleClickOutside = (e: MouseEvent) => {
-            const target = e.target as HTMLElement;
-            
-            // Check if click is outside both the wrapper and the floating options
-            const isOutsideWrapper = wrapperRef.current && !wrapperRef.current.contains(target);
-            const isOutsideFloating = refs.floating.current && !refs.floating.current.contains(target);
-            
-            if (isOutsideWrapper && isOutsideFloating) {
-                if (isOpen) {
-                    setIsOpen(false);
-                }
-                if (isActive) {
-                    setIsActive(false);
-                }
-            }
-        };
-
-        document.addEventListener('mousedown', handleClickOutside);
-        
-        return () => {
-            document.removeEventListener('mousedown', handleClickOutside);
-        };
-    }, [isOpen, isActive, refs.floating]);
 
 
     // Floating options handlers
@@ -372,11 +307,6 @@ const MermaidNodeComponent = ({ node, updateAttributes, editor, getPos }: NodeVi
     const handleMouseDown = (e: React.MouseEvent) => {
         e.preventDefault();
         e.stopPropagation();
-        
-        // Activate the node when starting to drag
-        // editor.commands.setNodeSelection(getPos());
-        // editor.commands.focus();
-        setIsActive(true);
         
         setIsDragging(true);
         const newDragStart = { x: e.clientX - panPosition.x, y: e.clientY - panPosition.y };
@@ -569,11 +499,13 @@ const MermaidNodeComponent = ({ node, updateAttributes, editor, getPos }: NodeVi
         <>
             <NodeViewWrapper 
                 className={`mermaid-node-wrapper ${isActive ? 'active' : ''}`}
-                {...customReferenceProps}
+                ref={refs.setReference}
+                {...getReferenceProps()}
             >
                 <div 
                     ref={wrapperRef}
                     className="mermaid-editor-container"
+                    onMouseDown={handleWrapperClick}
                 >
                 
                 {/* Edit Mode: Show editor interface */}
