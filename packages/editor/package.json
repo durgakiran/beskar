@@ -45,6 +45,7 @@
     "@tiptap/extension-collaboration-caret": "^3.6.6",
     "@tiptap/extension-color": "^3.6.6",
     "@tiptap/extension-details": "^3.7.0",
+    "@tiptap/extension-emoji": "^3.7.2",
     "@tiptap/extension-list-item": "^3.7.0",
     "@tiptap/extension-table": "^3.6.6",
     "@tiptap/extension-table-cell": "^3.6.6",

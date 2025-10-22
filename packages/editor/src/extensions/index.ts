@@ -12,7 +12,7 @@ import { Table, TableCell, TableHeader, TableRow } from '../nodes/table';
 import { SlashCommand } from './slash-command';
 import { BlockId } from './block-id';
 import { BlockDragDrop } from './block-drag-drop';
-import { Emoji } from './emoji';
+import Emoji, { gitHubEmojis } from '@tiptap/extension-emoji';
 import {
   BlockHeading,
   BlockParagraph,
@@ -34,7 +34,6 @@ export * from '../nodes/table/utils';
 export { SlashCommand } from './slash-command';
 export { BlockId } from './block-id';
 export { BlockDragDrop } from './block-drag-drop';
-export { Emoji } from './emoji';
 
 export interface GetExtensionsOptions {
   placeholder?: string;
@@ -86,7 +85,13 @@ export function getExtensions(options: GetExtensionsOptions = {}): Extensions {
     Underline,
     TextStyle,
     Color,
-    Emoji, // Auto-replace emoji shortcuts
+    Emoji.configure({
+      emojis: gitHubEmojis, // Use extended GitHub emoji set (includes custom ones like :octocat:)
+      enableEmoticons: true, // Convert emoticons like :) to 😊, <3 to ❤️
+      HTMLAttributes: {
+        class: 'emoji-node',
+      },
+    }),
     Table, // Already configured with resizable: true in the custom extension
     TableRow,
     TableHeader,

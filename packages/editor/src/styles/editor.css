@@ -689,3 +689,44 @@
   margin: 0.5rem 1rem 1rem;
   padding: 0.5rem;
 }
+
+/* Emoji Node Styling */
+.beskar-editor .ProseMirror .emoji-node {
+  display: inline-block;
+  line-height: 1;
+  font-size: 1.25em;
+  vertical-align: baseline;
+  margin: 0 0.05em;
+  user-select: all;
+  -webkit-user-select: all;
+}
+
+/* Emoji fallback images */
+.beskar-editor .ProseMirror .emoji-node img {
+  display: inline-block;
+  width: 1.25em;
+  height: 1.25em;
+  vertical-align: text-bottom;
+  object-fit: contain;
+}
+
+/* Emoji in headings - scale appropriately */
+.beskar-editor .ProseMirror h1 .emoji-node {
+  font-size: 1.2em;
+}
+
+.beskar-editor .ProseMirror h2 .emoji-node {
+  font-size: 1.15em;
+}
+
+.beskar-editor .ProseMirror h3 .emoji-node {
+  font-size: 1.1em;
+}
+
+/* Emoji selection - highlight the entire emoji */
+.beskar-editor .ProseMirror .emoji-node.ProseMirror-selectednode {
+  outline: 2px solid #68cef8;
+  outline-offset: 2px;
+  border-radius: 2px;
+  background-color: rgba(104, 206, 248, 0.1);
+}
