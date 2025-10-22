@@ -469,9 +469,11 @@
 }
 
 .beskar-editor .ProseMirror table .selectedCell {
-  border-style: double;
-  border-color: rgba(0, 0, 0, 0.2);
-  background-color: rgba(0, 0, 0, 0.05);
+  outline: 3px solid rgb(0, 120, 212) !important;
+  outline-offset: -2px;
+  background-color: rgba(0, 120, 212, 0.05);
+  position: relative;
+  z-index: 1;
 }
 
 /* Table Grip Handles */
@@ -503,11 +505,11 @@
   border-color: rgba(255, 255, 255, 0.2);
 }
 
-.beskar-editor .ProseMirror table .grip-column.selected:before,
+/* .beskar-editor .ProseMirror table .grip-column.selected:before,
 .beskar-editor .ProseMirror table .grip-column:hover:before {
   content: "";
   width: 0.625rem;
-}
+} */
 
 .beskar-editor .ProseMirror table .grip-column:hover {
   background-color: rgba(0, 0, 0, 0.1);
@@ -517,13 +519,13 @@
   background-color: rgba(255, 255, 255, 0.2);
 }
 
-.beskar-editor .ProseMirror table .grip-column:hover:before {
+/* .beskar-editor .ProseMirror table .grip-column:hover:before {
   border-bottom: 2px dotted rgba(0, 0, 0, 0.6);
-}
+} */
 
-.beskar-editor.dark .ProseMirror table .grip-column:hover:before {
+/* .beskar-editor.dark .ProseMirror table .grip-column:hover:before {
   border-color: rgba(255, 255, 255, 0.6);
-}
+} */
 
 .beskar-editor .ProseMirror table .grip-column.first {
   border-top-left-radius: 0.125rem;
@@ -563,11 +565,11 @@
   border-color: rgba(255, 255, 255, 0.2);
 }
 
-.beskar-editor .ProseMirror table .grip-row.selected:before,
+/* .beskar-editor .ProseMirror table .grip-row.selected:before,
 .beskar-editor .ProseMirror table .grip-row:hover:before {
   height: 0.625rem;
   content: "";
-}
+} */
 
 .beskar-editor .ProseMirror table .grip-row:hover {
   background-color: rgba(0, 0, 0, 0.1);
@@ -577,13 +579,13 @@
   background-color: rgba(255, 255, 255, 0.2);
 }
 
-.beskar-editor .ProseMirror table .grip-row:hover:before {
+/* .beskar-editor .ProseMirror table .grip-row:hover:before {
   border-left: 2px dotted rgba(0, 0, 0, 0.6);
-}
+} */
 
-.beskar-editor.dark .ProseMirror table .grip-row:hover:before {
+/* .beskar-editor.dark .ProseMirror table .grip-row:hover:before {
   border-color: rgba(255, 255, 255, 0.6);
-}
+} */
 
 .beskar-editor .ProseMirror table .grip-row.first {
   border-top-left-radius: 0.125rem;
@@ -729,4 +731,417 @@
   outline-offset: 2px;
   border-radius: 2px;
   background-color: rgba(104, 206, 248, 0.1);
+}
+
+/* ===========================
+   Table Controls Styles
+   =========================== */
+
+/* Row Grip Handles */
+.grip-row {
+  position: absolute;
+  left: -2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 0.25rem;
+  cursor: pointer;
+  opacity: 0.4;
+  transition: opacity 0.15s ease, background-color 0.15s ease;
+  z-index: 10;
+  pointer-events: auto;
+}
+
+.grip-row:hover,
+.grip-row.selected {
+  opacity: 1 !important;
+  background-color: rgba(0, 0, 0, 0.05);
+}
+
+.dark .grip-row:hover,
+.dark .grip-row.selected {
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+/* Show row grip on row hover */
+tr:hover .grip-row {
+  opacity: 1;
+}
+
+/* Row highlighting removed - individual cell styling is sufficient */
+/* The selectedCell class on each cell provides the blue border */
+
+/* Column Grip Handles */
+.grip-column {
+  position: absolute;
+  top: -1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 0.25rem;
+  cursor: pointer;
+  opacity: 0.4;
+  transition: opacity 0.15s ease, background-color 0.15s ease;
+  z-index: 10;
+  pointer-events: auto;
+}
+
+.grip-column:hover,
+.grip-column.selected {
+  opacity: 1 !important;
+  background-color: rgba(0, 0, 0, 0.05);
+}
+
+.dark .grip-column:hover,
+.dark .grip-column.selected {
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+/* Show column grip on column hover - using nth-child */
+th:hover .grip-column,
+td:hover .grip-column {
+  opacity: 1;
+}
+
+/* Highlight selected column with blue border */
+th.selectedCell,
+td.selectedCell {
+  outline: 3px solid rgb(0, 120, 212) !important;
+  outline-offset: -2px;
+  background-color: rgba(0, 120, 212, 0.05);
+  position: relative;
+  z-index: 1;
+}
+
+/* Row and Column Drag Handle Triggers */
+.row-drag-handle-trigger,
+.column-drag-handle-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  border: none;
+  background: transparent;
+  color: rgba(0, 0, 0, 0.5);
+  cursor: pointer;
+  padding: 0;
+  border-radius: 0.25rem;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.row-drag-handle-trigger:hover,
+.column-drag-handle-trigger:hover {
+  background-color: rgba(0, 0, 0, 0.1);
+  color: rgba(0, 0, 0, 0.8);
+}
+
+.dark .row-drag-handle-trigger,
+.dark .column-drag-handle-trigger {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.dark .row-drag-handle-trigger:hover,
+.dark .column-drag-handle-trigger:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.8);
+}
+
+/* Table Dropdown Menu */
+.table-dropdown-content {
+  min-width: 200px;
+  background-color: white;
+  border-radius: 0.5rem;
+  padding: 0.25rem;
+  box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  z-index: 1000;
+}
+
+.dark .table-dropdown-content {
+  background-color: #1f1f1f;
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.table-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  border-radius: 0.375rem;
+  cursor: pointer;
+  user-select: none;
+  outline: none;
+  color: rgba(0, 0, 0, 0.9);
+  transition: background-color 0.15s ease;
+}
+
+.dark .table-dropdown-item {
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.table-dropdown-item:hover,
+.table-dropdown-item:focus {
+  background-color: rgba(0, 0, 0, 0.05);
+}
+
+.dark .table-dropdown-item:hover,
+.dark .table-dropdown-item:focus {
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+.table-dropdown-item.danger {
+  color: #dc2626;
+}
+
+.dark .table-dropdown-item.danger {
+  color: #f87171;
+}
+
+.table-dropdown-item.danger:hover {
+  background-color: rgba(220, 38, 38, 0.1);
+}
+
+.dark .table-dropdown-item.danger:hover {
+  background-color: rgba(248, 113, 113, 0.1);
+}
+
+.table-dropdown-item[data-disabled] {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.table-dropdown-item .submenu-arrow {
+  margin-left: auto;
+}
+
+.table-dropdown-separator {
+  height: 1px;
+  background-color: rgba(0, 0, 0, 0.1);
+  margin: 0.25rem 0;
+}
+
+.dark .table-dropdown-separator {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.table-dropdown-arrow {
+  fill: white;
+}
+
+.dark .table-dropdown-arrow {
+  fill: #1f1f1f;
+}
+
+/* Color Picker */
+.table-color-picker-wrapper {
+  padding: 0.5rem;
+}
+
+.table-color-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.table-color-picker-content {
+  background-color: white;
+  border-radius: 0.5rem;
+  padding: 0.75rem;
+  box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  z-index: 1001;
+}
+
+.dark .table-color-picker-content {
+  background-color: #1f1f1f;
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.color-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.color-swatch {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 0.375rem;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.color-swatch:hover {
+  transform: scale(1.1);
+  box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+}
+
+.custom-color-input {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.custom-color-input input {
+  flex: 1;
+  padding: 0.375rem 0.5rem;
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  border-radius: 0.375rem;
+  font-size: 0.875rem;
+  outline: none;
+  background-color: white;
+  color: rgba(0, 0, 0, 0.9);
+}
+
+.dark .custom-color-input input {
+  background-color: #2a2a2a;
+  border-color: rgba(255, 255, 255, 0.2);
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.custom-color-input input:focus {
+  border-color: rgba(0, 120, 212, 0.5);
+}
+
+.custom-color-input button {
+  padding: 0.375rem 0.75rem;
+  border: none;
+  border-radius: 0.375rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  background-color: rgba(0, 120, 212, 1);
+  color: white;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.custom-color-input button:hover {
+  background-color: rgba(0, 100, 192, 1);
+}
+
+.table-color-picker-arrow {
+  fill: white;
+}
+
+.dark .table-color-picker-arrow {
+  fill: #1f1f1f;
+}
+
+/* Table Toolbar */
+.table-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem;
+  background-color: white;
+  border-radius: 0.5rem;
+  box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.dark .table-toolbar {
+  background-color: #1f1f1f;
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.table-toolbar-button,
+.table-toolbar-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  border: none;
+  border-radius: 0.375rem;
+  background-color: transparent;
+  color: rgba(0, 0, 0, 0.9);
+  cursor: pointer;
+  user-select: none;
+  outline: none;
+  transition: background-color 0.15s ease;
+  white-space: nowrap;
+}
+
+.dark .table-toolbar-button,
+.dark .table-toolbar-toggle {
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.table-toolbar-button:hover,
+.table-toolbar-toggle:hover {
+  background-color: rgba(0, 0, 0, 0.05);
+}
+
+.dark .table-toolbar-button:hover,
+.dark .table-toolbar-toggle:hover {
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+.table-toolbar-toggle[data-state="on"] {
+  background-color: rgba(0, 120, 212, 0.1);
+  color: rgba(0, 120, 212, 1);
+}
+
+.dark .table-toolbar-toggle[data-state="on"] {
+  background-color: rgba(0, 120, 212, 0.2);
+  color: rgba(96, 165, 250, 1);
+}
+
+.table-toolbar-button.danger {
+  color: #dc2626;
+}
+
+.dark .table-toolbar-button.danger {
+  color: #f87171;
+}
+
+.table-toolbar-button.danger:hover {
+  background-color: rgba(220, 38, 38, 0.1);
+}
+
+.dark .table-toolbar-button.danger:hover {
+  background-color: rgba(248, 113, 113, 0.1);
+}
+
+.table-toolbar-separator {
+  width: 1px;
+  height: 1.5rem;
+  background-color: rgba(0, 0, 0, 0.1);
+}
+
+.dark .table-toolbar-separator {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+/* Row Numbers */
+.tableWrapper.show-row-numbers table {
+  counter-reset: row-number;
+}
+
+.tableWrapper.show-row-numbers tr {
+  counter-increment: row-number;
+}
+
+.tableWrapper.show-row-numbers tr td:first-child::before {
+  content: counter(row-number);
+  position: absolute;
+  left: -3rem;
+  color: rgba(0, 0, 0, 0.4);
+  font-size: 0.75rem;
+  font-weight: 500;
+  user-select: none;
+}
+
+.dark .tableWrapper.show-row-numbers tr td:first-child::before {
+  color: rgba(255, 255, 255, 0.4);
 }

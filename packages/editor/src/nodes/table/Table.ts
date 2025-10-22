@@ -24,26 +24,51 @@ export const Table = TiptapTable.extend({
           return { 'data-block-id': attributes.blockId };
         },
       },
+      showRowNumbers: {
+        default: false,
+        parseHTML: (element) => {
+          const wrapper = element.closest('.tableWrapper');
+          return wrapper?.getAttribute('data-row-numbers') === 'true';
+        },
+        renderHTML: (attributes) => {
+          if (!attributes.showRowNumbers) return {};
+          return { 'data-row-numbers': 'true' };
+        },
+      },
     };
   },
 
   renderHTML({ node, HTMLAttributes }: { node: any; HTMLAttributes: Record<string, any> }) {
-    // Extract blockId for the wrapper, don't pass it to the table element
-    const { blockId, ...tableAttributes } = node.attrs;
+    // Extract blockId and showRowNumbers for the wrapper, don't pass them to the table element
+    const { blockId, showRowNumbers, ...tableAttributes } = node.attrs;
     
-    const wrapperAttrs = blockId ? {
-      'data-block-id': blockId,
-      class: 'tableWrapper block-node',
-      draggable: 'false', // Only draggable via handle
-    } : {
-      class: 'tableWrapper',
+    let wrapperClass = 'tableWrapper';
+    if (blockId) {
+      wrapperClass += ' block-node';
+    }
+    if (showRowNumbers) {
+      wrapperClass += ' show-row-numbers';
+    }
+
+    const wrapperAttrs: Record<string, any> = {
+      class: wrapperClass,
     };
 
-    // Merge HTMLAttributes but exclude any blockId-related attributes
+    if (blockId) {
+      wrapperAttrs['data-block-id'] = blockId;
+      wrapperAttrs['draggable'] = 'false'; // Only draggable via handle
+    }
+
+    if (showRowNumbers) {
+      wrapperAttrs['data-row-numbers'] = 'true';
+    }
+
+    // Merge HTMLAttributes but exclude wrapper-specific attributes
     const cleanTableAttrs = { ...HTMLAttributes };
     delete cleanTableAttrs['data-block-id'];
+    delete cleanTableAttrs['data-row-numbers'];
     delete cleanTableAttrs['draggable'];
-    delete cleanTableAttrs['class']; // Don't apply block-node class to inner table
+    delete cleanTableAttrs['class']; // Don't apply wrapper classes to inner table
 
     return [
       'div',

@@ -5,6 +5,12 @@ export { Editor } from './core/Editor';
 export { BubbleMenu, BubbleMenuButton } from './components/BubbleMenu';
 export type { BubbleMenuProps, BubbleMenuButtonProps } from './components/BubbleMenu';
 
+// Table Components
+export { TableToolbar } from './components/table/TableToolbar';
+export { RowDragHandle } from './components/table/RowDragHandle';
+export { ColumnDragHandle } from './components/table/ColumnDragHandle';
+export { ColorPicker } from './components/table/ColorPicker';
+
 // Types
 export type {
   Editor as TiptapEditor,
