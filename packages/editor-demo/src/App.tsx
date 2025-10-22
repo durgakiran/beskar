@@ -229,6 +229,7 @@ function App() {
   const [editor, setEditor] = useState<TiptapEditor | null>(null);
 
   const handleUpdate = useCallback((updatedContent: any) => {
+    console.log('updatedContent:', updatedContent);
     setContent(updatedContent);
     setLastSaved(new Date());
   }, []);

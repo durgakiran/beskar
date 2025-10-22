@@ -12,14 +12,20 @@ import { Table, TableCell, TableHeader, TableRow } from '../nodes/table';
 import { SlashCommand } from './slash-command';
 import { BlockId } from './block-id';
 import { BlockDragDrop } from './block-drag-drop';
+import { Emoji } from './emoji';
 import {
   BlockHeading,
   BlockParagraph,
   BlockBlockquote,
   BlockCodeBlock,
+  BlockCodeBlockLowlight,
   BlockBulletList,
   BlockOrderedList,
   BlockHorizontalRule,
+  BlockDetails,
+  BlockDetailsSummary,
+  BlockDetailsContent,
+  BlockListItem,
 } from '../nodes/block-nodes';
 
 export { CustomAttributes };
@@ -28,6 +34,7 @@ export * from '../nodes/table/utils';
 export { SlashCommand } from './slash-command';
 export { BlockId } from './block-id';
 export { BlockDragDrop } from './block-drag-drop';
+export { Emoji } from './emoji';
 
 export interface GetExtensionsOptions {
   placeholder?: string;
@@ -58,15 +65,20 @@ export function getExtensions(options: GetExtensionsOptions = {}): Extensions {
       bulletList: false,
       orderedList: false,
       horizontalRule: false,
+      listItem: false,
     }),
     // Add our custom block-enabled nodes
     BlockHeading,
     BlockParagraph,
     BlockBlockquote,
-    BlockCodeBlock,
+    BlockCodeBlockLowlight, // Use code block with syntax highlighting
     BlockBulletList,
     BlockOrderedList,
+    BlockListItem,
     BlockHorizontalRule,
+    BlockDetails,
+    BlockDetailsSummary,
+    BlockDetailsContent,
     TextAlign.configure({
       types: ['heading', 'paragraph'],
       alignments: ['left', 'right', 'center', 'justify'],
@@ -74,6 +86,7 @@ export function getExtensions(options: GetExtensionsOptions = {}): Extensions {
     Underline,
     TextStyle,
     Color,
+    Emoji, // Auto-replace emoji shortcuts
     Table, // Already configured with resizable: true in the custom extension
     TableRow,
     TableHeader,

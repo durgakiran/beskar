@@ -1,6 +1,5 @@
 import { Extension } from "@tiptap/core";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
-import type { EditorView } from "@tiptap/pm/view";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 
 // BlockDragDrop extension loaded
@@ -8,6 +7,13 @@ import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 export interface BlockDragDropOptions {
   types: string[];
 }
+
+export interface BlockDragDropState {
+  isDragging: boolean;
+  draggedNodeType: string | null;
+}
+
+export const blockDragDropKey = new PluginKey<BlockDragDropState>("blockDragDrop");
 
 interface BlockInfo {
   node: ProseMirrorNode;
@@ -29,10 +35,15 @@ export const BlockDragDrop = Extension.create<BlockDragDropOptions>({
         "paragraph",
         "bulletList",
         "orderedList",
+        "listItem",
         "blockquote",
         "codeBlock",
+        "codeBlockLowlight",
         "table",
         "horizontalRule",
+        "details",
+        "detailsSummary",
+        "detailsContent",
       ],
     };
   },
@@ -44,8 +55,22 @@ export const BlockDragDrop = Extension.create<BlockDragDropOptions>({
 
     return [
       new Plugin({
-        key: new PluginKey("blockDragDrop"),
-
+        key: blockDragDropKey,
+        state: {
+          init() {
+            return { isDragging: false, draggedNodeType: null };
+          },
+          apply(tr, value) {
+            const meta = tr.getMeta(blockDragDropKey);
+            if (meta !== undefined) {
+              return { 
+                isDragging: meta.isDragging,
+                draggedNodeType: meta.draggedNodeType || null
+              };
+            }
+            return value;
+          },
+        },
         view: (editorView) => {
           const container = editorView.dom as HTMLElement;
 
@@ -98,7 +123,7 @@ export const BlockDragDrop = Extension.create<BlockDragDropOptions>({
                 }
               }
             } catch (e) {
-              // Silent fail
+              console.error('[findBlockAtPos] Error:', e);
             }
             return null;
           };
@@ -107,10 +132,19 @@ export const BlockDragDrop = Extension.create<BlockDragDropOptions>({
             element: HTMLElement
           ): BlockInfo | null => {
             try {
-              // Get position from the element
-              let pos = editorView.posAtDOM(element, 0);
-              const $pos = editorView.state.doc.resolve(pos);
+              // Special handling for tableWrapper - use the actual table element
+              let targetElement = element;
+              if (element.classList.contains('tableWrapper')) {
+                const table = element.querySelector('table');
+                if (table) {
+                  targetElement = table as HTMLElement;
+                }
+              }
 
+              // Get position from the element
+              let pos = editorView.posAtDOM(targetElement, 0);
+              const $pos = editorView.state.doc.resolve(pos);
+              
               // Walk UP the document tree to find the top-level block (depth 1)
               for (let depth = $pos.depth; depth > 0; depth--) {
                 const node = $pos.node(depth);
@@ -129,7 +163,7 @@ export const BlockDragDrop = Extension.create<BlockDragDropOptions>({
                 }
               }
             } catch (e) {
-              // Silent fail
+              console.error('[findBlockFromElement] Error:', e);
             }
             return null;
           };
@@ -137,20 +171,24 @@ export const BlockDragDrop = Extension.create<BlockDragDropOptions>({
           const positionHandle = (blockInfo: BlockInfo) => {
             if (!dragHandle) return;
 
+            // Use the DOM element as-is (nodeDOM returns the wrapper for tables)
             const blockRect = blockInfo.dom.getBoundingClientRect();
             const parent = container.parentElement;
             if (!parent) return;
 
             const parentRect = parent.getBoundingClientRect();
 
+            // For tables, position handle vertically centered to avoid header overlap
+            const isTable = blockInfo.node.type.name === 'table';
+            let topOffset = 8;
+            
             // Calculate position relative to parent since handle is appended to parent
-            const top = blockRect.top - parentRect.top + parent.scrollTop;
-            const left =
-              blockRect.left - parentRect.left + parent.scrollLeft - 32;
+            const top = blockRect.top - parentRect.top + parent.scrollTop + topOffset;
+            const left = blockRect.left - parentRect.left + parent.scrollLeft - 32;
 
             dragHandle.style.top = `${top}px`;
             dragHandle.style.left = `${Math.max(left, 4)}px`;
-            dragHandle.style.height = `${Math.min(blockRect.height, 24)}px`;
+            dragHandle.style.height = `${blockRect.height}px`;
           };
 
           const showHandle = (blockInfo: BlockInfo) => {
@@ -177,11 +215,25 @@ export const BlockDragDrop = Extension.create<BlockDragDropOptions>({
             if (isDragging) return;
 
             // Use elementFromPoint to get the actual element under the mouse cursor
-            const elementUnderMouse = document.elementFromPoint(
+            let elementUnderMouse = document.elementFromPoint(
               event.clientX,
               event.clientY
             ) as HTMLElement;
             if (!elementUnderMouse) return;
+
+            // Skip table grip handles - they interfere with drag handle detection
+            if (elementUnderMouse.classList.contains('grip-column') || 
+                elementUnderMouse.classList.contains('grip-row')) {
+              // Check if we should show handle for the table wrapper instead
+              const tableWrapper = elementUnderMouse.closest('.tableWrapper') as HTMLElement;
+              if (tableWrapper) {
+                const blockInfo = findBlockFromElement(tableWrapper);
+                if (blockInfo && blockInfo.node.attrs.blockId !== currentBlockId) {
+                  showHandle(blockInfo);
+                }
+              }
+              return;
+            }
 
             // Check if hovering directly over the handle or near it
             // This check should work regardless of currentBlockId state
@@ -251,13 +303,54 @@ export const BlockDragDrop = Extension.create<BlockDragDropOptions>({
               }
             }
 
-            if (!blockElement) return;
+            if (!blockElement) {
+              return;
+            }
 
             draggedBlockInfo = findBlockFromElement(blockElement);
-            if (!draggedBlockInfo) return;
+            if (!draggedBlockInfo) {
+              return;
+            }
+
+            console.log('[DRAG START] Captured draggedBlockInfo:', {
+              pos: draggedBlockInfo.pos,
+              nodeType: draggedBlockInfo.node.type.name,
+              blockId: draggedBlockInfo.node.attrs.blockId,
+              nodeSize: draggedBlockInfo.node.nodeSize,
+            });
+            
+            // Log surrounding content
+            console.log('[DRAG START] Document structure around dragged node:');
+            const startPos = Math.max(0, draggedBlockInfo.pos - 50);
+            const endPos = Math.min(editorView.state.doc.content.size, draggedBlockInfo.pos + 150);
+            editorView.state.doc.nodesBetween(startPos, endPos, (node, pos) => {
+              console.log(`  pos ${pos}: ${node.type.name} (size: ${node.nodeSize}, blockId: ${node.attrs.blockId || 'none'})`);
+            });
 
             isDragging = true;
+            
+            // CRITICAL: Stop ProseMirror's DOM observer before making DOM changes
+            // This prevents readDOMChange from corrupting the document during drag
+            const domObserver = (editorView as any).domObserver;
+            if (domObserver) {
+              console.log('[DRAG START] Stopping DOM observer to prevent corruption');
+              domObserver.stop();
+            }
+            
             blockElement.classList.add("dragging");
+            
+            // Set drag state in plugin state to prevent table normalization
+            // Use a non-document-changing transaction
+            const tr = editorView.state.tr;
+            tr.setMeta('addToHistory', false);
+            tr.setMeta(blockDragDropKey, { 
+              isDragging: true, 
+              draggedNodeType: draggedBlockInfo.node.type.name 
+            });
+            tr.setMeta('skipFixTables', true); // Mark this transaction to skip fixTables
+            editorView.dispatch(tr);
+            
+            console.log('[DRAG START] Drag state set, positions should now be frozen');
 
             if (dragHandle) {
               dragHandle.style.cursor = "grabbing";
@@ -272,43 +365,77 @@ export const BlockDragDrop = Extension.create<BlockDragDropOptions>({
               try {
                 const clone = blockElement.cloneNode(true) as HTMLElement;
                 clone.style.opacity = "0.8";
+                clone.style.backgroundColor = "gray";
                 clone.style.width = `${blockElement.offsetWidth}px`;
                 clone.style.position = "absolute";
                 clone.style.top = "-9999px";
                 clone.style.left = "-9999px";
+                
+                // For tables, remove grip handles from the clone
+                if (blockElement.classList.contains('tableWrapper')) {
+                  clone.querySelectorAll('.grip-column, .grip-row').forEach(el => el.remove());
+                }
+                
                 document.body.appendChild(clone);
                 event.dataTransfer.setDragImage(clone, 0, 0);
                 setTimeout(() => clone.remove(), 0);
               } catch (e) {
                 // Fallback to default drag image
+                console.error('[handleDragStart] Error in createDragImage:', e);
               }
             }
           };
 
           const handleDragEnd = () => {
-            isDragging = false;
+            // Delay ALL cleanup to allow drop handler and all transactions to complete first
+            // This prevents fixTables from running on intermediate corrupted state
+            setTimeout(() => {
+              try {
+                isDragging = false;
+                
+                // Clear drag state in plugin state
+                // Use a non-document-changing transaction
+                const tr = editorView.state.tr;
+                tr.setMeta('addToHistory', false);
+                tr.setMeta(blockDragDropKey, { isDragging: false, draggedNodeType: null });
+                tr.setMeta('skipFixTables', true); // Mark this transaction to skip fixTables
+                editorView.dispatch(tr);
 
-            if (dragHandle) {
-              dragHandle.style.cursor = "grab";
-            }
+                if (dragHandle) {
+                  dragHandle.style.cursor = "grab";
+                }
 
-            // Clean up dragging classes
-            container
-              .querySelectorAll(
-                ".dragging, .drag-over, .drag-over-top, .drag-over-bottom"
-              )
-              .forEach((el) => {
-                el.classList.remove(
-                  "dragging",
-                  "drag-over",
-                  "drag-over-top",
-                  "drag-over-bottom"
-                );
-              });
+                // Clean up dragging classes
+                container
+                  .querySelectorAll(
+                    ".dragging, .drag-over, .drag-over-top, .drag-over-bottom"
+                  )
+                  .forEach((el) => {
+                    el.classList.remove(
+                      "dragging",
+                      "drag-over",
+                      "drag-over-top",
+                      "drag-over-bottom"
+                    );
+                  });
 
-            draggedBlockInfo = null;
-            // Clear currentBlockId after drag completes
-            currentBlockId = null;
+                draggedBlockInfo = null;
+                // Clear currentBlockId after drag completes
+                currentBlockId = null;
+                
+                // CRITICAL: Restart ProseMirror's DOM observer
+                // This was stopped in handleDragStart to prevent corruption
+                const domObserver = (editorView as any).domObserver;
+                if (domObserver) {
+                  console.log('[DRAG END] Restarting DOM observer');
+                  domObserver.start();
+                  // Force a flush to sync any pending DOM changes
+                  domObserver.flush();
+                }
+              } catch (error) {
+                console.error('[DRAG END] Error in cleanup:', error);
+              }
+            }, 150);
           };
 
           const handleScroll = () => {
@@ -470,6 +597,9 @@ export const BlockDragDrop = Extension.create<BlockDragDropOptions>({
               try {
                 // Get dragged block info from stored data
                 const draggedPos = draggedBlockInfo.pos;
+                
+                // IMPORTANT: Use the CACHED node from draggedBlockInfo, not the current state
+                // The current state may have been corrupted during the drag operation
                 const draggedNode = draggedBlockInfo.node;
 
                 if (!draggedNode) {
@@ -536,6 +666,7 @@ export const BlockDragDrop = Extension.create<BlockDragDropOptions>({
                     }
                   } catch (error) {
                     // Silent fail
+                    console.error('ERROR in drop handler:', error);
                   }
                 }
 
@@ -552,24 +683,76 @@ export const BlockDragDrop = Extension.create<BlockDragDropOptions>({
                   }
                 }
 
-                // Adjust if dragging downwards
-                if (draggedPos < insertPos) {
-                  insertPos -= draggedNode.nodeSize;
-                }
-
                 // Don't do anything if dropping in the same place
                 if (insertPos === draggedPos) {
                   return true;
                 }
 
-                // Perform the move
+                // Perform the move operation
                 const tr = view.state.tr;
-                tr.delete(draggedPos, draggedPos + draggedNode.nodeSize);
-                tr.insert(insertPos, draggedNode);
+                
+                console.log('[DROP] About to delete:', {
+                  draggedPos,
+                  nodeSize: draggedNode.nodeSize,
+                  deleteRange: [draggedPos, draggedPos + draggedNode.nodeSize],
+                  draggedNodeType: draggedNode.type.name,
+                  draggedNodeBlockId: draggedNode.attrs.blockId,
+                });
+                
+                // Check what's actually at draggedPos right now
+                const nodeAtDraggedPos = view.state.doc.nodeAt(draggedPos);
+                console.log('[DROP] Node at draggedPos:', {
+                  type: nodeAtDraggedPos?.type.name,
+                  blockId: nodeAtDraggedPos?.attrs?.blockId,
+                  size: nodeAtDraggedPos?.nodeSize,
+                });
+                
+                // Find the actual current position by blockId
+                let actualDraggedPos: number | null = null;
+                view.state.doc.descendants((node, pos) => {
+                  if (node.attrs.blockId === draggedNode.attrs.blockId) {
+                    actualDraggedPos = pos;
+                    console.log('[DROP] Found dragged node at current pos:', pos);
+                    return false;
+                  }
+                });
+                
+                if (actualDraggedPos === null) {
+                  console.error('[DROP] Could not find dragged node by blockId!');
+                  return false;
+                }
+                
+                console.log('[DROP] Using actualDraggedPos:', actualDraggedPos, 'instead of stale draggedPos:', draggedPos);
+                
+                // Delete the dragged node from its CURRENT position
+                tr.delete(actualDraggedPos, actualDraggedPos + draggedNode.nodeSize);
+                
+                // Adjust insert position if needed
+                let finalInsertPos = insertPos;
+                if (actualDraggedPos < insertPos) {
+                  finalInsertPos = insertPos - draggedNode.nodeSize;
+                }
+                
+                console.log('[DROP] Insert positions:', {
+                  originalInsertPos: insertPos,
+                  finalInsertPos,
+                });
+                
+                // Insert the node at the target position
+                tr.insert(finalInsertPos, draggedNode);
+                
                 view.dispatch(tr);
               } catch (error) {
-                // Silent fail
+                console.error('[DROP] Error in drop handler:', error);
               } finally {
+                // CRITICAL: Stop DOM observer again before cleanup
+                // view.dispatch might have restarted it, and DOM changes here would trigger corruption
+                const domObserver = (view as any).domObserver;
+                if (domObserver) {
+                  console.log('[DROP] Stopping DOM observer before cleanup');
+                  domObserver.stop();
+                }
+                
                 // Clean up
                 view.dom
                   .querySelectorAll(
@@ -600,6 +783,103 @@ export const BlockDragDrop = Extension.create<BlockDragDropOptions>({
               return false;
             },
           },
+        },
+      }),
+      // Debug plugin to monitor all table-related changes
+      new Plugin({
+        appendTransaction: (transactions, oldState, newState) => {
+          // Log any changes to table-related nodes
+          const tableTypes = ['table', 'tableRow', 'tableHeader', 'tableCell'];
+          
+          transactions.forEach((tr, trIndex) => {
+            if (!tr.docChanged) return;
+            
+            console.log(`\n[TABLE MONITOR] Transaction ${trIndex}:`, {
+              steps: tr.steps.length,
+              docChanged: tr.docChanged,
+              meta: {
+                addToHistory: tr.getMeta('addToHistory'),
+                skipFixTables: tr.getMeta('skipFixTables'),
+                blockDragDrop: tr.getMeta(blockDragDropKey),
+              }
+            });
+            
+            // Log each step in detail
+            tr.steps.forEach((step: any, stepIndex: number) => {
+              console.log(`  [TABLE MONITOR] Step ${stepIndex}:`, {
+                type: step.constructor.name,
+                from: step.from,
+                to: step.to,
+                slice: step.slice ? {
+                  size: step.slice.size,
+                  openStart: step.slice.openStart,
+                  openEnd: step.slice.openEnd,
+                  content: step.slice.content.toJSON(),
+                } : undefined,
+                stepJSON: step.toJSON ? step.toJSON() : 'N/A',
+              });
+            });
+            
+            // Track table structure before and after
+            const oldTables: any[] = [];
+            oldState.doc.descendants((node, pos) => {
+              if (node.type.name === 'table') {
+                oldTables.push({
+                  pos,
+                  structure: node.toJSON()
+                });
+              }
+            });
+            
+            const newTables: any[] = [];
+            newState.doc.descendants((node, pos) => {
+              if (node.type.name === 'table') {
+                newTables.push({
+                  pos,
+                  structure: node.toJSON()
+                });
+              }
+            });
+            
+            // Compare structures
+            if (oldTables.length !== newTables.length) {
+              console.log('[TABLE MONITOR] Table count changed:', {
+                before: oldTables.length,
+                after: newTables.length
+              });
+            }
+            
+            // Check for structural changes
+            oldTables.forEach((oldTable, i) => {
+              const newTable = newTables[i];
+              if (newTable) {
+                const oldFirstRow = oldTable.structure.content?.[0];
+                const newFirstRow = newTable.structure.content?.[0];
+                
+                if (oldFirstRow && newFirstRow) {
+                  const oldFirstRowCells = oldFirstRow.content || [];
+                  const newFirstRowCells = newFirstRow.content || [];
+                  
+                  // Check if header cells were converted to regular cells
+                  const oldHeaders = oldFirstRowCells.filter((c: any) => c.type === 'tableHeader').length;
+                  const newHeaders = newFirstRowCells.filter((c: any) => c.type === 'tableHeader').length;
+                  
+                  if (oldHeaders !== newHeaders) {
+                    console.error('[TABLE MONITOR] HEADER CORRUPTION DETECTED at pos', oldTable.pos, ':', {
+                      before: { headers: oldHeaders, cells: oldFirstRowCells.length },
+                      after: { headers: newHeaders, cells: newFirstRowCells.length },
+                      beforeStructure: oldFirstRowCells.map((c: any) => c.type),
+                      afterStructure: newFirstRowCells.map((c: any) => c.type)
+                    });
+                    console.log('[TABLE MONITOR] Full table before:', JSON.stringify(oldTable.structure, null, 2));
+                    console.log('[TABLE MONITOR] Full table after:', JSON.stringify(newTable.structure, null, 2));
+                  }
+                }
+              }
+            });
+          });
+          
+          return null; // Don't modify anything, just observe
         },
       }),
     ];

@@ -7,10 +7,14 @@ import { Heading } from '@tiptap/extension-heading';
 import { Paragraph } from '@tiptap/extension-paragraph';
 import { Blockquote } from '@tiptap/extension-blockquote';
 import { CodeBlock } from '@tiptap/extension-code-block';
+import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight';
 import { BulletList } from '@tiptap/extension-bullet-list';
 import { OrderedList } from '@tiptap/extension-ordered-list';
 import { HorizontalRule } from '@tiptap/extension-horizontal-rule';
+import { Details, DetailsContent, DetailsSummary } from '@tiptap/extension-details';
+import { ListItem } from '@tiptap/extension-list-item';
 import { mergeAttributes } from '@tiptap/core';
+import { createLowlight, common } from 'lowlight';
 
 export const BlockHeading = Heading.extend({
   addAttributes() {
@@ -202,5 +206,107 @@ export const BlockHorizontalRule = HorizontalRule.extend({
     } : {};
 
     return ['hr', mergeAttributes(this.options.HTMLAttributes, HTMLAttributes, blockAttrs)];
+  },
+});
+
+// Create lowlight instance with common languages
+const lowlight = createLowlight(common);
+
+export const BlockCodeBlockLowlight = CodeBlockLowlight
+  .extend({
+    addAttributes() {
+      return {
+        ...this.parent?.(),
+        blockId: {
+          default: null,
+          parseHTML: (element) => element.getAttribute('data-block-id'),
+          renderHTML: (attributes) => {
+            if (!attributes.blockId) return {};
+            return { 'data-block-id': attributes.blockId };
+          },
+        },
+      };
+    },
+
+    renderHTML({ node, HTMLAttributes }) {
+      const blockAttrs = node.attrs.blockId ? {
+        'data-block-id': node.attrs.blockId,
+        class: 'block-node',
+      } : {};
+
+      return [
+        'pre',
+        mergeAttributes(this.options.HTMLAttributes, HTMLAttributes, blockAttrs),
+        ['code', { class: node.attrs.language ? `language-${node.attrs.language}` : null }, 0],
+      ];
+    },
+  })
+  .configure({
+    lowlight,
+    HTMLAttributes: {
+      class: 'code-block-lowlight',
+    },
+    defaultLanguage: 'plaintext',
+  });
+
+export const BlockDetails = Details.extend({
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      blockId: {
+        default: null,
+        parseHTML: (element) => element.getAttribute('data-block-id'),
+        renderHTML: (attributes) => {
+          if (!attributes.blockId) return {};
+          return { 'data-block-id': attributes.blockId };
+        },
+      },
+    };
+  },
+
+  renderHTML({ node, HTMLAttributes }) {
+    const blockAttrs = node.attrs.blockId ? {
+      'data-block-id': node.attrs.blockId,
+      class: 'block-node',
+    } : {};
+
+    return ['details', mergeAttributes(this.options.HTMLAttributes, HTMLAttributes, blockAttrs), 0];
+  },
+});
+
+export const BlockDetailsSummary = DetailsSummary.extend({
+  renderHTML({ HTMLAttributes }) {
+    return ['summary', mergeAttributes(this.options.HTMLAttributes, HTMLAttributes), 0];
+  },
+});
+
+export const BlockDetailsContent = DetailsContent.extend({
+  renderHTML({ HTMLAttributes }) {
+    return ['div', mergeAttributes(this.options.HTMLAttributes, HTMLAttributes), 0];
+  },
+});
+
+export const BlockListItem = ListItem.extend({
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      blockId: {
+        default: null,
+        parseHTML: (element) => element.getAttribute('data-block-id'),
+        renderHTML: (attributes) => {
+          if (!attributes.blockId) return {};
+          return { 'data-block-id': attributes.blockId };
+        },
+      },
+    };
+  },
+
+  renderHTML({ node, HTMLAttributes }) {
+    const blockAttrs = node.attrs.blockId ? {
+      'data-block-id': node.attrs.blockId,
+      class: 'block-node',
+    } : {};
+
+    return ['li', mergeAttributes(this.options.HTMLAttributes, HTMLAttributes, blockAttrs), 0];
   },
 });

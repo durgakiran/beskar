@@ -1,5 +1,6 @@
 import { Extension } from '@tiptap/core';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
+import { blockDragDropKey } from './block-drag-drop';
 
 export interface BlockIdOptions {
   types: string[];
@@ -19,10 +20,15 @@ export const BlockId = Extension.create<BlockIdOptions>({
         'paragraph',
         'bulletList',
         'orderedList',
+        'listItem',
         'blockquote',
         'codeBlock',
+        'codeBlockLowlight',
         'table',
         'horizontalRule',
+        'details',
+        'detailsSummary',
+        'detailsContent',
       ],
     };
   },
@@ -30,12 +36,15 @@ export const BlockId = Extension.create<BlockIdOptions>({
   addGlobalAttributes() {
     return [
       {
-        types: this.options.types,
+        // Exclude 'table' from global rendering - it handles its own wrapper rendering
+        types: this.options.types.filter(type => type !== 'table'),
         attributes: {
           blockId: {
             default: null,
             parseHTML: (element) => element.getAttribute('data-block-id'),
             renderHTML: (attributes) => {
+              // Only render block attributes if blockId exists
+              // This prevents table cell content from being treated as blocks
               if (!attributes.blockId) {
                 return {};
               }
@@ -54,6 +63,18 @@ export const BlockId = Extension.create<BlockIdOptions>({
   addProseMirrorPlugins() {
     const editor = this.editor;
     
+    // Helper to check if a position is inside a table
+    const isInsideTable = (doc: any, pos: number): boolean => {
+      const $pos = doc.resolve(pos);
+      for (let i = $pos.depth; i > 0; i--) {
+        const node = $pos.node(i);
+        if (node.type.name === 'table' || node.type.name === 'tableRow' || node.type.name === 'tableCell' || node.type.name === 'tableHeader') {
+          return true;
+        }
+      }
+      return false;
+    };
+    
     return [
       new Plugin({
         key: new PluginKey('blockId'),
@@ -71,8 +92,20 @@ export const BlockId = Extension.create<BlockIdOptions>({
                   return;
                 }
 
-                // Skip if already has blockId
-                if (node.attrs.blockId) {
+                const isInTable = node.type.name !== 'table' && isInsideTable(view.state.doc, pos);
+
+                // If node is inside a table and has a blockId, remove it
+                if (isInTable && node.attrs.blockId) {
+                  tr.setNodeMarkup(pos, undefined, {
+                    ...node.attrs,
+                    blockId: null,
+                  });
+                  modified = true;
+                  return;
+                }
+
+                // Skip if already has blockId or is inside table
+                if (node.attrs.blockId || isInTable) {
                   return;
                 }
 
@@ -95,6 +128,12 @@ export const BlockId = Extension.create<BlockIdOptions>({
         },
         
         appendTransaction: (transactions, oldState, newState) => {
+          // Skip during drag operations to prevent table corruption
+          const dragState = blockDragDropKey.getState(newState);
+          if (dragState?.isDragging) {
+            return null;
+          }
+          
           // Only run if document changed
           const docChanged = transactions.some((transaction) => transaction.docChanged);
           if (!docChanged) {
@@ -110,8 +149,20 @@ export const BlockId = Extension.create<BlockIdOptions>({
               return;
             }
 
-            // Skip if already has blockId
-            if (node.attrs.blockId) {
+            const isInTable = node.type.name !== 'table' && isInsideTable(newState.doc, pos);
+
+            // If node is inside a table and has a blockId, remove it
+            if (isInTable && node.attrs.blockId) {
+              tr.setNodeMarkup(pos, undefined, {
+                ...node.attrs,
+                blockId: null,
+              });
+              modified = true;
+              return;
+            }
+
+            // Skip if already has blockId or is inside table
+            if (node.attrs.blockId || isInTable) {
               return;
             }
 
