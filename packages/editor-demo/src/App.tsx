@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { Editor, BubbleMenu, BubbleMenuButton } from '@beskar/editor';
+import { Editor, BubbleMenu, BubbleMenuButton, TableFloatingMenu } from '@beskar/editor';
 import type { Editor as TiptapEditor } from '@beskar/editor';
 import '@beskar/editor/styles.css';
 import './App.css';
@@ -270,43 +270,48 @@ function App() {
         
         {/* Bubble Menu for text formatting */}
         {editor && isEditable && (
-          <BubbleMenu editor={editor}>
-            <BubbleMenuButton
-              onClick={() => editor.chain().focus().toggleBold().run()}
-              isActive={editor.isActive('bold')}
-              title="Bold (Cmd+B)"
-            >
-              <strong>B</strong>
-            </BubbleMenuButton>
-            <BubbleMenuButton
-              onClick={() => editor.chain().focus().toggleItalic().run()}
-              isActive={editor.isActive('italic')}
-              title="Italic (Cmd+I)"
-            >
-              <em>I</em>
-            </BubbleMenuButton>
-            <BubbleMenuButton
-              onClick={() => editor.chain().focus().toggleUnderline().run()}
-              isActive={editor.isActive('underline')}
-              title="Underline (Cmd+U)"
-            >
-              <u>U</u>
-            </BubbleMenuButton>
-            <BubbleMenuButton
-              onClick={() => editor.chain().focus().toggleStrike().run()}
-              isActive={editor.isActive('strike')}
-              title="Strikethrough"
-            >
-              <s>S</s>
-            </BubbleMenuButton>
-            <BubbleMenuButton
-              onClick={() => editor.chain().focus().toggleCode().run()}
-              isActive={editor.isActive('code')}
-              title="Code"
-            >
-              {'</>'}
-            </BubbleMenuButton>
-          </BubbleMenu>
+          <>
+            <BubbleMenu editor={editor}>
+              <BubbleMenuButton
+                onClick={() => editor.chain().focus().toggleBold().run()}
+                isActive={editor.isActive('bold')}
+                title="Bold (Cmd+B)"
+              >
+                <strong>B</strong>
+              </BubbleMenuButton>
+              <BubbleMenuButton
+                onClick={() => editor.chain().focus().toggleItalic().run()}
+                isActive={editor.isActive('italic')}
+                title="Italic (Cmd+I)"
+              >
+                <em>I</em>
+              </BubbleMenuButton>
+              <BubbleMenuButton
+                onClick={() => editor.chain().focus().toggleUnderline().run()}
+                isActive={editor.isActive('underline')}
+                title="Underline (Cmd+U)"
+              >
+                <u>U</u>
+              </BubbleMenuButton>
+              <BubbleMenuButton
+                onClick={() => editor.chain().focus().toggleStrike().run()}
+                isActive={editor.isActive('strike')}
+                title="Strikethrough"
+              >
+                <s>S</s>
+              </BubbleMenuButton>
+              <BubbleMenuButton
+                onClick={() => editor.chain().focus().toggleCode().run()}
+                isActive={editor.isActive('code')}
+                title="Code"
+              >
+                {'</>'}
+              </BubbleMenuButton>
+            </BubbleMenu>
+            
+            {/* Table Floating Menu */}
+            <TableFloatingMenu editor={editor} />
+          </>
         )}
       </main>
 

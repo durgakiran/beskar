@@ -1123,27 +1123,163 @@ td.selectedCell {
   background-color: rgba(255, 255, 255, 0.1);
 }
 
-/* Row Numbers */
-.tableWrapper.show-row-numbers table {
-  counter-reset: row-number;
+/* Table Toolbar Floating Menu - Match Note Block Design */
+.table-toolbar-floating-menu {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.375rem 0.5rem;
+  background-color: white;
+  border-radius: 0.5rem;
+  box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+  border: 1px solid rgba(0, 0, 0, 0.1);
 }
 
-.tableWrapper.show-row-numbers tr {
-  counter-increment: row-number;
+.dark .table-toolbar-floating-menu {
+  background-color: #1f1f1f;
+  border-color: rgba(255, 255, 255, 0.1);
 }
 
-.tableWrapper.show-row-numbers tr td:first-child::before {
-  content: counter(row-number);
-  position: absolute;
-  left: -3rem;
-  color: rgba(0, 0, 0, 0.4);
-  font-size: 0.75rem;
+/* Table Floating Menu Container */
+.table-floating-menu-container {
+  pointer-events: auto;
+  animation: tableMenuFadeIn 0.15s ease;
+}
+
+@keyframes tableMenuFadeIn {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+.table-floating-menu-container * {
+  pointer-events: auto;
+}
+
+/* Table Floating Menu Buttons - Match Note Block */
+.table-toolbar-floating-menu .table-toolbar-button,
+.table-toolbar-floating-menu .table-toolbar-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.375rem 0.625rem;
+  font-size: 0.875rem;
+  border: none;
+  border-radius: 0.375rem;
+  background-color: transparent;
+  color: rgba(0, 0, 0, 0.7);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.dark .table-toolbar-floating-menu .table-toolbar-button,
+.dark .table-toolbar-floating-menu .table-toolbar-toggle {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.table-toolbar-floating-menu .table-toolbar-button:hover,
+.table-toolbar-floating-menu .table-toolbar-toggle:hover {
+  background-color: rgba(0, 0, 0, 0.05);
+  color: rgba(0, 0, 0, 0.9);
+}
+
+.dark .table-toolbar-floating-menu .table-toolbar-button:hover,
+.dark .table-toolbar-floating-menu .table-toolbar-toggle:hover {
+  background-color: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.table-toolbar-floating-menu .table-toolbar-toggle[data-state="on"] {
+  background-color: rgba(0, 120, 212, 0.1);
+  color: rgba(0, 120, 212, 1);
+}
+
+.dark .table-toolbar-floating-menu .table-toolbar-toggle[data-state="on"] {
+  background-color: rgba(0, 120, 212, 0.2);
+  color: rgba(96, 165, 250, 1);
+}
+
+.table-toolbar-floating-menu .table-toolbar-button svg,
+.table-toolbar-floating-menu .table-toolbar-toggle svg {
+  flex-shrink: 0;
+}
+
+/* Row Numbers Column (actual first column) */
+.tableWrapper.show-row-numbers td:first-child,
+.tableWrapper.show-row-numbers th:first-child {
+  background-color: #f8f9fa;
+  color: rgba(0, 0, 0, 0.5);
+  font-size: 0.875rem;
   font-weight: 500;
+  text-align: center;
+  min-width: 50px;
+  width: 50px;
+  max-width: 50px;
   user-select: none;
+  pointer-events: none;
+  border-right: 2px solid #e0e0e0;
 }
 
-.dark .tableWrapper.show-row-numbers tr td:first-child::before {
-  color: rgba(255, 255, 255, 0.4);
+.dark .tableWrapper.show-row-numbers td:first-child,
+.dark .tableWrapper.show-row-numbers th:first-child {
+  background-color: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.5);
+  border-right-color: rgba(255, 255, 255, 0.15);
+}
+
+/* Hide column drag handle for row numbers column */
+.tableWrapper.show-row-numbers th:first-child .grip-column,
+.tableWrapper.show-row-numbers td:first-child .grip-column {
+  display: none;
+}
+
+/* Column Resizing */
+.beskar-editor .ProseMirror .resize-handle {
+  position: absolute;
+  right: -2px;
+  top: 0;
+  bottom: -2px;
+  width: 4px;
+  cursor: col-resize;
+  background-color: transparent;
+  z-index: 20;
+}
+
+.beskar-editor .ProseMirror .resize-handle:hover {
+  background-color: rgba(0, 120, 212, 0.5);
+}
+
+.beskar-editor .ProseMirror .selectedCell .resize-handle {
+  background-color: rgba(0, 120, 212, 0.3);
+}
+
+.dark .beskar-editor .ProseMirror .resize-handle:hover {
+  background-color: rgba(96, 165, 250, 0.5);
+}
+
+.dark .beskar-editor .ProseMirror .selectedCell .resize-handle {
+  background-color: rgba(96, 165, 250, 0.3);
+}
+
+/* Table cell positioning for resize handles */
+.beskar-editor .ProseMirror table td,
+.beskar-editor .ProseMirror table th {
+  position: relative;
+}
+
+/* Prevent text selection during resize */
+.beskar-editor .ProseMirror.resize-cursor {
+  cursor: col-resize;
+}
+
+.beskar-editor .ProseMirror.resize-cursor * {
+  cursor: col-resize !important;
 }
 
 /* ===========================

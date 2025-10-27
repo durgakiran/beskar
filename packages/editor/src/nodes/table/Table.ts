@@ -43,9 +43,10 @@ export const Table = TiptapTable.extend({
     const { blockId, showRowNumbers, ...tableAttributes } = node.attrs;
     
     let wrapperClass = 'tableWrapper';
-    if (blockId) {
-      wrapperClass += ' block-node';
-    }
+    // Don't serialize blockId (it should be unique per table)
+    // if (blockId) {
+    //   wrapperClass += ' block-node';
+    // }
     if (showRowNumbers) {
       wrapperClass += ' show-row-numbers';
     }
@@ -54,10 +55,11 @@ export const Table = TiptapTable.extend({
       class: wrapperClass,
     };
 
-    if (blockId) {
-      wrapperAttrs['data-block-id'] = blockId;
-      wrapperAttrs['draggable'] = 'false'; // Only draggable via handle
-    }
+    // Don't serialize blockId when copying - it should be unique per table
+    // if (blockId) {
+    //   wrapperAttrs['data-block-id'] = blockId;
+    //   wrapperAttrs['draggable'] = 'false'; // Only draggable via handle
+    // }
 
     if (showRowNumbers) {
       wrapperAttrs['data-row-numbers'] = 'true';
@@ -118,7 +120,7 @@ export const Table = TiptapTable.extend({
 
     return [
       ...wrappedParentPlugins,
-      // Plugin to sync blockId attribute to DOM
+      // Plugin to sync blockId and showRowNumbers attributes to DOM
       new Plugin({
         view: (view) => {
           const updateTableWrappers = () => {
@@ -126,7 +128,13 @@ export const Table = TiptapTable.extend({
             view.state.doc.descendants((node, pos) => {
               if (node.type.name === 'table') {
                 const blockId = node.attrs.blockId;
+                const showRowNumbers = node.attrs.showRowNumbers;
                 const dom = view.nodeDOM(pos);
+                
+                console.log('[Table Plugin] Updating table wrapper at pos', pos, {
+                  blockId,
+                  showRowNumbers,
+                });
                 
                 if (dom) {
                   // The dom might be the wrapper or the table itself
@@ -134,10 +142,22 @@ export const Table = TiptapTable.extend({
                   const wrapper = htmlDom.classList?.contains('tableWrapper') ? htmlDom : htmlDom.closest?.('.tableWrapper');
                   
                   if (wrapper) {
+                    // Sync blockId
                     if (blockId) {
                       wrapper.setAttribute('data-block-id', blockId);
                       wrapper.classList.add('block-node');
                       wrapper.setAttribute('draggable', 'false');
+                    }
+                    
+                    // Sync showRowNumbers
+                    if (showRowNumbers) {
+                      wrapper.classList.add('show-row-numbers');
+                      wrapper.setAttribute('data-row-numbers', 'true');
+                      console.log('[Table Plugin] Added show-row-numbers class');
+                    } else {
+                      wrapper.classList.remove('show-row-numbers');
+                      wrapper.removeAttribute('data-row-numbers');
+                      console.log('[Table Plugin] Removed show-row-numbers class');
                     }
                   }
                 }

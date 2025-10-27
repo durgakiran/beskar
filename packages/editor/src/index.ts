@@ -7,6 +7,7 @@ export type { BubbleMenuProps, BubbleMenuButtonProps } from './components/Bubble
 
 // Table Components
 export { TableToolbar } from './components/table/TableToolbar';
+export { TableFloatingMenu } from './components/table/TableFloatingMenu';
 export { RowDragHandle } from './components/table/RowDragHandle';
 export { ColumnDragHandle } from './components/table/ColumnDragHandle';
 export { ColorPicker } from './components/table/ColorPicker';

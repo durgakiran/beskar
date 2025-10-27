@@ -4,8 +4,8 @@ import * as Toggle from '@radix-ui/react-toggle';
 import * as Separator from '@radix-ui/react-separator';
 import { Editor } from '@tiptap/core';
 import { BubbleMenu } from '../BubbleMenu';
-import { FiPlus, FiTrash2, FiGrid } from 'react-icons/fi';
-import { isTableSelected, findTable, toggleRowNumbers as toggleRowNumbersUtil } from '../../nodes/table/utils';
+import { FiPlus, FiTrash2, FiGrid, FiCopy } from 'react-icons/fi';
+import { isTableSelected, findTable, toggleRowNumbers as toggleRowNumbersUtil, copyTable, deleteTable as deleteTableUtil } from '../../nodes/table/utils';
 
 interface TableToolbarProps {
   editor: Editor;
@@ -27,8 +27,14 @@ export const TableToolbar: React.FC<TableToolbarProps> = ({ editor }) => {
     editor.chain().focus().addColumnAfter().run();
   };
 
-  const deleteTable = () => {
-    editor.chain().focus().deleteTable().run();
+  const handleDeleteTable = () => {
+    console.log('[TableToolbar] Delete button clicked');
+    deleteTableUtil(editor);
+  };
+
+  const handleCopyTable = () => {
+    console.log('[TableToolbar] Copy button clicked');
+    copyTable(editor);
   };
 
   const mergeCells = () => {
@@ -62,7 +68,21 @@ export const TableToolbar: React.FC<TableToolbarProps> = ({ editor }) => {
         return !!table;
       }}
     >
-      <Toolbar.Root className="table-toolbar">
+      <Toolbar.Root className="table-toolbar table-toolbar-floating">
+        {/* Copy and Delete - Prominently displayed */}
+        <Toolbar.Button className="table-toolbar-button" onClick={handleCopyTable} aria-label="Copy table">
+          <FiCopy />
+          <span>Copy</span>
+        </Toolbar.Button>
+
+        <Toolbar.Button className="table-toolbar-button danger" onClick={handleDeleteTable} aria-label="Delete table">
+          <FiTrash2 />
+          <span>Delete</span>
+        </Toolbar.Button>
+
+        <Separator.Root className="table-toolbar-separator" orientation="vertical" />
+
+        {/* Additional table operations */}
         <Toolbar.Button className="table-toolbar-button" onClick={addRow}>
           <FiPlus />
           <span>Add row</span>
@@ -85,7 +105,9 @@ export const TableToolbar: React.FC<TableToolbarProps> = ({ editor }) => {
           <span>Row numbers</span>
         </Toggle.Root>
 
-        <Separator.Root className="table-toolbar-separator" orientation="vertical" />
+        {(canMergeCells() || canSplitCell()) && (
+          <Separator.Root className="table-toolbar-separator" orientation="vertical" />
+        )}
 
         {canMergeCells() && (
           <Toolbar.Button className="table-toolbar-button" onClick={mergeCells}>
@@ -106,13 +128,6 @@ export const TableToolbar: React.FC<TableToolbarProps> = ({ editor }) => {
             <span>Split cell</span>
           </Toolbar.Button>
         )}
-
-        <Separator.Root className="table-toolbar-separator" orientation="vertical" />
-
-        <Toolbar.Button className="table-toolbar-button danger" onClick={deleteTable}>
-          <FiTrash2 />
-          <span>Delete table</span>
-        </Toolbar.Button>
       </Toolbar.Root>
     </BubbleMenu>
   );

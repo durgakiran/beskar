@@ -786,18 +786,123 @@ export const distributeColumns = (tr: Transaction) => {
 };
 
 /**
- * Toggle row numbers display
+ * Toggle row numbers display by adding/removing an actual column
  */
 export const toggleRowNumbers = (tr: Transaction) => {
+  console.log('[toggleRowNumbers] Function called');
+  
   const table = findTable(tr.selection);
-  if (!table) return tr;
+  if (!table) {
+    console.error('[toggleRowNumbers] No table found in selection');
+    return tr;
+  }
 
   const currentValue = table.node.attrs.showRowNumbers;
-  tr.setNodeMarkup(table.pos, null, {
-    ...table.node.attrs,
-    showRowNumbers: !currentValue,
-  });
+  const map = TableMap.get(table.node);
+  const schema = tr.doc.type.schema;
+  
+  console.log('[toggleRowNumbers] Current value:', currentValue);
+  console.log('[toggleRowNumbers] Table has', map.height, 'rows and', map.width, 'columns');
+  
+  if (!currentValue) {
+    // ADDING ROW NUMBERS COLUMN
+    console.log('[toggleRowNumbers] Adding row numbers column');
+    
+    // Build new table structure with row numbers column
+    const newRows: any[] = [];
+    let rowIndex = 0;
+    
+    table.node.forEach((row) => {
+      rowIndex++;
+      
+      // Create row number cell with proper paragraph structure
+      const paragraph = schema.nodes.paragraph.create(
+        null,
+        schema.text(rowIndex.toString())
+      );
+      
+      const rowNumberCell = schema.nodes.tableCell.create(
+        { 
+          colspan: 1, 
+          rowspan: 1,
+          colwidth: [50],
+        },
+        paragraph
+      );
+      
+      // Collect existing cells
+      const existingCells: any[] = [];
+      row.forEach((cell) => {
+        existingCells.push(cell);
+      });
+      
+      // Create new row with row number cell first
+      const newRow = schema.nodes.tableRow.create(
+        row.attrs,
+        [rowNumberCell, ...existingCells]
+      );
+      
+      newRows.push(newRow);
+    });
+    
+    // Create new table with row numbers
+    const newTable = schema.nodes.table.create(
+      {
+        ...table.node.attrs,
+        showRowNumbers: true,
+      },
+      newRows
+    );
+    
+    // Replace the entire table
+    tr.replaceWith(table.pos, table.pos + table.node.nodeSize, newTable);
+    
+    console.log('[toggleRowNumbers] Rebuilt table with row numbers column');
+    
+  } else {
+    // REMOVING ROW NUMBERS COLUMN
+    console.log('[toggleRowNumbers] Removing row numbers column');
+    
+    // Build new table structure without row numbers column
+    const newRows: any[] = [];
+    
+    table.node.forEach((row) => {
+      // Collect all cells except the first one (row number)
+      const cellsWithoutRowNumber: any[] = [];
+      let cellIndex = 0;
+      
+      row.forEach((cell) => {
+        if (cellIndex > 0) {
+          cellsWithoutRowNumber.push(cell);
+        }
+        cellIndex++;
+      });
+      
+      // Create new row without row number cell
+      const newRow = schema.nodes.tableRow.create(
+        row.attrs,
+        cellsWithoutRowNumber
+      );
+      
+      newRows.push(newRow);
+    });
+    
+    // Create new table without row numbers
+    const newTable = schema.nodes.table.create(
+      {
+        ...table.node.attrs,
+        showRowNumbers: false,
+      },
+      newRows
+    );
+    
+    // Replace the entire table
+    tr.replaceWith(table.pos, table.pos + table.node.nodeSize, newTable);
+    
+    console.log('[toggleRowNumbers] Rebuilt table without row numbers column');
+  }
 
+  console.log('[toggleRowNumbers] Transaction updated');
   return tr;
 };
 
@@ -917,4 +1022,73 @@ export const toggleHeaderColumn = (tr: Transaction) => {
   console.log('[toggleHeaderColumn] Done');
   return tr;
 };
+
+/**
+ * Copy the entire table (with styling and attributes) to clipboard
+ */
+export function copyTable(editor: any): boolean {
+  try {
+    const { state } = editor;
+    const { selection } = state;
+    
+    console.log('[copyTable] Called');
+    
+    // Find the table node
+    const table = findTable(selection);
+    
+    if (!table) {
+      console.warn('[copyTable] Not inside a table');
+      return false;
+    }
+    
+    const tablePos = table.pos;
+    const tableNode = table.node;
+    const tableEndPos = tablePos + tableNode.nodeSize;
+    
+    console.log('[copyTable] Selecting entire table', {
+      from: tablePos,
+      to: tableEndPos,
+      nodeSize: tableNode.nodeSize,
+      attrs: tableNode.attrs,
+    });
+    
+    // Select the entire table node
+    editor.chain()
+      .focus()
+      .setNodeSelection(tablePos)
+      .run();
+    
+    // Give the selection a moment to update, then trigger copy
+    setTimeout(() => {
+      try {
+        // Trigger the browser's copy command
+        document.execCommand('copy');
+        console.log('[copyTable] Copy command executed');
+        
+        // Restore focus
+        editor.commands.focus();
+      } catch (err) {
+        console.error('[copyTable] Failed to execute copy command:', err);
+      }
+    }, 10);
+    
+    return true;
+  } catch (error) {
+    console.error('[copyTable] Failed to copy table:', error);
+    return false;
+  }
+}
+
+/**
+ * Delete the entire table
+ */
+export function deleteTable(editor: any): boolean {
+  try {
+    console.log('[deleteTable] Called');
+    return editor.chain().focus().deleteTable().run();
+  } catch (error) {
+    console.error('[deleteTable] Failed to delete table:', error);
+    return false;
+  }
+}
 
