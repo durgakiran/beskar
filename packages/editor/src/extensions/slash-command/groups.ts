@@ -112,6 +112,18 @@ export const GROUPS: Group[] = [
         },
       },
       {
+        name: 'note',
+        label: 'Note Block',
+        icon: '📝',
+        description: 'Add a highlighted note with custom styling',
+        aliases: ['callout', 'info', 'alert'],
+        action: (editor) => {
+          editor.chain().focus().insertContent({
+            type: 'noteBlock',
+          }).run();
+        },
+      },
+      {
         name: 'horizontalRule',
         label: 'Divider',
         icon: '—',

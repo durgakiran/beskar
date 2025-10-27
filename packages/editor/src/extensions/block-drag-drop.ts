@@ -44,6 +44,7 @@ export const BlockDragDrop = Extension.create<BlockDragDropOptions>({
         "details",
         "detailsSummary",
         "detailsContent",
+        "noteBlock",
       ],
     };
   },

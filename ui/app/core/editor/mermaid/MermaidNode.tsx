@@ -22,7 +22,7 @@ const diagramExamples = {
     C --> D[Rethink]
     D --> B
     B ---->|No| E[End]`,
-    
+
     sequence: `sequenceDiagram
     participant Alice
     participant Bob
@@ -34,7 +34,7 @@ const diagramExamples = {
     John-->>Alice: Great!
     John->>Bob: How about you?
     Bob-->>John: Jolly good!`,
-    
+
     class: `classDiagram
     class Animal {
         +String name
@@ -52,7 +52,7 @@ const diagramExamples = {
     }
     Animal <|-- Dog
     Animal <|-- Cat`,
-    
+
     state: `stateDiagram-v2
     [*] --> Still
     Still --> [*]
@@ -60,12 +60,12 @@ const diagramExamples = {
     Moving --> Still
     Moving --> Crash
     Crash --> [*]`,
-    
+
     er: `erDiagram
     CUSTOMER ||--o{ ORDER : places
     ORDER ||--|{ LINE-ITEM : contains
     CUSTOMER }|..|{ DELIVERY-ADDRESS : uses`,
-    
+
     gantt: `gantt
     title A Gantt Diagram
     dateFormat  YYYY-MM-DD
@@ -75,7 +75,7 @@ const diagramExamples = {
     section Another
     Task in sec      :2014-01-12  , 12d
     another task      : 24d`,
-    
+
     journey: `journey
     title My working day
     section Go to work
@@ -85,7 +85,7 @@ const diagramExamples = {
     section Go home
       Go downstairs: 5: Me
       Sit down: 5: Me`,
-    
+
     git: `gitGraph
     commit
     commit
@@ -97,42 +97,34 @@ const diagramExamples = {
     merge develop
     commit
     commit`,
-    
+
     pie: `pie title Pets adopted by volunteers
     "Dogs" : 386
     "Cats" : 85
     "Rats" : 15`,
-    
+
     block: `block-beta
     columns 3
     A B C
     D E F
-    G H I`
+    G H I`,
 };
 
 const diagramTypes = [
-    { value: 'flowchart', label: 'Flow chart' },
-    { value: 'sequence', label: 'Sequence' },
-    { value: 'class', label: 'Class' },
-    { value: 'state', label: 'State' },
-    { value: 'er', label: 'Relation' },
-    { value: 'gantt', label: 'Gantt' },
-    { value: 'journey', label: 'User journey' },
-    { value: 'git', label: 'Git' },
-    { value: 'pie', label: 'Pie' },
-    { value: 'block', label: 'Block (beta)' }
+    { value: "flowchart", label: "Flow chart" },
+    { value: "sequence", label: "Sequence" },
+    { value: "class", label: "Class" },
+    { value: "state", label: "State" },
+    { value: "er", label: "Relation" },
+    { value: "gantt", label: "Gantt" },
+    { value: "journey", label: "User journey" },
+    { value: "git", label: "Git" },
+    { value: "pie", label: "Pie" },
+    { value: "block", label: "Block (beta)" },
 ];
 
 // Start With Menu Component
-const StartWithMenu = ({ 
-    selectedType, 
-    onTypeChange, 
-    diagramTypes 
-}: { 
-    selectedType: string; 
-    onTypeChange: (type: string) => void; 
-    diagramTypes: Array<{ value: string; label: string }>; 
-}) => {
+const StartWithMenu = ({ selectedType, onTypeChange, diagramTypes }: { selectedType: string; onTypeChange: (type: string) => void; diagramTypes: Array<{ value: string; label: string }> }) => {
     const [isOpen, setIsOpen] = useState(false);
     const menuRef = useRef<HTMLDivElement>(null);
 
@@ -144,9 +136,9 @@ const StartWithMenu = ({
             }
         };
 
-        document.addEventListener('mousedown', handleClickOutside);
+        document.addEventListener("mousedown", handleClickOutside);
         return () => {
-            document.removeEventListener('mousedown', handleClickOutside);
+            document.removeEventListener("mousedown", handleClickOutside);
         };
     }, []);
 
@@ -157,24 +149,15 @@ const StartWithMenu = ({
 
     return (
         <div className="mermaid-start-with-menu" ref={menuRef} contentEditable={false}>
-            <button
-                className="mermaid-start-with-button"
-                onClick={() => setIsOpen(!isOpen)}
-                type="button"
-            >
+            <button className="mermaid-start-with-button" onClick={() => setIsOpen(!isOpen)} type="button">
                 <span className="mermaid-start-with-text">Start with...</span>
-                <span className={`mermaid-start-with-arrow ${isOpen ? 'open' : ''}`}>▼</span>
+                <span className={`mermaid-start-with-arrow ${isOpen ? "open" : ""}`}>▼</span>
             </button>
-            
+
             {isOpen && (
                 <div className="mermaid-start-with-panel">
-                    {diagramTypes.map(type => (
-                        <button
-                            key={type.value}
-                            className={`mermaid-start-with-item`}
-                            onClick={() => handleItemClick(type.value)}
-                            type="button"
-                        >
+                    {diagramTypes.map((type) => (
+                        <button key={type.value} className={`mermaid-start-with-item`} onClick={() => handleItemClick(type.value)} type="button">
                             {type.label}
                         </button>
                     ))}
@@ -184,7 +167,6 @@ const StartWithMenu = ({
     );
 };
 
-
 const MermaidNodeComponent = ({ node, updateAttributes, editor, getPos }: NodeViewProps) => {
     const [title, setTitle] = useState((node.attrs as any).title || "");
     const [selectedType, setSelectedType] = useState("flowchart");
@@ -192,20 +174,20 @@ const MermaidNodeComponent = ({ node, updateAttributes, editor, getPos }: NodeVi
     const [isValid, setIsValid] = useState(true);
     const [isOpen, setIsOpen] = useState(false);
     const [isActive, setIsActive] = useState(false);
-    const [layout, setLayout] = useState<'horizontal' | 'vertical'>((node.attrs as any).layout || 'horizontal');
+    const [layout, setLayout] = useState<"horizontal" | "vertical">((node.attrs as any).layout || "horizontal");
     const [zoom, setZoom] = useState<number>((node.attrs as any).zoom || 1);
     const [panPosition, setPanPosition] = useState({ x: 0, y: 0 });
     const [isDragging, setIsDragging] = useState(false);
     const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
     const renderRef = useRef<HTMLDivElement>(null);
     const wrapperRef = useRef<HTMLDivElement>(null);
-    
+
     // Floating UI setup
-    const { refs, floatingStyles, context } = useFloating({ 
-        whileElementsMounted: autoUpdate, 
-        open: isOpen, 
+    const { refs, floatingStyles, context } = useFloating({
+        whileElementsMounted: autoUpdate,
+        open: isOpen,
         onOpenChange: setIsOpen,
-        middleware: [offset(10), flip(), shift()] 
+        middleware: [offset(10), flip(), shift()],
     });
     const click = useClick(context);
     const { getReferenceProps, getFloatingProps } = useInteractions([click]);
@@ -214,48 +196,40 @@ const MermaidNodeComponent = ({ node, updateAttributes, editor, getPos }: NodeVi
     const handleWrapperClick = (e: React.MouseEvent) => {
         // Check if this is a drag attempt
         const target = e.target as HTMLElement;
-        const isDiagramContainer = target.closest('.mermaid-diagram-container') || target.closest('.mermaid-display-diagram');
-        
+        const isDiagramContainer = target.closest(".mermaid-diagram-container") || target.closest(".mermaid-display-diagram");
+
         if (isDiagramContainer) {
             // Don't handle as wrapper click, let drag handlers take over
             return;
         }
-        
+
         // For interactive elements, don't interfere with their focus
-        const isInteractive = target.tagName === 'TEXTAREA' || 
-                            target.tagName === 'INPUT' || 
-                            target.tagName === 'SELECT' ||
-                            target.tagName === 'BUTTON' ||
-                            target.closest('.mermaid-start-with-menu');
-        
+        const isInteractive = target.tagName === "TEXTAREA" || target.tagName === "INPUT" || target.tagName === "SELECT" || target.tagName === "BUTTON" || target.closest(".mermaid-start-with-menu");
+
         if (isInteractive) {
             // Let interactive elements handle their own focus
             return;
         }
-        
+
         // For other elements, let Floating UI handle the click
         // No need to manually manage isActive or isOpen
     };
 
-
-
-          // Simple active state based on floating options being open
-          useEffect(() => {
-              setIsActive(isOpen);
-          }, [isOpen]);
-
-
-
+    // Simple active state based on floating options being open
+    useEffect(() => {
+        setIsActive(isOpen);
+    }, [isOpen]);
 
     // Floating options handlers
     const handleDelete = () => {
         const pos = getPos();
-        
+
         // Replace the mermaid node with a paragraph
-        editor.chain()
+        editor
+            .chain()
             .focus()
             .deleteRange({ from: pos, to: pos + node.nodeSize })
-            .insertContentAt(pos, { type: 'paragraph', content: [{ type: 'text', text: '' }] })
+            .insertContentAt(pos, { type: "paragraph", content: [{ type: "text", text: "" }] })
             .run();
     };
 
@@ -266,18 +240,18 @@ const MermaidNodeComponent = ({ node, updateAttributes, editor, getPos }: NodeVi
             attrs: {
                 title: (node.attrs as any).title || "",
                 layout: (node.attrs as any).layout || "horizontal",
-                zoom: (node.attrs as any).zoom || 1
+                zoom: (node.attrs as any).zoom || 1,
             },
-            content: [{ type: 'text', text: getCurrentDiagram() }]
+            content: [{ type: "text", text: getCurrentDiagram() }],
         };
-        
+
         // Copy to clipboard as JSON
-        navigator.clipboard.writeText(JSON.stringify(nodeData)).catch(err => {
+        navigator.clipboard.writeText(JSON.stringify(nodeData)).catch((err) => {
             console.error("Failed to copy node:", err);
         });
     };
 
-    const handleLayoutChange = (newLayout: 'horizontal' | 'vertical') => {
+    const handleLayoutChange = (newLayout: "horizontal" | "vertical") => {
         setLayout(newLayout);
         updateAttributes({ layout: newLayout });
     };
@@ -302,12 +276,11 @@ const MermaidNodeComponent = ({ node, updateAttributes, editor, getPos }: NodeVi
         }
     };
 
-
     // Mouse event handlers for dragging
     const handleMouseDown = (e: React.MouseEvent) => {
         e.preventDefault();
         e.stopPropagation();
-        
+
         setIsDragging(true);
         const newDragStart = { x: e.clientX - panPosition.x, y: e.clientY - panPosition.y };
         setDragStart(newDragStart);
@@ -315,12 +288,12 @@ const MermaidNodeComponent = ({ node, updateAttributes, editor, getPos }: NodeVi
 
     const handleMouseMove = (e: React.MouseEvent) => {
         if (!isDragging) return;
-        
+
         e.preventDefault();
         e.stopPropagation();
         setPanPosition({
             x: e.clientX - dragStart.x,
-            y: e.clientY - dragStart.y
+            y: e.clientY - dragStart.y,
         });
     };
 
@@ -337,25 +310,25 @@ const MermaidNodeComponent = ({ node, updateAttributes, editor, getPos }: NodeVi
         {
             label: "Copy",
             icon: <MdContentCopy />,
-            onClick: handleCopy
+            onClick: handleCopy,
         },
         {
             label: "Horizontal Layout",
             icon: <MdViewColumn />,
-            onClick: () => handleLayoutChange('horizontal'),
-            className: layout === 'horizontal' ? 'bg-blue-100 text-blue-600' : ''
+            onClick: () => handleLayoutChange("horizontal"),
+            className: layout === "horizontal" ? "bg-blue-100 text-blue-600" : "",
         },
         {
             label: "Vertical Layout",
             icon: <MdViewStream />,
-            onClick: () => handleLayoutChange('vertical'),
-            className: layout === 'vertical' ? 'bg-blue-100 text-blue-600' : ''
+            onClick: () => handleLayoutChange("vertical"),
+            className: layout === "vertical" ? "bg-blue-100 text-blue-600" : "",
         },
         {
             label: "Delete",
             icon: <MdDelete />,
-            onClick: handleDelete
-        }
+            onClick: handleDelete,
+        },
     ];
 
     // Function to validate and render Mermaid diagram
@@ -437,32 +410,30 @@ const MermaidNodeComponent = ({ node, updateAttributes, editor, getPos }: NodeVi
     const handleTypeChange = (type: string) => {
         setSelectedType(type);
         const example = diagramExamples[type as keyof typeof diagramExamples] || "";
-        
+
         // Replace the content in the editor
         const pos = getPos();
-        editor.chain()
+        editor
+            .chain()
             .focus()
             .deleteRange({ from: pos, to: pos + node.nodeSize })
-            .insertContentAt(pos, { 
-                type: 'mermaid', 
+            .insertContentAt(pos, {
+                type: "mermaid",
                 attrs: { title, layout, zoom },
-                content: [{ type: 'text', text: example }]
+                content: [{ type: "text", text: example }],
             })
             .run();
     };
-
-
-
 
     // Global mouse move listener for dragging
     useEffect(() => {
         const handleGlobalMouseMove = (e: MouseEvent) => {
             if (!isDragging) return;
-            
+
             e.preventDefault();
             const newPanPosition = {
                 x: e.clientX - dragStart.x,
-                y: e.clientY - dragStart.y
+                y: e.clientY - dragStart.y,
             };
             setPanPosition(newPanPosition);
         };
@@ -472,13 +443,13 @@ const MermaidNodeComponent = ({ node, updateAttributes, editor, getPos }: NodeVi
         };
 
         if (isDragging) {
-            document.addEventListener('mousemove', handleGlobalMouseMove);
-            document.addEventListener('mouseup', handleGlobalMouseUp);
+            document.addEventListener("mousemove", handleGlobalMouseMove);
+            document.addEventListener("mouseup", handleGlobalMouseUp);
         }
 
         return () => {
-            document.removeEventListener('mousemove', handleGlobalMouseMove);
-            document.removeEventListener('mouseup', handleGlobalMouseUp);
+            document.removeEventListener("mousemove", handleGlobalMouseMove);
+            document.removeEventListener("mouseup", handleGlobalMouseUp);
         };
     }, [isDragging, dragStart]);
 
@@ -494,159 +465,124 @@ const MermaidNodeComponent = ({ node, updateAttributes, editor, getPos }: NodeVi
         renderDiagram(currentDiagram);
     }, [getCurrentDiagram]);
 
-
     return (
         <>
-            <NodeViewWrapper 
-                className={`mermaid-node-wrapper ${isActive ? 'active' : ''}`}
-                ref={refs.setReference}
-                {...getReferenceProps()}
-            >
-                <div 
-                    ref={wrapperRef}
-                    className="mermaid-editor-container"
-                    onMouseDown={handleWrapperClick}
-                >
-                
-                {/* Edit Mode: Show editor interface */}
-                {editor.isEditable ? (
-                    <div className={`mermaid-editor-layout ${layout === 'vertical' ? 'mermaid-editor-layout-vertical' : 'mermaid-editor-layout-horizontal'}`}>
-                        {/* Left Panel: Edit Diagram */}
-                        <div className="mermaid-editor-panel">
-                            <div className="mermaid-panel-header">
-                                <div className="mermaid-title-container">
-                                    <input
-                                        type="text"
-                                        value={title}
-                                        onChange={(e) => handleTitleChange(e.target.value)}
-                                        placeholder="Diagram title (optional)"
-                                        className="mermaid-title-field"
-                                        maxLength={100}
-                                    />
-                                    <div className="mermaid-title-counter">
-                                        {title.length}/100
+            <NodeViewWrapper className={`mermaid-node-wrapper ${isActive ? "active" : ""}`} ref={refs.setReference} {...getReferenceProps()}>
+                <div ref={wrapperRef} className="mermaid-editor-container" onMouseDown={handleWrapperClick}>
+                    {/* Edit Mode: Show editor interface */}
+                    {editor.isEditable ? (
+                        <div className={`mermaid-editor-layout ${layout === "vertical" ? "mermaid-editor-layout-vertical" : "mermaid-editor-layout-horizontal"}`}>
+                            {/* Left Panel: Edit Diagram */}
+                            <div className="mermaid-editor-panel">
+                                <div className="mermaid-panel-header">
+                                    <div className="mermaid-title-container">
+                                        <input
+                                            type="text"
+                                            value={title}
+                                            onChange={(e) => handleTitleChange(e.target.value)}
+                                            placeholder="Diagram title (optional)"
+                                            className="mermaid-title-field"
+                                            maxLength={100}
+                                        />
+                                        <div className="mermaid-title-counter">{title.length}/100</div>
+                                    </div>
+                                    <StartWithMenu selectedType={selectedType} onTypeChange={handleTypeChange} diagramTypes={diagramTypes} />
+                                </div>
+
+                                <div className="mermaid-code-editor">
+                                    <NodeViewContent className="mermaid-code-content" placeholder="Enter your Mermaid diagram code here..." />
+                                    {error && <div className="mermaid-error-message">{error}</div>}
+                                </div>
+
+                                <div className="mermaid-footer">
+                                    <div className="mermaid-version" contentEditable={false}>
+                                        Powered by Mermaid. Visit mermaid.live for the complete list of Mermaid syntax. Version: 11.10.1
                                     </div>
                                 </div>
-                                <StartWithMenu
-                                    selectedType={selectedType}
-                                    onTypeChange={handleTypeChange}
-                                    diagramTypes={diagramTypes}
-                                />
                             </div>
 
-                            <div className="mermaid-code-editor">
-                                <NodeViewContent 
-                                    className="mermaid-code-content"
-                                    placeholder="Enter your Mermaid diagram code here..."
-                                />
-                                {error && (
-                                    <div className="mermaid-error-message">
-                                        {error}
-                                    </div>
-                                )}
-                            </div>
-
-                            <div className="mermaid-footer">
-                                <div className="mermaid-version" contentEditable={false}>
-                                    Powered by Mermaid. Visit mermaid.live for the complete list of Mermaid syntax. Version: 11.10.1
+                            {/* Right Panel: Diagram */}
+                            <div className="mermaid-diagram-panel" contentEditable={false}>
+                                <div className="mermaid-diagram-controls">
+                                    <button className={`mermaid-control-btn ${zoom <= 0.25 ? "disabled" : ""}`} onClick={handleZoomOut} title="Zoom Out" disabled={zoom <= 0.25}>
+                                        <MdZoomOut />
+                                    </button>
+                                    <span className="mermaid-zoom-level">{Math.round(zoom * 100)}%</span>
+                                    <button
+                                        className={`mermaid-control-btn ${zoom >= 3 ? "disabled" : ""}`}
+                                        onClick={(e) => {
+                                            e.preventDefault();
+                                            e.stopPropagation();
+                                            handleZoomIn();
+                                        }}
+                                        title="Zoom In"
+                                        disabled={zoom >= 3}
+                                    >
+                                        <MdZoomIn />
+                                    </button>
                                 </div>
-                            </div>
-                        </div>
-
-                        {/* Right Panel: Diagram */}
-                        <div className="mermaid-diagram-panel" contentEditable={false}>
-                            <div className="mermaid-diagram-controls">
-                                <button
-                                    className={`mermaid-control-btn ${zoom <= 0.25 ? 'disabled' : ''}`}
-                                    onClick={handleZoomOut}
-                                    title="Zoom Out"
-                                    disabled={zoom <= 0.25}
-                                >
-                                    <MdZoomOut />
-                                </button>
-                                <span className="mermaid-zoom-level">{Math.round(zoom * 100)}%</span>
-                                <button
-                                    className={`mermaid-control-btn ${zoom >= 3 ? 'disabled' : ''}`}
-                                    onClick={(e) => {
-                                        e.preventDefault();
-                                        e.stopPropagation();
-                                        handleZoomIn();
+                                <div
+                                    ref={renderRef}
+                                    className="mermaid-diagram-container"
+                                    style={{
+                                        transform: `scale(${zoom}) translate(${panPosition.x}px, ${panPosition.y}px)`,
+                                        transformOrigin: "center center",
+                                        cursor: isDragging ? "grabbing" : "grab",
                                     }}
-                                    title="Zoom In"
-                                    disabled={zoom >= 3}
-                                >
-                                    <MdZoomIn />
-                                </button>
+                                    onMouseDown={handleMouseDown}
+                                    onMouseMove={handleMouseMove}
+                                    onMouseUp={handleMouseUp}
+                                    onMouseLeave={handleMouseUp}
+                                />
                             </div>
-                            <div 
-                                ref={renderRef}
-                                className="mermaid-diagram-container"
-                                style={{ 
-                                    transform: `scale(${zoom}) translate(${panPosition.x}px, ${panPosition.y}px)`, 
-                                    transformOrigin: 'center center',
-                                    cursor: isDragging ? 'grabbing' : 'grab'
-                                }}
-                                onMouseDown={handleMouseDown}
-                                onMouseMove={handleMouseMove}
-                                onMouseUp={handleMouseUp}
-                                onMouseLeave={handleMouseUp}
-                            />
                         </div>
-                    </div>
-                ) : (
-                    /* Non-Edit Mode: Show only the rendered diagram with title at bottom */
-                    <div className="mermaid-display-mode">
-                        <div className="mermaid-display-container">
-                            <div className="mermaid-diagram-controls">
-                                <button
-                                    className={`mermaid-control-btn ${zoom <= 0.25 ? 'disabled' : ''}`}
-                                    onClick={handleZoomOut}
-                                    title="Zoom Out"
-                                    disabled={zoom <= 0.25}
-                                >
-                                    <MdZoomOut />
-                                </button>
-                                <span className="mermaid-zoom-level">{Math.round(zoom * 100)}%</span>
-                                <button
-                                    className={`mermaid-control-btn ${zoom >= 3 ? 'disabled' : ''}`}
-                                    onClick={(e) => {
-                                        e.preventDefault();
-                                        e.stopPropagation();
-                                        handleZoomIn();
+                    ) : (
+                        /* Non-Edit Mode: Show only the rendered diagram with title at bottom */
+                        <div className="mermaid-display-mode">
+                            <div className="mermaid-display-container">
+                                <div className="mermaid-diagram-controls">
+                                    <button className={`mermaid-control-btn ${zoom <= 0.25 ? "disabled" : ""}`} onClick={handleZoomOut} title="Zoom Out" disabled={zoom <= 0.25}>
+                                        <MdZoomOut />
+                                    </button>
+                                    <span className="mermaid-zoom-level">{Math.round(zoom * 100)}%</span>
+                                    <button
+                                        className={`mermaid-control-btn ${zoom >= 3 ? "disabled" : ""}`}
+                                        onClick={(e) => {
+                                            e.preventDefault();
+                                            e.stopPropagation();
+                                            handleZoomIn();
+                                        }}
+                                        title="Zoom In"
+                                        disabled={zoom >= 3}
+                                    >
+                                        <MdZoomIn />
+                                    </button>
+                                </div>
+                                <div
+                                    ref={renderRef}
+                                    className="mermaid-display-diagram"
+                                    style={{
+                                        transform: `scale(${zoom}) translate(${panPosition.x}px, ${panPosition.y}px)`,
+                                        transformOrigin: "center center",
+                                        cursor: isDragging ? "grabbing" : "grab",
                                     }}
-                                    title="Zoom In"
-                                    disabled={zoom >= 3}
-                                >
-                                    <MdZoomIn />
-                                </button>
+                                    onMouseDown={handleMouseDown}
+                                    onMouseMove={handleMouseMove}
+                                    onMouseUp={handleMouseUp}
+                                    onMouseLeave={handleMouseUp}
+                                />
                             </div>
-                            <div 
-                                ref={renderRef}
-                                className="mermaid-display-diagram"
-                                style={{ 
-                                    transform: `scale(${zoom}) translate(${panPosition.x}px, ${panPosition.y}px)`, 
-                                    transformOrigin: 'center center',
-                                    cursor: isDragging ? 'grabbing' : 'grab'
-                                }}
-                                onMouseDown={handleMouseDown}
-                                onMouseMove={handleMouseMove}
-                                onMouseUp={handleMouseUp}
-                                onMouseLeave={handleMouseUp}
-                            />
                         </div>
-                    </div>
-                )}
-            </div>
-        </NodeViewWrapper>
-        {/* Title outside the draggable container for display mode */}
-        {!editor.isEditable && title && (
-            <div className="mermaid-display-title-alt">{title}</div>
-        )}
-        {(isOpen && editor.isEditable) && (
-            <div ref={refs.setFloating} style={floatingStyles} {...getFloatingProps()} className="z-[9999]">
-                <GenericFloatingOptions options={floatingOptions} />
-            </div>
-        )}
+                    )}
+                </div>
+            </NodeViewWrapper>
+            {/* Title outside the draggable container for display mode */}
+            {!editor.isEditable && title && <div className="mermaid-display-title-alt">{title}</div>}
+            {isOpen && editor.isEditable && (
+                <div ref={refs.setFloating} style={floatingStyles} {...getFloatingProps()} className="z-[9999]">
+                    <GenericFloatingOptions options={floatingOptions} />
+                </div>
+            )}
         </>
     );
 };

@@ -27,10 +27,13 @@ import {
   BlockDetailsContent,
   BlockListItem,
 } from '../nodes/block-nodes';
+import { NoteBlock } from '../nodes/NoteBlock';
 
 export { CustomAttributes };
 export { Table, TableCell, TableHeader, TableRow } from '../nodes/table';
 export * from '../nodes/table/utils';
+export { NoteBlock } from '../nodes/NoteBlock';
+export * from '../nodes/note/utils';
 export { SlashCommand } from './slash-command';
 export { BlockId } from './block-id';
 export { BlockDragDrop } from './block-drag-drop';
@@ -78,6 +81,7 @@ export function getExtensions(options: GetExtensionsOptions = {}): Extensions {
     BlockDetails,
     BlockDetailsSummary,
     BlockDetailsContent,
+    NoteBlock, // Custom note block with themes and styling
     TextAlign.configure({
       types: ['heading', 'paragraph'],
       alignments: ['left', 'right', 'center', 'justify'],

@@ -11,6 +11,11 @@ export { RowDragHandle } from './components/table/RowDragHandle';
 export { ColumnDragHandle } from './components/table/ColumnDragHandle';
 export { ColorPicker } from './components/table/ColorPicker';
 
+// Note Block Components
+export { NoteBlock } from './nodes/NoteBlock';
+export * from './nodes/note/utils';
+export * from './components/note';
+
 // Types
 export type {
   Editor as TiptapEditor,
