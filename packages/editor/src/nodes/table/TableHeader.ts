@@ -31,6 +31,16 @@ export const TableHeader = TiptapTableHeader.extend({
 
           return value;
         },
+        renderHTML: (attributes) => {
+          if (!attributes.colwidth) {
+            return {};
+          }
+
+          return {
+            colwidth: attributes.colwidth.join(','),
+            style: `width: ${attributes.colwidth[0]}px`,
+          };
+        },
       },
       style: {
         default: null,

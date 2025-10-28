@@ -16,6 +16,18 @@ export interface CollaborationConfig {
   field?: string;
 }
 
+export interface ImageUploadResult {
+  url: string;
+  width?: number;
+  height?: number;
+  alt?: string;
+}
+
+export interface ImageAPIHandler {
+  uploadImage: (file: File) => Promise<ImageUploadResult>;
+  getImageUrl?: (url: string) => string; // Optional CDN transformation
+}
+
 export interface EditorProps {
   initialContent?: any;
   editable?: boolean;
@@ -26,6 +38,7 @@ export interface EditorProps {
   extensions?: Extensions;
   className?: string;
   autoFocus?: boolean | 'start' | 'end' | number;
+  imageHandler?: ImageAPIHandler;
 }
 
 export interface EditorContentProps {

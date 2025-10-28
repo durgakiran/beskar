@@ -69,9 +69,19 @@ export const TableCell = Node.create<TableCellOptions>({
         default: null,
         parseHTML: (element) => {
           const colwidth = element.getAttribute('colwidth');
-          const value = colwidth ? [parseInt(colwidth, 10)] : null;
+          const value = colwidth ? colwidth.split(',').map((w) => parseInt(w, 10)) : null;
 
           return value;
+        },
+        renderHTML: (attributes) => {
+          if (!attributes.colwidth) {
+            return {};
+          }
+
+          return {
+            colwidth: attributes.colwidth.join(','),
+            style: `width: ${attributes.colwidth[0]}px`,
+          };
         },
       },
       style: {

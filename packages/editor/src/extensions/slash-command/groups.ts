@@ -124,6 +124,18 @@ export const GROUPS: Group[] = [
         },
       },
       {
+        name: 'image',
+        label: 'Image',
+        icon: '🖼️',
+        description: 'Upload and display an image',
+        aliases: ['img', 'photo', 'picture', 'upload'],
+        action: (editor) => {
+          editor.chain().focus().insertContent({
+            type: 'imageBlock',
+          }).run();
+        },
+      },
+      {
         name: 'horizontalRule',
         label: 'Divider',
         icon: '—',

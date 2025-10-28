@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { Editor, BubbleMenu, BubbleMenuButton, TableFloatingMenu } from '@beskar/editor';
-import type { Editor as TiptapEditor } from '@beskar/editor';
+import type { TiptapEditor, ImageAPIHandler } from '@beskar/editor';
 import '@beskar/editor/styles.css';
 import './App.css';
 
@@ -239,6 +239,42 @@ function App() {
     setEditor(editorInstance);
   }, []);
 
+  // Example image upload handler
+  // In a real application, you would upload to your server/CDN
+  const imageHandler: ImageAPIHandler = {
+    uploadImage: async (file: File) => {
+      console.log('[Demo] Uploading image:', file.name);
+      
+      // Simulate upload delay
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      
+      // In a real app, upload to your server:
+      // const formData = new FormData();
+      // formData.append('image', file);
+      // const response = await fetch('/api/upload', { method: 'POST', body: formData });
+      // const { url, width, height } = await response.json();
+      
+      // For demo, convert to data URL (not recommended for production)
+      const dataUrl = await new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.readAsDataURL(file);
+      });
+      
+      console.log('[Demo] Upload complete');
+      
+      return {
+        url: dataUrl,
+        alt: file.name,
+      };
+    },
+    getImageUrl: (url: string) => {
+      // Optional: Transform URL for CDN (e.g., add resize params)
+      // return `${url}?w=800&q=80`;
+      return url;
+    },
+  };
+
   return (
     <div className="app-container">
       <header className="app-header">
@@ -266,6 +302,7 @@ function App() {
           onUpdate={handleUpdate}
           onReady={handleReady}
           className={isEditable ? 'editable' : 'readonly'}
+          imageHandler={imageHandler}
         />
         
         {/* Bubble Menu for text formatting */}

@@ -20,7 +20,6 @@ export const BlockId = Extension.create<BlockIdOptions>({
         'paragraph',
         'bulletList',
         'orderedList',
-        'listItem',
         'blockquote',
         'codeBlock',
         'codeBlockLowlight',
@@ -30,6 +29,7 @@ export const BlockId = Extension.create<BlockIdOptions>({
         'detailsSummary',
         'detailsContent',
         'noteBlock',
+        'imageBlock',
       ],
     };
   },
@@ -76,6 +76,18 @@ export const BlockId = Extension.create<BlockIdOptions>({
       return false;
     };
     
+    // Helper to check if a position is inside a list
+    const isInsideList = (doc: any, pos: number): boolean => {
+      const $pos = doc.resolve(pos);
+      for (let i = $pos.depth; i > 0; i--) {
+        const node = $pos.node(i);
+        if (node.type.name === 'bulletList' || node.type.name === 'orderedList' || node.type.name === 'listItem') {
+          return true;
+        }
+      }
+      return false;
+    };
+    
     return [
       new Plugin({
         key: new PluginKey('blockId'),
@@ -93,10 +105,12 @@ export const BlockId = Extension.create<BlockIdOptions>({
                   return;
                 }
 
+                // Check if node is inside a table or list (but not if it IS a table or list)
                 const isInTable = node.type.name !== 'table' && isInsideTable(view.state.doc, pos);
+                const isInList = node.type.name !== 'bulletList' && node.type.name !== 'orderedList' && isInsideList(view.state.doc, pos);
 
-                // If node is inside a table and has a blockId, remove it
-                if (isInTable && node.attrs.blockId) {
+                // If node is inside a table/list and has a blockId, remove it
+                if ((isInTable || isInList) && node.attrs.blockId) {
                   tr.setNodeMarkup(pos, undefined, {
                     ...node.attrs,
                     blockId: null,
@@ -105,8 +119,8 @@ export const BlockId = Extension.create<BlockIdOptions>({
                   return;
                 }
 
-                // Skip if already has blockId or is inside table
-                if (node.attrs.blockId || isInTable) {
+                // Skip if already has blockId or is inside table/list
+                if (node.attrs.blockId || isInTable || isInList) {
                   return;
                 }
 
@@ -150,10 +164,12 @@ export const BlockId = Extension.create<BlockIdOptions>({
               return;
             }
 
+            // Check if node is inside a table or list (but not if it IS a table or list)
             const isInTable = node.type.name !== 'table' && isInsideTable(newState.doc, pos);
+            const isInList = node.type.name !== 'bulletList' && node.type.name !== 'orderedList' && isInsideList(newState.doc, pos);
 
-            // If node is inside a table and has a blockId, remove it
-            if (isInTable && node.attrs.blockId) {
+            // If node is inside a table/list and has a blockId, remove it
+            if ((isInTable || isInList) && node.attrs.blockId) {
               tr.setNodeMarkup(pos, undefined, {
                 ...node.attrs,
                 blockId: null,
@@ -162,8 +178,8 @@ export const BlockId = Extension.create<BlockIdOptions>({
               return;
             }
 
-            // Skip if already has blockId or is inside table
-            if (node.attrs.blockId || isInTable) {
+            // Skip if already has blockId or is inside table/list
+            if (node.attrs.blockId || isInTable || isInList) {
               return;
             }
 

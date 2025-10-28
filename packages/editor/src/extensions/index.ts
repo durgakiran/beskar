@@ -7,8 +7,9 @@ import { Collaboration } from '@tiptap/extension-collaboration';
 import { CollaborationCaret } from '@tiptap/extension-collaboration-caret';
 import { Typography } from '@tiptap/extension-typography';
 import type { Extensions } from '@tiptap/core';
-import type { CollaborationConfig } from '../types';
+import type { CollaborationConfig, ImageAPIHandler } from '../types';
 import { CustomAttributes } from './custom-attributes';
+import { ImagePasteDrop } from './image-paste-drop';
 import { Table, TableCell, TableHeader, TableRow } from '../nodes/table';
 import { SlashCommand } from './slash-command';
 import { BlockId } from './block-id';
@@ -29,13 +30,17 @@ import {
   BlockListItem,
 } from '../nodes/block-nodes';
 import { NoteBlock } from '../nodes/NoteBlock';
+import { ImageBlock } from '../nodes/ImageBlock';
 
 export { CustomAttributes };
 export { Table, TableCell, TableHeader, TableRow } from '../nodes/table';
 export * from '../nodes/table/utils';
 export { NoteBlock } from '../nodes/NoteBlock';
 export * from '../nodes/note/utils';
+export { ImageBlock } from '../nodes/ImageBlock';
+export * from '../components/image/utils';
 export { SlashCommand } from './slash-command';
+export { ImagePasteDrop } from './image-paste-drop';
 export { BlockId } from './block-id';
 export { BlockDragDrop } from './block-drag-drop';
 
@@ -43,6 +48,7 @@ export interface GetExtensionsOptions {
   placeholder?: string;
   collaboration?: CollaborationConfig;
   additionalExtensions?: Extensions;
+  imageHandler?: ImageAPIHandler;
 }
 
 /**
@@ -53,6 +59,7 @@ export function getExtensions(options: GetExtensionsOptions = {}): Extensions {
     placeholder = 'Write something....',
     collaboration,
     additionalExtensions = [],
+    imageHandler,
   } = options;
 
   const baseExtensions: Extensions = [
@@ -83,6 +90,10 @@ export function getExtensions(options: GetExtensionsOptions = {}): Extensions {
     BlockDetailsSummary,
     BlockDetailsContent,
     NoteBlock, // Custom note block with themes and styling
+    ImageBlock, // Custom image block with upload and resize
+    ImagePasteDrop.configure({
+      imageHandler,
+    }),
     TextAlign.configure({
       types: ['heading', 'paragraph'],
       alignments: ['left', 'right', 'center', 'justify'],

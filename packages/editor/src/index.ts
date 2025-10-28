@@ -17,6 +17,11 @@ export { NoteBlock } from './nodes/NoteBlock';
 export * from './nodes/note/utils';
 export * from './components/note';
 
+// Image Block Components
+export { ImageBlock } from './nodes/ImageBlock';
+export * from './components/image/utils';
+export * from './components/image';
+
 // Types
 export type {
   Editor as TiptapEditor,
@@ -24,6 +29,8 @@ export type {
   CollaborationConfig,
   EditorProps,
   EditorContentProps,
+  ImageAPIHandler,
+  ImageUploadResult,
 } from './types';
 
 // Hooks

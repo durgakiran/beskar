@@ -30,6 +30,7 @@ export function Editor({
   extensions: customExtensions = [],
   className = '',
   autoFocus = false,
+  imageHandler,
 }: EditorProps) {
   const [content, setContent] = useState<any>(null);
   const [hasInitialized, setHasInitialized] = useState(false);
@@ -54,8 +55,9 @@ export function Editor({
         placeholder,
         collaboration,
         additionalExtensions: customExtensions,
+        imageHandler,
       }),
-    [placeholder, collaboration, customExtensions]
+    [placeholder, collaboration, customExtensions, imageHandler]
   );
 
   // Initialize editor

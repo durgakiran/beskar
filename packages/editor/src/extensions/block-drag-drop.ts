@@ -35,7 +35,6 @@ export const BlockDragDrop = Extension.create<BlockDragDropOptions>({
         "paragraph",
         "bulletList",
         "orderedList",
-        "listItem",
         "blockquote",
         "codeBlock",
         "codeBlockLowlight",
@@ -45,6 +44,7 @@ export const BlockDragDrop = Extension.create<BlockDragDropOptions>({
         "detailsSummary",
         "detailsContent",
         "noteBlock",
+        "imageBlock",
       ],
     };
   },
@@ -141,8 +141,41 @@ export const BlockDragDrop = Extension.create<BlockDragDropOptions>({
                   targetElement = table as HTMLElement;
                 }
               }
+              
+              // Special handling for React-rendered blocks (like imageBlock)
+              // If we're inside a .react-renderer, use that as the target
+              if (!element.classList.contains('react-renderer')) {
+                const reactRenderer = element.closest('.react-renderer') as HTMLElement;
+                if (reactRenderer && reactRenderer.classList.contains('block-node')) {
+                  targetElement = reactRenderer;
+                }
+              }
 
-              // Get position from the element
+              // For atom nodes (like imageBlock), posAtDOM returns position BEFORE the node (depth 0)
+              // So we need to find the node by blockId instead
+              const blockId = targetElement.getAttribute('data-block-id');
+              if (blockId) {
+                let foundBlock: BlockInfo | null = null;
+                
+                editorView.state.doc.descendants((node, pos) => {
+                  if (
+                    this.options.types.includes(node.type.name) &&
+                    node.attrs.blockId === blockId
+                  ) {
+                    const dom = editorView.nodeDOM(pos) as HTMLElement;
+                    if (dom) {
+                      foundBlock = { node, pos, dom };
+                      return false; // Stop searching
+                    }
+                  }
+                });
+                
+                if (foundBlock) {
+                  return foundBlock;
+                }
+              }
+              
+              // Fallback: Try the old method (works for non-atom nodes like tables, paragraphs)
               let pos = editorView.posAtDOM(targetElement, 0);
               const $pos = editorView.state.doc.resolve(pos);
               
@@ -173,14 +206,26 @@ export const BlockDragDrop = Extension.create<BlockDragDropOptions>({
             if (!dragHandle) return;
 
             // Use the DOM element as-is (nodeDOM returns the wrapper for tables)
-            const blockRect = blockInfo.dom.getBoundingClientRect();
+            let blockElement = blockInfo.dom;
+            
+            // For React-rendered blocks (like imageBlock), use the inner wrapper for sizing
+            if (blockElement.classList.contains('react-renderer') && blockInfo.node.type.name === 'imageBlock') {
+              const innerWrapper = blockElement.querySelector('.image-block-container') as HTMLElement;
+              if (innerWrapper) {
+                // Use inner container for better visual alignment
+                blockElement = innerWrapper;
+              }
+            }
+            
+            const blockRect = blockElement.getBoundingClientRect();
             const parent = container.parentElement;
             if (!parent) return;
 
             const parentRect = parent.getBoundingClientRect();
 
-            // For tables, position handle vertically centered to avoid header overlap
+            // For tables and images, position handle with appropriate offset
             const isTable = blockInfo.node.type.name === 'table';
+            const isImage = blockInfo.node.type.name === 'imageBlock';
             let topOffset = 8;
             
             // Calculate position relative to parent since handle is appended to parent
@@ -234,6 +279,19 @@ export const BlockDragDrop = Extension.create<BlockDragDropOptions>({
                 }
               }
               return;
+            }
+            
+            // Check if we're inside a React-rendered block (like imageBlock)
+            // and show handle for the react-renderer container
+            if (!elementUnderMouse.classList.contains('block-node')) {
+              const reactRenderer = elementUnderMouse.closest('.react-renderer.block-node') as HTMLElement;
+              if (reactRenderer) {
+                const blockInfo = findBlockFromElement(reactRenderer);
+                if (blockInfo && blockInfo.node.attrs.blockId !== currentBlockId) {
+                  showHandle(blockInfo);
+                  return;
+                }
+              }
             }
 
             // Check if hovering directly over the handle or near it
