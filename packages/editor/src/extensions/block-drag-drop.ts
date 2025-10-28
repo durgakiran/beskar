@@ -74,6 +74,12 @@ export const BlockDragDrop = Extension.create<BlockDragDropOptions>({
         },
         view: (editorView) => {
           const container = editorView.dom as HTMLElement;
+          const { isEditable } = this.editor;
+
+          // Don't create drag handle if editor is not editable
+          if (!isEditable) {
+            return {};
+          }
 
           let dragHandle: HTMLElement | null = null;
           let currentBlockId: string | null = null;

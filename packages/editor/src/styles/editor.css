@@ -61,6 +61,7 @@
   user-select: none;
   cursor: grab;
   transition: opacity 0.15s ease, background-color 0.15s ease;
+  pointer-events: auto;
   
   /* 6-dot grid icon using radial gradients */
   background-image: 
@@ -115,6 +116,13 @@
 .beskar-editor .block-drag-handle:focus-visible {
   outline: 2px solid rgba(0, 120, 212, 0.6);
   outline-offset: 2px;
+}
+
+/* Hide drag handles in read-only mode */
+.beskar-editor .ProseMirror[contenteditable="false"] ~ .block-drag-handle,
+.beskar-editor.readonly .block-drag-handle {
+  display: none !important;
+  pointer-events: none !important;
 }
 
 /* Dragging state */
