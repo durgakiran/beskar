@@ -82,7 +82,7 @@ export const BlockDragDrop = Extension.create<BlockDragDropOptions>({
           const createDragHandle = () => {
             const handle = document.createElement("button");
             handle.className = "block-drag-handle";
-            handle.textContent = "⋮⋮";
+            // Remove text content - will use CSS for icon
             handle.draggable = true;
             handle.contentEditable = "false";
             handle.type = "button";
@@ -226,15 +226,16 @@ export const BlockDragDrop = Extension.create<BlockDragDropOptions>({
             // For tables and images, position handle with appropriate offset
             const isTable = blockInfo.node.type.name === 'table';
             const isImage = blockInfo.node.type.name === 'imageBlock';
-            let topOffset = 8;
+            let topOffset = 18;
             
             // Calculate position relative to parent since handle is appended to parent
             const top = blockRect.top - parentRect.top + parent.scrollTop + topOffset;
-            const left = blockRect.left - parentRect.left + parent.scrollLeft - 32;
+            // Position at left: 0 (top-left corner of the block)
+            const left = blockRect.left - parentRect.left + parent.scrollLeft - 44;
 
             dragHandle.style.top = `${top}px`;
-            dragHandle.style.left = `${Math.max(left, 4)}px`;
-            dragHandle.style.height = `${blockRect.height}px`;
+            dragHandle.style.left = `${left}px`;
+            // Height is fixed via CSS (1.25rem)
           };
 
           const showHandle = (blockInfo: BlockInfo) => {

@@ -30,8 +30,9 @@
 /* Block-based Editor Styling */
 .beskar-editor .ProseMirror .block-node {
   position: relative;
-  padding: 0.25rem 0;
-  margin: 0.125rem 0;
+  /* padding: 0.25rem 0; */
+  margin: 0.375rem 0;
+  box-sizing: border-box;
   border-radius: 0.25rem;
   transition: background-color 0.1s ease;
   border: 1px solid transparent;
@@ -52,47 +53,63 @@
   align-items: center;
   justify-content: center;
   width: 1.25rem;
+  height: 1.25rem !important; /* Fixed height for the handle */
   padding: 0;
   border-radius: 0.25rem;
-  background-color: rgba(0, 0, 0, 0.04);
-  border: 1px solid rgba(0, 0, 0, 0.06);
-  color: rgba(0, 0, 0, 0.4);
-  font-size: 0.75rem;
-  font-weight: 600;
+  background-color: transparent;
+  border: none;
   user-select: none;
-  line-height: 1;
   cursor: grab;
-  transition: opacity 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  transition: opacity 0.15s ease, background-color 0.15s ease;
+  
+  /* 6-dot grid icon using radial gradients */
+  background-image: 
+    radial-gradient(circle, rgba(0, 0, 0, 0.4) 1.5px, transparent 1.5px),
+    radial-gradient(circle, rgba(0, 0, 0, 0.4) 1.5px, transparent 1.5px),
+    radial-gradient(circle, rgba(0, 0, 0, 0.4) 1.5px, transparent 1.5px),
+    radial-gradient(circle, rgba(0, 0, 0, 0.4) 1.5px, transparent 1.5px),
+    radial-gradient(circle, rgba(0, 0, 0, 0.4) 1.5px, transparent 1.5px),
+    radial-gradient(circle, rgba(0, 0, 0, 0.4) 1.5px, transparent 1.5px);
+  background-size: 4px 4px;
+  background-position: 
+    4px 4px,
+    10px 4px,
+    4px 10px,
+    10px 10px,
+    4px 16px,
+    10px 16px;
+  background-repeat: no-repeat;
 }
 
 .beskar-editor.dark .block-drag-handle {
-  background-color: rgba(255, 255, 255, 0.04);
-  border-color: rgba(255, 255, 255, 0.06);
-  color: rgba(255, 255, 255, 0.4);
+  /* 6-dot grid icon for dark mode */
+  background-image: 
+    radial-gradient(circle, rgba(255, 255, 255, 0.4) 1.5px, transparent 1.5px),
+    radial-gradient(circle, rgba(255, 255, 255, 0.4) 1.5px, transparent 1.5px),
+    radial-gradient(circle, rgba(255, 255, 255, 0.4) 1.5px, transparent 1.5px),
+    radial-gradient(circle, rgba(255, 255, 255, 0.4) 1.5px, transparent 1.5px),
+    radial-gradient(circle, rgba(255, 255, 255, 0.4) 1.5px, transparent 1.5px),
+    radial-gradient(circle, rgba(255, 255, 255, 0.4) 1.5px, transparent 1.5px);
 }
 
 .beskar-editor .block-drag-handle:hover {
   opacity: 1 !important;
-  background-color: rgba(0, 0, 0, 0.1);
-  color: rgba(0, 0, 0, 0.7);
-  border-color: rgba(0, 0, 0, 0.15);
+  background-color: rgba(0, 0, 0, 0.05);
 }
 
 .beskar-editor.dark .block-drag-handle:hover {
   opacity: 1 !important;
-  background-color: rgba(255, 255, 255, 0.1);
-  color: rgba(255, 255, 255, 0.7);
-  border-color: rgba(255, 255, 255, 0.15);
+  background-color: rgba(255, 255, 255, 0.05);
 }
 
 .beskar-editor .block-drag-handle:active {
-  transform: scale(0.98);
-  background-color: rgba(0, 0, 0, 0.15);
+  transform: scale(0.95);
+  background-color: rgba(0, 0, 0, 0.08);
   cursor: grabbing;
 }
 
 .beskar-editor.dark .block-drag-handle:active {
-  background-color: rgba(255, 255, 255, 0.15);
+  background-color: rgba(255, 255, 255, 0.08);
 }
 
 .beskar-editor .block-drag-handle:focus-visible {
@@ -140,9 +157,9 @@
 
 /* Block selection styling */
 .beskar-editor .ProseMirror .block-node.ProseMirror-selectednode {
-  background-color: rgba(0, 120, 212, 0.08);
-  outline: 2px solid rgba(0, 120, 212, 0.3);
-  outline-offset: 1px;
+  /* background-color: rgba(0, 120, 212, 0.08); */
+  outline: 0.5px solid rgba(0, 120, 212, 0.3);
+  /* outline-offset: 1px; */
   border-radius: 0.375rem;
 }
 
@@ -1693,10 +1710,10 @@ td.selectedCell {
   margin-right: 0;
 }
 
-.image-block-wrapper.selected .image-block-container {
+/* .image-block-wrapper.selected .image-block-container {
   outline: 2px solid #0c66e4;
   outline-offset: 2px;
-}
+} */
 
 /* Image Wrapper */
 .image-block-image-wrapper {
@@ -1807,7 +1824,7 @@ td.selectedCell {
 }
 
 .image-block-caption:focus {
-  border-color: rgba(0, 0, 0, 0.1);
+  /* border-color: rgba(0, 0, 0, 0.1); */
   background-color: rgba(0, 0, 0, 0.02);
   color: rgba(0, 0, 0, 0.9);
 }
