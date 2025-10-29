@@ -3,7 +3,7 @@
 import User from "@components/settings/User";
 import { Response, useGet } from "@http/hooks";
 import { Spinner, Table } from "flowbite-react";
-import { useEffect } from "react";
+import { use, useEffect } from "react";
 
 interface User {
     id: string;
@@ -11,8 +11,9 @@ interface User {
     role: string;
 }
 
-export default function Page({ params }: { params: { spaceId: string } }) {
-    const [{ isLoading, data, errors }, fetchData] = useGet<Response<User[]>>(`space/${params.spaceId}/users`);
+export default function Page({ params }: { params: Promise<{ spaceId: string }> }) {
+    const { spaceId } = use(params);
+    const [{ isLoading, data, errors }, fetchData] = useGet<Response<User[]>>(`space/${spaceId}/users`);
 
     useEffect(() => {
         fetchData();

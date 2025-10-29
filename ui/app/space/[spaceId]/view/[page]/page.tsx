@@ -3,7 +3,7 @@ import { TipTap } from "@editor";
 import { useGet } from "@http/hooks";
 import { Breadcrumb, Button, Spinner, Tooltip } from "flowbite-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { use, useEffect, useRef, useState } from "react";
 import { HiHome, HiPencil, HiOutlineTrash } from "react-icons/hi";
 
 interface BreadCrumbData {
@@ -12,16 +12,17 @@ interface BreadCrumbData {
     parentId: number;
 }
 
-export default function Page({ params }: { params: { page: string; spaceId: string } }) {
-    const workerRef = useRef<Worker>();
+export default function Page({ params }: { params: Promise<{ page: string; spaceId: string }> }) {
+    const { page, spaceId } = use(params);
+    const workerRef = useRef<Worker>(null);
     const [workerInitiated, setWorkerInitiated] = useState(false);
     const [content, setContent] = useState();
     const router = useRouter();
-    const [{ isLoading, data, errors }, fetchData] = useGet<{ data: any; status: string }>(`editor/space/${params.spaceId}/page/${params.page}`);
-    const [{ isLoading: loadingBreadCrum, data: dataBreadCrum, errors: breadCrumErrors }, getBreadCrum] = useGet<{ data: BreadCrumbData[]; status: string }>(`page/${params.page}/breadCrumbs`);
+    const [{ isLoading, data, errors }, fetchData] = useGet<{ data: any; status: string }>(`editor/space/${spaceId}/page/${page}`);
+    const [{ isLoading: loadingBreadCrum, data: dataBreadCrum, errors: breadCrumErrors }, getBreadCrum] = useGet<{ data: BreadCrumbData[]; status: string }>(`page/${page}/breadCrumbs`);
 
     const editPage = () => {
-        router.push(`/edit/${params.spaceId}/${params.page}`);
+        router.push(`/edit/${spaceId}/${page}`);
     };
 
     const deletePage = () => {};
@@ -82,7 +83,7 @@ export default function Page({ params }: { params: { page: string; spaceId: stri
                                 })
                                 .map((item: BreadCrumbData) => {
                                     return (
-                                        <Breadcrumb.Item key={item.id} href={`space/${params.spaceId}/view/${item.id}`}>
+                                        <Breadcrumb.Item key={item.id} href={`space/${spaceId}/view/${item.id}`}>
                                             {item.name}
                                         </Breadcrumb.Item>
                                     );
@@ -115,7 +116,7 @@ export default function Page({ params }: { params: { page: string; spaceId: stri
                         setEditorContext={() => {}}
                         editable={false}
                         content={content}
-                        pageId={params.page}
+                        pageId={page}
                         id={data.data.docId}
                         user={null}
                     />

@@ -26,7 +26,7 @@ const get = async (cookies: { name: string; value: string }[]) => {
 };
 
 export default async function Home() {
-    const cookieStore = cookies();
+    const cookieStore = await cookies();
     const res = await get(cookieStore.getAll());
 
     if (res.response !== 200) {

@@ -2,15 +2,16 @@
 
 import { Response, useGet } from "@http/hooks"
 import { Spinner } from "flowbite-react";
-import { useEffect } from "react";
+import { use, useEffect } from "react";
 
 interface space {
     name: string;
     id: string;
 }
 
-export default function Page({ params }: { params: { spaceId: string } }) {
-    const [ { isLoading, data, errors }, fetchData ] = useGet<Response<space>>(`space/${params.spaceId}/details`);
+export default function Page({ params }: { params: Promise<{ spaceId: string }> }) {
+    const { spaceId } = use(params);
+    const [ { isLoading, data, errors }, fetchData ] = useGet<Response<space>>(`space/${spaceId}/details`);
 
     useEffect(() => {
         fetchData();

@@ -2,11 +2,12 @@
 import { TipTap } from "@editor";
 import { useGet } from "@http/hooks";
 import { PageParams } from "app/space/types";
-import { useEffect, useRef, useState } from "react";
+import { use, useEffect, useRef, useState } from "react";
 
-export default function Page({ params }: { params: PageParams }) {
-    const workerRef = useRef<Worker>();
-    const [{ isLoading, data, errors }, fetchData] = useGet<{ data: any; status: string }>(`editor/space/${params.spaceId}/page/${params.page}`);
+export default function Page({ params }: { params: Promise<PageParams> }) {
+    const { page, spaceId } = use(params);
+    const workerRef = useRef<Worker>(null);
+    const [{ isLoading, data, errors }, fetchData] = useGet<{ data: any; status: string }>(`editor/space/${spaceId}/page/${page}`);
     const [workerInitiated, setWorkerInitiated] = useState(false);
     const [content, setContent] = useState();
 

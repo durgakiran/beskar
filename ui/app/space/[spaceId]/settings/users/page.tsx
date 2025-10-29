@@ -6,7 +6,7 @@ import ToastComponent from "@components/ui/ToastComponent";
 import { Response, useGet, usePost } from "@http/hooks";
 import { Breadcrumb, Button, Spinner, Table, Toast } from "flowbite-react";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { use, useEffect, useState } from "react";
 import { HiExclamation } from "react-icons/hi";
 
 interface User {
@@ -24,10 +24,11 @@ interface Invite {
     senderId: string;
 }
 
-export default function Page({ params }: { params: { spaceId: string } }) {
+export default function Page({ params }: { params: Promise<{ spaceId: string }> }) {
+    const { spaceId } = use(params);
     const router = usePathname();
     const [openModal, setOpenModal] = useState(false);
-    const [{ isLoading, data, errors }, fetchData] = useGet<Response<User[]>>(`space/${params.spaceId}/users`);
+    const [{ isLoading, data, errors }, fetchData] = useGet<Response<User[]>>(`space/${spaceId}/users`);
     const [{ data: profileData, errors: profileErrors, isLoading: profileLoading }, getProfile] = useGet<Response<User>>(`profile/details`);
     const [{ isLoading: inviteLoading, data: inviteData, errors: inviteErrors }, sendInvite] = usePost<string, Invite>(`invite/user/create`);
 
@@ -36,7 +37,7 @@ export default function Page({ params }: { params: { spaceId: string } }) {
         const invite: Invite = {
             email: email,
             role: role,
-            entityId: params.spaceId,
+            entityId: spaceId,
             entity: "space",
             senderId: profileData.data.id,
         };

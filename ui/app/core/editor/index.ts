@@ -1,6 +1,5 @@
 // import { RefObject, useCallback, useEffect, useRef, useState } from "react";
 // import Quill, { QuillOptionsStatic } from 'quill';
-export { EXAMPLE_JSON } from "./example";
 export { TipTap } from './tiptap';
 
 // interface QuillObj {

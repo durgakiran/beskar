@@ -4,7 +4,7 @@ import { createRoot } from "react-dom/client";
 import useMutationObserver from "./useMutationObserver";
 
 export const useTippyWrapperV2 = (ref: RefObject<HTMLElement>, elementId: string, content?: any, isEditable = false, additionalClasses?: string): void => {
-    const instancesRef = useRef<Array<Instance> | undefined>();
+    const instancesRef = useRef<Array<Instance> | undefined>(null);
     const [elementRendered, setElementRendered] = useState(false);
 
     const mutationObserverCallback = (mutations: MutationRecord[]) => {
@@ -74,7 +74,7 @@ export const useTippyWrapperV2 = (ref: RefObject<HTMLElement>, elementId: string
 };
 
 export const useTippyWrapper = (elementId: string, content?: any, isEditable = false, additionalClasses?: string): void => {
-    const instancesRef = useRef<Array<Instance> | undefined>();
+    const instancesRef = useRef<Array<Instance> | undefined>(null);
     window.requestAnimationFrame(() => {
         if (!isEditable) {
             return;

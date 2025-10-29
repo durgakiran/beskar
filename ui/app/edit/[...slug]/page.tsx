@@ -9,7 +9,7 @@ import { HocuspocusProvider } from "@hocuspocus/provider";
 import { Response, useGet } from "@http/hooks";
 import { Editor } from "@tiptap/react";
 import { Spinner } from "flowbite-react";
-import { useContext, useEffect, useRef, useState } from "react";
+import { use, useContext, useEffect, useRef, useState } from "react";
 import * as y from "yjs"
 import "./styles.css";
 import { usePUT } from "app/core/http/hooks/usePut";
@@ -53,7 +53,8 @@ interface IPayloadPublish {
     nodeData: any;
 }
 
-export default function Page({ params: { slug } }: { params: { slug: string[] } }) {
+export default function Page({ params }: { params: Promise<{ slug: string[] }> }) {
+    const { slug } = use(params);
     const socket = useContext(SocketContext);
     const [provider, setProvider] = useState<HocuspocusProvider>();
     const router = useRouter();
@@ -79,7 +80,7 @@ export default function Page({ params: { slug } }: { params: { slug: string[] } 
 
     // wasm handling
     const [workerInitiated, setWorkerInitiated] = useState<boolean>(false);
-    const workerRef = useRef<Worker>();
+    const workerRef = useRef<Worker>(null);
     // end of wasm handling
 
     // to check the nunber of times component rendered
@@ -291,7 +292,8 @@ export default function Page({ params: { slug } }: { params: { slug: string[] } 
                                 id={49}
                                 user={profileData.data}
                                 updateContent={(content, title) => {
-                                    updateContent(content, title);
+                                    // updateContent(content, title);
+                                    console.log(content, title);
                                 }}
                                 provider={provider}
                             />

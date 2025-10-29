@@ -6,7 +6,7 @@ import { Response, useGet, usePost } from "@http/hooks";
 import { useDelete } from "app/core/http/hooks/useDelete";
 import { Breadcrumb, Button, Spinner, Table } from "flowbite-react";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { use, useEffect, useState } from "react";
 
 interface User {
     id: string;
@@ -23,8 +23,9 @@ interface Invite {
     senderId: string;
 }
 
-export default function Page({ params }: { params: { spaceId: string } }) {
-    const [{ isLoading, data, errors }, fetchData] = useGet<Response<Invite[]>>(`invite/space/${params.spaceId}/list`);
+export default function Page({ params }: { params: Promise<{ spaceId: string }> }) {
+    const { spaceId } = use(params);
+    const [{ isLoading, data, errors }, fetchData] = useGet<Response<Invite[]>>(`invite/space/${spaceId}/list`);
     const [{ data: profileData, errors: profileErrors, isLoading: profileLoading }, getProfile] = useGet<Response<User[]>>(`profile/details`);
 
     const refresh = () => {

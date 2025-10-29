@@ -20,7 +20,7 @@ const authenticted = async (cookies: {name: string, value: string}[]) => {
 }
 
 export default async function SessionGuard({ children }: { children: ReactNode }) {
-    const cookieStore =  cookies();
+    const cookieStore = await cookies();
     
     const res = await authenticted(cookieStore.getAll());
     if (res.status === 401) {

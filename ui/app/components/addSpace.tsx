@@ -20,7 +20,7 @@ interface Data {
 export default function AddSpace({ isOpen, setIsOpen }: IAddSpace) {
     const [name, setName] = useState('');
     const [{ data, errors: error, isLoading: loading }, mutateData] = usePost<Response<Data>, Payload>("space/create")
-    const spaceNameRef = useRef();
+    const spaceNameRef = useRef<HTMLInputElement>(null);
 
 
     const onDialogClose = useCallback(() => {
