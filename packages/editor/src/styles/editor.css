@@ -20,7 +20,7 @@
   caret-color: #000;
   outline-width: 0;
   position: relative;
-  padding-left: 2.75rem;
+  /* padding-left: 2.75rem; */
 }
 
 .beskar-editor.dark .ProseMirror {

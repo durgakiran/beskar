@@ -292,8 +292,8 @@ export default function Page({ params }: { params: Promise<{ slug: string[] }> }
                                 id={49}
                                 user={profileData.data}
                                 updateContent={(content, title) => {
-                                    // updateContent(content, title);
-                                    console.log(content, title);
+                                    updateContent(content, title);
+                                    // console.log(content, title);
                                 }}
                                 provider={provider}
                             />

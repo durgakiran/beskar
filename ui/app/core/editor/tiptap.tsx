@@ -154,7 +154,19 @@ export function TipTap({ setEditorContext, user, content, pageId, id, editable =
     return (
         <div ref={menuContainerRef} className="beskar-editor">
             <div>Rendered: {countRenderRef.current}</div>
-            <EditorBeskar imageHandler={imageHandler} extensions={editable ? collaborationExtensions() : []} editable={editable} placeholder="Start typing..." onUpdate={editedDataFn} onReady={handleReady} />
+            {editable ? (
+                <EditorBeskar imageHandler={imageHandler} extensions={collaborationExtensions()} editable={editable} placeholder="Start typing..." onUpdate={editedDataFn} onReady={handleReady} />
+            ) : (
+                <EditorBeskar
+                    imageHandler={imageHandler}
+                    initialContent={content}
+                    extensions={[]}
+                    editable={editable}
+                    placeholder="Start typing..."
+                    onUpdate={editedDataFn}
+                    onReady={handleReady}
+                />
+            )}
             {editor && editable && (
                 <>
                     <BubbleMenu editor={editor}>
