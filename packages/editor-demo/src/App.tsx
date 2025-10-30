@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { Editor, BubbleMenu, BubbleMenuButton, TableFloatingMenu } from '@beskar/editor';
+import { Editor, BubbleMenu, BubbleMenuButton, TableFloatingMenu, TextFormattingMenu } from '@beskar/editor';
 import type { TiptapEditor, ImageAPIHandler } from '@beskar/editor';
 import '@beskar/editor/styles.css';
 import './App.css';
@@ -308,7 +308,8 @@ function App() {
         {/* Bubble Menu for text formatting */}
         {editor && isEditable && (
           <>
-            <BubbleMenu editor={editor}>
+            <TextFormattingMenu editor={editor} />
+            {/* <BubbleMenu editor={editor}>
               <BubbleMenuButton
                 onClick={() => editor.chain().focus().toggleBold().run()}
                 isActive={editor.isActive('bold')}
@@ -344,7 +345,14 @@ function App() {
               >
                 {'</>'}
               </BubbleMenuButton>
-            </BubbleMenu>
+              <BubbleMenuButton
+                onClick={() => editor.chain().focus().toggleMath().run()}
+                isActive={editor.isActive('math')}
+                title="Math"
+              >
+                <span>Math</span>
+              </BubbleMenuButton>
+            </BubbleMenu> */}
             
             {/* Table Floating Menu */}
             <TableFloatingMenu editor={editor} />

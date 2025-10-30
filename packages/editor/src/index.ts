@@ -4,6 +4,7 @@ export { Editor } from './core/Editor';
 // Components
 export { BubbleMenu, BubbleMenuButton } from './components/BubbleMenu';
 export type { BubbleMenuProps, BubbleMenuButtonProps } from './components/BubbleMenu';
+export { TextFormattingMenu } from './components/TextFormattingMenu';
 
 // Table Components
 export { TableToolbar } from './components/table/TableToolbar';

@@ -31,9 +31,15 @@ import {
 } from '../nodes/block-nodes';
 import { NoteBlock } from '../nodes/NoteBlock';
 import { ImageBlock } from '../nodes/ImageBlock';
+import { MathBlock } from '../nodes/MathBlock';
+import { TableOfContents } from '../nodes/TableOfContents';
+import { InlineMath } from './math-inline';
 
 export { CustomAttributes };
 export { Table, TableCell, TableHeader, TableRow } from '../nodes/table';
+export { MathBlock };
+export { InlineMath };
+export { TableOfContents };
 export * from '../nodes/table/utils';
 export { NoteBlock } from '../nodes/NoteBlock';
 export * from '../nodes/note/utils';
@@ -91,6 +97,9 @@ export function getExtensions(options: GetExtensionsOptions = {}): Extensions {
     BlockDetailsContent,
     NoteBlock, // Custom note block with themes and styling
     ImageBlock, // Custom image block with upload and resize
+    MathBlock, // Custom math block for LaTeX formulas
+    TableOfContents, // Auto-generated table of contents
+    InlineMath, // Inline math formulas within text
     ImagePasteDrop.configure({
       imageHandler,
     }),
