@@ -10,7 +10,7 @@ import { uploadImageData } from "../http/uploadImageData";
 import Collaboration from "@tiptap/extension-collaboration";
 import CollaborationCursor from "@tiptap/extension-collaboration-caret";
 import { HocuspocusProvider } from "@hocuspocus/provider";
-import { getExtensions, Editor as EditorBeskar, BubbleMenu, BubbleMenuButton, TableFloatingMenu, type ImageAPIHandler, TiptapEditor } from "@durgakiran/editor";
+import { getExtensions, Editor as EditorBeskar, BubbleMenu, BubbleMenuButton, TableFloatingMenu, type ImageAPIHandler, TiptapEditor, TextFormattingMenu } from "@durgakiran/editor";
 
 interface TipTapProps {
     setEditorContext: (editorContext: Editor) => void;
@@ -169,7 +169,7 @@ export function TipTap({ setEditorContext, user, content, pageId, id, editable =
             )}
             {editor && editable && (
                 <>
-                    <BubbleMenu editor={editor}>
+                    {/* <BubbleMenu editor={editor}>
                         <BubbleMenuButton onClick={() => (editor.chain().focus() as any).toggleBold().run()} isActive={editor.isActive("bold")} title="Bold (Cmd+B)">
                             <strong>B</strong>
                         </BubbleMenuButton>
@@ -185,7 +185,8 @@ export function TipTap({ setEditorContext, user, content, pageId, id, editable =
                         <BubbleMenuButton onClick={() => (editor.chain().focus() as any).toggleCode().run()} isActive={editor.isActive("code")} title="Code">
                             {"</>"}
                         </BubbleMenuButton>
-                    </BubbleMenu>
+                    </BubbleMenu> */}
+                    <TextFormattingMenu editor={editor} />
 
                     {/* Table Floating Menu */}
                     <TableFloatingMenu editor={editor} />

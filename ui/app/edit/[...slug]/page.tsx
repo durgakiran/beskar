@@ -263,7 +263,14 @@ export default function Page({ params }: { params: Promise<{ slug: string[] }> }
                         <div
                             className="header"
                             data-testid="sticky-header"
-                            style={{ position: "sticky", zIndex: 1, top: 0, display: "grid", placeItems: "center", marginBottom: "2rem", backgroundColor: "white" }}
+                            style={{ 
+                                position: "sticky", 
+                                zIndex: 1, 
+                                top: 0, 
+                                marginBottom: "2rem", 
+                                backgroundColor: "white",
+                                width: "100%"
+                            }}
                         >
                             <EditorContext.Provider value={editorContext}>
                                 <Editorheader handleClose={handleClose} handleUpdate={handleUpdate} />

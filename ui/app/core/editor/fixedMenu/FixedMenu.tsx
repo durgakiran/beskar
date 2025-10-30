@@ -16,33 +16,63 @@ export default function FixedMenu({ handleClose, handleUpdate }: { handleClose: 
     }
 
     return (
-        <Flex align="center" justify="between" style={{ width: "100%", maxWidth: "1024px" }}>
-            <Flex align="center" gap="2">
-                <Flex align="center" gap="1" pr="3" style={{ borderRight: "1px solid var(--gray-6)" }}>
-                    <IconButton variant="ghost" size="2" aria-label="home" onClick={() => console.log("Home clicked")}>
+        <Flex 
+            align="center" 
+            justify="between" 
+            py="3"
+            px="4"
+            gap="4"
+            style={{ 
+                width: "100%", 
+                maxWidth: "100%",
+                borderBottom: "1px solid var(--gray-6)",
+                minHeight: "52px"
+            }}
+        >
+            <Flex align="center" gap="4" style={{ flex: 1 }}>
+                <Flex align="center" gap="2" pr="4" style={{ borderRight: "1px solid var(--gray-6)", height: "32px" }}>
+                    <IconButton 
+                        variant="ghost" 
+                        size="2" 
+                        aria-label="home" 
+                        onClick={() => console.log("Home clicked")}
+                        style={{ height: "32px", width: "32px" }}
+                    >
                         <HiHome size={18} />
                     </IconButton>
-                    <IconButton variant="ghost" size="2" onClick={() => editor.chain().undo().run()} aria-label="undo">
+                    <IconButton 
+                        variant="ghost" 
+                        size="2" 
+                        onClick={() => editor.chain().undo().run()} 
+                        aria-label="undo"
+                        style={{ height: "32px", width: "32px" }}
+                    >
                         <LuUndo size={18} />
                     </IconButton>
-                    <IconButton variant="ghost" size="2" onClick={() => editor.chain().redo().run()} aria-label="redo">
+                    <IconButton 
+                        variant="ghost" 
+                        size="2" 
+                        onClick={() => editor.chain().redo().run()} 
+                        aria-label="redo"
+                        style={{ height: "32px", width: "32px" }}
+                    >
                         <LuRedo size={18} />
                     </IconButton>
                 </Flex>
 
-                <Flex align="center" px="3" style={{ borderRight: "1px solid var(--gray-6)" }}>
+                <Flex align="center" gap="2" px="4" style={{ borderRight: "1px solid var(--gray-6)", height: "32px" }}>
                     <ContentTypePicker editor={editor} />
                 </Flex>
-                <Flex align="center" px="3" style={{ borderRight: "1px solid var(--gray-6)" }}>
+                <Flex align="center" gap="2" px="4" style={{ borderRight: "1px solid var(--gray-6)", height: "32px" }}>
                     <FormatTypePicker editor={editor} />
                 </Flex>
-                <Flex align="center" px="3" style={{ borderRight: "1px solid var(--gray-6)" }}>
+                <Flex align="center" gap="2" px="4" style={{ height: "32px" }}>
                     <ContentAlignPicker editor={editor} />
                 </Flex>
             </Flex>
-            <Flex align="center" gap="2">
-                <Button onClick={handleUpdate}>Update</Button>
-                <Button variant="ghost" color="gray" onClick={handleClose}>
+            <Flex align="center" gap="3">
+                <Button size="2" onClick={handleUpdate}>Update</Button>
+                <Button size="2" variant="ghost" color="gray" onClick={handleClose}>
                     Close
                 </Button>
             </Flex>
