@@ -7,11 +7,14 @@ A rich text editor built on TipTap v3 with Radix UI components for better access
 - 🎨 Built on TipTap v3 (latest) with full ProseMirror power
 - ♿ Accessible UI components using Radix UI
 - 🤝 Real-time collaboration support with Y.js and Hocuspocus
+- 📐 **Math formulas** - LaTeX support (inline & block) via KaTeX 🆕
+- 📑 **Table of Contents** - Auto-updating TOC from headings 🆕
 - 📝 Rich text formatting (bold, italic, underline, strike, code)
 - 📋 Lists (bullet, ordered, task lists)
 - 📊 Tables with advanced operations
 - 🎯 Text alignment and text styling
 - 🎨 Color picker
+- 💬 Bubble menu for text formatting with inline math 🆕
 - 💾 Auto-save with debouncing
 - ⚡ TypeScript support
 - 🔧 Extensible architecture
@@ -177,6 +180,80 @@ npm run dev
 # Type check
 npm run type-check
 ```
+
+## Math Formulas 📐
+
+The editor supports beautiful LaTeX math formulas with KaTeX!
+
+### Inline Math (within text)
+```tsx
+import { Editor, EditorContent, TextFormattingMenu } from '@beskar/editor';
+
+function MathEditor() {
+  const editor = useEditor({ extensions: getExtensions() });
+  
+  return (
+    <>
+      <EditorContent editor={editor} />
+      <TextFormattingMenu editor={editor} />
+    </>
+  );
+}
+```
+
+**Usage:**
+- Select text → Press `Cmd+Shift+M` (Mac) or `Ctrl+Shift+M` (Windows)
+- Or use the ∑ button in the bubble menu
+
+### Block Math (centered formulas)
+- Type `/math` in the editor
+- Enter your LaTeX formula
+- Press `Esc` or `Cmd+Enter` to save
+
+**Examples:**
+```latex
+# Inline: E = mc^2
+# Block:  \int_{a}^{b} f(x) dx
+```
+
+See `MATH_COMPLETE_GUIDE.md` for full documentation!
+
+## Table of Contents 📑
+
+Auto-generate a table of contents from your document's headings!
+
+### Insert TOC
+```tsx
+// Type / and search for "toc" or "contents"
+// Or use the editor API:
+editor.chain().focus().setTableOfContents().run();
+
+// With custom settings:
+editor.chain().focus().setTableOfContents({
+  title: 'On this page',
+  maxLevel: 3  // Include H1-H3
+}).run();
+```
+
+### Features
+- ✅ **Auto-updates** in real-time as you edit headings
+- ✅ **Clickable links** - scroll to any heading
+- ✅ **Hierarchical** - properly indented by level
+- ✅ **Configurable** - control which heading levels to show
+- ✅ **Draggable** - move anywhere in your document
+- ✅ **Theme-neutral** - style with CSS variables
+
+### Customization
+```css
+:root {
+  --toc-border-color: rgba(0, 0, 0, 0.1);
+  --toc-background: rgba(0, 0, 0, 0.02);
+  --toc-link-background-hover: rgba(0, 0, 0, 0.05);
+  /* ... more CSS variables */
+}
+```
+
+See `TABLE_OF_CONTENTS.md` for complete documentation!
 
 ## License
 

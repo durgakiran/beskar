@@ -3,6 +3,7 @@ import { TextAlign } from '@tiptap/extension-text-align';
 import { Underline } from '@tiptap/extension-underline';
 import { TextStyle } from '@tiptap/extension-text-style';
 import { Color } from '@tiptap/extension-color';
+import { Highlight } from '@tiptap/extension-highlight';
 import { Collaboration } from '@tiptap/extension-collaboration';
 import { CollaborationCaret } from '@tiptap/extension-collaboration-caret';
 import { Typography } from '@tiptap/extension-typography';
@@ -110,6 +111,9 @@ export function getExtensions(options: GetExtensionsOptions = {}): Extensions {
     Underline,
     TextStyle,
     Color,
+    Highlight.configure({
+      multicolor: true, // Allow multiple highlight colors
+    }),
     Typography, // Auto-convert text patterns like -> to →, (c) to ©, etc.
     Emoji.configure({
       emojis: gitHubEmojis, // Use extended GitHub emoji set (includes custom ones like :octocat:)

@@ -3,15 +3,15 @@
  * Includes inline math button for converting text to LaTeX formulas
  */
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Editor } from '@tiptap/core';
 import { BubbleMenu, BubbleMenuButton } from './BubbleMenu';
+import { TextColorPicker } from './TextColorPicker';
 import {
   FiBold,
   FiItalic,
   FiUnderline,
   FiCode,
-  FiType,
 } from 'react-icons/fi';
 
 export interface TextFormattingMenuProps {
@@ -23,6 +23,30 @@ export interface TextFormattingMenuProps {
  * Shows formatting options when text is selected
  */
 export function TextFormattingMenu({ editor }: TextFormattingMenuProps) {
+  // Track current colors to trigger re-renders
+  const [textColor, setTextColor] = useState<string | undefined>(undefined);
+  const [highlightColor, setHighlightColor] = useState<string | undefined>(undefined);
+
+  // Update colors when editor state changes
+  useEffect(() => {
+    const updateColors = () => {
+      setTextColor(editor.getAttributes('textStyle').color);
+      setHighlightColor(editor.getAttributes('highlight').color);
+    };
+
+    // Update on selection change
+    editor.on('selectionUpdate', updateColors);
+    editor.on('transaction', updateColors);
+    
+    // Initial update
+    updateColors();
+
+    return () => {
+      editor.off('selectionUpdate', updateColors);
+      editor.off('transaction', updateColors);
+    };
+  }, [editor]);
+
   return (
     <BubbleMenu editor={editor}>
       {/* Bold */}
@@ -60,6 +84,35 @@ export function TextFormattingMenu({ editor }: TextFormattingMenuProps) {
       >
         <FiCode />
       </BubbleMenuButton>
+
+      {/* Separator */}
+      <div className="bubble-menu-separator" />
+
+      {/* Text Color */}
+      <TextColorPicker
+        onColorSelect={(color) => {
+          if (color === '') {
+            editor.chain().focus().unsetColor().run();
+          } else {
+            editor.chain().focus().setColor(color).run();
+          }
+        }}
+        currentColor={textColor}
+        label="Text Color"
+      />
+
+      {/* Highlight Color */}
+      <TextColorPicker
+        onColorSelect={(color) => {
+          if (color === '' || color === 'transparent') {
+            editor.chain().focus().unsetHighlight().run();
+          } else {
+            editor.chain().focus().setHighlight({ color }).run();
+          }
+        }}
+        currentColor={highlightColor}
+        label="Highlight"
+      />
 
       {/* Separator */}
       <div className="bubble-menu-separator" />
