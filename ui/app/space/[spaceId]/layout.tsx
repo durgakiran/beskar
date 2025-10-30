@@ -8,7 +8,7 @@ export default function Layout({ children, params }: { children: React.ReactNode
     const { spaceId } = use(params);
 
     return (
-        <div className="flex space-x-4 min-h-svh">
+        <div className="flex min-h-svh">
             <div>
                 <SideNav id={spaceId} />
             </div>

@@ -2,7 +2,7 @@
 import { redirect } from "next/navigation";
 import { ReactNode, Suspense } from "react";
 import { cookies } from "next/headers";
-import { Spinner } from "flowbite-react";
+import { Spinner, Flex } from "@radix-ui/themes";
 
 const USER_URI = process.env.NEXT_PUBLIC_USER_SERVER_URL;
 
@@ -29,7 +29,11 @@ export default async function SessionGuard({ children }: { children: ReactNode }
 
 
     return (
-        <Suspense fallback={<Spinner />}>
+        <Suspense fallback={
+            <Flex align="center" justify="center" style={{ minHeight: '100vh' }}>
+                <Spinner size="3" />
+            </Flex>
+        }>
             {children}
         </Suspense>
     );

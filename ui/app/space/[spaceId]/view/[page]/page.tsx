@@ -1,7 +1,8 @@
 "use client";
 import { TipTap } from "@editor";
 import { useGet } from "@http/hooks";
-import { Breadcrumb, Button, Spinner, Tooltip } from "flowbite-react";
+import { Button, Spinner, Tooltip, Flex, Box, IconButton, Text } from "@radix-ui/themes";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { use, useEffect, useRef, useState } from "react";
 import { HiHome, HiPencil, HiOutlineTrash } from "react-icons/hi";
@@ -64,64 +65,113 @@ export default function Page({ params }: { params: Promise<{ page: string; space
     }, [data]);
 
     if (isLoading || status === "loading") {
-        <div className="text-center">
-            <Spinner size="lg" />
-        </div>;
+        return (
+            <Flex align="center" justify="center" p="4">
+                <Spinner size="3" />
+            </Flex>
+        );
     }
     return (
-        <div className="min-h-screen mx-auto ">
-            <div className="py-2 mb-4 flex flex-nowrap justify-between box-border shadow-sm   ">
-                <div>
-                    {!loadingBreadCrum && dataBreadCrum && dataBreadCrum.data && dataBreadCrum.data.length ? (
-                        <Breadcrumb aria-label="page navigation">
-                            <Breadcrumb.Item href="/" icon={HiHome}>
-                                Home
-                            </Breadcrumb.Item>
-                            {dataBreadCrum.data
-                                .sort((a: BreadCrumbData, b: BreadCrumbData) => {
-                                    return a.id > b.id ? 1 : -1;
-                                })
-                                .map((item: BreadCrumbData) => {
-                                    return (
-                                        <Breadcrumb.Item key={item.id} href={`space/${spaceId}/view/${item.id}`}>
-                                            {item.name}
-                                        </Breadcrumb.Item>
-                                    );
-                                })}
-                        </Breadcrumb>
-                    ) : null}
-                </div>
+        <Box className="min-h-screen mx-auto bg-white">
+            {/* Header Section */}
+            <Box className="bg-white border-b border-neutral-200 sticky top-0 z-10">
+                <Flex 
+                    py="3" 
+                    px="4" 
+                    justify="between" 
+                    align="center" 
+                    className="max-w-7xl mx-auto flex-col sm:flex-row gap-3"
+                >
+                    {/* Breadcrumbs */}
+                    <Box className="overflow-x-auto w-full sm:w-auto">
+                        {!loadingBreadCrum && dataBreadCrum && dataBreadCrum.data && dataBreadCrum.data.length ? (
+                            <Flex align="center" gap="2" className="flex-nowrap">
+                                <Link 
+                                    href={`/space/${spaceId}`}
+                                    className="flex items-center gap-1.5 px-2 py-1 rounded-sm 
+                                             hover:bg-mauve-50 transition-colors group flex-shrink-0"
+                                >
+                                    <HiHome size={16} className="text-mauve-600 group-hover:text-primary-600" />
+                                    <Text size="2" className="text-neutral-700 group-hover:text-primary-700 font-medium">
+                                        Home
+                                    </Text>
+                                </Link>
+                                {dataBreadCrum.data
+                                    .sort((a: BreadCrumbData, b: BreadCrumbData) => {
+                                        return a.id > b.id ? 1 : -1;
+                                    })
+                                    .map((item: BreadCrumbData, index: number, array: BreadCrumbData[]) => {
+                                        const isLast = index === array.length - 1;
+                                        return (
+                                            <Flex key={item.id} align="center" gap="2" className="flex-shrink-0">
+                                                <Text className="text-neutral-300">/</Text>
+                                                <Link 
+                                                    href={`/space/${spaceId}/view/${item.id}`}
+                                                    className={`px-2 py-1 rounded-sm transition-colors ${
+                                                        isLast 
+                                                            ? 'bg-primary-50 text-primary-700 font-semibold' 
+                                                            : 'hover:bg-mauve-50 text-neutral-700 hover:text-primary-700'
+                                                    }`}
+                                                >
+                                                    <Text size="2" className="truncate max-w-[200px]">
+                                                        {item.name}
+                                                    </Text>
+                                                </Link>
+                                            </Flex>
+                                        );
+                                    })}
+                            </Flex>
+                        ) : null}
+                    </Box>
 
-                <div className="flex space-x-4">
-                    <Tooltip content="Edit page" placement="bottom">
-                        <Button outline className="max-w-full" color="light" size="xs" onClick={editPage}>
-                            <HiPencil size="15" />
-                        </Button>
-                    </Tooltip>
-                    <Tooltip content="Delete page" placement="bottom">
-                        <Button outline className="max-w-full" color="light" size="xs" onClick={deletePage}>
-                            <HiOutlineTrash size="15" />
-                        </Button>
-                    </Tooltip>
-                </div>
-            </div>
+                    {/* Action Buttons */}
+                    <Flex gap="4" className="flex-shrink-0">
+                        <Tooltip content="Edit page">
+                            <IconButton 
+                                variant="ghost"
+                                size="2" 
+                                onClick={editPage}
+                                className="text-primary-600 hover:bg-primary-50 hover:text-primary-700 transition-colors p-2"
+                            >
+                                <HiPencil size={18} />
+                            </IconButton>
+                        </Tooltip>
+                        <Tooltip content="Delete page">
+                            <IconButton 
+                                variant="ghost"
+                                size="2" 
+                                onClick={deletePage}
+                                className="text-error-600 hover:bg-error-50 hover:text-error-700 transition-colors p-2"
+                            >
+                                <HiOutlineTrash size={18} />
+                            </IconButton>
+                        </Tooltip>
+                    </Flex>
+                </Flex>
+            </Box>
+
+            {/* Content Section */}
             {content && (
-                <div className="ml-16 mr-16">
-                    <div className="mb-8">
-                        <h1 className="text-3xl font-bold">{data.data.title}</h1>
-                    </div>
-                    <TipTap
-                        updateContent={(content, title) => console.log(content, title)}
-                        title={data.data.title}
-                        setEditorContext={() => {}}
-                        editable={false}
-                        content={content}
-                        pageId={page}
-                        id={data.data.docId}
-                        user={null}
-                    />
-                </div>
+                <Box className="px-4 md:px-8 lg:px-16 py-6 max-w-7xl mx-auto bg-white">
+                    <Box className="p-6 md:p-8 lg:p-12">
+                        <Box mb="8">
+                            <h1 className="text-3xl md:text-4xl font-bold text-neutral-900">
+                                {data.data.title}
+                            </h1>
+                        </Box>
+                        <TipTap
+                            updateContent={(content, title) => console.log(content, title)}
+                            title={data.data.title}
+                            setEditorContext={() => {}}
+                            editable={false}
+                            content={content}
+                            pageId={page}
+                            id={data.data.docId}
+                            user={null}
+                        />
+                    </Box>
+                </Box>
             )}
-        </div>
+        </Box>
     );
 }

@@ -1,7 +1,7 @@
 'use client'
 
 import { Response, useGet } from "@http/hooks"
-import { Spinner } from "flowbite-react";
+import { Spinner, Box, Heading, Text, Flex } from "@radix-ui/themes";
 import { use, useEffect } from "react";
 
 interface space {
@@ -19,21 +19,23 @@ export default function Page({ params }: { params: Promise<{ spaceId: string }> 
 
     if (errors) {
         return (
-            <div>{errors.message}</div>
+            <Box p="4">
+                <Text color="red">{errors.message}</Text>
+            </Box>
         )
     }
 
     if (isLoading) {
         return (
-            <div><Spinner /></div>
+            <Flex align="center" justify="center" p="4">
+                <Spinner size="3" />
+            </Flex>
         )
     }
     
     return (
-        <div>
-            {
-                data && data.data ? <h1>{data.data.name}</h1> : null
-            }
-        </div>
+        <Box p="4">
+            {data && data.data && <Heading size="6">{data.data.name}</Heading>}
+        </Box>
     )
 }

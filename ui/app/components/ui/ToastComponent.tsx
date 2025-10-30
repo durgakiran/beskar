@@ -1,5 +1,7 @@
 import ModifiedIcon from "@components/modifiedIcon";
-import { Toast } from "flowbite-react";
+import { Callout, Flex, IconButton } from "@radix-ui/themes";
+import { Cross2Icon } from "@radix-ui/react-icons";
+import { useState } from "react";
 
 interface props {
     icon: string;
@@ -9,20 +11,38 @@ interface props {
 }
 
 export default function ToastComponent(props: props) {
-    const successClasses = "bg-green-100 text-green-500 dark:bg-green-800 dark:text-green-200";
-    const warningClasses = "bg-orange-100 text-orange-500 dark:bg-orange-700 dark:text-orange-200";
-    const errorClasses = "bg-red-100 text-red-500 dark:bg-red-800 dark:text-red-200";
+    const [visible, setVisible] = useState(true);
+
+    if (!visible) return null;
+
+    const colorMap = {
+        success: "green",
+        error: "red",
+        warning: "orange"
+    } as const;
 
     return (
-        <Toast className="fixed bottom-5 right-5" duration={75}>
-            <div
-                className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${props.type === "success" ? successClasses : props.type === "error" ? errorClasses : warningClasses}`}
-            >
-                <ModifiedIcon name={props.icon} size={16} />
-            </div>
-            <div className="ml-3 text-sm font-normal">{props.message}</div>
-            {props.toggle ? <Toast.Toggle /> : null}
-        </Toast>
+        <div className="fixed bottom-5 right-5 z-50">
+            <Callout.Root color={colorMap[props.type]} style={{ minWidth: '300px' }}>
+                <Flex align="center" gap="2">
+                    <Callout.Icon>
+                        <ModifiedIcon name={props.icon} size={16} />
+                    </Callout.Icon>
+                    <Callout.Text style={{ flex: 1 }}>
+                        {props.message}
+                    </Callout.Text>
+                    {props.toggle && (
+                        <IconButton 
+                            size="1" 
+                            variant="ghost" 
+                            color="gray"
+                            onClick={() => setVisible(false)}
+                        >
+                            <Cross2Icon />
+                        </IconButton>
+                    )}
+                </Flex>
+            </Callout.Root>
+        </div>
     );
-
 }

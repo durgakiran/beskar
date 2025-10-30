@@ -69,9 +69,9 @@ export const Item = ({
     const className = cn(
         "flex items-center gap-2 p-1.5 text-sm font-medium text-neutral-500 text-left bg-transparent w-full rounded",
         !isActive && !disabled,
-        "hover:bg-neutral-100 hover:text-neutral-800 dark:hover:bg-neutral-900 dark:hover:text-neutral-200",
-        isActive && !disabled && "bg-neutral-100 text-neutral-800 dark:bg-neutral-900 dark:text-neutral-200",
-        disabled && "text-neutral-400 cursor-not-allowed dark:text-neutral-600",
+        "hover:bg-neutral-100 hover:text-neutral-800",
+        isActive && !disabled && "bg-neutral-100 text-neutral-800",
+        disabled && "text-neutral-400 cursor-not-allowed",
     );
 
     const IconComponent = icon ? icons[icon] : null;
@@ -93,11 +93,11 @@ export type CategoryTitle = {
 };
 
 export const CategoryTitle = ({ children }: CategoryTitle) => {
-    return <div className="mt-4 first:mt-1.5 mb-1.5 text-[0.625rem] font-medium text-neutral-400 dark:text-neutral-600 uppercase select-none px-1">{children}</div>;
+    return <div className="mt-4 first:mt-1.5 mb-1.5 text-[0.625rem] font-medium text-neutral-400 uppercase select-none px-1">{children}</div>;
 };
 
 export const Divider = forwardRef<HTMLHRElement>((props, ref) => {
-    return <hr {...props} ref={ref} className="my-1 border-neutral-200 dark:border-neutral-800" />;
+    return <hr {...props} ref={ref} className="my-1 border-neutral-200" />;
 });
 
 Divider.displayName = "Divider";

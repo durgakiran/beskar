@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { useContentAlignTypes } from "./hooks/useContentAlignTypes";
 import { ContentAlignTypePickerOption } from "./types";
 import { HiMenuAlt2, HiMenuAlt3, HiOutlineMenu } from "react-icons/hi";
-import { Button } from "flowbite-react";
+import { IconButton, Flex, Tooltip } from "@radix-ui/themes";
 interface ContentAlignPickerOption {
     editor: Editor;
 }
@@ -46,17 +46,21 @@ export default function ContentAlignPicker({ editor }: ContentAlignPickerOption)
     };
 
     return (
-        <div>
-            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                {alignmentTypes.map((type) => {
-                    const Icon = type.icon;
-                    return (
-                        <Button key={type.alignment} onClick={() => handleIconClick(type.alignment)} size="xs" outline color="transparent">
-                            <Icon title={type.tooltip} size="16" />
-                        </Button>
-                    );
-                })}
-            </div>
-        </div>
+        <Flex align="center" gap="1">
+            {alignmentTypes.map((type) => {
+                const Icon = type.icon;
+                return (
+                    <Tooltip key={type.alignment} content={type.tooltip}>
+                        <IconButton 
+                            variant="ghost" 
+                            size="2"
+                            onClick={() => handleIconClick(type.alignment)}
+                        >
+                            <Icon size={16} />
+                        </IconButton>
+                    </Tooltip>
+                );
+            })}
+        </Flex>
     );
 }

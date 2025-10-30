@@ -4,7 +4,7 @@ import ModifiedIcon from "@components/modifiedIcon";
 import { useEffect, useState } from "react";
 import { FormatTypePickerOption } from "./types";
 import "./picker.css";
-import { Button } from "flowbite-react";
+import { IconButton } from "@radix-ui/themes";
 
 interface FormatTypePickerProps {
     editor: Editor;
@@ -30,20 +30,16 @@ export default function FormatTypePicker({ editor }: FormatTypePickerProps) {
     return (
         <>
             {options.map((item, i) => (
-                <Button
-                    outline
-                    color="transparent"
+                <IconButton
+                    variant={item.isActive() ? "soft" : "ghost"}
                     aria-label={item.label}
-                    style={{ color: "black" }}
-                    className={item.isActive() ? "active" : ""}
-                    as="button"
-                    size="xs"
+                    size="2"
                     key={i}
                     disabled={item.disabled()}
                     onClick={() => item.onClick()}
                 >
                     <ModifiedIcon name={item.icon} size={16} />
-                </Button>
+                </IconButton>
             ))}
         </>
     );

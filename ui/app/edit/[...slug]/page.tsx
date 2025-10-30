@@ -8,7 +8,7 @@ import TextArea from "@editor/textarea/TextArea";
 import { HocuspocusProvider } from "@hocuspocus/provider";
 import { Response, useGet } from "@http/hooks";
 import { Editor } from "@tiptap/react";
-import { Spinner } from "flowbite-react";
+import { Spinner, Flex } from "@radix-ui/themes";
 import { use, useContext, useEffect, useRef, useState } from "react";
 import * as y from "yjs"
 import "./styles.css";
@@ -245,7 +245,7 @@ export default function Page({ params }: { params: Promise<{ slug: string[] }> }
     if (profileLoading || !provider || !isSynced) {
         return (
             <div className="text-center">
-                <Spinner size="lg" />
+                <Spinner size="3" />
             </div>
         );
     }

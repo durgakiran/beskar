@@ -1,19 +1,7 @@
 "use client";
 import { MouseEvent, useCallback, useEffect, useState } from "react";
-import styled from "styled-components";
-import { Button, Spinner, TextInput, Modal } from "flowbite-react";
+import { Dialog, Button, TextField, Flex, Text } from "@radix-ui/themes";
 import { Response, usePost } from "@http/hooks";
-
-const Footer = styled.div`
-    display: flex;
-    flex-direction: row;
-    flex-wrap: wrap;
-    align-content: center;
-    justify-content: flex-end;
-    align-items: center;
-    box-sizing: border-box;
-    margin-top: 1rem;
-`;
 
 interface IAddPage {
     isOpen: boolean;
@@ -58,19 +46,32 @@ export default function AddPage({ isOpen, setIsOpen, spaceId, parentId, editPage
     }, [data]);
 
     return (
-        <Modal show={isOpen} onClose={closeModal} size="sm">
-            <Modal.Header>Add a new Page</Modal.Header>
-            <div className="form p-4">
-                <div>
-                    <h2>Title of Page</h2>
-                    <TextInput className="w-4/5 " value={name} onInput={(ev) => handleInput((ev.target as HTMLInputElement).value)} placeholder="Enter page title..." />
-                </div>
-                <Footer>
-                    <Button onClick={handleSubmit} disabled={loading || added}>
-                        {loading ? <Spinner size="small" /> : "Add"}
-                    </Button>
-                </Footer>
-            </div>
-        </Modal>
+        <Dialog.Root open={isOpen} onOpenChange={setIsOpen}>
+            <Dialog.Content size="2" maxWidth="450px">
+                <Dialog.Title>Add a new Page</Dialog.Title>
+                <Flex direction="column" gap="4">
+                    <label>
+                        <Text as="div" size="2" mb="1" weight="bold">
+                            Title of Page
+                        </Text>
+                        <TextField.Root
+                            value={name}
+                            onChange={(ev) => handleInput(ev.target.value)}
+                            placeholder="Enter page title..."
+                        />
+                    </label>
+                    <Flex gap="3" mt="4" justify="end">
+                        <Dialog.Close>
+                            <Button variant="soft" color="gray">
+                                Cancel
+                            </Button>
+                        </Dialog.Close>
+                        <Button onClick={handleSubmit} disabled={loading || added} loading={loading}>
+                            Add
+                        </Button>
+                    </Flex>
+                </Flex>
+            </Dialog.Content>
+        </Dialog.Root>
     );
 }
