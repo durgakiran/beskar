@@ -1,4 +1,4 @@
-import { Button, Dropdown, Label, Modal, Select, TextInput } from "flowbite-react";
+import { Button, Dialog, TextField, Select, Flex, Text } from "@radix-ui/themes";
 import { FormEvent, useState } from "react";
 
 export default function InviteUser({ open, setOpen, handleInvite }: { open: boolean; setOpen: (open: boolean) => void; handleInvite: (email: string, role: string) => void }) {
@@ -20,30 +20,50 @@ export default function InviteUser({ open, setOpen, handleInvite }: { open: bool
 
 
     return (
-        <Modal show={open} onClose={() => setOpen(false)}>
-            <Modal.Header>Invite User</Modal.Header>
-            <form onSubmit={onSubmit}>
-                <Modal.Body>
-                    <div className="mb-2 block">
-                        <Label htmlFor="email" value="Select user" />
-                    </div>
-                    <div className="mb-2 block">
-                        <TextInput type="email" name="email" id="email" placeholder="type email" required  />
-                    </div>
-                    <div className="mb-2 block">
-                        <Label htmlFor="role" value="Select roles" />
-                    </div>
-                    <Select id="role" name="role" required>
-                        <option value={"admin"}>Admin</option>
-                        <option value={"editor"}>Editor</option>
-                        <option value={"commenter"}>Commenter</option>
-                        <option value={"viewer"}>Viewer</option>
-                    </Select>
-                </Modal.Body>
-                <Modal.Footer >
-                    <Button type="submit">Invite</Button>
-                </Modal.Footer>
-            </form>
-        </Modal>
+        <Dialog.Root open={open} onOpenChange={setOpen}>
+            <Dialog.Content size="2" maxWidth="450px">
+                <Dialog.Title>Invite User</Dialog.Title>
+                <form onSubmit={onSubmit}>
+                    <Flex direction="column" gap="4">
+                        <label>
+                            <Text as="div" size="2" mb="1" weight="bold">
+                                Email
+                            </Text>
+                            <TextField.Root 
+                                type="email" 
+                                name="email" 
+                                id="email" 
+                                placeholder="type email" 
+                                required 
+                            />
+                        </label>
+                        <label>
+                            <Text as="div" size="2" mb="1" weight="bold">
+                                Select roles
+                            </Text>
+                            <Select.Root name="role" required defaultValue="viewer">
+                                <Select.Trigger />
+                                <Select.Content>
+                                    <Select.Item value="admin">Admin</Select.Item>
+                                    <Select.Item value="editor">Editor</Select.Item>
+                                    <Select.Item value="commenter">Commenter</Select.Item>
+                                    <Select.Item value="viewer">Viewer</Select.Item>
+                                </Select.Content>
+                            </Select.Root>
+                        </label>
+                        <Flex gap="3" mt="4" justify="end">
+                            <Dialog.Close>
+                                <Button variant="soft" color="gray" type="button">
+                                    Cancel
+                                </Button>
+                            </Dialog.Close>
+                            <Button type="submit" loading={isLoading}>
+                                Invite
+                            </Button>
+                        </Flex>
+                    </Flex>
+                </form>
+            </Dialog.Content>
+        </Dialog.Root>
     )
 }

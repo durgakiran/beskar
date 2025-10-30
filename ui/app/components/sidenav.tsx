@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import AddPage from "./addPage";
-import { Sidebar, Spinner } from "flowbite-react";
+import { Box, Flex, Text, IconButton, Spinner } from "@radix-ui/themes";
 import { HiHome, HiOutlinePlusSm, HiOutlineChevronDown, HiOutlineChevronRight, HiCog } from "react-icons/hi";
 import Link from "next/link";
 import { Response, useGet } from "@http/hooks";
@@ -49,20 +49,26 @@ interface IPages {
 
 function SideNavItem({ pages, spaceId, openAddPage }: { pages: Array<IPages>; spaceId: string; openAddPage: (parentId: number) => void }) {
     return (
-        <div className="dropdown-content">
-            <ul className="list-disc pl-6 pt-2 pr-2">
+        <div className="space-y-0.5">
+            <ul className="list-none pl-4 space-y-0.5">
                 {pages &&
                     pages.map((page, i) => {
                         if (page.details && page.details.title) {
                             return (
                                 <li key={i}>
-                                    {/* active={pahtName2 === `/space/${param.id}/view/${page.id}`} */}
-                                    <div className="flex flex-row items-center py-1 px-1 hover:bg-gray-100">
-                                        <Link className="text-sm" href={`/space/${spaceId}/view/${page.id}`}>
+                                    <div className="flex flex-row items-center gap-1 py-1.5 px-2 rounded-sm hover:bg-mauve-50 transition-colors group">
+                                        <Link 
+                                            className="text-sm text-neutral-700 hover:text-primary-600 flex-1 truncate transition-colors" 
+                                            href={`/space/${spaceId}/view/${page.id}`}
+                                        >
                                             {page.details.title}
                                         </Link>
-                                        <button className="ml-auto hover:bg-gray-200 rounded p-1" onClick={() => openAddPage(page.id)}>
-                                            <HiOutlinePlusSm />
+                                        <button 
+                                            className="opacity-0 group-hover:opacity-100 hover:bg-primary-100 text-primary-600 rounded-sm p-1 transition-all" 
+                                            onClick={() => openAddPage(page.id)}
+                                            title="Add sub-page"
+                                        >
+                                            <HiOutlinePlusSm size={14} />
                                         </button>
                                     </div>
                                     {page.children.length > 0 && <SideNavItem pages={page.children} spaceId={spaceId} openAddPage={openAddPage} />}
@@ -153,42 +159,96 @@ export default function SideNav(param: Props) {
     };
 
     if (loading) {
-        return <Spinner size="lg" />;
+        return (
+            <Box className="w-64 h-full bg-neutral-50 border-r border-neutral-200" p="4">
+                <Flex align="center" justify="center">
+                    <Spinner size="3" />
+                </Flex>
+            </Box>
+        );
     }
 
     if (data) {
         return (
             <>
-                <Sidebar aria-label="Content navigation">
-                    <Sidebar.Items>
-                        <Sidebar.ItemGroup>
-                            <Sidebar.Item href={`/space/${param.id}`} icon={HiHome}>
-                                Overview
-                            </Sidebar.Item>
-                            <Sidebar.Item href={`/space/${param.id}/settings/users`} icon={HiCog}>
-                                Settings
-                            </Sidebar.Item>
-                            <div className="sidenav-content-container">
-                                <div className="content-header flex flex-row items-center">
-                                    <button onClick={toggleDropdown}>{isDropdownOpen ? <HiOutlineChevronDown /> : <HiOutlineChevronRight />}</button>
-                                    <span className="ml-2 mr-1 text-sm font-medium">PAGES</span>
-                                    <button className="ml-auto" onClick={() => openAddPage()}>
-                                        <HiOutlinePlusSm />
-                                    </button>
-                                </div>
-                                {isDropdownOpen && (
-                                    <>
-                                        <SideNavItem pages={pages} openAddPage={openAddPage} spaceId={param.id} />
-                                    </>
-                                )}
-                            </div>
-                        </Sidebar.ItemGroup>
-                    </Sidebar.Items>
-                </Sidebar>
+                <Box className="w-64 h-full bg-neutral-50 border-r border-neutral-200" p="4">
+                    <Flex direction="column" gap="1">
+                        {/* Navigation Links */}
+                        <Link 
+                            href={`/space/${param.id}`} 
+                            className="flex items-center gap-3 px-3 py-2.5 rounded-sm hover:bg-mauve-100 hover:text-primary-700 text-neutral-700 text-sm font-medium transition-colors"
+                        >
+                            <HiHome size={18} className="text-mauve-600" />
+                            <span>Overview</span>
+                        </Link>
+                        <Link 
+                            href={`/space/${param.id}/settings/users`} 
+                            className="flex items-center gap-3 px-3 py-2.5 rounded-sm hover:bg-mauve-100 hover:text-primary-700 text-neutral-700 text-sm font-medium transition-colors"
+                        >
+                            <HiCog size={18} className="text-mauve-600" />
+                            <span>Settings</span>
+                        </Link>
+                        
+                        {/* Divider */}
+                        <div className="my-3 border-t border-neutral-200" />
+                        
+                        {/* Pages Section */}
+                        <Box>
+                            <Flex 
+                                align="center" 
+                                gap="2" 
+                                mb="2" 
+                                px="2"
+                                className="group"
+                            >
+                                <IconButton 
+                                    size="1" 
+                                    variant="ghost" 
+                                    onClick={toggleDropdown}
+                                    className="text-mauve-600 hover:text-primary-600 hover:bg-primary-50"
+                                >
+                                    {isDropdownOpen ? <HiOutlineChevronDown size={16} /> : <HiOutlineChevronRight size={16} />}
+                                </IconButton>
+                                <Text 
+                                    size="1" 
+                                    weight="bold" 
+                                    className="flex-1 text-neutral-500 uppercase tracking-wide"
+                                >
+                                    Pages
+                                </Text>
+                                <IconButton 
+                                    size="1" 
+                                    variant="ghost" 
+                                    onClick={() => openAddPage()}
+                                    className="text-primary-600 hover:bg-primary-100"
+                                    title="Add new page"
+                                >
+                                    <HiOutlinePlusSm size={16} />
+                                </IconButton>
+                            </Flex>
+                            {isDropdownOpen && pages && pages.length > 0 && (
+                                <SideNavItem pages={pages} openAddPage={openAddPage} spaceId={param.id} />
+                            )}
+                            {isDropdownOpen && (!pages || pages.length === 0) && (
+                                <Box px="4" py="3">
+                                    <Text size="2" className="text-neutral-500 italic">
+                                        No pages yet
+                                    </Text>
+                                </Box>
+                            )}
+                        </Box>
+                    </Flex>
+                </Box>
                 <AddPage isOpen={isOpen} setIsOpen={setIsOpen} editPage={editePage} spaceId={param.id} parentId={parentId} />
             </>
         );
     }
 
-    return <>error</>;
+    return (
+        <Box className="w-64 h-full bg-neutral-50 border-r border-neutral-200" p="4">
+            <Flex align="center" gap="2" className="bg-error-50 border border-error-200 rounded-sm p-3">
+                <Text size="2" className="text-error-700">Error loading navigation</Text>
+            </Flex>
+        </Box>
+    );
 }

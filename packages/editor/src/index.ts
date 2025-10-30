@@ -4,6 +4,7 @@ export { Editor } from './core/Editor';
 // Components
 export { BubbleMenu, BubbleMenuButton } from './components/BubbleMenu';
 export type { BubbleMenuProps, BubbleMenuButtonProps } from './components/BubbleMenu';
+export { TextFormattingMenu } from './components/TextFormattingMenu';
 
 // Table Components
 export { TableToolbar } from './components/table/TableToolbar';
@@ -45,4 +46,3 @@ export { useDebounce as useDebounceUtil } from './utils/debounce';
 // Re-export common TipTap exports that users might need
 export { EditorContent } from '@tiptap/react';
 export type { JSONContent } from '@tiptap/core';
-

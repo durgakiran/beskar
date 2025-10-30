@@ -1,19 +1,19 @@
-import { useEffect, useState } from "react";
-import data from '@emoji-mart/data'
-import { init, SearchIndex } from 'emoji-mart'
+// import { useEffect, useState } from "react";
+// import data from '@emoji-mart/data'
+// import { init, SearchIndex } from 'emoji-mart'
 
-init({ data })
+// init({ data })
 
 
-export default function useEmoji() {
-    const [emojiSearchString, setEmojiSearchString] = useState();
+// export default function useEmoji() {
+//     const [emojiSearchString, setEmojiSearchString] = useState();
 
-    useEffect(() => {
-        if (emojiSearchString) {
+//     useEffect(() => {
+//         if (emojiSearchString) {
             
-        }
+//         }
 
-    }, [emojiSearchString]);
+//     }, [emojiSearchString]);
 
-    return [setEmojiSearchString];
-}
+//     return [setEmojiSearchString];
+// }

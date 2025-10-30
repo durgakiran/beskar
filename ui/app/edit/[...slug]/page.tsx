@@ -8,8 +8,8 @@ import TextArea from "@editor/textarea/TextArea";
 import { HocuspocusProvider } from "@hocuspocus/provider";
 import { Response, useGet } from "@http/hooks";
 import { Editor } from "@tiptap/react";
-import { Spinner } from "flowbite-react";
-import { useContext, useEffect, useRef, useState } from "react";
+import { Spinner, Flex } from "@radix-ui/themes";
+import { use, useContext, useEffect, useRef, useState } from "react";
 import * as y from "yjs"
 import "./styles.css";
 import { usePUT } from "app/core/http/hooks/usePut";
@@ -53,7 +53,8 @@ interface IPayloadPublish {
     nodeData: any;
 }
 
-export default function Page({ params: { slug } }: { params: { slug: string[] } }) {
+export default function Page({ params }: { params: Promise<{ slug: string[] }> }) {
+    const { slug } = use(params);
     const socket = useContext(SocketContext);
     const [provider, setProvider] = useState<HocuspocusProvider>();
     const router = useRouter();
@@ -79,7 +80,7 @@ export default function Page({ params: { slug } }: { params: { slug: string[] } 
 
     // wasm handling
     const [workerInitiated, setWorkerInitiated] = useState<boolean>(false);
-    const workerRef = useRef<Worker>();
+    const workerRef = useRef<Worker>(null);
     // end of wasm handling
 
     // to check the nunber of times component rendered
@@ -244,7 +245,7 @@ export default function Page({ params: { slug } }: { params: { slug: string[] } 
     if (profileLoading || !provider || !isSynced) {
         return (
             <div className="text-center">
-                <Spinner size="lg" />
+                <Spinner size="3" />
             </div>
         );
     }
@@ -262,7 +263,14 @@ export default function Page({ params: { slug } }: { params: { slug: string[] } 
                         <div
                             className="header"
                             data-testid="sticky-header"
-                            style={{ position: "sticky", zIndex: 1, top: 0, display: "grid", placeItems: "center", marginBottom: "2rem", backgroundColor: "white" }}
+                            style={{ 
+                                position: "sticky", 
+                                zIndex: 1, 
+                                top: 0, 
+                                marginBottom: "2rem", 
+                                backgroundColor: "white",
+                                width: "100%"
+                            }}
                         >
                             <EditorContext.Provider value={editorContext}>
                                 <Editorheader handleClose={handleClose} handleUpdate={handleUpdate} />
@@ -292,6 +300,7 @@ export default function Page({ params: { slug } }: { params: { slug: string[] } 
                                 user={profileData.data}
                                 updateContent={(content, title) => {
                                     updateContent(content, title);
+                                    // console.log(content, title);
                                 }}
                                 provider={provider}
                             />

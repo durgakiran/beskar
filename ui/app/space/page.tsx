@@ -2,10 +2,11 @@
 import { useEffect, useState } from "react";
 import AddSpace from "@components/addSpace";
 import { useRouter } from "next/navigation";
-import { Avatar, Button, Card, Spinner } from "flowbite-react";
+import { Avatar, Button, Card, Spinner, Flex, Box, Heading, Text } from "@radix-ui/themes";
 import Slate from "@components/slate";
 import { signIn } from "next-auth/react";
 import { Response, useGet } from "@http/hooks";
+import Link from "next/link";
 
 
 interface Data {
@@ -50,60 +51,58 @@ export default function Page() {
     }, [error]);
 
     return (
-        <>
-            <div className="py-2.5 md:mx-8">
-                <div className="mb-8 flex justify-between">
-                    <div>
-                        <h1 className="text-xl font-bold tracking-tight text-gray-900 dark:text-white">
-                            Your Spaces
-                        </h1>
-                        <h6 className="text-sm font-bold tracking-tight text-gray-500 dark:text-white">Organize your content across spaces</h6>
-                    </div>
-                    <div>
-                        <Button size={"sm"} onClick={() => {
-                            setIsOpen(true);
-                        }}>Add Space +</Button>
-                    </div>
-                </div>
-                <div className="flex flex-col items-center">
-                    {
-                        loading ? <Spinner aria-label="loading data" size="xl" /> : null
-                    }
-                </div>
-                <div className="flex flex-wrap space-x-4">
-                    {
-                        !loading && tableData.length ? (
-                            tableData.map((item, i) => {
-                                return (
-                                    <Card href={`/space/${item.id}`} className="w-48" key={i}>
-                                        <div className="flex flex-col items-center">
-                                            <Avatar size="lg" placeholderInitials={item.name.charAt(0).toUpperCase()} />
-                                        </div>
-                                        <div className="text-center">
-                                            <h2 className="text-lg font-bold tracking-tight text-gray-900 dark:text-white">
-                                                {item.name}
-                                            </h2>
-                                            <p className="font-normal text-gray-700 dark:text-gray-400">
-                                                About the space
-                                            </p>
-                                        </div>
-                                    </Card>
-                                )
-                            })
-                        ) : null
-                    }
-                    {
-                        !loading && !tableData.length ? (<Slate title={BLANK_STATE_HEADING} />) : null
-                    }
-                </div>
-                <AddSpace
-                    isOpen={isOpen}
-                    setIsOpen={(open: boolean) => {
-                        setIsOpen(open);
-                        fetchData();
-                    }}
-                />
-            </div>
-        </>
+        <Box p="4" className="md:mx-8">
+            <Flex justify="between" align="start" mb="6">
+                <Box>
+                    <Heading size="6" mb="1">
+                        Your Spaces
+                    </Heading>
+                    <Text size="2" color="gray">Organize your content across spaces</Text>
+                </Box>
+                <Button size="2" onClick={() => setIsOpen(true)}>
+                    Add Space +
+                </Button>
+            </Flex>
+            
+            {loading && (
+                <Flex align="center" justify="center" py="8">
+                    <Spinner size="3" />
+                </Flex>
+            )}
+            
+            <Flex wrap="wrap" gap="4">
+                {!loading && tableData.length > 0 && tableData.map((item, i) => (
+                    <Link href={`/space/${item.id}`} key={i}>
+                        <Card style={{ width: '192px', cursor: 'pointer' }}>
+                            <Flex direction="column" align="center" gap="3">
+                                <Avatar 
+                                    size="5" 
+                                    fallback={item.name.charAt(0).toUpperCase()} 
+                                    radius="full"
+                                />
+                                <Box style={{ textAlign: 'center' }}>
+                                    <Text size="3" weight="bold" as="div" mb="1">
+                                        {item.name}
+                                    </Text>
+                                    <Text size="2" color="gray">
+                                        About the space
+                                    </Text>
+                                </Box>
+                            </Flex>
+                        </Card>
+                    </Link>
+                ))}
+            </Flex>
+            
+            {!loading && !tableData.length && <Slate title={BLANK_STATE_HEADING} />}
+            
+            <AddSpace
+                isOpen={isOpen}
+                setIsOpen={(open: boolean) => {
+                    setIsOpen(open);
+                    fetchData();
+                }}
+            />
+        </Box>
     );
 }

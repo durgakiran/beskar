@@ -3,6 +3,7 @@ import { TextAlign } from '@tiptap/extension-text-align';
 import { Underline } from '@tiptap/extension-underline';
 import { TextStyle } from '@tiptap/extension-text-style';
 import { Color } from '@tiptap/extension-color';
+import { Highlight } from '@tiptap/extension-highlight';
 import { Collaboration } from '@tiptap/extension-collaboration';
 import { CollaborationCaret } from '@tiptap/extension-collaboration-caret';
 import { Typography } from '@tiptap/extension-typography';
@@ -31,9 +32,15 @@ import {
 } from '../nodes/block-nodes';
 import { NoteBlock } from '../nodes/NoteBlock';
 import { ImageBlock } from '../nodes/ImageBlock';
+import { MathBlock } from '../nodes/MathBlock';
+import { TableOfContents } from '../nodes/TableOfContents';
+import { InlineMath } from './math-inline';
 
 export { CustomAttributes };
 export { Table, TableCell, TableHeader, TableRow } from '../nodes/table';
+export { MathBlock };
+export { InlineMath };
+export { TableOfContents };
 export * from '../nodes/table/utils';
 export { NoteBlock } from '../nodes/NoteBlock';
 export * from '../nodes/note/utils';
@@ -91,6 +98,9 @@ export function getExtensions(options: GetExtensionsOptions = {}): Extensions {
     BlockDetailsContent,
     NoteBlock, // Custom note block with themes and styling
     ImageBlock, // Custom image block with upload and resize
+    MathBlock, // Custom math block for LaTeX formulas
+    TableOfContents, // Auto-generated table of contents
+    InlineMath, // Inline math formulas within text
     ImagePasteDrop.configure({
       imageHandler,
     }),
@@ -101,6 +111,9 @@ export function getExtensions(options: GetExtensionsOptions = {}): Extensions {
     Underline,
     TextStyle,
     Color,
+    Highlight.configure({
+      multicolor: true, // Allow multiple highlight colors
+    }),
     Typography, // Auto-convert text patterns like -> to →, (c) to ©, etc.
     Emoji.configure({
       emojis: gitHubEmojis, // Use extended GitHub emoji set (includes custom ones like :octocat:)

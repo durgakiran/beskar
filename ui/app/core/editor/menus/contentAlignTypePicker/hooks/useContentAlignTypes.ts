@@ -3,31 +3,31 @@ import { useMemo } from "react";
 import { ContentAlignTypePickerOption } from "../types";
 
 export const useContentAlignTypes = (editor: Editor) => {
-    const options = useMemo<Array<ContentAlignTypePickerOption>>(() => {
+    const options = useMemo(() => {
         return [
             {
                 label: "Left Align",
                 icon: "AlignLeft",
                 id: "alignleft",
-                disabled: () => !editor.can().setTextAlign("left"),
+                disabled: () => !(editor.can() as any).setTextAlign("left"),
                 isActive: () => editor.isActive({ textAlign: "left" }),
-                onClick: () => editor.chain().focus().setTextAlign("left").run(),
+                onClick: () => (editor.chain().focus() as any).setTextAlign("left").run(),
             },
             {
                 label: "Center Align",
                 icon: "AlignCenter",
                 id: "aligncenter",
-                disabled: () => !editor.can().setTextAlign("center"),
+                disabled: () => !(editor.can() as any).setTextAlign("center"),
                 isActive: () => editor.isActive({ textAlign: "center" }),
-                onClick: () => editor.chain().focus().setTextAlign("center").run(),
+                onClick: () => (editor.chain().focus() as any).setTextAlign("center").run(),
             },
             {
                 label: "Right Align",
                 icon: "AlignRight",
                 id: "alignright",
-                disabled: () => !editor.can().setTextAlign("right"),
+                disabled: () => !(editor.can() as any).setTextAlign("right"),
                 isActive: () => editor.isActive({ textAlign: "right" }),
-                onClick: () => editor.chain().focus().setTextAlign("right").run(),
+                onClick: () => (editor.chain().focus() as any).setTextAlign("right").run(),
             },
         ];
     }, [editor]);

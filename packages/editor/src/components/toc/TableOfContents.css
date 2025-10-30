@@ -1,0 +1,170 @@
+/* Table of Contents Styles - Clean & Simple */
+
+.table-of-contents {
+  margin: 1.5rem 0;
+  position: relative;
+}
+
+/* Clean list styling */
+.toc-list {
+  list-style: none;
+  list-style-type: none;
+  margin: 0;
+  padding: 0;
+}
+
+.toc-item {
+  position: relative;
+  margin: 0;
+  padding: 0;
+  line-height: 1.8;
+  list-style: none;
+  list-style-type: none;
+}
+
+/* Explicitly hide default browser markers */
+.toc-item::marker {
+  display: none;
+  content: none;
+}
+
+.toc-container {
+  padding: var(--toc-padding, 0.5rem 0);
+  transition: all 0.15s ease;
+}
+
+/* Selected state - subtle outline only */
+.ProseMirror-selectednode .toc-container {
+  outline: 2px solid var(--toc-outline-selected, rgba(59, 130, 246, 0.3));
+  outline-offset: 4px;
+  border-radius: 4px;
+}
+
+/* Header - minimal styling */
+.toc-header {
+  margin-bottom: 0.75rem;
+}
+
+.toc-title {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--toc-title-color, rgba(0, 0, 0, 0.6));
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* Content */
+.toc-content {
+  max-height: var(--toc-max-height, none);
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* Bullet markers using ::before */
+.toc-item::before {
+  content: '';
+  display: inline-block;
+  width: 0.7rem;
+  margin-right: 0.5rem;
+  text-align: center;
+  color: var(--toc-bullet-color, currentColor);
+  font-size: 0.7rem;
+}
+
+/* Level 1: filled circle */
+.toc-level-1::before {
+  content: '●';
+}
+
+/* Level 2: hollow circle */
+.toc-level-2::before {
+  content: '○';
+  margin-left: 1.25rem;
+}
+
+/* Level 3: filled square */
+.toc-level-3::before {
+  content: '■';
+  margin-left: 2.5rem;
+}
+
+/* Level 4+: hollow square */
+.toc-level-4::before {
+  content: '□';
+  margin-left: 3.75rem;
+}
+
+.toc-level-5::before {
+  content: '□';
+  margin-left: 5rem;
+}
+
+.toc-level-6::before {
+  content: '□';
+  margin-left: 6.25rem;
+}
+
+/* Font weight per level */
+.toc-level-1 {
+  font-weight: 500;
+}
+
+.toc-level-2,
+.toc-level-3,
+.toc-level-4,
+.toc-level-5,
+.toc-level-6 {
+  font-weight: 400;
+}
+
+/* Link - clean blue clickable text */
+.toc-link {
+  cursor: pointer;
+  color: var(--toc-link-color, #2563eb);
+  transition: color 0.15s ease;
+}
+
+.toc-link:hover {
+  color: var(--toc-link-color-hover, #1d4ed8);
+  text-decoration: underline;
+}
+
+.toc-link:active {
+  color: var(--toc-link-color-active, #1e40af);
+}
+
+/* Empty state */
+.toc-empty {
+  padding: 2rem 1rem;
+  text-align: center;
+  color: var(--toc-empty-color, rgba(0, 0, 0, 0.5));
+  font-style: italic;
+  font-size: 0.875rem;
+}
+
+/* Dark mode support */
+.dark .ProseMirror-selectednode .toc-container {
+  outline-color: var(--toc-outline-selected-dark, rgba(96, 165, 250, 0.4));
+}
+
+.dark .toc-title {
+  color: var(--toc-title-color-dark, rgba(255, 255, 255, 0.6));
+}
+
+.dark .toc-link {
+  color: var(--toc-link-color-dark, #60a5fa);
+}
+
+.dark .toc-link:hover {
+  color: var(--toc-link-color-hover-dark, #93c5fd);
+}
+
+.dark .toc-link:active {
+  color: var(--toc-link-color-active-dark, #3b82f6);
+}
+
+.dark .toc-empty {
+  color: var(--toc-empty-color-dark, rgba(255, 255, 255, 0.5));
+}
+

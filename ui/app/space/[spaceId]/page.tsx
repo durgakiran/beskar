@@ -1,16 +1,17 @@
 'use client'
 
 import { Response, useGet } from "@http/hooks"
-import { Spinner } from "flowbite-react";
-import { useEffect } from "react";
+import { Spinner, Box, Heading, Text, Flex } from "@radix-ui/themes";
+import { use, useEffect } from "react";
 
 interface space {
     name: string;
     id: string;
 }
 
-export default function Page({ params }: { params: { spaceId: string } }) {
-    const [ { isLoading, data, errors }, fetchData ] = useGet<Response<space>>(`space/${params.spaceId}/details`);
+export default function Page({ params }: { params: Promise<{ spaceId: string }> }) {
+    const { spaceId } = use(params);
+    const [ { isLoading, data, errors }, fetchData ] = useGet<Response<space>>(`space/${spaceId}/details`);
 
     useEffect(() => {
         fetchData();
@@ -18,21 +19,23 @@ export default function Page({ params }: { params: { spaceId: string } }) {
 
     if (errors) {
         return (
-            <div>{errors.message}</div>
+            <Box p="4">
+                <Text color="red">{errors.message}</Text>
+            </Box>
         )
     }
 
     if (isLoading) {
         return (
-            <div><Spinner /></div>
+            <Flex align="center" justify="center" p="4">
+                <Spinner size="3" />
+            </Flex>
         )
     }
     
     return (
-        <div>
-            {
-                data && data.data ? <h1>{data.data.name}</h1> : null
-            }
-        </div>
+        <Box p="4">
+            {data && data.data && <Heading size="6">{data.data.name}</Heading>}
+        </Box>
     )
 }

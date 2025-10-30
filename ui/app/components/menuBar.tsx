@@ -1,7 +1,7 @@
 "use client"
 import { useGetCall } from "@http";
-import { Avatar, Dropdown, Navbar, Tooltip } from "flowbite-react";
-import Link from "next/link";
+import { Avatar, DropdownMenu, Flex, Box, Text, IconButton, Tooltip, Button, Link } from "@radix-ui/themes";
+// import Link from "next/link";
 import ModifiedIcon from "./modifiedIcon";
 
 interface UserInfo {
@@ -21,50 +21,84 @@ export default function MenuBar() {
     }
 
     return (
-        <Navbar fluid rounded className="fixed w-full bg-white z-50 shadow-sm">
-            <Navbar.Brand href="/">
-                <span className="self-center whitespace-nowrap text-xl font-semibold dark:text-white">TedEDox!</span>
-            </Navbar.Brand>
-            <div className="flex items-center space-x-4">
-                <Navbar.Collapse>
-                    <Navbar.Link href="/space" as={Link}>
-                        Spaces
-                    </Navbar.Link>
-                    {/* <Navbar.Link href="#">Pricing</Navbar.Link> */}
-                    <Navbar.Link href="#">Contact</Navbar.Link>
-                </Navbar.Collapse>
-                <div className="flex items-center gap-4">
-                    <Tooltip animation={false} content="Notifications">
-                        <a
-                            rel="noopener"
-                            href="/user/notifications"
-                            aria-label="Notifications"
-                            className="hidden rounded-lg p-2.5 text-gray-500 hover:bg-gray-100 focus:outline-none focus:ring-4 focus:ring-gray-200 lg:block dark:text-gray-300 dark:hover:bg-gray-700 dark:focus:ring-gray-700"
+        <Box className="fixed w-full bg-white z-50 shadow-sm border-b border-neutral-200" py="3" px="4">
+            <Flex align="center" justify="between">
+                <Link href="/" className="hover:opacity-80 transition-opacity">
+                    <Text size="5" weight="bold" className="text-primary-700">TedEDox</Text>
+                </Link>
+                <Flex align="center" gap="6">
+                    <Flex align="center" gap="5">
+                        <Link 
+                            href="/space" 
+                            underline="hover"
+                            className="text-neutral-700 hover:text-primary-700 font-medium transition-colors"
                         >
-                            <ModifiedIcon name="Bell" size={16} />
-                        </a>
-                    </Tooltip>
-                    <Dropdown
-                        arrowIcon={false}
-                        inline
-                        label={<Avatar alt="User settings" size="sm" placeholderInitials={res && res.data && res.data.name ? res.data.name.charAt(0).toUpperCase() : ""} rounded />}
-                    >
-                        {res && res.data ? (
-                            <>
-                                <Dropdown.Header>
-                                    <span className="block text-sm">{res.data.name}</span>
-                                    <span className="block truncate text-sm font-medium">{res.data.email}</span>
-                                </Dropdown.Header>
-                                <Dropdown.Item>Dashboard</Dropdown.Item>
-                                <Dropdown.Item>Settings</Dropdown.Item>
-                                <Dropdown.Divider />
-                                <Dropdown.Item onClick={() => handleLogout()}>Sign out</Dropdown.Item>
-                            </>
-                        ) : null}
-                    </Dropdown>
-                    <Navbar.Toggle />
-                </div>
-            </div>
-        </Navbar>
+                            Spaces
+                        </Link>
+                        <Link 
+                            href="#" 
+                            underline="hover"
+                            className="text-neutral-700 hover:text-primary-700 font-medium transition-colors"
+                        >
+                            Contact
+                        </Link>
+                    </Flex>
+                    <Flex align="center" gap="3">
+                        <Tooltip content="Notifications">
+                            <IconButton 
+                                variant="ghost" 
+                                asChild
+                                className="text-mauve-600 hover:text-primary-600 hover:bg-mauve-50"
+                            >
+                                <a
+                                    rel="noopener"
+                                    href="/user/notifications"
+                                    aria-label="Notifications"
+                                >
+                                    <ModifiedIcon name="Bell" size={16} />
+                                </a>
+                            </IconButton>
+                        </Tooltip>
+                        <DropdownMenu.Root>
+                            <DropdownMenu.Trigger>
+                                <IconButton 
+                                    variant="surface" 
+                                    radius="full" 
+                                    highContrast
+                                    className="hover:bg-mauve-50"
+                                >
+                                    <Avatar
+                                        size="2"
+                                        fallback={res && res.data && res.data.name ? res.data.name.charAt(0).toUpperCase() : "U"}
+                                        className="ring-2 ring-mauve-200"
+                                        style={{ cursor: "pointer" }}
+                                    />
+                                </IconButton>
+                            </DropdownMenu.Trigger>
+                            <DropdownMenu.Content className="bg-white border border-neutral-200 shadow-lg rounded-sm">
+                                {res && res.data ? (
+                                    <>
+                                        <Box px="2" py="2" className="border-b border-neutral-100">
+                                            <Text size="2" weight="bold" as="div" className="text-neutral-900">{res.data.name}</Text>
+                                            <Text size="1" as="div" className="text-neutral-500">{res.data.email}</Text>
+                                        </Box>
+                                        <DropdownMenu.Separator className="bg-neutral-200" />
+                                        <DropdownMenu.Item className="hover:bg-mauve-50 text-neutral-700">Dashboard</DropdownMenu.Item>
+                                        <DropdownMenu.Item className="hover:bg-mauve-50 text-neutral-700">Settings</DropdownMenu.Item>
+                                        <DropdownMenu.Separator className="bg-neutral-200" />
+                                        <DropdownMenu.Item 
+                                            onClick={() => handleLogout()}
+                                            className="hover:bg-error-50 text-error-600"
+                                        >
+                                            Sign out
+                                        </DropdownMenu.Item>
+                                    </>
+                                ) : null}
+                            </DropdownMenu.Content>
+                        </DropdownMenu.Root>
+                    </Flex>
+                </Flex>
+            </Flex>
+        </Box>
     );
 }

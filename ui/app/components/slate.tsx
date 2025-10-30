@@ -1,5 +1,5 @@
 'use client'
-import { Button } from "flowbite-react";
+import { Button, Flex, Heading } from "@radix-ui/themes";
 import { HiBookOpen } from "react-icons/hi";
 import React from "react";
 
@@ -13,22 +13,22 @@ interface ISlate {
 export default function Slate(props: ISlate) {
    
     return (
-        <div style={{
-            display: 'flex', 
-            flexDirection: 'column', 
-            justifyContent: 'flex-start', 
-            alignItems: 'center', 
-            height: '100vh',
-            textAlign: 'center', 
-            width: '100%' }}>
-            <div>
-                <HiBookOpen size="50" />
-            </div>
-            <h1>
-                {props.title}
-            </h1>
-            { props.description && <div></div> }
-            {props.primaryAction && <Button  size="md" onClick={props.primaryAction} >{props.primaryActionText}</Button> }
-        </div>
+        <Flex 
+            direction="column" 
+            align="center" 
+            justify="start" 
+            style={{ height: '100vh', width: '100%', textAlign: 'center' }}
+            gap="4"
+            pt="9"
+        >
+            <HiBookOpen size="50" />
+            <Heading size="6">{props.title}</Heading>
+            {props.description && <div>{props.description}</div>}
+            {props.primaryAction && (
+                <Button size="3" onClick={props.primaryAction}>
+                    {props.primaryActionText}
+                </Button>
+            )}
+        </Flex>
     )
 }

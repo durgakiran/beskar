@@ -1,1 +1,0 @@
-export { CustomAttributes } from "./globalAttributes/nodeId";

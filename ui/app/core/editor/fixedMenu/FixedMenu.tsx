@@ -1,5 +1,5 @@
 "use client";
-import { Button } from "flowbite-react";
+import { Button, IconButton, Flex, Separator } from "@radix-ui/themes";
 import { HiHome } from "react-icons/hi";
 import { LuUndo, LuRedo } from "react-icons/lu";
 import { useContext } from "react";
@@ -16,41 +16,66 @@ export default function FixedMenu({ handleClose, handleUpdate }: { handleClose: 
     }
 
     return (
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", maxWidth: "1024px" }}>
-            <div style={{ display: "flex", alignItems: "center" }}>
-                <div style={{ display: "flex", borderRight: "0.25px solid", paddingRight: "1em" }}>
-                    <Button outline color="transparent" size="xs" aria-label="home" onClick={() => console.log("Home clicked")}>
-                        <HiHome size="18" />
-                    </Button>
+        <Flex 
+            align="center" 
+            justify="between" 
+            py="3"
+            px="4"
+            gap="4"
+            style={{ 
+                width: "100%", 
+                maxWidth: "100%",
+                borderBottom: "1px solid var(--gray-6)",
+                minHeight: "52px"
+            }}
+        >
+            <Flex align="center" gap="4" style={{ flex: 1 }}>
+                <Flex align="center" gap="2" pr="4" style={{ borderRight: "1px solid var(--gray-6)", height: "32px" }}>
+                    <IconButton 
+                        variant="ghost" 
+                        size="2" 
+                        aria-label="home" 
+                        onClick={() => console.log("Home clicked")}
+                        style={{ height: "32px", width: "32px" }}
+                    >
+                        <HiHome size={18} />
+                    </IconButton>
+                    <IconButton 
+                        variant="ghost" 
+                        size="2" 
+                        onClick={() => editor.chain().undo().run()} 
+                        aria-label="undo"
+                        style={{ height: "32px", width: "32px" }}
+                    >
+                        <LuUndo size={18} />
+                    </IconButton>
+                    <IconButton 
+                        variant="ghost" 
+                        size="2" 
+                        onClick={() => editor.chain().redo().run()} 
+                        aria-label="redo"
+                        style={{ height: "32px", width: "32px" }}
+                    >
+                        <LuRedo size={18} />
+                    </IconButton>
+                </Flex>
 
-                    <Button outline color="transparent" size="xs" onClick={() => editor.chain().undo().run()} aria-label="undo">
-                        <LuUndo size="18" />
-                    </Button>
-                    <Button outline color="transparent" size="xs" onClick={() => editor.chain().redo().run()} aria-label="redo">
-                        <LuRedo size="18" />
-                    </Button>
-                </div>
-
-                <div style={{ display: "flex", borderRight: "0.25px solid", paddingLeft: "1rem", paddingRight: "1em" }}>
+                <Flex align="center" gap="2" px="4" style={{ borderRight: "1px solid var(--gray-6)", height: "32px" }}>
                     <ContentTypePicker editor={editor} />
-                </div>
-                <div style={{ display: "flex", borderRight: "0.25px solid", paddingLeft: "1rem", paddingRight: "1em" }}>
+                </Flex>
+                <Flex align="center" gap="2" px="4" style={{ borderRight: "1px solid var(--gray-6)", height: "32px" }}>
                     <FormatTypePicker editor={editor} />
-                </div>
-                <div style={{ display: "flex", borderRight: "0.25px solid", paddingLeft: "1rem", paddingRight: "1em" }}>
+                </Flex>
+                <Flex align="center" gap="2" px="4" style={{ height: "32px" }}>
                     <ContentAlignPicker editor={editor} />
-                </div>
-            </div>
-            <div style={{ display: "flex", alignItems: "center" }}>
-                <div style={{ paddingRight: "0.5rem" }}>
-                    <Button color="black" onClick={handleUpdate}>Update</Button>
-                </div>
-                <div style={{ paddingRight: "0.5rem" }}>
-                    <Button color="gray" onClick={handleClose} style={{ backgroundColor: "transparent", border: "none" }}>
-                        Close
-                    </Button>
-                </div>
-            </div>
-        </div>
+                </Flex>
+            </Flex>
+            <Flex align="center" gap="3">
+                <Button size="2" onClick={handleUpdate}>Update</Button>
+                <Button size="2" variant="ghost" color="gray" onClick={handleClose}>
+                    Close
+                </Button>
+            </Flex>
+        </Flex>
     );
 }

@@ -30,6 +30,8 @@ export const BlockId = Extension.create<BlockIdOptions>({
         'detailsContent',
         'noteBlock',
         'imageBlock',
+        'mathBlock',
+        'tableOfContents',
       ],
     };
   },

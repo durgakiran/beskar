@@ -1,7 +1,7 @@
 'use client'
 import { Response, usePost } from "@http/hooks";
-import { Button, Label, Modal, TextInput } from "flowbite-react";
-import { MouseEvent, useCallback, useEffect, useRef, useState } from "react";
+import { Button, Dialog, TextField, Flex, Text } from "@radix-ui/themes";
+import { MouseEvent, useCallback, useEffect, useState } from "react";
 
 
 interface IAddSpace {
@@ -20,8 +20,6 @@ interface Data {
 export default function AddSpace({ isOpen, setIsOpen }: IAddSpace) {
     const [name, setName] = useState('');
     const [{ data, errors: error, isLoading: loading }, mutateData] = usePost<Response<Data>, Payload>("space/create")
-    const spaceNameRef = useRef();
-
 
     const onDialogClose = useCallback(() => {
         setIsOpen(false);
@@ -43,30 +41,34 @@ export default function AddSpace({ isOpen, setIsOpen }: IAddSpace) {
     }, [data, loading])
 
     return (
-        <>
-            <Modal dismissible show={isOpen} onClose={() => onDialogClose()} initialFocus={spaceNameRef}>
-                <Modal.Header>Create new space.</Modal.Header>
-                <Modal.Body>
-                    <div>
-                        <div>
-                            <div className="mb-2 block">
-                                <Label htmlFor="name" value="Space name" />
-                            </div>
-                            <TextInput
-                                id="name"
-                                placeholder="Engineering"
-                                value={name}
-                                ref={spaceNameRef}
-                                onChange={(event) => setName(event.target.value)}
-                                required
-                            />
-                        </div>
-                        <div className="w-full mt-6 flex-row-reverse">
-                            <Button onClick={handleSubmit} isProcessing={loading} disabled={loading}>create</Button>
-                        </div>
-                    </div>
-                </Modal.Body>
-            </Modal>
-        </>
+        <Dialog.Root open={isOpen} onOpenChange={setIsOpen}>
+            <Dialog.Content size="2" maxWidth="450px">
+                <Dialog.Title>Create new space</Dialog.Title>
+                <Flex direction="column" gap="4">
+                    <label>
+                        <Text as="div" size="2" mb="1" weight="bold">
+                            Space name
+                        </Text>
+                        <TextField.Root
+                            id="name"
+                            placeholder="Engineering"
+                            value={name}
+                            onChange={(event) => setName(event.target.value)}
+                            required
+                        />
+                    </label>
+                    <Flex gap="3" mt="4" justify="end">
+                        <Dialog.Close>
+                            <Button variant="soft" color="gray">
+                                Cancel
+                            </Button>
+                        </Dialog.Close>
+                        <Button onClick={handleSubmit} loading={loading} disabled={loading}>
+                            Create
+                        </Button>
+                    </Flex>
+                </Flex>
+            </Dialog.Content>
+        </Dialog.Root>
     )
 }

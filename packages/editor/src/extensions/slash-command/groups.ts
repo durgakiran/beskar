@@ -102,6 +102,26 @@ export const GROUPS: Group[] = [
         },
       },
       {
+        name: 'mathBlock',
+        label: 'Math Formula',
+        icon: '∑',
+        description: 'Add a LaTeX math formula',
+        aliases: ['latex', 'equation', 'formula', 'math'],
+        action: (editor) => {
+          editor.chain().focus().setMathBlock().run();
+        },
+      },
+      {
+        name: 'tableOfContents',
+        label: 'Table of Contents',
+        icon: '📑',
+        description: 'Insert a table of contents',
+        aliases: ['toc', 'contents', 'index'],
+        action: (editor) => {
+          editor.chain().focus().setTableOfContents().run();
+        },
+      },
+      {
         name: 'table',
         label: 'Table',
         icon: '⊞',
