@@ -1,8 +1,10 @@
 import { useState, useCallback } from 'react';
-import { Editor, BubbleMenu, BubbleMenuButton, TableFloatingMenu, TextFormattingMenu } from '@beskar/editor';
+import { Editor, TableFloatingMenu, TextFormattingMenu } from '@beskar/editor';
 import type { TiptapEditor, ImageAPIHandler } from '@beskar/editor';
+// Import Radix UI styles first, then editor styles so editor can use Radix variables
 import '@beskar/editor/styles.css';
 import './App.css';
+import { Button } from '@radix-ui/themes';
 
 const initialContent = {
   type: 'doc',
@@ -285,12 +287,13 @@ function App() {
               Last saved: {lastSaved.toLocaleTimeString()}
             </span>
           )}
-          <button
+          <Button
             onClick={() => setIsEditable(!isEditable)}
             className="toggle-button"
+            variant="soft"
           >
             {isEditable ? '👁️ View Mode' : '✏️ Edit Mode'}
-          </button>
+          </Button>
         </div>
       </header>
 

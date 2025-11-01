@@ -20,14 +20,13 @@ export const BlockId = Extension.create<BlockIdOptions>({
         'paragraph',
         'bulletList',
         'orderedList',
+        'taskList',
         'blockquote',
         'codeBlock',
         'codeBlockLowlight',
         'table',
         'horizontalRule',
-        'details',
-        'detailsSummary',
-        'detailsContent',
+        'details', // Only details should be a block, not detailsSummary/detailsContent
         'noteBlock',
         'imageBlock',
         'mathBlock',
@@ -83,7 +82,7 @@ export const BlockId = Extension.create<BlockIdOptions>({
       const $pos = doc.resolve(pos);
       for (let i = $pos.depth; i > 0; i--) {
         const node = $pos.node(i);
-        if (node.type.name === 'bulletList' || node.type.name === 'orderedList' || node.type.name === 'listItem') {
+        if (node.type.name === 'bulletList' || node.type.name === 'orderedList' || node.type.name === 'taskList' || node.type.name === 'listItem' || node.type.name === 'taskItem') {
           return true;
         }
       }
@@ -109,7 +108,7 @@ export const BlockId = Extension.create<BlockIdOptions>({
 
                 // Check if node is inside a table or list (but not if it IS a table or list)
                 const isInTable = node.type.name !== 'table' && isInsideTable(view.state.doc, pos);
-                const isInList = node.type.name !== 'bulletList' && node.type.name !== 'orderedList' && isInsideList(view.state.doc, pos);
+                const isInList = node.type.name !== 'bulletList' && node.type.name !== 'orderedList' && node.type.name !== 'taskList' && isInsideList(view.state.doc, pos);
 
                 // If node is inside a table/list and has a blockId, remove it
                 if ((isInTable || isInList) && node.attrs.blockId) {
@@ -168,7 +167,7 @@ export const BlockId = Extension.create<BlockIdOptions>({
 
             // Check if node is inside a table or list (but not if it IS a table or list)
             const isInTable = node.type.name !== 'table' && isInsideTable(newState.doc, pos);
-            const isInList = node.type.name !== 'bulletList' && node.type.name !== 'orderedList' && isInsideList(newState.doc, pos);
+            const isInList = node.type.name !== 'bulletList' && node.type.name !== 'orderedList' && node.type.name !== 'taskList' && isInsideList(newState.doc, pos);
 
             // If node is inside a table/list and has a blockId, remove it
             if ((isInTable || isInList) && node.attrs.blockId) {

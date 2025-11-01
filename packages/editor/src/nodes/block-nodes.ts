@@ -14,6 +14,7 @@ import { HorizontalRule } from '@tiptap/extension-horizontal-rule';
 import { Details, DetailsContent, DetailsSummary } from '@tiptap/extension-details';
 import { ListItem } from '@tiptap/extension-list-item';
 import { mergeAttributes } from '@tiptap/core';
+import { Plugin, PluginKey } from '@tiptap/pm/state';
 import { createLowlight, common } from 'lowlight';
 
 export const BlockHeading = Heading.extend({
@@ -272,17 +273,107 @@ export const BlockDetails = Details.extend({
 
     return ['details', mergeAttributes(this.options.HTMLAttributes, HTMLAttributes, blockAttrs), 0];
   },
+
+  addProseMirrorPlugins() {
+    return [
+      ...(this.parent?.() || []),
+      new Plugin({
+        key: new PluginKey('detailsEnterHandler'),
+        props: {
+          handleKeyDown: (view, event) => {
+            // Only handle Enter key
+            if (event.key !== 'Enter') {
+              return false;
+            }
+
+            const { state, dispatch } = view;
+            const { selection, doc } = state;
+            const { $from } = selection;
+
+            // Check if we're inside a details node
+            let detailsNode = null;
+            let detailsPos = -1;
+            
+            for (let depth = $from.depth; depth > 0; depth--) {
+              const node = $from.node(depth);
+              if (node.type.name === 'details') {
+                detailsNode = node;
+                detailsPos = $from.before(depth);
+                break;
+              }
+            }
+
+            if (!detailsNode) {
+              return false;
+            }
+
+            // Check if details is closed (not open)
+            const detailsElement = view.nodeDOM(detailsPos) as HTMLElement;
+            const isOpen = detailsElement?.classList.contains(this.options.openClassName) || 
+                          detailsElement?.hasAttribute('open');
+
+            // If details is open, allow default behavior
+            if (isOpen) {
+              return false;
+            }
+
+            // If details is closed and cursor is at the end of summary
+            // Check if we're in the summary node
+            let inSummary = false;
+            for (let depth = $from.depth; depth > 0; depth--) {
+              const node = $from.node(depth);
+              if (node.type.name === 'detailsSummary') {
+                inSummary = true;
+                break;
+              }
+            }
+
+            if (!inSummary) {
+              return false;
+            }
+
+            // Check if we're at the end of the summary
+            const summaryNode = $from.node();
+            const isAtEnd = $from.parentOffset === summaryNode.content.size;
+
+            if (isAtEnd) {
+              // Exit details block and create a new paragraph after it
+              event.preventDefault();
+              
+              const posAfterDetails = detailsPos + detailsNode.nodeSize;
+              
+              // Use editor commands to create paragraph after details
+              const editor = this.editor;
+              if (editor) {
+                editor.chain()
+                  .setTextSelection(posAfterDetails)
+                  .insertContent({ type: 'paragraph', content: [] })
+                  .focus()
+                  .run();
+              }
+
+              return true;
+            }
+
+            return false;
+          },
+        },
+      }),
+    ];
+  },
 });
 
 export const BlockDetailsSummary = DetailsSummary.extend({
+  // Do NOT add blockId to summary - it's part of the details block, not a separate block
   renderHTML({ HTMLAttributes }) {
     return ['summary', mergeAttributes(this.options.HTMLAttributes, HTMLAttributes), 0];
   },
 });
 
 export const BlockDetailsContent = DetailsContent.extend({
+  // Do NOT add blockId to content - it's part of the details block, not a separate block
   renderHTML({ HTMLAttributes }) {
-    return ['div', mergeAttributes(this.options.HTMLAttributes, HTMLAttributes), 0];
+    return ['div', mergeAttributes(this.options.HTMLAttributes, HTMLAttributes, { class: 'details-content' }), 0];
   },
 });
 

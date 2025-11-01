@@ -5,11 +5,16 @@
 .bubble-menu-content {
   display: flex;
   gap: 2px;
-  background: #1a1a1a;
+  background: var(--editor-bg-secondary, #1a1a1a);
   border-radius: 8px;
   padding: 4px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15), 0 0 0 1px var(--editor-border-subtle, rgba(0, 0, 0, 0.1));
   animation: bubbleMenuFadeIn 0.2s ease-out;
+}
+
+.dark .bubble-menu-content {
+  background: var(--editor-bg-secondary, #1a1a1a);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3), 0 0 0 1px var(--editor-border-subtle, rgba(255, 255, 255, 0.1));
 }
 
 @keyframes bubbleMenuFadeIn {
@@ -32,19 +37,19 @@
   background: transparent;
   border: none;
   border-radius: 4px;
-  color: #fff;
+  color: var(--editor-text-primary, #fff);
   cursor: pointer;
   transition: all 0.15s ease;
   font-size: 16px;
 }
 
 .bubble-menu-button:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--editor-bg-hover, rgba(255, 255, 255, 0.1));
 }
 
 .bubble-menu-button.is-active {
-  background: rgba(255, 255, 255, 0.2);
-  color: #60a5fa;
+  background: var(--editor-bg-active, rgba(255, 255, 255, 0.2));
+  color: var(--editor-accent-4, #7dd3fc);
 }
 
 .bubble-menu-button:active {
@@ -59,7 +64,7 @@
 .bubble-menu-separator {
   width: 1px;
   height: 24px;
-  background-color: rgba(255, 255, 255, 0.2);
+  background-color: var(--editor-border-subtle, rgba(255, 255, 255, 0.2));
   margin: 0 4px;
 }
 

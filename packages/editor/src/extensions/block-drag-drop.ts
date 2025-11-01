@@ -35,14 +35,13 @@ export const BlockDragDrop = Extension.create<BlockDragDropOptions>({
         "paragraph",
         "bulletList",
         "orderedList",
+        "taskList",
         "blockquote",
         "codeBlock",
         "codeBlockLowlight",
         "table",
         "horizontalRule",
-        "details",
-        "detailsSummary",
-        "detailsContent",
+        "details", // Only details should be a block, not detailsSummary/detailsContent
         "noteBlock",
         "imageBlock",
         "mathBlock",
@@ -222,6 +221,18 @@ export const BlockDragDrop = Extension.create<BlockDragDropOptions>({
               if (innerWrapper) {
                 // Use inner container for better visual alignment
                 blockElement = innerWrapper;
+              }
+            }
+            
+            // For details blocks, ensure we're using the details element, not the summary
+            if (blockInfo.node.type.name === 'details') {
+              // Make sure we're targeting the actual <details> element
+              // The summary is a child, so we want to position relative to the parent details
+              if (!blockElement.tagName || blockElement.tagName.toLowerCase() !== 'details') {
+                const detailsElement = blockElement.closest('details') || blockElement.querySelector('details') || blockElement;
+                if (detailsElement && detailsElement !== blockElement) {
+                  blockElement = detailsElement as HTMLElement;
+                }
               }
             }
             

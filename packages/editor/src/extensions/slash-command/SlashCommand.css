@@ -1,8 +1,8 @@
 /* Slash Command Menu Styles */
 
 .slash-command-menu {
-  background: white;
-  border: 1px solid rgba(0, 0, 0, 0.1);
+  background: var(--editor-bg-primary, white);
+  border: 1px solid var(--editor-border-subtle, rgba(0, 0, 0, 0.1));
   border-radius: 0.5rem;
   box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
   max-height: min(80vh, 24rem);
@@ -13,7 +13,7 @@
 .slash-command-empty {
   padding: 1rem;
   text-align: center;
-  color: rgba(0, 0, 0, 0.5);
+  color: var(--editor-text-tertiary, rgba(0, 0, 0, 0.5));
   font-size: 0.875rem;
 }
 
@@ -29,7 +29,7 @@
   padding: 0.25rem 0.5rem;
   font-size: 0.75rem;
   font-weight: 600;
-  color: rgba(0, 0, 0, 0.5);
+  color: var(--editor-text-tertiary, rgba(0, 0, 0, 0.5));
   text-transform: uppercase;
   letter-spacing: 0.025em;
 }
@@ -54,11 +54,11 @@
 }
 
 .slash-command-item:hover {
-  background-color: rgba(0, 0, 0, 0.05);
+  background-color: var(--editor-bg-hover, rgba(0, 0, 0, 0.05));
 }
 
 .slash-command-item.selected {
-  background-color: rgba(0, 0, 0, 0.1);
+  background-color: var(--editor-selection-bg, color-mix(in srgb, var(--editor-accent, #0ea5e9) 10%, transparent));
 }
 
 .slash-command-icon {
@@ -68,7 +68,7 @@
   width: 1.5rem;
   height: 1.5rem;
   border-radius: 0.25rem;
-  background-color: rgba(0, 0, 0, 0.05);
+  background-color: var(--editor-bg-tertiary, rgba(0, 0, 0, 0.05));
   font-size: 0.875rem;
   font-weight: 600;
   flex-shrink: 0;
@@ -83,49 +83,21 @@
 .slash-command-label {
   font-size: 0.8125rem;
   font-weight: 500;
-  color: rgba(0, 0, 0, 0.9);
+  color: var(--editor-text-primary, rgba(0, 0, 0, 0.9));
   line-height: 1.2;
 }
 
 .slash-command-description {
   font-size: 0.6875rem;
-  color: rgba(0, 0, 0, 0.5);
+  color: var(--editor-text-tertiary, rgba(0, 0, 0, 0.5));
   margin-top: 0.0625rem;
   line-height: 1.3;
 }
 
-/* Dark mode */
+/* Dark mode - uses theme variables which are already overridden */
 .dark .slash-command-menu {
-  background: rgb(31, 31, 31);
-  border-color: rgba(255, 255, 255, 0.1);
-}
-
-.dark .slash-command-empty {
-  color: rgba(255, 255, 255, 0.5);
-}
-
-.dark .slash-command-group-title {
-  color: rgba(255, 255, 255, 0.5);
-}
-
-.dark .slash-command-item:hover {
-  background-color: rgba(255, 255, 255, 0.05);
-}
-
-.dark .slash-command-item.selected {
-  background-color: rgba(255, 255, 255, 0.1);
-}
-
-.dark .slash-command-icon {
-  background-color: rgba(255, 255, 255, 0.1);
-}
-
-.dark .slash-command-label {
-  color: rgba(255, 255, 255, 0.9);
-}
-
-.dark .slash-command-description {
-  color: rgba(255, 255, 255, 0.5);
+  background: var(--editor-bg-primary, rgb(31, 31, 31));
+  border-color: var(--editor-border-subtle, rgba(255, 255, 255, 0.1));
 }
 
 /* Tippy theme for slash command */
@@ -139,35 +111,35 @@
 }
 
 .tippy-box[data-theme~='slash-command'][data-placement^='top'] > .tippy-arrow::before {
-  border-top-color: white;
+  border-top-color: var(--editor-bg-primary, white);
 }
 
 .tippy-box[data-theme~='slash-command'][data-placement^='bottom'] > .tippy-arrow::before {
-  border-bottom-color: white;
+  border-bottom-color: var(--editor-bg-primary, white);
 }
 
 .tippy-box[data-theme~='slash-command'][data-placement^='left'] > .tippy-arrow::before {
-  border-left-color: white;
+  border-left-color: var(--editor-bg-primary, white);
 }
 
 .tippy-box[data-theme~='slash-command'][data-placement^='right'] > .tippy-arrow::before {
-  border-right-color: white;
+  border-right-color: var(--editor-bg-primary, white);
 }
 
 /* Dark mode tippy theme */
 .dark .tippy-box[data-theme~='slash-command'][data-placement^='top'] > .tippy-arrow::before {
-  border-top-color: rgb(31, 31, 31);
+  border-top-color: var(--editor-bg-primary, rgb(31, 31, 31));
 }
 
 .dark .tippy-box[data-theme~='slash-command'][data-placement^='bottom'] > .tippy-arrow::before {
-  border-bottom-color: rgb(31, 31, 31);
+  border-bottom-color: var(--editor-bg-primary, rgb(31, 31, 31));
 }
 
 .dark .tippy-box[data-theme~='slash-command'][data-placement^='left'] > .tippy-arrow::before {
-  border-left-color: rgb(31, 31, 31);
+  border-left-color: var(--editor-bg-primary, rgb(31, 31, 31));
 }
 
 .dark .tippy-box[data-theme~='slash-command'][data-placement^='right'] > .tippy-arrow::before {
-  border-right-color: rgb(31, 31, 31);
+  border-right-color: var(--editor-bg-primary, rgb(31, 31, 31));
 }
 

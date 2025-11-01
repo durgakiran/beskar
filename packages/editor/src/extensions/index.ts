@@ -7,6 +7,8 @@ import { Highlight } from '@tiptap/extension-highlight';
 import { Collaboration } from '@tiptap/extension-collaboration';
 import { CollaborationCaret } from '@tiptap/extension-collaboration-caret';
 import { Typography } from '@tiptap/extension-typography';
+import { TaskList, TaskItem } from '@tiptap/extension-list';
+import { ListItem } from '@tiptap/extension-list-item';
 import type { Extensions } from '@tiptap/core';
 import type { CollaborationConfig, ImageAPIHandler } from '../types';
 import { CustomAttributes } from './custom-attributes';
@@ -91,11 +93,14 @@ export function getExtensions(options: GetExtensionsOptions = {}): Extensions {
     BlockCodeBlockLowlight, // Use code block with syntax highlighting
     BlockBulletList,
     BlockOrderedList,
-    BlockListItem,
+    BlockListItem, // Used by BlockBulletList and BlockOrderedList
+    ListItem, // Required by TaskItem (TaskItem extends ListItem)
     BlockHorizontalRule,
     BlockDetails,
     BlockDetailsSummary,
     BlockDetailsContent,
+    TaskList, // Task list with checkboxes (requires TaskItem)
+    TaskItem, // Task item (checkbox item) - extends ListItem
     NoteBlock, // Custom note block with themes and styling
     ImageBlock, // Custom image block with upload and resize
     MathBlock, // Custom math block for LaTeX formulas

@@ -10,7 +10,7 @@ import { uploadImageData } from "../http/uploadImageData";
 import Collaboration from "@tiptap/extension-collaboration";
 import CollaborationCursor from "@tiptap/extension-collaboration-caret";
 import { HocuspocusProvider } from "@hocuspocus/provider";
-import { getExtensions, Editor as EditorBeskar, BubbleMenu, BubbleMenuButton, TableFloatingMenu, type ImageAPIHandler, TiptapEditor, TextFormattingMenu } from "@durgakiran/editor";
+import { getExtensions, Editor as EditorBeskar, TableFloatingMenu, type ImageAPIHandler, TiptapEditor, TextFormattingMenu } from "@durgakiran/editor";
 
 interface TipTapProps {
     setEditorContext: (editorContext: Editor) => void;
@@ -157,15 +157,7 @@ export function TipTap({ setEditorContext, user, content, pageId, id, editable =
             {editable ? (
                 <EditorBeskar imageHandler={imageHandler} extensions={collaborationExtensions()} editable={editable} placeholder="Start typing..." onUpdate={editedDataFn} onReady={handleReady} />
             ) : (
-                <EditorBeskar
-                    imageHandler={imageHandler}
-                    initialContent={content}
-                    extensions={[]}
-                    editable={editable}
-                    placeholder="Start typing..."
-                    onUpdate={editedDataFn}
-                    onReady={handleReady}
-                />
+                <EditorBeskar imageHandler={imageHandler} initialContent={content} extensions={[]} editable={editable} placeholder="Start typing..." onUpdate={editedDataFn} onReady={handleReady} />
             )}
             {editor && editable && (
                 <>

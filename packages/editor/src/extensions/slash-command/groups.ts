@@ -165,6 +165,40 @@ export const GROUPS: Group[] = [
           editor.chain().focus().setHorizontalRule().run();
         },
       },
+      {
+        name: 'details',
+        label: 'Details',
+        icon: '▼',
+        description: 'Create a collapsible details block',
+        aliases: ['collapse', 'summary', 'expand', 'dropdown'],
+        action: (editor) => {
+          editor.chain().focus().insertContent({
+            type: 'details',
+            attrs: { open: true },
+            content: [
+              {
+                type: 'detailsSummary',
+                content: [
+                  {
+                    type: 'text',
+                    text: 'This is a summary',
+                    marks: [{ type: 'bold' }],
+                  },
+                ],
+              },
+              {
+                type: 'detailsContent',
+                content: [
+                  {
+                    type: 'paragraph',
+                    content: [{ type: 'text', text: 'Surprise!' }],
+                  },
+                ],
+              },
+            ],
+          }).run();
+        },
+      },
     ],
   },
 ];

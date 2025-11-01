@@ -40,7 +40,6 @@ export const SlashCommand = Extension.create<SlashCommandOptions>({
         },
         allow: ({ state, range }: { state: any; range: any }) => {
           const $from = state.doc.resolve(range.from);
-          const isRootDepth = $from.depth === 1;
           const isParagraph = $from.parent.type.name === 'paragraph';
           const isStartOfNode = $from.parent.textContent?.charAt(0) === '/';
 
@@ -49,7 +48,27 @@ export const SlashCommand = Extension.create<SlashCommandOptions>({
           );
           const isValidAfterContent = !afterContent?.endsWith('  ');
 
-          return isRootDepth && isParagraph && isStartOfNode && isValidAfterContent;
+          // Check if we're at root depth OR inside detailsContent
+          let isAllowedDepth = false;
+          if ($from.depth === 1) {
+            // Root level paragraph
+            isAllowedDepth = true;
+          } else {
+            // Check if we're inside detailsContent (which is allowed)
+            for (let depth = $from.depth; depth > 0; depth--) {
+              const node = $from.node(depth);
+              if (node.type.name === 'detailsContent') {
+                isAllowedDepth = true;
+                break;
+              }
+              // Stop checking if we reach root or a non-details node
+              if (depth === 1 || node.type.name === 'details') {
+                break;
+              }
+            }
+          }
+
+          return isAllowedDepth && isParagraph && isStartOfNode && isValidAfterContent;
         },
         items: ({ query, editor }: { query: string; editor: any }) => {
           const withFilteredCommands = GROUPS.map((group) => ({
