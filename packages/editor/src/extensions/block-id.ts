@@ -1,6 +1,7 @@
 import { Extension } from '@tiptap/core';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
 import { blockDragDropKey } from './block-drag-drop';
+import { Fragment, Slice } from '@tiptap/pm/model';
 
 export interface BlockIdOptions {
   types: string[];
@@ -22,8 +23,7 @@ export const BlockId = Extension.create<BlockIdOptions>({
         'orderedList',
         'taskList',
         'blockquote',
-        'codeBlock',
-        'codeBlockLowlight',
+        'codeBlock', // CodeBlockLowlight extends CodeBlock, so it uses 'codeBlock' as node type
         'table',
         'horizontalRule',
         'details', // Only details should be a block, not detailsSummary/detailsContent
@@ -38,7 +38,7 @@ export const BlockId = Extension.create<BlockIdOptions>({
   addGlobalAttributes() {
     return [
       {
-        // Exclude 'table' from global rendering - it handles its own wrapper rendering
+        // Exclude 'table' and 'codeBlock' from global rendering - codeBlock handles its own wrapper rendering
         types: this.options.types.filter(type => type !== 'table'),
         attributes: {
           blockId: {
@@ -92,7 +92,42 @@ export const BlockId = Extension.create<BlockIdOptions>({
     return [
       new Plugin({
         key: new PluginKey('blockId'),
+
+        props: {
+          transformPasted: (slice: Slice) => {
+            if (!slice || !slice.content) {
+              return slice;
+            }
         
+            // Recursively remove blockId from nodes
+            const removeBlockIds = (node: any): any => {
+              if (node.attrs?.blockId && this.options.types.includes(node.type.name)) {
+                const newAttrs = { ...node.attrs, blockId: null };
+                
+                let newContent = node.content;
+                console.log("node in removeBlockIds", node);
+                if (node.content && node.content.content) {
+                  newContent = node.content.content.map((child: any) => removeBlockIds(child));
+                }
+                
+                return node.type.create(newAttrs, Fragment.from(newContent), node.marks);
+              }
+              console.log('node in removeBlockIds', node);
+              if (node.content && node.content.content) {
+                const newContent = node.content.content.map((child: any) => removeBlockIds(child));
+                if (newContent !== node.content) {
+                  return node.type.create(node.attrs, Fragment.from(newContent), node.marks);
+                }
+              }
+              
+              return node;
+            };
+        
+            const processedNodes = slice.content.content.map((node: any) => removeBlockIds(node));
+            const processedFragment = Fragment.from(processedNodes);
+            return new Slice(processedFragment, slice.openStart, slice.openEnd);
+          },
+        },
         view: () => {
           return {
             update: (view) => {
@@ -160,14 +195,16 @@ export const BlockId = Extension.create<BlockIdOptions>({
           let modified = false;
 
           newState.doc.descendants((node, pos) => {
+            const nodeType = node.type.name;
+            
             // Only process block-level nodes that are in our types list
-            if (!this.options.types.includes(node.type.name)) {
+            if (!this.options.types.includes(nodeType)) {
               return;
             }
 
             // Check if node is inside a table or list (but not if it IS a table or list)
-            const isInTable = node.type.name !== 'table' && isInsideTable(newState.doc, pos);
-            const isInList = node.type.name !== 'bulletList' && node.type.name !== 'orderedList' && node.type.name !== 'taskList' && isInsideList(newState.doc, pos);
+            const isInTable = nodeType !== 'table' && isInsideTable(newState.doc, pos);
+            const isInList = nodeType !== 'bulletList' && nodeType !== 'orderedList' && nodeType !== 'taskList' && isInsideList(newState.doc, pos);
 
             // If node is inside a table/list and has a blockId, remove it
             if ((isInTable || isInList) && node.attrs.blockId) {

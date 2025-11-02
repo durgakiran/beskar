@@ -6,7 +6,6 @@
 import { Heading } from '@tiptap/extension-heading';
 import { Paragraph } from '@tiptap/extension-paragraph';
 import { Blockquote } from '@tiptap/extension-blockquote';
-import { CodeBlock } from '@tiptap/extension-code-block';
 import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight';
 import { BulletList } from '@tiptap/extension-bullet-list';
 import { OrderedList } from '@tiptap/extension-ordered-list';
@@ -99,34 +98,7 @@ export const BlockBlockquote = Blockquote.extend({
   },
 });
 
-export const BlockCodeBlock = CodeBlock.extend({
-  addAttributes() {
-    return {
-      ...this.parent?.(),
-      blockId: {
-        default: null,
-        parseHTML: (element) => element.getAttribute('data-block-id'),
-        renderHTML: (attributes) => {
-          if (!attributes.blockId) return {};
-          return { 'data-block-id': attributes.blockId };
-        },
-      },
-    };
-  },
 
-  renderHTML({ node, HTMLAttributes }) {
-    const blockAttrs = node.attrs.blockId ? {
-      'data-block-id': node.attrs.blockId,
-      class: 'block-node',
-    } : {};
-
-    return [
-      'pre',
-      mergeAttributes(this.options.HTMLAttributes, HTMLAttributes, blockAttrs),
-      ['code', { class: node.attrs.language ? `language-${node.attrs.language}` : null }, 0],
-    ];
-  },
-});
 
 export const BlockBulletList = BulletList.extend({
   addAttributes() {
@@ -230,14 +202,17 @@ export const BlockCodeBlockLowlight = CodeBlockLowlight
     },
 
     renderHTML({ node, HTMLAttributes }) {
+      console.log('node', node.attrs);
+      console.log('HTMLAttributes', HTMLAttributes);
       const blockAttrs = node.attrs.blockId ? {
         'data-block-id': node.attrs.blockId,
         class: 'block-node',
       } : {};
+      const { blockId: blockIdFromHTML, ...cleanHTMLAttributes } = HTMLAttributes as any;
 
       return [
         'pre',
-        mergeAttributes(this.options.HTMLAttributes, HTMLAttributes, blockAttrs),
+        mergeAttributes(cleanHTMLAttributes, { class: 'code-block-wrapper' }),
         ['code', { class: node.attrs.language ? `language-${node.attrs.language}` : null }, 0],
       ];
     },

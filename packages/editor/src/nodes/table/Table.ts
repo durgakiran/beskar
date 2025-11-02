@@ -131,10 +131,6 @@ export const Table = TiptapTable.extend({
                 const showRowNumbers = node.attrs.showRowNumbers;
                 const dom = view.nodeDOM(pos);
                 
-                console.log('[Table Plugin] Updating table wrapper at pos', pos, {
-                  blockId,
-                  showRowNumbers,
-                });
                 
                 if (dom) {
                   // The dom might be the wrapper or the table itself
@@ -153,11 +149,9 @@ export const Table = TiptapTable.extend({
                     if (showRowNumbers) {
                       wrapper.classList.add('show-row-numbers');
                       wrapper.setAttribute('data-row-numbers', 'true');
-                      console.log('[Table Plugin] Added show-row-numbers class');
                     } else {
                       wrapper.classList.remove('show-row-numbers');
                       wrapper.removeAttribute('data-row-numbers');
-                      console.log('[Table Plugin] Removed show-row-numbers class');
                     }
                   }
                 }

@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { Editor, TableFloatingMenu, TextFormattingMenu } from '@beskar/editor';
+import { Editor, TableFloatingMenu, TextFormattingMenu, CodeBlockFloatingMenu } from '@beskar/editor';
 import type { TiptapEditor, ImageAPIHandler } from '@beskar/editor';
 // Import Radix UI styles first, then editor styles so editor can use Radix variables
 import '@beskar/editor/styles.css';
@@ -359,6 +359,9 @@ function App() {
             
             {/* Table Floating Menu */}
             <TableFloatingMenu editor={editor} />
+            
+            {/* Code Block Floating Menu */}
+            <CodeBlockFloatingMenu editor={editor} />
           </>
         )}
       </main>

@@ -22,7 +22,6 @@ import {
   BlockHeading,
   BlockParagraph,
   BlockBlockquote,
-  BlockCodeBlock,
   BlockCodeBlockLowlight,
   BlockBulletList,
   BlockOrderedList,

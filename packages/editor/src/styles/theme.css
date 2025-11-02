@@ -83,11 +83,11 @@
   --editor-error: var(--red-9, #ef4444);
   --editor-info: var(--editor-accent);
   
-  /* Code Block Colors (dark theme, not affected by main theme) */
-  --editor-code-bg: #0d0d0d;
-  --editor-code-text: #fff;
-  --editor-code-inline-bg: #171717;
-  --editor-code-inline-text: #fff;
+  /* Code Block Colors (light theme) */
+  --editor-code-bg: #fafafa;
+  --editor-code-text: #1f1f1f;
+  --editor-code-inline-bg: #f0f0f0;
+  --editor-code-inline-text: #1f1f1f;
   
   /* Caret Color */
   --editor-caret: var(--editor-text-primary);

@@ -64,12 +64,19 @@ export const NoteBlock = Node.create({
 
   renderHTML({ node, HTMLAttributes }) {
     // Exclude blockId from serialization (it should be unique per block)
-    const { blockId, ...attributesWithoutBlockId } = HTMLAttributes as any;
+    // Extract blockId from both node.attrs and HTMLAttributes to ensure it's not serialized
+    const { blockId: blockIdFromAttrs, ...nodeAttrsWithoutBlockId } = node.attrs;
+    const { blockId: blockIdFromHTML, ...cleanHTMLAttributes } = HTMLAttributes as any;
+    
+    // Also remove data-block-id and block-node class if they exist in HTMLAttributes (following Table pattern)
+    delete cleanHTMLAttributes['data-block-id'];
+    delete cleanHTMLAttributes['draggable'];
+    delete cleanHTMLAttributes['class']; // Remove block-node class if present
     
     return [
       'div',
       mergeAttributes(
-        attributesWithoutBlockId,
+        cleanHTMLAttributes,
         {
           'data-type': 'note-block',
           'data-icon': node.attrs.icon,
