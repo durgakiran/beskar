@@ -13,6 +13,9 @@ export { RowDragHandle } from './components/table/RowDragHandle';
 export { ColumnDragHandle } from './components/table/ColumnDragHandle';
 export { ColorPicker } from './components/table/ColorPicker';
 
+// Code Block Components
+export { CodeBlockFloatingMenu } from './components/codeblock/CodeBlockFloatingMenu';
+
 // Note Block Components
 export { NoteBlock } from './nodes/NoteBlock';
 export * from './nodes/note/utils';

@@ -7,6 +7,8 @@ import { Highlight } from '@tiptap/extension-highlight';
 import { Collaboration } from '@tiptap/extension-collaboration';
 import { CollaborationCaret } from '@tiptap/extension-collaboration-caret';
 import { Typography } from '@tiptap/extension-typography';
+import { TaskList, TaskItem } from '@tiptap/extension-list';
+import { ListItem } from '@tiptap/extension-list-item';
 import type { Extensions } from '@tiptap/core';
 import type { CollaborationConfig, ImageAPIHandler } from '../types';
 import { CustomAttributes } from './custom-attributes';
@@ -20,7 +22,6 @@ import {
   BlockHeading,
   BlockParagraph,
   BlockBlockquote,
-  BlockCodeBlock,
   BlockCodeBlockLowlight,
   BlockBulletList,
   BlockOrderedList,
@@ -91,11 +92,14 @@ export function getExtensions(options: GetExtensionsOptions = {}): Extensions {
     BlockCodeBlockLowlight, // Use code block with syntax highlighting
     BlockBulletList,
     BlockOrderedList,
-    BlockListItem,
+    BlockListItem, // Used by BlockBulletList and BlockOrderedList
+    ListItem, // Required by TaskItem (TaskItem extends ListItem)
     BlockHorizontalRule,
     BlockDetails,
     BlockDetailsSummary,
     BlockDetailsContent,
+    TaskList, // Task list with checkboxes (requires TaskItem)
+    TaskItem, // Task item (checkbox item) - extends ListItem
     NoteBlock, // Custom note block with themes and styling
     ImageBlock, // Custom image block with upload and resize
     MathBlock, // Custom math block for LaTeX formulas
@@ -141,7 +145,13 @@ export function getExtensions(options: GetExtensionsOptions = {}): Extensions {
         user: {
           id: collaboration.user.id,
           name: collaboration.user.name,
-          color: collaboration.user.color || `#${Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0')}`,
+          color: collaboration.user.color || (() => {
+            // Generate lighter colors (RGB values 150-255) for better text visibility
+            const r = Math.floor(Math.random() * 106) + 150; // 150-255
+            const g = Math.floor(Math.random() * 106) + 150; // 150-255
+            const b = Math.floor(Math.random() * 106) + 150; // 150-255
+            return `#${[r, g, b].map(x => x.toString(16).padStart(2, '0')).join('')}`;
+          })(),
         },
       }),
     ];

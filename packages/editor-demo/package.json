@@ -12,6 +12,7 @@
   "dependencies": {
     "@beskar/editor": "file:../editor",
     "@hocuspocus/provider": "^3.0.8-rc.0",
+    "@radix-ui/themes": "^3.2.1",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "yjs": "^13.6.18"

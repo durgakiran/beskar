@@ -35,14 +35,13 @@ export const BlockDragDrop = Extension.create<BlockDragDropOptions>({
         "paragraph",
         "bulletList",
         "orderedList",
+        "taskList",
         "blockquote",
         "codeBlock",
         "codeBlockLowlight",
         "table",
         "horizontalRule",
-        "details",
-        "detailsSummary",
-        "detailsContent",
+        "details", // Only details should be a block, not detailsSummary/detailsContent
         "noteBlock",
         "imageBlock",
         "mathBlock",
@@ -141,13 +140,16 @@ export const BlockDragDrop = Extension.create<BlockDragDropOptions>({
             element: HTMLElement
           ): BlockInfo | null => {
             try {
-              // Special handling for tableWrapper - use the actual table element
+              // Special handling for tableWrapper and code-block-wrapper - find by blockId
               let targetElement = element;
               if (element.classList.contains('tableWrapper')) {
                 const table = element.querySelector('table');
                 if (table) {
                   targetElement = table as HTMLElement;
                 }
+              } else if (element.classList.contains('code-block-wrapper')) {
+                // For code blocks, use the wrapper itself
+                targetElement = element;
               }
               
               // Special handling for React-rendered blocks (like imageBlock)
@@ -222,6 +224,18 @@ export const BlockDragDrop = Extension.create<BlockDragDropOptions>({
               if (innerWrapper) {
                 // Use inner container for better visual alignment
                 blockElement = innerWrapper;
+              }
+            }
+            
+            // For details blocks, ensure we're using the details element, not the summary
+            if (blockInfo.node.type.name === 'details') {
+              // Make sure we're targeting the actual <details> element
+              // The summary is a child, so we want to position relative to the parent details
+              if (!blockElement.tagName || blockElement.tagName.toLowerCase() !== 'details') {
+                const detailsElement = blockElement.closest('details') || blockElement.querySelector('details') || blockElement;
+                if (detailsElement && detailsElement !== blockElement) {
+                  blockElement = detailsElement as HTMLElement;
+                }
               }
             }
             
@@ -443,6 +457,7 @@ export const BlockDragDrop = Extension.create<BlockDragDropOptions>({
                 if (blockElement.classList.contains('tableWrapper')) {
                   clone.querySelectorAll('.grip-column, .grip-row').forEach(el => el.remove());
                 }
+                // Code blocks don't have grip handles, no special handling needed
                 
                 document.body.appendChild(clone);
                 event.dataTransfer.setDragImage(clone, 0, 0);
@@ -862,31 +877,7 @@ export const BlockDragDrop = Extension.create<BlockDragDropOptions>({
           transactions.forEach((tr, trIndex) => {
             if (!tr.docChanged) return;
             
-            console.log(`\n[TABLE MONITOR] Transaction ${trIndex}:`, {
-              steps: tr.steps.length,
-              docChanged: tr.docChanged,
-              meta: {
-                addToHistory: tr.getMeta('addToHistory'),
-                skipFixTables: tr.getMeta('skipFixTables'),
-                blockDragDrop: tr.getMeta(blockDragDropKey),
-              }
-            });
             
-            // Log each step in detail
-            tr.steps.forEach((step: any, stepIndex: number) => {
-              console.log(`  [TABLE MONITOR] Step ${stepIndex}:`, {
-                type: step.constructor.name,
-                from: step.from,
-                to: step.to,
-                slice: step.slice ? {
-                  size: step.slice.size,
-                  openStart: step.slice.openStart,
-                  openEnd: step.slice.openEnd,
-                  content: step.slice.content.toJSON(),
-                } : undefined,
-                stepJSON: step.toJSON ? step.toJSON() : 'N/A',
-              });
-            });
             
             // Track table structure before and after
             const oldTables: any[] = [];
@@ -909,14 +900,6 @@ export const BlockDragDrop = Extension.create<BlockDragDropOptions>({
               }
             });
             
-            // Compare structures
-            if (oldTables.length !== newTables.length) {
-              console.log('[TABLE MONITOR] Table count changed:', {
-                before: oldTables.length,
-                after: newTables.length
-              });
-            }
-            
             // Check for structural changes
             oldTables.forEach((oldTable, i) => {
               const newTable = newTables[i];
@@ -932,16 +915,6 @@ export const BlockDragDrop = Extension.create<BlockDragDropOptions>({
                   const oldHeaders = oldFirstRowCells.filter((c: any) => c.type === 'tableHeader').length;
                   const newHeaders = newFirstRowCells.filter((c: any) => c.type === 'tableHeader').length;
                   
-                  if (oldHeaders !== newHeaders) {
-                    console.error('[TABLE MONITOR] HEADER CORRUPTION DETECTED at pos', oldTable.pos, ':', {
-                      before: { headers: oldHeaders, cells: oldFirstRowCells.length },
-                      after: { headers: newHeaders, cells: newFirstRowCells.length },
-                      beforeStructure: oldFirstRowCells.map((c: any) => c.type),
-                      afterStructure: newFirstRowCells.map((c: any) => c.type)
-                    });
-                    console.log('[TABLE MONITOR] Full table before:', JSON.stringify(oldTable.structure, null, 2));
-                    console.log('[TABLE MONITOR] Full table after:', JSON.stringify(newTable.structure, null, 2));
-                  }
                 }
               }
             });

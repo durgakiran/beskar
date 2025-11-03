@@ -1,0 +1,140 @@
+/**
+ * Beskar Editor Theme System
+ * 
+ * Uses CSS variables that map to Radix UI theme tokens
+ * Consumers can override these variables to match their Radix UI theme
+ * 
+ * Default values use Radix UI's neutral grays and a blue accent
+ * These will automatically adapt to the consumer's Radix UI theme
+ */
+
+/* ========================================
+   Root Theme Variables
+   ======================================== */
+
+:root, .beskar-editor {
+  /* Accent Colors - maps to Radix UI accent colors */
+  /* Radix UI Theme component automatically sets --accent-1 through --accent-12 */
+  /* based on accentColor prop (e.g., "plum", "indigo", "violet") */
+  --editor-accent-1: var(--accent-1, #f0f9ff);
+  --editor-accent-2: var(--accent-2, #e0f2fe);
+  --editor-accent-3: var(--accent-3, #bae6fd);
+  --editor-accent-4: var(--accent-4, #7dd3fc);
+  --editor-accent-5: var(--accent-5, #38bdf8);
+  --editor-accent-6: var(--accent-6, #0ea5e9);
+  --editor-accent-7: var(--accent-7, #0284c7);
+  --editor-accent-8: var(--accent-8, #0369a1);
+  --editor-accent-9: var(--accent-9, #075985);
+  --editor-accent-10: var(--accent-10, #0c4a6e);
+  --editor-accent-11: var(--accent-11, #082f49);
+  --editor-accent-12: var(--accent-12, #0c1221);
+  
+  /* Primary accent color (accent-9) - automatically uses Radix UI's accent color */
+  --editor-accent: var(--accent-9, #075985);
+  --editor-accent-contrast: var(--accent-contrast, white);
+  
+  /* Gray/Neutral Colors - maps to Radix UI gray colors */
+  /* Radix UI Theme component automatically sets --gray-1 through --gray-12 */
+  /* based on grayColor prop (e.g., "mauve", "sage", "slate") */
+  --editor-gray-1: var(--gray-1, #fcfcfc);
+  --editor-gray-2: var(--gray-2, #f9f9f9);
+  --editor-gray-3: var(--gray-3, #f0f0f0);
+  --editor-gray-4: var(--gray-4, #e8e8e8);
+  --editor-gray-5: var(--gray-5, #e0e0e0);
+  --editor-gray-6: var(--gray-6, #d9d9d9);
+  --editor-gray-7: var(--gray-7, #cecece);
+  --editor-gray-8: var(--gray-8, #bbbbbb);
+  --editor-gray-9: var(--gray-9, #8d8d8d);
+  --editor-gray-10: var(--gray-10, #838383);
+  --editor-gray-11: var(--gray-11, #646464);
+  --editor-gray-12: var(--gray-12, #202020);
+  
+  /* Text Colors */
+  --editor-text-primary: var(--gray-12, #202020);
+  --editor-text-secondary: var(--gray-11, #646464);
+  --editor-text-tertiary: var(--gray-9, #8d8d8d);
+  --editor-text-disabled: var(--gray-8, #bbbbbb);
+  
+  /* Background Colors */
+  --editor-bg-primary: var(--gray-1, #fcfcfc);
+  --editor-bg-secondary: var(--gray-2, #f9f9f9);
+  --editor-bg-tertiary: var(--gray-3, #f0f0f0);
+  --editor-bg-hover: var(--gray-3, #f0f0f0);
+  --editor-bg-active: var(--gray-4, #e8e8e8);
+  
+  /* Border Colors */
+  --editor-border-subtle: var(--gray-4, #e8e8e8);
+  --editor-border-default: var(--gray-6, #d9d9d9);
+  --editor-border-strong: var(--gray-8, #bbbbbb);
+  
+  /* Selection & Focus */
+  --editor-selection-bg: color-mix(in srgb, var(--editor-accent) 20%, transparent);
+  --editor-selection-outline: var(--editor-accent);
+  --editor-focus-ring: color-mix(in srgb, var(--editor-accent) 60%, transparent);
+  
+  /* Drag & Drop */
+  --editor-drag-bg: color-mix(in srgb, var(--editor-accent) 5%, transparent);
+  --editor-drag-indicator: var(--editor-accent);
+  --editor-drag-handle-color: var(--gray-11, #646464);
+  
+  /* Semantic Colors */
+  --editor-success: var(--green-9, #22c55e);
+  --editor-warning: var(--yellow-9, #eab308);
+  --editor-error: var(--red-9, #ef4444);
+  --editor-info: var(--editor-accent);
+  
+  /* Code Block Colors (light theme) */
+  --editor-code-bg: #fafafa;
+  --editor-code-text: #1f1f1f;
+  --editor-code-inline-bg: #f0f0f0;
+  --editor-code-inline-text: #1f1f1f;
+  
+  /* Caret Color */
+  --editor-caret: var(--editor-text-primary);
+}
+
+/* Dark Mode Overrides */
+.dark,
+[data-theme="dark"] {
+  --editor-text-primary: var(--gray-12, #fcfcfc);
+  --editor-text-secondary: var(--gray-11, #c8c8c8);
+  --editor-text-tertiary: var(--gray-9, #8d8d8d);
+  --editor-text-disabled: var(--gray-7, #707070);
+  
+  --editor-bg-primary: var(--gray-2, #1a1a1a);
+  --editor-bg-secondary: var(--gray-3, #1f1f1f);
+  --editor-bg-tertiary: var(--gray-4, #262626);
+  --editor-bg-hover: var(--gray-4, #262626);
+  --editor-bg-active: var(--gray-5, #2e2e2e);
+  
+  --editor-border-subtle: var(--gray-4, #262626);
+  --editor-border-default: var(--gray-6, #3a3a3a);
+  --editor-border-strong: var(--gray-8, #525252);
+  
+  --editor-drag-handle-color: var(--gray-10, #999999);
+  
+  --editor-caret: var(--editor-text-primary);
+}
+
+/* ========================================
+   Theme Variant Examples
+   ========================================
+   
+   Consumers can override these in their own CSS:
+   
+   /* Plum Theme Example */
+   /* .plum-theme {
+     --editor-accent: var(--plum-9);
+     --editor-accent-contrast: white;
+   } */
+   
+   /* Indigo Theme Example */
+   /* .indigo-theme {
+     --editor-accent: var(--indigo-9);
+     --editor-accent-contrast: white;
+   } */
+/*   
+   Radix UI automatically provides --plum-*, --indigo-*, etc. variables
+   when using those themes, so consumers just need to map them.
+*/
+
