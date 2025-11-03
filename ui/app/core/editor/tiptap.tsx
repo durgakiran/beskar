@@ -10,7 +10,7 @@ import { uploadImageData } from "../http/uploadImageData";
 import Collaboration from "@tiptap/extension-collaboration";
 import CollaborationCursor from "@tiptap/extension-collaboration-caret";
 import { HocuspocusProvider } from "@hocuspocus/provider";
-import { getExtensions, Editor as EditorBeskar, TableFloatingMenu, type ImageAPIHandler, TiptapEditor, TextFormattingMenu } from "@durgakiran/editor";
+import { getExtensions, Editor as EditorBeskar, TableFloatingMenu, type ImageAPIHandler, TiptapEditor, TextFormattingMenu, CodeBlockFloatingMenu, ImageFloatingMenu } from "@durgakiran/editor";
 
 interface TipTapProps {
     setEditorContext: (editorContext: Editor) => void;
@@ -84,9 +84,13 @@ export function TipTap({ setEditorContext, user, content, pageId, id, editable =
                 user: {
                     id: user.id,
                     name: user.name,
-                    color: `#${Math.floor(Math.random() * 16777215)
-                        .toString(16)
-                        .padStart(6, "0")}`,
+                    color: (() => {
+                        // Generate lighter colors (RGB values 150-255) for better text visibility
+                        const r = Math.floor(Math.random() * 106) + 150; // 150-255
+                        const g = Math.floor(Math.random() * 106) + 150; // 150-255
+                        const b = Math.floor(Math.random() * 106) + 150; // 150-255
+                        return `#${[r, g, b].map(x => x.toString(16).padStart(2, '0')).join('')}`;
+                    })(),
                 },
             }),
         ];
@@ -182,6 +186,8 @@ export function TipTap({ setEditorContext, user, content, pageId, id, editable =
 
                     {/* Table Floating Menu */}
                     <TableFloatingMenu editor={editor} />
+
+                    <CodeBlockFloatingMenu editor={editor} />
                 </>
             )}
         </div>

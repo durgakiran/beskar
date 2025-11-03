@@ -145,7 +145,13 @@ export function getExtensions(options: GetExtensionsOptions = {}): Extensions {
         user: {
           id: collaboration.user.id,
           name: collaboration.user.name,
-          color: collaboration.user.color || `#${Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0')}`,
+          color: collaboration.user.color || (() => {
+            // Generate lighter colors (RGB values 150-255) for better text visibility
+            const r = Math.floor(Math.random() * 106) + 150; // 150-255
+            const g = Math.floor(Math.random() * 106) + 150; // 150-255
+            const b = Math.floor(Math.random() * 106) + 150; // 150-255
+            return `#${[r, g, b].map(x => x.toString(16).padStart(2, '0')).join('')}`;
+          })(),
         },
       }),
     ];

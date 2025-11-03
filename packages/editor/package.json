@@ -1,6 +1,6 @@
 {
   "name": "@durgakiran/editor",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "A rich text editor built on TipTap with Radix UI",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
