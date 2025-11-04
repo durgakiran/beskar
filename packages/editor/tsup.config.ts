@@ -24,9 +24,13 @@ export default defineConfig({
       const mathBlockCss = readFileSync(resolve(__dirname, 'src/components/math/MathBlock.css'), 'utf-8');
       const tocCss = readFileSync(resolve(__dirname, 'src/components/toc/TableOfContents.css'), 'utf-8');
       const textColorPickerCss = readFileSync(resolve(__dirname, 'src/components/TextColorPicker.css'), 'utf-8');
+      const commentPopupCss = readFileSync(resolve(__dirname, 'src/components/comments/CommentPopup.css'), 'utf-8');
+      const emojiPickerCss = readFileSync(resolve(__dirname, 'src/components/comments/EmojiPicker.css'), 'utf-8');
+      const deleteCommentModalCss = readFileSync(resolve(__dirname, 'src/components/comments/DeleteCommentModal.css'), 'utf-8');
+      const endOfPageCommentsCss = readFileSync(resolve(__dirname, 'src/components/comments/EndOfPageComments.css'), 'utf-8');
 
       // Combine and write to dist - theme.css must come first
-      const combinedCss = `${themeCss}\n\n${editorCss}\n\n/* Bubble Menu Styles */\n${bubbleMenuCss}\n\n/* Slash Command Styles */\n${slashCommandCss}\n\n/* Math Block Styles */\n${mathBlockCss}\n\n/* Table of Contents Styles */\n${tocCss}\n\n/* Text Color Picker Styles */\n${textColorPickerCss}`;
+      const combinedCss = `${themeCss}\n\n${editorCss}\n\n/* Bubble Menu Styles */\n${bubbleMenuCss}\n\n/* Slash Command Styles */\n${slashCommandCss}\n\n/* Math Block Styles */\n${mathBlockCss}\n\n/* Table of Contents Styles */\n${tocCss}\n\n/* Text Color Picker Styles */\n${textColorPickerCss}\n\n/* Comment Popup Styles */\n${commentPopupCss}\n\n/* Emoji Picker Styles */\n${emojiPickerCss}\n\n/* Delete Comment Modal Styles */\n${deleteCommentModalCss}\n\n/* End of Page Comments Styles */\n${endOfPageCommentsCss}`;
       writeFileSync(resolve(__dirname, 'dist/styles.css'), combinedCss);
       console.log('✓ CSS files combined successfully');
     } catch (error) {

@@ -109,3 +109,68 @@ type OutputDocumentToEdit struct {
 type Sequence interface {
 	GenerateNextVal() interface{}
 }
+
+// Comment types
+type Comment struct {
+	Id              uuid.UUID  `json:"id" db:"id"`
+	PageId          int64      `json:"pageId" db:"page_id"`
+	DocId           *int64     `json:"docId" db:"doc_id"`
+	AuthorId        uuid.UUID  `json:"authorId" db:"author_id"`
+	CommentType     string     `json:"commentType" db:"comment_type"`
+	ParentCommentId *uuid.UUID `json:"parentCommentId" db:"parent_comment_id"`
+	CommentText     string     `json:"commentText" db:"comment_text"`
+	Resolved        bool       `json:"resolved" db:"resolved"`
+	ResolvedAt      *time.Time `json:"resolvedAt" db:"resolved_at"`
+	ResolvedBy      *uuid.UUID `json:"resolvedBy" db:"resolved_by"`
+	CreatedAt       time.Time  `json:"createdAt" db:"created_at"`
+	UpdatedAt       time.Time  `json:"updatedAt" db:"updated_at"`
+	Edited          bool       `json:"edited" db:"edited"`
+	EditedAt        *time.Time `json:"editedAt" db:"edited_at"`
+}
+
+type CreateCommentRequest struct {
+	CommentType     string     `json:"commentType"`     // "inline" or "page_end"
+	ParentCommentId *uuid.UUID `json:"parentCommentId"` // Optional, for replies
+	CommentText     string     `json:"commentText"`
+	IsDraft         bool       `json:"isDraft"` // true if commenting on draft
+}
+
+type UpdateCommentRequest struct {
+	CommentText string `json:"commentText"`
+}
+
+type ResolveCommentRequest struct {
+	Resolved bool `json:"resolved"`
+}
+
+type CommentWithAuthor struct {
+	Comment
+	AuthorName  string `json:"authorName"`
+	AuthorEmail string `json:"authorEmail"`
+}
+
+// Comment Reaction types
+type CommentReaction struct {
+	Id        uuid.UUID `json:"id" db:"id"`
+	CommentId uuid.UUID `json:"commentId" db:"comment_id"`
+	UserId    uuid.UUID `json:"userId" db:"user_id"`
+	Emoji     string    `json:"emoji" db:"emoji"`
+	CreatedAt time.Time `json:"createdAt" db:"created_at"`
+}
+
+type ReactionWithUser struct {
+	CommentReaction
+	UserName  string `json:"userName"`
+	UserEmail string `json:"userEmail"`
+}
+
+type AddReactionRequest struct {
+	Emoji string `json:"emoji"`
+}
+
+type ReactionSummary struct {
+	Emoji      string   `json:"emoji"`
+	Count      int      `json:"count"`
+	UserIds    []string `json:"userIds"`    // User IDs who reacted
+	HasReacted bool     `json:"hasReacted"` // Whether current user has reacted
+}

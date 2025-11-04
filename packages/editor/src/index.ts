@@ -16,6 +16,20 @@ export { ColorPicker } from './components/table/ColorPicker';
 // Code Block Components
 export { CodeBlockFloatingMenu } from './components/codeblock/CodeBlockFloatingMenu';
 
+// Comment Components
+export { CommentThread } from './components/comments/CommentThread';
+export { CommentSidebar } from './components/comments/CommentSidebar';
+export { EndOfPageComments } from './components/comments/EndOfPageComments';
+export { CommentPopup } from './components/comments/CommentPopup';
+export { CommentClickHandler } from './components/comments/CommentHoverHandler';
+export type { CommentClickHandlerProps } from './components/comments/CommentHoverHandler';
+export { CreateCommentPopup } from './components/comments/CreateCommentPopup';
+export { CreateCommentHandler } from './components/comments/CreateCommentHandler';
+export { EmojiPicker } from './components/comments/EmojiPicker';
+export type { ReactionSummary } from './components/comments/EmojiPicker';
+export { DeleteCommentModal } from './components/comments/DeleteCommentModal';
+export type { Comment } from './components/comments/CommentThread';
+
 // Note Block Components
 export { NoteBlock } from './nodes/NoteBlock';
 export * from './nodes/note/utils';

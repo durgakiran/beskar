@@ -1,0 +1,169 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.20.xsd">
+
+    <changeSet id="32-create-comment-table" author="Kiran Kumar">
+        <preConditions onFail="MARK_RAN">
+            <sqlCheck expectedResult="0">
+                SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'comment' AND table_schema = 'core';
+            </sqlCheck>
+        </preConditions>
+        <comment>Create comment table for storing inline and end-of-page comments</comment>
+        <createTable tableName="comment" schemaName="core">
+            <column name="id" type="UUID" defaultValueComputed="gen_random_uuid()">
+                <constraints primaryKey="true" nullable="false" />
+            </column>
+            <column name="page_id" type="BIGINT">
+                <constraints nullable="false" />
+            </column>
+            <column name="doc_id" type="BIGINT" />
+            <column name="author_id" type="UUID">
+                <constraints nullable="false" />
+            </column>
+            <column name="comment_type" type="VARCHAR(20)">
+                <constraints nullable="false" />
+            </column>
+            <column name="parent_comment_id" type="UUID" />
+            <column name="comment_text" type="TEXT">
+                <constraints nullable="false" />
+            </column>
+            <column name="resolved" type="BOOLEAN" defaultValueBoolean="false" />
+            <column name="resolved_at" type="TIMESTAMP WITH TIME ZONE" />
+            <column name="resolved_by" type="UUID" />
+            <column name="created_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="now()" />
+            <column name="updated_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="now()" />
+            <column name="edited" type="BOOLEAN" defaultValueBoolean="false" />
+            <column name="edited_at" type="TIMESTAMP WITH TIME ZONE" />
+        </createTable>
+        
+        <addCheckConstraint 
+            tableName="comment" 
+            schemaName="core"
+            constraintName="comment_type_check"
+            checkCondition="comment_type IN ('inline', 'page_end')"
+        />
+        
+        <addCheckConstraint 
+            tableName="comment" 
+            schemaName="core"
+            constraintName="inline_comment_check"
+            checkCondition="(comment_type = 'inline') OR (comment_type = 'page_end')"
+        />
+        
+        <addForeignKeyConstraint 
+            baseTableSchemaName="core" 
+            baseTableName="comment" 
+            baseColumnNames="page_id" 
+            constraintName="comment_page_id_fkey"
+            referencedTableSchemaName="core" 
+            referencedTableName="page" 
+            referencedColumnNames="id" 
+            deleteCascade="true" 
+        />
+        
+        <addForeignKeyConstraint 
+            baseTableSchemaName="core" 
+            baseTableName="comment" 
+            baseColumnNames="doc_id" 
+            constraintName="comment_doc_id_fkey"
+            referencedTableSchemaName="core" 
+            referencedTableName="page_doc_map" 
+            referencedColumnNames="doc_id" 
+            onDelete="SET NULL"
+        />
+        
+        <addForeignKeyConstraint 
+            baseTableSchemaName="core" 
+            baseTableName="comment" 
+            baseColumnNames="parent_comment_id" 
+            constraintName="comment_parent_comment_id_fkey"
+            referencedTableSchemaName="core" 
+            referencedTableName="comment" 
+            referencedColumnNames="id" 
+            deleteCascade="true" 
+        />
+        
+        <createIndex tableName="comment" schemaName="core" indexName="idx_comment_page_id">
+            <column name="page_id" />
+        </createIndex>
+        
+        <createIndex tableName="comment" schemaName="core" indexName="idx_comment_doc_id">
+            <column name="doc_id" />
+        </createIndex>
+        
+        <createIndex tableName="comment" schemaName="core" indexName="idx_comment_author_id">
+            <column name="author_id" />
+        </createIndex>
+        
+        <createIndex tableName="comment" schemaName="core" indexName="idx_comment_parent_id">
+            <column name="parent_comment_id" />
+        </createIndex>
+    </changeSet>
+
+    <changeSet id="41-create-comment-reaction-table" author="Kiran Kumar">
+        <preConditions onFail="MARK_RAN">
+            <sqlCheck expectedResult="0">
+                SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'comment_reaction' AND table_schema = 'core';
+            </sqlCheck>
+        </preConditions>
+        <comment>Create comment_reaction table for emoji reactions</comment>
+        <createTable tableName="comment_reaction" schemaName="core">
+            <column name="id" type="UUID" defaultValueComputed="gen_random_uuid()">
+                <constraints primaryKey="true" nullable="false" />
+            </column>
+            <column name="comment_id" type="UUID">
+                <constraints nullable="false" />
+            </column>
+            <column name="user_id" type="UUID">
+                <constraints nullable="false" />
+            </column>
+            <column name="emoji" type="VARCHAR(50)">
+                <constraints nullable="false" />
+            </column>
+            <column name="created_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="now()">
+                <constraints nullable="false" />
+            </column>
+        </createTable>
+        
+        <addForeignKeyConstraint 
+            baseTableSchemaName="core" 
+            baseTableName="comment_reaction" 
+            baseColumnNames="comment_id" 
+            constraintName="comment_reaction_comment_id_fkey"
+            referencedTableSchemaName="core" 
+            referencedTableName="comment" 
+            referencedColumnNames="id" 
+            deleteCascade="true" 
+        />
+        
+        <addForeignKeyConstraint 
+            baseTableSchemaName="core" 
+            baseTableName="comment_reaction" 
+            baseColumnNames="user_id" 
+            constraintName="comment_reaction_user_id_fkey"
+            referencedTableSchemaName="auth" 
+            referencedTableName="users" 
+            referencedColumnNames="id" 
+            deleteCascade="restrict" 
+        />
+        
+        <createIndex tableName="comment_reaction" schemaName="core" indexName="idx_comment_reaction_comment_id">
+            <column name="comment_id" />
+        </createIndex>
+        
+        <createIndex tableName="comment_reaction" schemaName="core" indexName="idx_comment_reaction_user_id">
+            <column name="user_id" />
+        </createIndex>
+        
+        <createUniqueConstraint 
+            tableName="comment_reaction" 
+            schemaName="core"
+            constraintName="comment_reaction_unique_user_emoji"
+            columnNames="comment_id, user_id, emoji"
+        />
+    </changeSet>
+
+</databaseChangeLog>

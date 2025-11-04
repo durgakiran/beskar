@@ -110,6 +110,7 @@ export default function Page({ params }: { params: Promise<{ slug: string[] }> }
     };
 
     const updateContent = (content: any, title: string) => {
+        console.log('content', JSON.stringify(content));
         const payLoad: IPayload = {
             data: content,
             id: Number(slug[1]),

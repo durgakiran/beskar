@@ -53,4 +53,52 @@ const (
 	updateDraftDocument = `UPDATE core.content_draft SET data_binary = $2 WHERE doc_id = $1 RETURNING id`
 	getBinaryDocument   = `SELECT id, doc_id, data_binary as data FROM core.content_draft cd WHERE cd.doc_id = $1`
 	deleteDraftDocument = `DELETE FROM core.content_draft WHERE doc_id = $1`
+
+	// Comment queries
+	createCommentQuery = `INSERT INTO core.comment (page_id, doc_id, author_id, comment_type, parent_comment_id, comment_text) 
+		VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, page_id, doc_id, author_id, comment_type, parent_comment_id, 
+		comment_text, resolved, resolved_at, resolved_by, created_at, updated_at, edited, edited_at`
+
+	getCommentsQuery = `SELECT c.id, c.page_id, c.doc_id, c.author_id, c.comment_type, c.parent_comment_id, 
+		c.comment_text, c.resolved, c.resolved_at, c.resolved_by, c.created_at, c.updated_at, c.edited, c.edited_at
+		FROM core.comment c
+		WHERE c.page_id = $1 AND ($2::BIGINT IS NULL OR c.doc_id = $2 OR c.doc_id IS NULL)
+		ORDER BY c.created_at ASC`
+
+	getCommentByIdQuery = `SELECT c.id, c.page_id, c.doc_id, c.author_id, c.comment_type, c.parent_comment_id, 
+		c.comment_text, c.resolved, c.resolved_at, c.resolved_by, c.created_at, c.updated_at, c.edited, c.edited_at
+		FROM core.comment c
+		WHERE c.id = $1`
+
+	updateCommentQuery = `UPDATE core.comment SET comment_text = $1, updated_at = now(), edited = true, edited_at = now() 
+		WHERE id = $2 RETURNING id, page_id, doc_id, author_id, comment_type, parent_comment_id, 
+		comment_text, resolved, resolved_at, resolved_by, created_at, updated_at, edited, edited_at`
+
+	deleteCommentQuery = `DELETE FROM core.comment WHERE id = $1`
+
+	resolveCommentQuery = `UPDATE core.comment SET resolved = $1, resolved_at = CASE WHEN $1 = true THEN now() ELSE NULL END, 
+		resolved_by = CASE WHEN $1 = true THEN $3 ELSE NULL END, updated_at = now()
+		WHERE id = $2 RETURNING id, page_id, doc_id, author_id, comment_type, parent_comment_id, 
+		comment_text, resolved, resolved_at, resolved_by, created_at, updated_at, edited, edited_at`
+
+	getCurrentPublishedDocIdQuery = `SELECT doc_id FROM core.page_doc_map WHERE page_id = $1 AND draft = 0 ORDER BY version DESC LIMIT 1`
+
+	// Comment Reaction queries
+	addReactionQuery = `INSERT INTO core.comment_reaction (comment_id, user_id, emoji) 
+		VALUES ($1, $2, $3) 
+		ON CONFLICT (comment_id, user_id, emoji) DO NOTHING
+		RETURNING id, comment_id, user_id, emoji, created_at`
+
+	removeReactionQuery = `DELETE FROM core.comment_reaction 
+		WHERE comment_id = $1 AND user_id = $2 AND emoji = $3`
+
+	getReactionsQuery = `SELECT cr.id, cr.comment_id, cr.user_id, cr.emoji, cr.created_at
+		FROM core.comment_reaction cr
+		WHERE cr.comment_id = $1
+		ORDER BY cr.created_at ASC`
+
+	getReactionsByCommentIdsQuery = `SELECT cr.id, cr.comment_id, cr.user_id, cr.emoji, cr.created_at
+		FROM core.comment_reaction cr
+		WHERE cr.comment_id = ANY($1::UUID[])
+		ORDER BY cr.comment_id, cr.created_at ASC`
 )

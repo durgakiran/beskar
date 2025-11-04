@@ -36,9 +36,11 @@ import { ImageBlock } from '../nodes/ImageBlock';
 import { MathBlock } from '../nodes/MathBlock';
 import { TableOfContents } from '../nodes/TableOfContents';
 import { InlineMath } from './math-inline';
+import { Comment } from './comment';
 
 export { CustomAttributes };
 export { Table, TableCell, TableHeader, TableRow } from '../nodes/table';
+export { Comment } from './comment';
 export { MathBlock };
 export { InlineMath };
 export { TableOfContents };
@@ -118,6 +120,7 @@ export function getExtensions(options: GetExtensionsOptions = {}): Extensions {
     Highlight.configure({
       multicolor: true, // Allow multiple highlight colors
     }),
+    Comment, // Comment mark for inline comments
     Typography, // Auto-convert text patterns like -> to →, (c) to ©, etc.
     Emoji.configure({
       emojis: gitHubEmojis, // Use extended GitHub emoji set (includes custom ones like :octocat:)

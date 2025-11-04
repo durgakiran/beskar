@@ -12,17 +12,20 @@ import {
   FiItalic,
   FiUnderline,
   FiCode,
+  FiMessageCircle,
 } from 'react-icons/fi';
 
 export interface TextFormattingMenuProps {
   editor: Editor;
+  onAddComment?: () => void;
+  canComment?: boolean;
 }
 
 /**
  * Text Formatting Bubble Menu
  * Shows formatting options when text is selected
  */
-export function TextFormattingMenu({ editor }: TextFormattingMenuProps) {
+export function TextFormattingMenu({ editor, onAddComment, canComment = false }: TextFormattingMenuProps) {
   // Track current colors to trigger re-renders
   const [textColor, setTextColor] = useState<string | undefined>(undefined);
   const [highlightColor, setHighlightColor] = useState<string | undefined>(undefined);
@@ -125,6 +128,20 @@ export function TextFormattingMenu({ editor }: TextFormattingMenuProps) {
       >
         <span style={{ fontWeight: 'bold', fontSize: '18px' }}>∑</span>
       </BubbleMenuButton>
+
+      {/* Separator */}
+      {canComment && onAddComment && (
+        <>
+          <div className="bubble-menu-separator" />
+          {/* Add Comment */}
+          <BubbleMenuButton
+            onClick={onAddComment}
+            title="Add comment"
+          >
+            <FiMessageCircle />
+          </BubbleMenuButton>
+        </>
+      )}
     </BubbleMenu>
   );
 }

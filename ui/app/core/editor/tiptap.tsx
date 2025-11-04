@@ -44,6 +44,7 @@ export function TipTap({ setEditorContext, user, content, pageId, id, editable =
     countRenderRef.current += 1;
 
     const editedDataFn = (data: JSONContent) => {
+        console.log('editor data', data);
         setEditedData(data as any);
     };
 
