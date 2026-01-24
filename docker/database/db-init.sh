@@ -32,15 +32,15 @@ do
 done
 
 echo "postgres is ready, running migrations... 🥳"
-DB_HOST=postgres
-DB_PORT=5432
-DB_ROOT=postgres
-DB_ROOT_USER=admin
-DB_ROOT_PASS=password
-DB_BESKAR_ADMIN_USER=beskar_admin # run liquibase migrations with this user
-DB_BESKAR_ADMIN_USER_PWD=beskar_admin_pwd
-DB_BESKAR_APP_USER=app_user
-DB_BESKAR_APP_USER_PWD=app_user_pwd
+DB_HOST=${DB_HOST:-postgres}
+DB_PORT=${DB_PORT:-5432}
+DB_ROOT=${DB_ROOT:-postgres}
+DB_ROOT_USER=${DB_ROOT_USER:-admin}
+DB_ROOT_PASS=${DB_ROOT_PASS:-password}
+DB_BESKAR_ADMIN_USER=${DB_BESKAR_ADMIN_USER:-beskar_admin} # run liquibase migrations with this user
+DB_BESKAR_ADMIN_USER_PWD=${DB_BESKAR_ADMIN_USER_PWD:-beskar_admin_pwd}
+DB_BESKAR_APP_USER=${DB_BESKAR_APP_USER:-app_user}
+DB_BESKAR_APP_USER_PWD=${DB_BESKAR_APP_USER_PWD:-app_user_pwd}
 TAG=$(echo date +"%s")
 
 echo "running migrations with tag $TAG"

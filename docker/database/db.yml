@@ -9,12 +9,12 @@ services:
     volumes:
       - ./pgdata:/var/lib/postgresql/data
     environment:
-      - POSTGRES_PASSWORD=password
-      - POSTGRES_USER=admin
+      - POSTGRES_PASSWORD=${DB_ROOT_PASS:-password}
+      - POSTGRES_USER=${DB_ROOT_USER:-admin}
     networks:
       - dbnet
     healthcheck:
-      test: pg_isready -h localhost -p 5432 -U admin
+      test: pg_isready -h localhost -p 5432 -U ${DB_ROOT_USER:-admin}
       interval: 2s
       timeout: 5s
       retries: 15
