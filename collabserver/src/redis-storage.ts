@@ -5,8 +5,14 @@ export class RedisStorage {
     private redis: Redis;
     private readonly DOCUMENT_PREFIX = 'doc:';
 
-    constructor(redisUrl: string) {
-        this.redis = new Redis(redisUrl);
+    constructor(port: number, host: string, password: string) {
+        this.redis = new Redis(
+            {
+                port: port,
+                host: host,
+                password: password
+            }
+        );
     }
 
     async storeDocument(documentName: string, ydoc: Y.Doc): Promise<void> {

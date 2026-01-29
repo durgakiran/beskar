@@ -232,11 +232,49 @@ func updateDraftDoc(w http.ResponseWriter, r *http.Request) {
 	render.Render(w, r, core.NewSucessResponse(core.SUCCESS, PageId{Page: pageId}))
 }
 
+func deleteDocument(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	user, err := core.GetUserInfo(ctx)
+	if err != nil {
+		core.SendFailedReponse(w, r, http.StatusForbidden, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNAUTHORIZED])
+		return
+	}
+	if user.Id == "" {
+		core.SendFailedReponse(w, r, http.StatusForbidden, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNAUTHORIZED])
+		return
+	}
+	userId := user.AId
+	ownerId := uuid.MustParse(userId)
+	pageId := chi.URLParam(r, "pageId")
+	validSpaceUserPermissions := core.ValidateUserPagePermission(pageId, ownerId, "delete")
+	if !validSpaceUserPermissions {
+		core.SendFailedReponse(w, r, http.StatusForbidden, "Invalid space permissions")
+		return
+	}
+	page, err := strconv.ParseInt(pageId, 10, 64)
+	if err != nil {
+		core.SendFailedReponse(w, r, http.StatusInternalServerError, "Unable to delete document")
+		return
+	}
+	spaceId := uuid.MustParse(chi.URLParam(r, "spaceId"))
+	if spaceId == uuid.Nil {
+		core.SendFailedReponse(w, r, http.StatusBadRequest, "Invalid space ID")
+		return
+	}
+	rowsAffected, err := DeleteDocument(page, spaceId, ownerId)
+	if err != nil {
+		core.SendFailedReponse(w, r, http.StatusInternalServerError, "Unable to delete document")
+		return
+	}
+	core.SendSuccessResponse(w, r, http.StatusOK, rowsAffected)
+}
+
 func Router() *chi.Mux {
 	r := chi.NewRouter()
 	r.Use(core.Authenticated)
 	r.Get("/space/{spaceId}/page/{pageId}", getDocumentToView)
 	r.Get("/space/{spaceId}/page/{pageId}/edit", getDocumentToEdit)
+	r.Delete("/space/{spaceId}/page/{pageId}/delete", deleteDocument)
 	r.Post("/space/{spaceId}/page/create", saveDoc)
 	r.Put("/publish", publishDoc)
 	r.Put("/update", updateDraftDoc)

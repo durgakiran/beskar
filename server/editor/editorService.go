@@ -64,8 +64,15 @@ func (p Page) Publish() int64 {
 	return int64(0)
 }
 
-func (p Page) Delete() int64 {
-	return int64(0)
+func (p Page) Delete(conn pgx.Tx, ctx context.Context) (int64, error) {
+	var rowsAffected int64
+	command, err := conn.Exec(ctx, deleteDocumentQuery, p.Id, p.SpaceId)
+	rowsAffected = command.RowsAffected()
+	if err != nil {
+		logger().Error(err.Error())
+		return int64(0), err
+	}
+	return rowsAffected, nil
 }
 
 func (d Doc) Create(conn pgx.Tx, ctx context.Context) (int64, error) {
@@ -510,4 +517,27 @@ func GetDocumentToEdit(pageId int64, spaceId uuid.UUID, ownerId uuid.UUID) (Outp
 	outputDocument.Draft = isDraft
 	tx.Commit(ctx)
 	return outputDocument, nil
+}
+
+func DeleteDocument(pageId int64, spaceId uuid.UUID, ownerId uuid.UUID) (int64, error) {
+	connPool := core.GetPool()
+	ctx := context.Background()
+	conn, err := connPool.Acquire(ctx)
+	if err != nil {
+		logger().Error("Unable to start transaction" + err.Error())
+	}
+	tx, err := conn.Begin(ctx)
+	if err != nil {
+		defer conn.Release()
+		panic("Unable to start transaction" + err.Error())
+	}
+	defer tx.Rollback(ctx)
+	defer conn.Release()
+	page := Page{Id: pageId, SpaceId: spaceId, OwnerId: ownerId}
+	rowsAffected, err := page.Delete(tx, ctx)
+	if err != nil {
+		return rowsAffected, err
+	}
+	tx.Commit(ctx)
+	return rowsAffected, nil
 }

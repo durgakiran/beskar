@@ -1,7 +1,8 @@
 "use client";
+import ToastComponent from "@components/ui/ToastComponent";
 import { TipTap } from "@editor";
-import { useGet } from "@http/hooks";
-import { Button, Spinner, Tooltip, Flex, Box, IconButton, Text } from "@radix-ui/themes";
+import { useGet, useDelete } from "@http/hooks";
+import { Button, Spinner, Tooltip, Flex, Box, IconButton, Text, Dialog } from "@radix-ui/themes";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { use, useEffect, useRef, useState } from "react";
@@ -18,15 +19,24 @@ export default function Page({ params }: { params: Promise<{ page: string; space
     const workerRef = useRef<Worker>(null);
     const [workerInitiated, setWorkerInitiated] = useState(false);
     const [content, setContent] = useState();
+    const [showDeleteDialog, setShowDeleteDialog] = useState(false);
     const router = useRouter();
     const [{ isLoading, data, errors }, fetchData] = useGet<{ data: any; status: string }>(`editor/space/${spaceId}/page/${page}`);
     const [{ isLoading: loadingBreadCrum, data: dataBreadCrum, errors: breadCrumErrors }, getBreadCrum] = useGet<{ data: BreadCrumbData[]; status: string }>(`page/${page}/breadCrumbs`);
+    const [{ isLoading: loadingDelete, data: deleteData, errors: deleteErrors }, _deletePage] = useDelete<{ rowsAffected: number }, null>(`editor/space/${spaceId}/page/${page}/delete`);
 
     const editPage = () => {
         router.push(`/edit/${spaceId}/${page}`);
     };
 
-    const deletePage = () => {};
+    const deletePage = () => {
+        setShowDeleteDialog(true);
+    };
+
+    const confirmDelete = () => {
+        setShowDeleteDialog(false);
+        _deletePage(null);
+    };
 
     useEffect(() => {
         workerRef.current = new Worker("/workers/editor.js", { type: "module" });
@@ -64,6 +74,12 @@ export default function Page({ params }: { params: Promise<{ page: string; space
         }
     }, [data]);
 
+    useEffect(() => {
+        if (deleteData) {
+            router.push(`/space/${spaceId}`);
+        }
+    }, [deleteData]);
+
     if (isLoading || status === "loading") {
         return (
             <Flex align="center" justify="center" p="4">
@@ -72,6 +88,7 @@ export default function Page({ params }: { params: Promise<{ page: string; space
         );
     }
     return (
+        <>
         <Box className="min-h-screen mx-auto bg-white">
             {/* Header Section */}
             <Box className="bg-white border-b border-neutral-200 sticky top-0 z-10">
@@ -141,6 +158,7 @@ export default function Page({ params }: { params: Promise<{ page: string; space
                                 variant="ghost"
                                 size="2" 
                                 onClick={deletePage}
+                                disabled={loadingDelete || deleteErrors}
                                 className="text-error-600 hover:bg-error-50 hover:text-error-700 transition-colors p-2"
                             >
                                 <HiOutlineTrash size={18} />
@@ -173,5 +191,36 @@ export default function Page({ params }: { params: Promise<{ page: string; space
                 </Box>
             )}
         </Box>
+        {(deleteErrors) && !loadingDelete && <ToastComponent icon="AlertTriangle" type="warning" toggle={true} message="Unable to delete page" />}
+        {deleteData && !loadingDelete && <ToastComponent icon="Check" type="success" toggle={true} message="Page deleted successfully" />}
+        
+        {/* Delete Confirmation Dialog */}
+        <Dialog.Root open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+            <Dialog.Content size="2" maxWidth="450px">
+                <Dialog.Title>Delete Page</Dialog.Title>
+                <Flex direction="column" gap="4">
+                    <Text size="3">
+                        Are you sure you want to delete this page? This action cannot be undone.
+                    </Text>
+                    <Flex gap="3" mt="4" justify="end">
+                        <Dialog.Close>
+                            <Button variant="soft" color="gray">
+                                Cancel
+                            </Button>
+                        </Dialog.Close>
+                        <Button 
+                            onClick={confirmDelete} 
+                            disabled={loadingDelete}
+                            loading={loadingDelete}
+                            color="red"
+                        >
+                            Delete
+                        </Button>
+                    </Flex>
+                </Flex>
+            </Dialog.Content>
+        </Dialog.Root>
+        </>
+
     );
 }

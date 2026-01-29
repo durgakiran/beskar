@@ -53,4 +53,5 @@ const (
 	updateDraftDocument = `UPDATE core.content_draft SET data_binary = $2 WHERE doc_id = $1 RETURNING id`
 	getBinaryDocument   = `SELECT id, doc_id, data_binary as data FROM core.content_draft cd WHERE cd.doc_id = $1`
 	deleteDraftDocument = `DELETE FROM core.content_draft WHERE doc_id = $1`
+	deleteDocumentQuery = `DELETE FROM core.page WHERE id = $1 AND space_id = $2`
 )

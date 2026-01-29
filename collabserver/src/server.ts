@@ -7,7 +7,7 @@ import { extensions } from "./extensions";
 import * as Y from "yjs";
 
 // Initialize Redis storage
-const redisStorage = new RedisStorage(`redis://${process.env.REDIS_HOST}:${process.env.REDIS_PORT}?password=${process.env.REDIS_PASSWORD}`);
+const redisStorage = new RedisStorage(parseInt(process.env.REDIS_PORT || '6379'), process.env.REDIS_HOST || 'localhost', process.env.REDIS_PASSWORD || '');
 
 const server = new Server({
     port: 1234,

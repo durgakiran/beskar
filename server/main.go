@@ -68,13 +68,13 @@ func QueryParamLogger(next http.Handler) http.Handler {
 }
 
 func main() {
+	core.InitializeLogger()
+	core.InitializeSlogLogger()
+	const port = ":9095"
 	err := godotenv.Load()
 	if err != nil {
 		logger().Error(err.Error())
 	}
-	core.InitializeLogger()
-	core.InitializeSlogLogger()
-	const port = ":9095"
 
 	// create connection pool with database
 	connPool := core.GetPool()
