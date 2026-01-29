@@ -5,7 +5,7 @@ import { createContext } from "react";
 import { WebSocket } from "ws";
 
 const socket = new HocuspocusProviderWebsocket({
-    url: "wss://app.durgakiran.com/collab",
+    url: "wss://app.durgakiran.in/collab",
     WebSocketPolyfill: WebSocket,
 });
 

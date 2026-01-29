@@ -1,6 +1,5 @@
 import { Server } from "@hocuspocus/server";
 import { Logger } from "@hocuspocus/extension-logger";
-import { TiptapTransformer } from "@hocuspocus/transformer";
 import { getDocFromDatabase, initWasm } from "./content";
 import { RedisStorage } from "./redis-storage";
 import { extensions } from "./extensions";
@@ -51,7 +50,7 @@ const server = new Server({
         let ydoc = new Y.Doc();
         console.log("doc", doc);
         // if doc is null, initialize a new doc
-        if (doc === null) {
+        if (doc === null || doc.data == null) {
             // do nothing
             // Create title Y doc and merge it
             const titleYdoc = new Y.Doc();
