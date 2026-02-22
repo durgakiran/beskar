@@ -10,7 +10,7 @@ export default function useCollaboration(document: string): HocuspocusProvider {
     const provider = useMemo(() => {
         return new HocuspocusProvider({
             document: yDoc,
-            url: "wss://app.durgakiran.in/collab",
+            url: "wss://app.durgakiran.com/collab",
             name: document,
         })
     }, [yDoc]);

@@ -495,24 +495,24 @@ func GetDocumentToEdit(pageId int64, spaceId uuid.UUID, ownerId uuid.UUID) (Outp
 	if doc.DocId == 0 { // zero value
 		return outputDocument, err
 	}
-	// if isDraft {
-	// 	nodes, err := fetchContentToEdit(tx, ctx, doc.DocId)
-	// 	if err != nil {
-	// 		return outputDocument, err
-	// 	}
-	// 	outputDocument.Data = nodes
-	// } else {
-	// 	nodes, err := fetchContent(tx, ctx, doc.DocId)
-	// 	if err != nil {
-	// 		return outputDocument, err
-	// 	}
-	// 	outputDocument.Nodes = nodes
-	// }
-	nodes, err := fetchContentToEdit(tx, ctx, doc.DocId)
+	if isDraft {
+		nodes, err := fetchContentToEdit(tx, ctx, doc.DocId)
+		if err != nil {
+			return outputDocument, err
+		}
+		outputDocument.Data = nodes
+	} else {
+		nodes, err := fetchContent(tx, ctx, doc.DocId)
+		if err != nil {
+			return outputDocument, err
+		}
+		outputDocument.Nodes = nodes
+	}
+	// nodes, err := fetchContentToEdit(tx, ctx, doc.DocId)
 	if err != nil {
 		return outputDocument, err
 	}
-	outputDocument.Data = nodes
+	// outputDocument.Data = nodes
 	outputDocument.Document = doc
 	outputDocument.Draft = isDraft
 	tx.Commit(ctx)

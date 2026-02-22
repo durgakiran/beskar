@@ -11,6 +11,8 @@ import Collaboration from "@tiptap/extension-collaboration";
 import CollaborationCursor from "@tiptap/extension-collaboration-caret";
 import { HocuspocusProvider } from "@hocuspocus/provider";
 import { getExtensions, Editor as EditorBeskar, TableFloatingMenu, type ImageAPIHandler, TiptapEditor, TextFormattingMenu, CodeBlockFloatingMenu, ImageFloatingMenu } from "@durgakiran/editor";
+import { WebrtcProvider } from "y-webrtc";
+import * as Y from "yjs";
 
 interface TipTapProps {
     setEditorContext: (editorContext: Editor) => void;
@@ -21,7 +23,8 @@ interface TipTapProps {
     editable?: boolean;
     title: string;
     updateContent: (content: any, title: string) => void;
-    provider?: HocuspocusProvider;
+    provider?: WebrtcProvider;
+    ydoc?: Y.Doc;
 }
 
 const MAX_DEFAULT_WIDTH = 760;
@@ -30,10 +33,11 @@ interface UserInfo {
     email: string;
     id: string;
     name: string;
-    username: string;
+    username?: string;
+    color?: string;
 }
 
-export function TipTap({ setEditorContext, user, content, pageId, id, editable = true, title, updateContent, provider }: TipTapProps) {
+export function TipTap({ setEditorContext, user, content, pageId, id, editable = true, title, updateContent, provider, ydoc }: TipTapProps) {
     const [editedData, setEditedData] = useState(null);
     const menuContainerRef = useRef(null);
     const debouncedValue = useDebounce(editedData, 10000);
@@ -76,22 +80,12 @@ export function TipTap({ setEditorContext, user, content, pageId, id, editable =
     const collaborationExtensions = () => {
         return [
             Collaboration.configure({
-                document: provider?.document,
+                document: ydoc,
                 field: "default",
             }),
             CollaborationCursor.configure({
                 provider: provider,
-                user: {
-                    id: user.id,
-                    name: user.name,
-                    color: (() => {
-                        // Generate lighter colors (RGB values 150-255) for better text visibility
-                        const r = Math.floor(Math.random() * 106) + 150; // 150-255
-                        const g = Math.floor(Math.random() * 106) + 150; // 150-255
-                        const b = Math.floor(Math.random() * 106) + 150; // 150-255
-                        return `#${[r, g, b].map(x => x.toString(16).padStart(2, '0')).join('')}`;
-                    })(),
-                },
+                user: user,
             }),
         ];
     };
