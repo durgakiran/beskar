@@ -8,3 +8,6 @@ export type { CylinderShape, ParallelogramShape } from './shapes';
 
 // Collaboration stub (yjs wiring — future)
 export type { CollaborationConfig } from './collaboration';
+
+// WebRTC Collaboration Store
+export { useYjsStore } from './hooks/useYjsStore';

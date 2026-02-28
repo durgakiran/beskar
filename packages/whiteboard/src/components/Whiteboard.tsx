@@ -26,6 +26,7 @@ export function Whiteboard({
     className,
     style,
     collaboration: _collaboration,
+    store,
 }: WhiteboardProps) {
     const components: TLComponents = {
         Toolbar: null,
@@ -53,7 +54,8 @@ export function Whiteboard({
             style={{ position: 'relative', width: '100%', height: '100%', ...style }}
         >
             <Tldraw
-                persistenceKey={persistenceKey}
+                store={store}
+                persistenceKey={store ? undefined : persistenceKey}
                 onMount={handleMount}
                 components={components}
                 shapeUtils={customShapeUtils}

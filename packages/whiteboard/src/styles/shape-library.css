@@ -2,6 +2,18 @@
    Shape Library Panel
    ========================================================================== */
 
+@keyframes slideInLib {
+    from {
+        transform: translateX(-20px);
+        opacity: 0;
+    }
+
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
 .wb-lib {
     position: relative;
     display: flex;
@@ -18,6 +30,7 @@
     flex-shrink: 0;
     z-index: 201;
     pointer-events: all;
+    animation: slideInLib 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 .wb-lib--collapsed {

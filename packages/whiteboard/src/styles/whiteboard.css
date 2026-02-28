@@ -33,3 +33,156 @@
     background: var(--wb-bg-dark) !important;
   }
 }
+
+/* --- Shortcuts Modal --- */
+.wb-shortcuts-modal {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(2px);
+  z-index: 99999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: auto;
+}
+
+.wb-shortcuts-modal__content {
+  background-color: var(--color-panel);
+  border: 1px solid var(--color-panel-contrast);
+  border-radius: var(--radius-4);
+  box-shadow: var(--shadow-2);
+  width: 440px;
+  max-width: 90vw;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: wb-fade-in 0.15s ease-out;
+}
+
+.wb-shortcuts-modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--color-panel-contrast);
+}
+
+.wb-shortcuts-modal__header h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--color-text-0);
+}
+
+.wb-shortcuts-modal__header button {
+  background: none;
+  border: none;
+  color: var(--color-text-2);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.1s;
+}
+
+.wb-shortcuts-modal__header button:hover {
+  background-color: var(--color-low);
+  color: var(--color-text-0);
+}
+
+.wb-shortcuts-modal__body {
+  padding: 20px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.wb-shortcuts-section h3 {
+  margin: 0 0 12px 0;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--color-text-2);
+  font-weight: 600;
+}
+
+.wb-shortcuts-section ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.wb-shortcuts-section li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13px;
+  color: var(--color-text-1);
+}
+
+.wb-shortcuts-section kbd {
+  background-color: var(--color-low);
+  border: 1px solid var(--color-panel-contrast);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-family: inherit;
+  font-size: 11px;
+  color: var(--color-text-0);
+  margin-right: 4px;
+  display: inline-block;
+  min-width: 20px;
+  text-align: center;
+}
+
+@keyframes wb-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.98);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* ==========================================================================
+   Tldraw Theme Overrides
+   ========================================================================== */
+.wb-canvas-root {
+  /* Soft indigo accent matching the toolbars */
+  --color-accent: #5c6bc0;
+}
+
+/* ==========================================================================
+   Empty State Hint
+   ========================================================================== */
+
+.wb-empty-state {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: #adb5bd;
+  font-size: 18px;
+  font-weight: 500;
+  pointer-events: none;
+  user-select: none;
+  letter-spacing: -0.01em;
+  z-index: 100;
+}
+
+@media (prefers-color-scheme: dark) {
+  .wb-empty-state {
+    color: #6c757d;
+  }
+}

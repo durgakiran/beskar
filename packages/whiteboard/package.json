@@ -38,8 +38,11 @@
         "yjs": "^13.6.18"
     },
     "dependencies": {
+        "lucide-react": "^0.548.0",
         "tldraw": "^3.15.0",
-        "lucide-react": "^0.548.0"
+        "y-utility": "^0.1.4",
+        "y-webrtc": "^10.3.0",
+        "y-websocket": "^3.0.0"
     },
     "devDependencies": {
         "@types/node": "^22.0.0",
@@ -49,7 +52,7 @@
         "react-dom": "^19.0.0",
         "tsup": "^8.0.0",
         "typescript": "^5.3.3",
-        "yjs": "^13.6.18"
+        "yjs": "^13.6.29"
     },
     "keywords": [
         "whiteboard",

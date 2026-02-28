@@ -24,6 +24,12 @@ export interface WhiteboardProps {
      */
     collaboration?: CollaborationConfig;
 
+    /**
+     * A custom tldraw store. Specifically used for Yjs/WebRTC sync.
+     * When provided, `persistenceKey` should generally be ignored.
+     */
+    store?: any;
+
     className?: string;
 
     style?: React.CSSProperties;
