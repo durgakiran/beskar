@@ -1,0 +1,65 @@
+{
+    "name": "@durgakiran/whiteboard",
+    "version": "0.1.0",
+    "description": "A collaborative whiteboard component built on tldraw — Lucid-style diagramming for beskar",
+    "main": "./dist/index.js",
+    "module": "./dist/index.mjs",
+    "types": "./dist/index.d.ts",
+    "publishConfig": {
+        "registry": "https://npm.pkg.github.com"
+    },
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/durgakiran/beskar.git"
+    },
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "import": "./dist/index.mjs",
+            "require": "./dist/index.js"
+        },
+        "./styles.css": "./dist/styles.css"
+    },
+    "files": [
+        "dist"
+    ],
+    "scripts": {
+        "dev": "tsup --watch",
+        "build": "tsup",
+        "type-check": "tsc --noEmit"
+    },
+    "engines": {
+        "node": ">=22.0.0",
+        "npm": ">=10.0.0"
+    },
+    "peerDependencies": {
+        "react": "^19.0.0",
+        "react-dom": "^19.0.0",
+        "yjs": "^13.6.18"
+    },
+    "dependencies": {
+        "tldraw": "^3.15.0",
+        "lucide-react": "^0.548.0"
+    },
+    "devDependencies": {
+        "@types/node": "^22.0.0",
+        "@types/react": "^19.0.0",
+        "@types/react-dom": "^19.0.0",
+        "react": "^19.0.0",
+        "react-dom": "^19.0.0",
+        "tsup": "^8.0.0",
+        "typescript": "^5.3.3",
+        "yjs": "^13.6.18"
+    },
+    "keywords": [
+        "whiteboard",
+        "tldraw",
+        "diagram",
+        "flowchart",
+        "collaboration",
+        "react",
+        "canvas"
+    ],
+    "author": "",
+    "license": "MIT"
+}

@@ -1,0 +1,35 @@
+/* ==========================================================================
+   Whiteboard — canvas root styles
+   ========================================================================== */
+
+:root {
+  --wb-bg: #f8f9fa;
+  --wb-bg-dark: #1a1b1e;
+  --wb-accent: #5c6bc0;
+  --wb-accent-hover: #3f51b5;
+  --wb-surface: #ffffff;
+  --wb-surface-dark: #25262b;
+  --wb-border: #dee2e6;
+  --wb-border-dark: #373a40;
+  --wb-radius: 8px;
+  --wb-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  --wb-shadow-dark: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+.wb-canvas-root {
+  background: var(--wb-bg);
+  border-radius: var(--wb-radius);
+  overflow: hidden;
+}
+
+/* Dark mode */
+@media (prefers-color-scheme: dark) {
+  .wb-canvas-root {
+    background: var(--wb-bg-dark);
+  }
+
+  /* Override tldraw panel colours */
+  .tl-background {
+    background: var(--wb-bg-dark) !important;
+  }
+}

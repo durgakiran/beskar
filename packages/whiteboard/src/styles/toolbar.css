@@ -1,0 +1,436 @@
+/* ==========================================================================
+   WhiteboardCanvas overlay — contains toolbar, shape library, zoom strip
+   ========================================================================== */
+
+/**
+ * The overlay sits on top of the tldraw canvas via InFrontOfTheCanvas.
+ * It renders as a 100%×100% absolute element over the canvas — we use
+ * display:flex to lay out the panel (left) and our right column (toolbar+zoom).
+ * Individual interactive children opt in to pointer-events.
+ */
+.wb-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: row;
+    pointer-events: none;
+    z-index: 200;
+    overflow: hidden;
+}
+
+/* The right portion — holds the floating toolbar and zoom strip */
+.wb-overlay__right {
+    flex: 1;
+    position: relative;
+    /* Children (toolbar, zoom) position themselves inside here */
+    pointer-events: none;
+}
+
+/* ==========================================================================
+   Vertical Toolbar
+   ========================================================================== */
+
+.wb-toolbar {
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    padding: 6px 5px;
+    background: rgba(255, 255, 255, 0.96);
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08), 0 8px 24px rgba(0, 0, 0, 0.06);
+    user-select: none;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    pointer-events: all;
+    z-index: 210;
+}
+
+.wb-toolbar__group {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1px;
+}
+
+.wb-toolbar__divider {
+    width: 20px;
+    height: 1px;
+    background: rgba(0, 0, 0, 0.08);
+    margin: 4px 0;
+    flex-shrink: 0;
+}
+
+/* Tool button */
+.wb-toolbar__btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    padding: 0;
+    border: none;
+    border-radius: 8px;
+    background: transparent;
+    color: #555;
+    cursor: pointer;
+    transition: background 0.1s ease, color 0.1s ease, transform 0.08s ease;
+    flex-shrink: 0;
+    line-height: 0;
+    position: relative;
+}
+
+.wb-toolbar__btn:hover:not(:disabled) {
+    background: rgba(92, 107, 192, 0.1);
+    color: #3f51b5;
+    transform: scale(1.05);
+}
+
+.wb-toolbar__btn--active {
+    background: #e8eaf6;
+    color: #3f51b5;
+}
+
+.wb-toolbar__btn--active:hover {
+    background: #c5cae9 !important;
+}
+
+.wb-toolbar__btn:active:not(:disabled) {
+    transform: scale(0.94);
+}
+
+/* Shape button wrapper */
+.wb-toolbar__shape-wrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.wb-toolbar__btn-arrow {
+    position: absolute;
+    right: -2px;
+    bottom: 2px;
+    color: #aaa;
+    line-height: 0;
+    pointer-events: all;
+}
+
+/* Shape sub-type popover */
+.wb-shape-popover {
+    position: absolute;
+    left: calc(100% + 8px);
+    top: 50%;
+    transform: translateY(-50%);
+    background: #fff;
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    border-radius: 10px;
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.12);
+    padding: 10px;
+    z-index: 300;
+    width: 200px;
+}
+
+.wb-shape-popover__title {
+    font-size: 11px;
+    font-weight: 600;
+    color: #888;
+    margin-bottom: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding-left: 4px;
+}
+
+.wb-shape-popover__grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 4px;
+}
+
+.wb-shape-popover__item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: 8px 4px;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    background: none;
+    cursor: pointer;
+    color: #444;
+    transition: all 0.15s ease;
+}
+
+.wb-shape-popover__item:hover {
+    background: #f0f2ff;
+    color: #3f51b5;
+    border-color: #d1d9ff;
+    transform: translateY(-1px);
+}
+
+.wb-shape-popover__icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    margin-bottom: 2px;
+}
+
+.wb-shape-popover__label {
+    font-size: 10px;
+    text-align: center;
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    width: 100%;
+}
+
+/* Arrow style picker */
+.wb-arrow-picker {
+    position: absolute;
+    left: calc(100% + 8px);
+    top: 0;
+    background: #fff;
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    border-radius: 8px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+    padding: 4px;
+    z-index: 300;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 100px;
+}
+
+.wb-arrow-picker__btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    border: none;
+    border-radius: 6px;
+    background: none;
+    cursor: pointer;
+    font-size: 12px;
+    color: #555;
+    transition: background 0.1s, color 0.1s;
+}
+
+.wb-arrow-picker__btn:hover {
+    background: #e8eaf6;
+    color: #3f51b5;
+}
+
+/* ==========================================================================
+   Zoom Strip
+   ========================================================================== */
+
+.wb-zoom {
+    position: absolute;
+    bottom: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    padding: 4px 8px;
+    background: rgba(255, 255, 255, 0.96);
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    pointer-events: all;
+    z-index: 210;
+}
+
+.wb-zoom__btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border: none;
+    border-radius: 6px;
+    background: none;
+    color: #555;
+    cursor: pointer;
+    transition: background 0.1s, color 0.1s;
+}
+
+.wb-zoom__btn:hover {
+    background: #e8eaf6;
+    color: #3f51b5;
+}
+
+.wb-zoom__level {
+    padding: 0 8px;
+    height: 28px;
+    border: none;
+    border-radius: 6px;
+    background: none;
+    font-size: 12px;
+    font-weight: 600;
+    color: #555;
+    cursor: pointer;
+    transition: background 0.1s, color 0.1s;
+    min-width: 44px;
+    text-align: center;
+}
+
+.wb-zoom__level:hover {
+    background: #e8eaf6;
+    color: #3f51b5;
+}
+
+.wb-zoom__divider {
+    width: 1px;
+    height: 16px;
+    background: rgba(0, 0, 0, 0.1);
+    margin: 0 2px;
+}
+
+/* ==========================================================================
+   Whiteboard canvas root
+   ========================================================================== */
+
+.wb-canvas-root {
+    display: flex;
+    flex-direction: row;
+    position: relative;
+}
+
+/* ==========================================================================
+   Quick-Add Handles + Popover
+   ========================================================================== */
+
+.wb-quick-add {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 250;
+}
+
+.wb-quick-add__handle {
+    position: absolute;
+    width: 20px;
+    height: 20px;
+    background: #2f80ed;
+    color: white;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transform: translate(-50%, -50%) scale(0.5);
+    cursor: crosshair;
+    transition: transform 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+    z-index: 260;
+    pointer-events: all;
+    box-shadow: 0 0 0 2px white, 0 1px 4px rgba(0, 0, 0, 0.15);
+}
+
+.wb-quick-add__handle:hover {
+    transform: translate(-50%, -50%) scale(1.15);
+    background: #1a73e8;
+    box-shadow: 0 0 0 2px white, 0 2px 8px rgba(26, 115, 232, 0.4);
+}
+
+.wb-quick-add__handle svg {
+    opacity: 0;
+    transition: opacity 0.15s ease;
+}
+
+.wb-quick-add__handle:hover svg {
+    opacity: 1;
+}
+
+@keyframes wb-popover-in {
+    from {
+        opacity: 0;
+        transform: translate(-50%, -50%) scale(0.9);
+    }
+
+    to {
+        opacity: 1;
+        transform: translate(-50%, -50%) scale(1);
+    }
+}
+
+.wb-quick-add-popover {
+    position: fixed;
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.12), 0 4px 6px -2px rgba(0, 0, 0, 0.06);
+    padding: 12px;
+    z-index: 2000;
+    transform: translate(-50%, -50%);
+    pointer-events: all;
+    min-width: 200px;
+    animation: wb-popover-in 0.2s ease-out;
+}
+
+/* ==========================================================================
+   Dark mode
+   ========================================================================== */
+
+@media (prefers-color-scheme: dark) {
+
+    .wb-toolbar,
+    .wb-zoom {
+        background: rgba(30, 31, 37, 0.95);
+        border-color: rgba(255, 255, 255, 0.08);
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.25);
+    }
+
+    .wb-toolbar__divider,
+    .wb-zoom__divider {
+        background: rgba(255, 255, 255, 0.08);
+    }
+
+    .wb-toolbar__btn,
+    .wb-zoom__btn,
+    .wb-zoom__level {
+        color: #adb5bd;
+    }
+
+    .wb-toolbar__btn:hover:not(:disabled),
+    .wb-zoom__btn:hover,
+    .wb-zoom__level:hover {
+        background: rgba(159, 168, 218, 0.15);
+        color: #9fa8da;
+    }
+
+    .wb-toolbar__btn--active {
+        background: rgba(92, 107, 192, 0.25);
+        color: #9fa8da;
+    }
+
+    .wb-toolbar__btn--active:hover {
+        background: rgba(92, 107, 192, 0.35) !important;
+    }
+
+    .wb-shape-popover,
+    .wb-arrow-picker {
+        background: #25262b;
+        border-color: rgba(255, 255, 255, 0.08);
+    }
+
+    .wb-shape-popover__item,
+    .wb-arrow-picker__btn {
+        color: #adb5bd;
+    }
+
+    .wb-shape-popover__item:hover,
+    .wb-arrow-picker__btn:hover {
+        background: rgba(92, 107, 192, 0.2);
+        color: #9fa8da;
+        border-color: rgba(92, 107, 192, 0.3);
+    }
+}
