@@ -54,4 +54,19 @@ const (
 	getBinaryDocument   = `SELECT id, doc_id, data_binary as data FROM core.content_draft cd WHERE cd.doc_id = $1`
 	deleteDraftDocument = `DELETE FROM core.content_draft WHERE doc_id = $1`
 	deleteDocumentQuery = `DELETE FROM core.page WHERE id = $1 AND space_id = $2`
+
+	// Whiteboard page creation (type-aware)
+	newPageWithType = "INSERT INTO core.page (space_id, owner_id, parent_id, date_created, status, type) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id"
+
+	// Whiteboard data
+	insertWhiteboardData = `INSERT INTO core.whiteboard_data (doc_id, data, updated_at) VALUES ($1, $2, NOW()) RETURNING id`
+	upsertWhiteboardData = `INSERT INTO core.whiteboard_data (doc_id, data, updated_at) VALUES ($1, $2, NOW()) ON CONFLICT (doc_id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW() RETURNING id`
+	getWhiteboardData    = `SELECT wd.id, wd.doc_id, wd.data, d.title, d.page_id AS id, p.space_id AS spaceId
+                        FROM core.whiteboard_data wd
+                        JOIN core.page_doc_map d ON d.doc_id = wd.doc_id
+                        JOIN core.page p ON p.id = d.page_id
+                        WHERE d.page_id = $1 AND p.space_id = $2 ORDER BY d.version DESC LIMIT 1`
+
+	// Page metadata (type lookup)
+	getPageMetadata = `SELECT p.id, p.type, p.space_id AS spaceId FROM core.page p WHERE p.id = $1 AND p.space_id = $2`
 )

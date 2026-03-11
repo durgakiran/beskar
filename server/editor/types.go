@@ -109,3 +109,27 @@ type OutputDocumentToEdit struct {
 type Sequence interface {
 	GenerateNextVal() interface{}
 }
+
+type WhiteboardInput struct {
+	Id       int64     `json:"id"`
+	Title    string    `json:"title"`
+	SpaceId  uuid.UUID `json:"spaceId"`
+	ParentId int64     `json:"parentId"`
+	OwnerId  uuid.UUID `json:"ownerId"`
+	Data     []byte    `json:"data"` // base64-decoded Yjs state
+}
+
+type WhiteboardData struct {
+	Id      int64     `json:"id" db:"id"`
+	DocId   int64     `json:"docId" db:"doc_id"`
+	Data    []byte    `json:"data" db:"data"`
+	Title   string    `json:"title" db:"title"`
+	PageId  int64     `json:"pageId" db:"id"`
+	SpaceId uuid.UUID `json:"spaceId" db:"spaceId"`
+}
+
+type PageMetadata struct {
+	Id      int64     `json:"id" db:"id"`
+	Type    string    `json:"type" db:"type"`
+	SpaceId uuid.UUID `json:"spaceId" db:"spaceId"`
+}

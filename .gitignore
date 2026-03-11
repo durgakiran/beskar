@@ -28,9 +28,9 @@ collabserver/dist
 redis-data
 redis-logs
 .npmrc
-packages/whiteboard
+# packages/whiteboard
 packages/whiteboard-demo
 packages/rtc-collaboration
 packages/rtc-collaboration-demo
-
-signalserver
+signalserver/signalserver
+server/server

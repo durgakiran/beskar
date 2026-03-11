@@ -1,6 +1,6 @@
 "use client";
 import { MouseEvent, useCallback, useEffect, useState } from "react";
-import { Dialog, Button, TextField, Flex, Text } from "@radix-ui/themes";
+import { Dialog, Button, TextField, Flex, Text, Select } from "@radix-ui/themes";
 import { Response, usePost } from "@http/hooks";
 
 interface IAddPage {
@@ -23,8 +23,14 @@ interface PageResponse {
 
 export default function AddPage({ isOpen, setIsOpen, spaceId, parentId, editPage }: IAddPage) {
     const [name, setName] = useState("");
-    const [{ data, errors, isLoading: loading }, createPage] = usePost<Response<PageResponse>, Page>(`editor/space/${spaceId}/page/create`);
-    const [added, setAdded] = useState(false);
+    const [pageType, setPageType] = useState<"document" | "whiteboard">("document");
+    
+    const [{ data: docData, isLoading: docLoading }, createDoc] = usePost<Response<PageResponse>, Page>(`editor/space/${spaceId}/page/create`);
+    const [{ data: wbData, isLoading: wbLoading }, createWb] = usePost<Response<PageResponse>, Page>(`editor/space/${spaceId}/whiteboard/create`);
+    
+    const [isAdded, setIsAdded] = useState(false);
+    const loading = docLoading || wbLoading;
+    const added = isAdded || !!docData || !!wbData;
 
     const handleInput = useCallback((value: string) => {
         setName(value);
@@ -32,18 +38,22 @@ export default function AddPage({ isOpen, setIsOpen, spaceId, parentId, editPage
 
     const handleSubmit = async (ev: MouseEvent<HTMLButtonElement>) => {
         ev.preventDefault();
-        await createPage({ title: name, spaceId, parentId: parentId });
-    };
-    const closeModal = () => {
-        setIsOpen(false);
+        if (pageType === "document") {
+            await createDoc({ title: name, spaceId, parentId });
+        } else {
+            await createWb({ title: name, spaceId, parentId });
+        }
     };
 
     useEffect(() => {
-        if (data) {
-            setAdded(true);
-            editPage(data.data.page);
+        if (docData) {
+            setIsAdded(true);
+            editPage(docData.data.page);
+        } else if (wbData) {
+            setIsAdded(true);
+            editPage(wbData.data.page);
         }
-    }, [data]);
+    }, [docData, wbData, editPage]);
 
     return (
         <Dialog.Root open={isOpen} onOpenChange={setIsOpen}>
@@ -60,13 +70,25 @@ export default function AddPage({ isOpen, setIsOpen, spaceId, parentId, editPage
                             placeholder="Enter page title..."
                         />
                     </label>
+                    <label>
+                        <Text as="div" size="2" mb="1" weight="bold">
+                            Page Type
+                        </Text>
+                        <Select.Root value={pageType} onValueChange={(val: "document" | "whiteboard") => setPageType(val)}>
+                            <Select.Trigger />
+                            <Select.Content>
+                                <Select.Item value="document">Document</Select.Item>
+                                <Select.Item value="whiteboard">Whiteboard</Select.Item>
+                            </Select.Content>
+                        </Select.Root>
+                    </label>
                     <Flex gap="3" mt="4" justify="end">
                         <Dialog.Close>
                             <Button variant="soft" color="gray">
                                 Cancel
                             </Button>
                         </Dialog.Close>
-                        <Button onClick={handleSubmit} disabled={loading || added} loading={loading}>
+                        <Button onClick={handleSubmit} disabled={loading || added || !name.trim()} loading={loading}>
                             Add
                         </Button>
                     </Flex>

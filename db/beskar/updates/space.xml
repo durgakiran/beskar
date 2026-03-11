@@ -400,5 +400,40 @@
     <changeSet id="31-remove-not-null-constaint-to-data-column-content-draft-table" author="Kiran Kumar">
         <dropNotNullConstraint tableName="content_draft" schemaName="core" columnName="data" />
     </changeSet>
+
+    <changeSet id="32-add-type-to-page" author="Kiran Kumar">
+        <addColumn tableName="page" schemaName="core">
+            <column name="type" type="VARCHAR(20)" defaultValue="document">
+                <constraints nullable="false"/>
+            </column>
+        </addColumn>
+        <sql>ALTER TABLE core.page ADD CONSTRAINT chk_page_type CHECK (type IN ('document', 'whiteboard'))</sql>
+        <rollback>
+            <dropColumn tableName="page" schemaName="core" columnName="type"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="33-create-whiteboard-data-table" author="Kiran Kumar">
+        <createTable tableName="whiteboard_data" schemaName="core">
+            <column name="id" type="BIGINT" autoIncrement="true">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="doc_id" type="BIGINT">
+                <constraints nullable="false" unique="true"/>
+            </column>
+            <column name="data" type="BYTEA"/>
+            <column name="updated_at" type="TIMESTAMP" defaultValueComputed="NOW()">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+        <addForeignKeyConstraint
+            baseTableName="whiteboard_data" baseTableSchemaName="core" baseColumnNames="doc_id"
+            constraintName="fk-whiteboard-doc-id"
+            referencedTableName="page_doc_map" referencedTableSchemaName="core" referencedColumnNames="doc_id"
+            deleteCascade="true"/>
+        <rollback>
+            <dropTable tableName="whiteboard_data" schemaName="core"/>
+        </rollback>
+    </changeSet>
     
 </databaseChangeLog>

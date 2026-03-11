@@ -23,17 +23,19 @@ export function useYjsStore({
     yDoc,
     yProvider,
     shapeUtils = [],
+    userName,
 }: {
     yDoc: Y.Doc;
     yProvider: any;
     shapeUtils?: TLAnyShapeUtilConstructor[];
+    userName?: string;
 }) {
-    // Generate an ephemeral random user for UI cursor colors
+    // Generate an ephemeral user for UI cursor colors — use real name if provided
     const user = useMemo(() => ({
         id: Math.random().toString(36).substring(2, 9),
         color: randomColor(),
-        name: randomName(),
-    }), []);
+        name: userName || randomName(),
+    }), [userName]);
 
     // Set up the YKeyValue store from the provided Y.Doc
     const yStore = useMemo(() => {
@@ -142,6 +144,17 @@ export function useYjsStore({
             unsubs.push(() => yStore.off("change", handleChange));
 
             // === AWARENESS (CURSORS) SYNC ==========================================================
+            // Only set up presence/awareness when a real-time provider exists (edit mode only).
+            if (!yProvider) {
+                setStoreWithStatus({
+                    store,
+                    status: "synced-local",
+                });
+                return () => {
+                    unsubs.forEach(fn => fn());
+                    unsubs.length = 0;
+                };
+            }
 
             const userPreferences = computed<{
                 id: string;
@@ -167,6 +180,7 @@ export function useYjsStore({
                 "presence",
                 presenceDerivation.get() ?? null
             );
+
 
             // Update Yjs when tldraw presence changes
             unsubs.push(

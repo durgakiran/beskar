@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import AddPage from "./addPage";
 import { Box, Flex, Text, IconButton, Spinner } from "@radix-ui/themes";
-import { HiHome, HiOutlinePlusSm, HiOutlineChevronDown, HiOutlineChevronRight, HiCog } from "react-icons/hi";
+import { HiHome, HiOutlinePlusSm, HiOutlineChevronDown, HiOutlineChevronRight, HiCog, HiOutlinePresentationChartBar, HiOutlineDocumentText } from "react-icons/hi";
 import Link from "next/link";
 import { Response, useGet } from "@http/hooks";
 interface Docs {
@@ -44,6 +44,7 @@ interface IPages {
     id: number;
     parentId: number;
     details: PageDocMap;
+    type: "document" | "whiteboard";
     children: Array<IPages>;
 }
 
@@ -57,14 +58,17 @@ function SideNavItem({ pages, spaceId, openAddPage }: { pages: Array<IPages>; sp
                             return (
                                 <li key={i}>
                                     <div className="flex flex-row items-center gap-1 py-1.5 px-2 rounded-sm hover:bg-mauve-50 transition-colors group">
-                                        <Link 
-                                            className="text-sm text-neutral-700 hover:text-primary-600 flex-1 truncate transition-colors" 
+                                        <div className="flex-shrink-0 flex items-center justify-center w-5 h-5 text-neutral-400">
+                                            {page.type === "whiteboard" ? <HiOutlinePresentationChartBar size={16} /> : <HiOutlineDocumentText size={16} />}
+                                        </div>
+                                        <Link
+                                            className="text-sm text-neutral-700 hover:text-primary-600 flex-1 truncate transition-colors"
                                             href={`/space/${spaceId}/view/${page.id}`}
                                         >
                                             {page.details.title}
                                         </Link>
-                                        <button 
-                                            className="opacity-0 group-hover:opacity-100 hover:bg-primary-100 text-primary-600 rounded-sm p-1 transition-all" 
+                                        <button
+                                            className="opacity-0 group-hover:opacity-100 hover:bg-primary-100 text-primary-600 rounded-sm p-1 transition-all"
                                             onClick={() => openAddPage(page.id)}
                                             title="Add sub-page"
                                         >
@@ -86,6 +90,7 @@ interface IPageList {
     ownerId: string;
     title: string;
     parentId: number;
+    type: "document" | "whiteboard";
 }
 
 export default function SideNav(param: Props) {
@@ -110,6 +115,7 @@ export default function SideNav(param: Props) {
                     return {
                         id: page.pageId,
                         parentId: page.parentId,
+                        type: page.type || "document",
                         details: {
                             title: page.title ? page.title : "",
                         },
@@ -117,21 +123,23 @@ export default function SideNav(param: Props) {
                     };
                 })
                 .forEach((page) => {
-                    if (pagemap.get(page.parentId)) {
-                        pagemap.get(page.parentId).push(page);
-                    } else if (page.parentId) {
-                        pagemap.set(page.parentId, [page]);
+                    if (page.parentId > 0) {
+                        if (pagemap.get(page.parentId)) {
+                            pagemap.get(page.parentId)!.push(page);
+                        } else {
+                            pagemap.set(page.parentId, [page]);
+                        }
                     }
                     pages.push(page);
                 });
             const rootPages: IPages[] = [];
             pages.forEach((page) => {
-                if (!pagemap.get(page.parentId)) {
+                if (page.parentId <= 0) {
                     // it is not child of anyone
                     rootPages.push(page);
                 }
                 if (pagemap.get(page.id)) {
-                    page.children.push(...pagemap.get(page.id));
+                    page.children.push(...pagemap.get(page.id)!);
                 }
             });
             setPages(rootPages);
@@ -174,51 +182,51 @@ export default function SideNav(param: Props) {
                 <Box className="w-64 h-full bg-neutral-50 border-r border-neutral-200" p="4">
                     <Flex direction="column" gap="1">
                         {/* Navigation Links */}
-                        <Link 
-                            href={`/space/${param.id}`} 
+                        <Link
+                            href={`/space/${param.id}`}
                             className="flex items-center gap-3 px-3 py-2.5 rounded-sm hover:bg-mauve-100 hover:text-primary-700 text-neutral-700 text-sm font-medium transition-colors"
                         >
                             <HiHome size={18} className="text-mauve-600" />
                             <span>Overview</span>
                         </Link>
-                        <Link 
-                            href={`/space/${param.id}/settings/users`} 
+                        <Link
+                            href={`/space/${param.id}/settings/users`}
                             className="flex items-center gap-3 px-3 py-2.5 rounded-sm hover:bg-mauve-100 hover:text-primary-700 text-neutral-700 text-sm font-medium transition-colors"
                         >
                             <HiCog size={18} className="text-mauve-600" />
                             <span>Settings</span>
                         </Link>
-                        
+
                         {/* Divider */}
                         <div className="my-3 border-t border-neutral-200" />
-                        
+
                         {/* Pages Section */}
                         <Box>
-                            <Flex 
-                                align="center" 
-                                gap="2" 
-                                mb="2" 
+                            <Flex
+                                align="center"
+                                gap="2"
+                                mb="2"
                                 px="2"
                                 className="group"
                             >
-                                <IconButton 
-                                    size="1" 
-                                    variant="ghost" 
+                                <IconButton
+                                    size="1"
+                                    variant="ghost"
                                     onClick={toggleDropdown}
                                     className="text-mauve-600 hover:text-primary-600 hover:bg-primary-50"
                                 >
                                     {isDropdownOpen ? <HiOutlineChevronDown size={16} /> : <HiOutlineChevronRight size={16} />}
                                 </IconButton>
-                                <Text 
-                                    size="1" 
-                                    weight="bold" 
+                                <Text
+                                    size="1"
+                                    weight="bold"
                                     className="flex-1 text-neutral-500 uppercase tracking-wide"
                                 >
                                     Pages
                                 </Text>
-                                <IconButton 
-                                    size="1" 
-                                    variant="ghost" 
+                                <IconButton
+                                    size="1"
+                                    variant="ghost"
                                     onClick={() => openAddPage()}
                                     className="text-primary-600 hover:bg-primary-100"
                                     title="Add new page"

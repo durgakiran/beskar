@@ -22,18 +22,6 @@
   overflow: hidden;
 }
 
-/* Dark mode */
-@media (prefers-color-scheme: dark) {
-  .wb-canvas-root {
-    background: var(--wb-bg-dark);
-  }
-
-  /* Override tldraw panel colours */
-  .tl-background {
-    background: var(--wb-bg-dark) !important;
-  }
-}
-
 /* --- Shortcuts Modal --- */
 .wb-shortcuts-modal {
   position: fixed;
@@ -179,10 +167,4 @@
   user-select: none;
   letter-spacing: -0.01em;
   z-index: 100;
-}
-
-@media (prefers-color-scheme: dark) {
-  .wb-empty-state {
-    color: #6c757d;
-  }
 }

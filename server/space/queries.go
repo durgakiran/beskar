@@ -11,6 +11,7 @@ const (
 								p.id,
 								p.owner_id, 
 								p.parent_id, 
+								COALESCE(p.type, 'document') as type,
 								d.title, 
 								d.draft 
 							FROM 

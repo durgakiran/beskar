@@ -20,6 +20,7 @@ type PageList struct {
 	Title    string    `json:"title" db:"title"`
 	ParentId int64     `json:"parentId" db:"parent_id"`
 	Draft    int8      `json:"draft" db:"draft"`
+	Type     string    `json:"type" db:"type"`
 }
 
 type User struct {

@@ -31,11 +31,19 @@ export function Whiteboard({
     const components: TLComponents = {
         Toolbar: null,
         NavigationPanel: null,
+        PageMenu: null,
+        MainMenu: null,
+        QuickActions: null,
+        ActionsMenu: null,
+        MenuPanel: null,
         InFrontOfTheCanvas: readOnly ? undefined : CanvasOverlay,
     };
 
     const handleMount = useCallback(
         (editor: TldrawEditor) => {
+            // Always force light mode regardless of system preference or localStorage
+            editor.user.updateUserPreferences({ colorScheme: 'light' });
+
             if (readOnly) {
                 editor.updateInstanceState({ isReadonly: true });
             }
@@ -59,7 +67,6 @@ export function Whiteboard({
                 onMount={handleMount}
                 components={components}
                 shapeUtils={customShapeUtils}
-                inferDarkMode
             />
         </div>
     );
