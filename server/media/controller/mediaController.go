@@ -54,7 +54,6 @@ func saveImage(w http.ResponseWriter, r *http.Request) {
 
 func Router() *chi.Mux {
 	r := chi.NewRouter()
-	r.Use(core.AuthMiddleWare)
 	r.Get("/image/{imageid}", getImage)
 	r.Post("/upload", saveImage)
 	return r
