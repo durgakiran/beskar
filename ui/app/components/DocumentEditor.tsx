@@ -261,7 +261,12 @@ export default function DocumentEditor({ slug }: { slug: string[] }) {
                 safeMerge(data);
                 setIsEditorReady(true);
             } else if (documentData.data.nodeData) {
-                // create ydoc from documentData.data.nodeData
+                // nodeData exists — but it may be an empty object {} for a brand-new doc.
+                // Only treat it as real content if it has actual keys (e.g. "type", "content").
+                const hasRealContent =
+                    typeof documentData.data.nodeData === 'object' &&
+                    Object.keys(documentData.data.nodeData).length > 0;
+
                 // set the title of the document
                 const titleText = ydoc.getText("title");
                 if (titleText.length === 0) {  // ← only insert if empty
@@ -276,10 +281,14 @@ export default function DocumentEditor({ slug }: { slug: string[] }) {
                     parentIdText.insert(0, documentData.data.parentId.toString());
                 }
 
-
+                // If there's no real content, unlock the editor immediately.
+                // The WASM effect below guards on hasRealContent too, so it won't fire.
+                if (!hasRealContent) {
+                    setIsEditorReady(true);
+                }
+                // else: WASM effect will call setIsEditorReady(true) via applyEditorData
             } else {
-                // create ydoc from documentData.data.nodeData
-                // set the title of the document
+                // No nodeData at all — brand new empty document
                 const titleText = ydoc.getText("title");
                 if (titleText.length === 0) {  // ← only insert if empty
                     titleText.insert(0, "");
@@ -305,7 +314,12 @@ export default function DocumentEditor({ slug }: { slug: string[] }) {
         if (!workerInitiated) return;
         if (!documentData?.data) return;
         if (documentData.data.draft) return;        // draft → safeMerge only
-        if (!documentData.data.nodeData) return;    // no nodeData → nothing to do
+        // Guard: nodeData must be a non-empty object with actual content.
+        // An empty object {} is falsy for our purposes — it means a brand-new doc
+        // with no content yet. Sending it to WASM produces {type:"",…} which crashes
+        // ProseMirror's fromJSON with "Unknown node type: ".
+        const nodeData = documentData.data.nodeData;
+        if (!nodeData || typeof nodeData !== 'object' || Object.keys(nodeData).length === 0) return;
         if (!editorContext) return;
         if (!provider) return;
 
@@ -496,6 +510,14 @@ export default function DocumentEditor({ slug }: { slug: string[] }) {
         }
 
         const tiptapDoc = JSON.parse(data);
+        // Safety net: if WASM returned an empty or malformed document (e.g. nodeData was
+        // an empty object), tiptapDoc.type will be falsy. Passing such a doc to ProseMirror
+        // causes "Unknown node type: ". Bail out gracefully and unlock the editor instead.
+        if (!tiptapDoc || !tiptapDoc.type) {
+            console.warn('applyEditorData: WASM returned empty/invalid doc, unlocking editor gracefully');
+            setIsEditorReady(true);
+            return;
+        }
         const tempYDoc = prosemirrorJSONToYDoc(editorContextRef.current.schema, tiptapDoc, 'default');
 
         // Clear TipTap's init paragraph before applying DB content
