@@ -5,12 +5,20 @@
 import React, { useState, useEffect } from 'react';
 import { NodeViewContent, NodeViewWrapper } from '@tiptap/react';
 import type { NodeViewProps } from '@tiptap/core';
+import { useFloating, flip, shift, offset, autoUpdate } from '@floating-ui/react';
 import { getIconComponent } from './ThemePresets';
 import { NoteBlockToolbar } from './NoteBlockToolbar';
 
 export function NoteBlockView({ node, editor, updateAttributes, getPos }: NodeViewProps) {
   const { icon, emoji, backgroundColor, theme } = node.attrs;
   const [showToolbar, setShowToolbar] = useState(false);
+
+  const { refs, floatingStyles } = useFloating({
+    placement: 'bottom',
+    middleware: [offset(10), flip({ padding: 10 }), shift({ padding: 10 })],
+    whileElementsMounted: autoUpdate,
+    open: showToolbar,
+  });
 
   // Get the appropriate icon component
   const IconComponent = icon !== 'emoji' ? getIconComponent(icon) : null;
@@ -75,6 +83,7 @@ export function NoteBlockView({ node, editor, updateAttributes, getPos }: NodeVi
 
   return (
     <NodeViewWrapper
+      ref={refs.setReference}
       className={`note-block-wrapper ${showToolbar ? 'selected' : ''}`}
       data-theme={theme}
     >
@@ -89,7 +98,11 @@ export function NoteBlockView({ node, editor, updateAttributes, getPos }: NodeVi
         <NodeViewContent className="note-block-content" />
       </div>
       {showToolbar && (
-        <div className="note-block-toolbar-floating">
+        <div 
+          ref={refs.setFloating} 
+          style={{ ...floatingStyles, zIndex: 50 }}
+          className="note-block-toolbar-floating"
+        >
           <NoteBlockToolbar
             editor={editor}
             updateAttributes={updateAttributes}

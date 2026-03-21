@@ -68,35 +68,35 @@ export const TableToolbar: React.FC<TableToolbarProps> = ({ editor }) => {
         return !!table;
       }}
     >
-      <Toolbar.Root className="table-toolbar table-toolbar-floating">
+      <Toolbar.Root className="editor-floating-toolbar editor-floating-toolbar-floating">
         {/* Copy and Delete - Prominently displayed */}
-        <Toolbar.Button className="table-toolbar-button" onClick={handleCopyTable} aria-label="Copy table">
+        <Toolbar.Button className="editor-floating-toolbar-button" onClick={handleCopyTable} aria-label="Copy table">
           <FiCopy />
           <span>Copy</span>
         </Toolbar.Button>
 
-        <Toolbar.Button className="table-toolbar-button danger" onClick={handleDeleteTable} aria-label="Delete table">
+        <Toolbar.Button className="editor-floating-toolbar-button danger" onClick={handleDeleteTable} aria-label="Delete table">
           <FiTrash2 />
           <span>Delete</span>
         </Toolbar.Button>
 
-        <Separator.Root className="table-toolbar-separator" orientation="vertical" />
+        <Separator.Root className="editor-floating-toolbar-separator" orientation="vertical" />
 
         {/* Additional table operations */}
-        <Toolbar.Button className="table-toolbar-button" onClick={addRow}>
+        <Toolbar.Button className="editor-floating-toolbar-button" onClick={addRow}>
           <FiPlus />
           <span>Add row</span>
         </Toolbar.Button>
 
-        <Toolbar.Button className="table-toolbar-button" onClick={addColumn}>
+        <Toolbar.Button className="editor-floating-toolbar-button" onClick={addColumn}>
           <FiPlus />
           <span>Add column</span>
         </Toolbar.Button>
 
-        <Separator.Root className="table-toolbar-separator" orientation="vertical" />
+        <Separator.Root className="editor-floating-toolbar-separator" orientation="vertical" />
 
         <Toggle.Root
-          className="table-toolbar-toggle"
+          className="editor-floating-toolbar-toggle"
           pressed={getRowNumbersState()}
           onPressedChange={toggleRowNumbers}
           aria-label="Toggle row numbers"
@@ -106,11 +106,11 @@ export const TableToolbar: React.FC<TableToolbarProps> = ({ editor }) => {
         </Toggle.Root>
 
         {(canMergeCells() || canSplitCell()) && (
-          <Separator.Root className="table-toolbar-separator" orientation="vertical" />
+          <Separator.Root className="editor-floating-toolbar-separator" orientation="vertical" />
         )}
 
         {canMergeCells() && (
-          <Toolbar.Button className="table-toolbar-button" onClick={mergeCells}>
+          <Toolbar.Button className="editor-floating-toolbar-button" onClick={mergeCells}>
             <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
               <rect x="2" y="2" width="12" height="12" stroke="currentColor" fill="none" />
               <line x1="8" y1="2" x2="8" y2="14" stroke="currentColor" strokeDasharray="2,2" />
@@ -120,7 +120,7 @@ export const TableToolbar: React.FC<TableToolbarProps> = ({ editor }) => {
         )}
 
         {canSplitCell() && (
-          <Toolbar.Button className="table-toolbar-button" onClick={splitCell}>
+          <Toolbar.Button className="editor-floating-toolbar-button" onClick={splitCell}>
             <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
               <rect x="2" y="2" width="12" height="12" stroke="currentColor" fill="none" />
               <line x1="8" y1="2" x2="8" y2="14" stroke="currentColor" />

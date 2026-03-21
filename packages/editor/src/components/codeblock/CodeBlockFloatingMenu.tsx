@@ -6,6 +6,8 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { Editor, findParentNode } from '@tiptap/core';
 import { FiCopy, FiTrash2, FiChevronDown } from 'react-icons/fi';
+import * as Toolbar from '@radix-ui/react-toolbar';
+import * as Separator from '@radix-ui/react-separator';
 import { createLowlight, common } from 'lowlight';
 
 // Get available languages from lowlight
@@ -45,7 +47,7 @@ interface CodeBlockFloatingMenuProps {
 
 export const CodeBlockFloatingMenu: React.FC<CodeBlockFloatingMenuProps> = ({ editor }) => {
   const [isVisible, setIsVisible] = useState(false);
-  const [position, setPosition] = useState({ x: 0, y: 0 });
+  const [position, setPosition] = useState({ x: 0, y: 0, isBottom: true });
   const [currentLanguage, setCurrentLanguage] = useState<string>('plaintext');
   const [codeBlockPos, setCodeBlockPos] = useState<number>(-1);
   const [showLanguageDropdown, setShowLanguageDropdown] = useState(false);
@@ -191,12 +193,21 @@ export const CodeBlockFloatingMenu: React.FC<CodeBlockFloatingMenuProps> = ({ ed
 
         if (wrapperElement) {
           const rect = wrapperElement.getBoundingClientRect();
+          const spaceBelow = window.innerHeight - rect.bottom;
 
-          // Position below the code block wrapper, centered
-          setPosition({
-            x: rect.left + rect.width / 2,
-            y: rect.bottom + 10,
-          });
+          if (spaceBelow >= 60) {
+            setPosition({
+              x: rect.left + rect.width / 2,
+              y: rect.bottom + 10,
+              isBottom: true,
+            });
+          } else {
+            setPosition({
+              x: rect.left + rect.width / 2,
+              y: rect.top - 10,
+              isBottom: false,
+            });
+          }
         }
       }
     };
@@ -230,7 +241,7 @@ export const CodeBlockFloatingMenu: React.FC<CodeBlockFloatingMenuProps> = ({ ed
         position: 'fixed',
         left: `${position.x}px`,
         top: `${position.y}px`,
-        transform: 'translateX(-50%)',
+        transform: `translate(-50%, ${position.isBottom ? '0' : '-100%'})`,
         zIndex: 50,
       }}
       onMouseDown={(e) => {
@@ -238,7 +249,31 @@ export const CodeBlockFloatingMenu: React.FC<CodeBlockFloatingMenuProps> = ({ ed
         e.preventDefault();
       }}
     >
-      <div className="code-block-floating-menu">
+      <Toolbar.Root className="editor-floating-toolbar">
+        {/* Copy Button */}
+        <Toolbar.Button
+          className="editor-floating-toolbar-button"
+          onClick={handleCopy}
+          aria-label="Copy code"
+          title="Copy code"
+        >
+          <FiCopy size={16} />
+          <span>Copy</span>
+        </Toolbar.Button>
+
+        {/* Delete Button */}
+        <Toolbar.Button
+          className="editor-floating-toolbar-button"
+          onClick={handleDelete}
+          aria-label="Delete code block"
+          title="Delete code block"
+        >
+          <FiTrash2 size={16} />
+          <span>Delete</span>
+        </Toolbar.Button>
+
+        <Separator.Root className="editor-floating-toolbar-separator" orientation="vertical" />
+
         {/* Language Selector */}
         <div className="code-block-language-select-wrapper" ref={dropdownRef}>
           <button
@@ -273,27 +308,7 @@ export const CodeBlockFloatingMenu: React.FC<CodeBlockFloatingMenuProps> = ({ ed
             </div>
           )}
         </div>
-
-        {/* Copy Button */}
-        <button
-          className="code-block-action-button"
-          onClick={handleCopy}
-          aria-label="Copy code"
-          title="Copy code"
-        >
-          <FiCopy size={16} />
-        </button>
-
-        {/* Delete Button */}
-        <button
-          className="code-block-action-button code-block-action-button-danger"
-          onClick={handleDelete}
-          aria-label="Delete code block"
-          title="Delete code block"
-        >
-          <FiTrash2 size={16} />
-        </button>
-      </div>
+      </Toolbar.Root>
     </div>
   );
 };

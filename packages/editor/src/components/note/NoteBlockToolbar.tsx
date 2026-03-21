@@ -4,6 +4,8 @@
 
 import React from 'react';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
+import * as Toolbar from '@radix-ui/react-toolbar';
+import * as Separator from '@radix-ui/react-separator';
 import { FiMoreVertical, FiCopy, FiTrash2, FiDroplet, FiSmile, FiXCircle } from 'react-icons/fi';
 import { Editor } from '@tiptap/core';
 import { ThemePresets, THEME_PRESETS, type Theme } from './ThemePresets';
@@ -82,11 +84,25 @@ export function NoteBlockToolbar({
   const themeLabel = currentThemeObj?.label || 'Theme';
 
   return (
-    <div className="note-block-toolbar-bottom">
+    <Toolbar.Root className="editor-floating-toolbar">
+      {/* Copy Button */}
+      <Toolbar.Button className="editor-floating-toolbar-button" onClick={handleCopy} aria-label="Copy note" title="Copy note">
+        <FiCopy size={16} />
+        <span>Copy</span>
+      </Toolbar.Button>
+
+      {/* Delete Button */}
+      <Toolbar.Button className="editor-floating-toolbar-button" onClick={handleDelete} aria-label="Delete note" title="Delete note">
+        <FiTrash2 size={16} />
+        <span>Delete</span>
+      </Toolbar.Button>
+
+      <Separator.Root className="editor-floating-toolbar-separator" orientation="vertical" />
+
       {/* Theme Selector */}
       <DropdownMenu.Root>
         <DropdownMenu.Trigger asChild>
-          <button className="note-toolbar-button" type="button">
+          <button className="editor-floating-toolbar-button" type="button">
             {currentThemeObj && <currentThemeObj.IconComponent size={14} />}
             <span>{themeLabel}</span>
             <svg width="10" height="6" viewBox="0 0 10 6" fill="currentColor">
@@ -104,7 +120,7 @@ export function NoteBlockToolbar({
       {/* Emoji Selector */}
       <DropdownMenu.Root>
         <DropdownMenu.Trigger asChild>
-          <button className="note-toolbar-button" type="button" aria-label="Select emoji">
+          <button className="editor-floating-toolbar-button" type="button" aria-label="Select emoji">
             <FiSmile size={16} />
           </button>
         </DropdownMenu.Trigger>
@@ -117,7 +133,7 @@ export function NoteBlockToolbar({
 
       {/* Remove Emoji / Reset to Theme Icon */}
       <button 
-        className="note-toolbar-button" 
+        className="editor-floating-toolbar-button" 
         type="button" 
         aria-label="Remove custom emoji"
         onClick={handleRemoveEmoji}
@@ -129,7 +145,7 @@ export function NoteBlockToolbar({
       {/* Color Picker */}
       <DropdownMenu.Root>
         <DropdownMenu.Trigger asChild>
-          <button className="note-toolbar-button" type="button" aria-label="Background color">
+          <button className="editor-floating-toolbar-button" type="button" aria-label="Background color">
             <FiDroplet size={16} />
           </button>
         </DropdownMenu.Trigger>
@@ -142,31 +158,7 @@ export function NoteBlockToolbar({
           </DropdownMenu.Content>
         </DropdownMenu.Portal>
       </DropdownMenu.Root>
-
-      {/* More Menu */}
-      <DropdownMenu.Root>
-        <DropdownMenu.Trigger asChild>
-          <button className="note-toolbar-button" type="button" aria-label="More options">
-            <FiMoreVertical size={16} />
-          </button>
-        </DropdownMenu.Trigger>
-        <DropdownMenu.Portal>
-          <DropdownMenu.Content className="note-dropdown-content" sideOffset={5}>
-            <DropdownMenu.Item className="note-dropdown-item" onSelect={handleCopy}>
-              <FiCopy size={14} />
-              <span>Copy</span>
-            </DropdownMenu.Item>
-            <DropdownMenu.Item
-              className="note-dropdown-item note-dropdown-item-danger"
-              onSelect={handleDelete}
-            >
-              <FiTrash2 size={14} />
-              <span>Delete</span>
-            </DropdownMenu.Item>
-          </DropdownMenu.Content>
-        </DropdownMenu.Portal>
-      </DropdownMenu.Root>
-    </div>
+    </Toolbar.Root>
   );
 }
 

@@ -36,6 +36,8 @@ import { ImageBlock } from '../nodes/ImageBlock';
 import { MathBlock } from '../nodes/MathBlock';
 import { TableOfContents } from '../nodes/TableOfContents';
 import { InlineMath } from './math-inline';
+import { Columns } from '../nodes/layout/Columns';
+import { Column } from '../nodes/layout/Column';
 
 export { CustomAttributes };
 export { Table, TableCell, TableHeader, TableRow } from '../nodes/table';
@@ -51,6 +53,8 @@ export { SlashCommand } from './slash-command';
 export { ImagePasteDrop } from './image-paste-drop';
 export { BlockId } from './block-id';
 export { BlockDragDrop } from './block-drag-drop';
+export { Columns } from '../nodes/layout/Columns';
+export { Column } from '../nodes/layout/Column';
 
 export interface GetExtensionsOptions {
   placeholder?: string;
@@ -130,6 +134,8 @@ export function getExtensions(options: GetExtensionsOptions = {}): Extensions {
     TableRow,
     TableHeader,
     TableCell,
+    Columns,
+    Column,
     SlashCommand, // Slash command menu for inserting content
   ];
 

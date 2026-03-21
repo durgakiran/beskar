@@ -199,6 +199,30 @@ export const GROUPS: Group[] = [
           }).run();
         },
       },
+      {
+        name: 'twoColumns',
+        label: '2 Columns',
+        icon: '◫',
+        description: 'Create a 2-column layout',
+        aliases: ['columns', 'layout', 'grid', 'split'],
+        action: (editor) => {
+          editor.chain().focus().insertContent({
+            type: 'columns',
+            content: [
+              {
+                type: 'column',
+                attrs: { width: 50 },
+                content: [{ type: 'paragraph' }],
+              },
+              {
+                type: 'column',
+                attrs: { width: 50 },
+                content: [{ type: 'paragraph' }],
+              },
+            ],
+          }).run();
+        },
+      },
     ],
   },
 ];

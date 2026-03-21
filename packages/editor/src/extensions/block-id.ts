@@ -123,7 +123,7 @@ export const BlockId = Extension.create<BlockIdOptions>({
               return node;
             };
         
-            const processedNodes = slice.content.content.map((node: any) => removeBlockIds(node));
+            const processedNodes = (slice.content as any).content.map((node: any) => removeBlockIds(node));
             const processedFragment = Fragment.from(processedNodes);
             return new Slice(processedFragment, slice.openStart, slice.openEnd);
           },

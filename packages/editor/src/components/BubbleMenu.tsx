@@ -30,7 +30,7 @@ export function BubbleMenu({
   shouldShow,
 }: BubbleMenuProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const [position, setPosition] = useState({ x: 0, y: 0 });
+  const [position, setPosition] = useState({ x: 0, y: 0, isBottom: true });
 
   useEffect(() => {
     const updateMenu = () => {
@@ -67,10 +67,21 @@ export function BubbleMenu({
 
       // Get selection rect for positioning
       const rect = posToDOMRect(view, from, to);
-      setPosition({
-        x: rect.left + rect.width / 2,
-        y: rect.top,
-      });
+      const spaceBelow = window.innerHeight - rect.bottom;
+      
+      if (spaceBelow >= 60) {
+        setPosition({
+          x: rect.left + rect.width / 2,
+          y: rect.bottom + 10,
+          isBottom: true,
+        });
+      } else {
+        setPosition({
+          x: rect.left + rect.width / 2,
+          y: rect.top - 10,
+          isBottom: false,
+        });
+      }
 
       setIsOpen(true);
     };
@@ -99,8 +110,8 @@ export function BubbleMenu({
       style={{
         position: 'fixed',
         left: `${position.x}px`,
-        top: `${position.y - 10}px`,
-        transform: 'translate(-50%, -100%)',
+        top: `${position.y}px`,
+        transform: `translate(-50%, ${position.isBottom ? '0' : '-100%'})`,
         zIndex: 50,
       }}
       onMouseDown={(e) => {

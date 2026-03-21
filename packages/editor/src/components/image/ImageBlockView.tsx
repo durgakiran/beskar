@@ -2,21 +2,34 @@
  * ImageBlockView - React component for rendering image blocks
  */
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { NodeViewWrapper } from '@tiptap/react';
 import type { NodeViewProps } from '@tiptap/react';
-import { ImageCaption } from './ImageCaption';
 import { ImageFloatingMenu } from './ImageFloatingMenu';
+import { useFloating, flip, shift, offset, autoUpdate } from '@floating-ui/react';
 
-const MAX_WIDTH = 800;
-
-export function ImageBlockView({ node, editor, updateAttributes, getPos }: NodeViewProps) {
-  const { src, alt, width, height, caption, uploadStatus, align } = node.attrs;
-  const [showToolbar, setShowToolbar] = useState(false);
+export function ImageBlockView({ node, updateAttributes, selected, editor, getPos }: NodeViewProps) {
+  const { src, alt, title, align, width, height, isUploading } = node.attrs;
   const [isResizing, setIsResizing] = useState(false);
-  const [dimensions, setDimensions] = useState({ width, height });
+  const [showToolbar, setShowToolbar] = useState(false);
+  
+  const { refs, floatingStyles } = useFloating({
+    placement: 'bottom',
+    middleware: [offset(10), flip({ padding: 10 }), shift({ padding: 10 })],
+    whileElementsMounted: autoUpdate,
+    open: showToolbar,
+  });
+
   const imageRef = useRef<HTMLImageElement>(null);
-  const resizeStartRef = useRef<{ x: number; y: number; width: number; height: number } | null>(null);
+  const resizeStartRef = useRef<{ startX: number; startY: number; width: number; height: number; aspectRatio: number; direction: string } | null>(null);
+
+  // Get dynamic max width based on the parent container
+  const getMaxWidth = useCallback(() => {
+    // We walk up to find the closest appropriate constraint container
+    // Either the column or the editor text area itself
+    const container = imageRef.current?.closest('.editor-column') || imageRef.current?.closest('.ProseMirror');
+    return container?.clientWidth || 800;
+  }, []);
 
   // Debug: Log when node attributes change
   useEffect(() => {
@@ -25,54 +38,16 @@ export function ImageBlockView({ node, editor, updateAttributes, getPos }: NodeV
 
   // Monitor selection to show/hide toolbar
   useEffect(() => {
-    const checkSelection = () => {
-      if (!editor.isEditable) {
-        setShowToolbar(false);
-        return;
-      }
-
-      if (typeof getPos !== 'function') {
-        setShowToolbar(false);
-        return;
-      }
-
-      const pos = getPos();
-      if (pos === undefined || pos === null || pos < 0) {
-        setShowToolbar(false);
-        return;
-      }
-
-      const { from, to } = editor.state.selection;
-      const nodeStart = pos;
-      const nodeEnd = pos + node.nodeSize;
-
-      const isInside = from >= nodeStart && to <= nodeEnd;
-      setShowToolbar(isInside);
-    };
-
-    checkSelection();
-
-    editor.on('selectionUpdate', checkSelection);
-    editor.on('transaction', checkSelection);
-
-    return () => {
-      editor.off('selectionUpdate', checkSelection);
-      editor.off('transaction', checkSelection);
-    };
-  }, [editor, getPos, node.nodeSize]);
-
-  // Update dimensions when attributes change
-  useEffect(() => {
-    console.log('[ImageBlockView] Syncing dimensions from node attrs:', { width, height });
-    setDimensions({ width, height });
-  }, [width, height]);
+    setShowToolbar(selected && editor.isEditable);
+  }, [selected, editor.isEditable]);
 
   // Handle image load to set initial dimensions
   const handleImageLoad = () => {
     if (imageRef.current && (!width || !height)) {
       const img = imageRef.current;
       const aspectRatio = img.naturalWidth / img.naturalHeight;
-      const constrainedWidth = Math.min(img.naturalWidth, MAX_WIDTH);
+      const currentMaxWidth = getMaxWidth();
+      const constrainedWidth = Math.min(img.naturalWidth, currentMaxWidth);
       const constrainedHeight = constrainedWidth / aspectRatio;
 
       updateAttributes({
@@ -83,45 +58,57 @@ export function ImageBlockView({ node, editor, updateAttributes, getPos }: NodeV
   };
 
   // Resize handlers
-  const startResize = (e: React.MouseEvent) => {
+  const handleResizeStart = (e: React.MouseEvent, direction: string) => {
     e.preventDefault();
     e.stopPropagation();
 
     if (!imageRef.current) return;
 
     const img = imageRef.current;
+    const currentWidth = width || img.width;
+    const currentHeight = height || img.height;
+    const aspectRatio = currentWidth / currentHeight;
+
     resizeStartRef.current = {
-      x: e.clientX,
-      y: e.clientY,
-      width: dimensions.width || img.width,
-      height: dimensions.height || img.height,
+      startX: e.clientX,
+      startY: e.clientY,
+      width: currentWidth,
+      height: currentHeight,
+      aspectRatio,
+      direction,
     };
 
     setIsResizing(true);
     
     console.log('[ImageResize] Started resizing:', resizeStartRef.current);
 
-    // Store the latest dimensions during resize
-    let latestWidth = resizeStartRef.current.width;
-    let latestHeight = resizeStartRef.current.height;
+    let latestWidth = currentWidth;
+    let latestHeight = currentHeight;
 
     const handleMouseMove = (moveEvent: MouseEvent) => {
       if (!resizeStartRef.current || !imageRef.current) return;
 
-      const deltaX = moveEvent.clientX - resizeStartRef.current.x;
-      const aspectRatio = resizeStartRef.current.width / resizeStartRef.current.height;
+      const { startX, width: initialWidth, aspectRatio, direction } = resizeStartRef.current;
+      const deltaX = moveEvent.clientX - startX;
+      const currentMaxWidth = getMaxWidth();
       
-      let newWidth = resizeStartRef.current.width + deltaX;
-      newWidth = Math.max(100, Math.min(newWidth, MAX_WIDTH));
+      let newWidth = initialWidth;
+
+      if (direction.includes('left')) {
+        newWidth = initialWidth - deltaX;
+      } else { // 'right'
+        newWidth = initialWidth + deltaX;
+      }
+
+      newWidth = Math.max(100, Math.min(newWidth, currentMaxWidth));
       const newHeight = newWidth / aspectRatio;
 
       latestWidth = Math.round(newWidth);
       latestHeight = Math.round(newHeight);
 
-      setDimensions({
-        width: latestWidth,
-        height: latestHeight,
-      });
+      // Temporarily update the image element's style for visual feedback
+      imageRef.current.style.width = `${latestWidth}px`;
+      imageRef.current.style.height = `${latestHeight}px`;
     };
 
     const handleMouseUp = () => {
@@ -139,6 +126,12 @@ export function ImageBlockView({ node, editor, updateAttributes, getPos }: NodeV
         console.log('[ImageResize] updateAttributes called');
       }
 
+      // Reset image element style
+      if (imageRef.current) {
+        imageRef.current.style.width = '100%';
+        imageRef.current.style.height = height ? `${height}px` : 'auto';
+      }
+
       resizeStartRef.current = null;
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
@@ -148,12 +141,24 @@ export function ImageBlockView({ node, editor, updateAttributes, getPos }: NodeV
     document.addEventListener('mouseup', handleMouseUp);
   };
 
-  const handleCaptionChange = (newCaption: string) => {
-    updateAttributes({ caption: newCaption });
+  const handleTitleChange = (newTitle: string) => {
+    updateAttributes({ title: newTitle });
+  };
+
+  const handleClick = () => {
+    // This is needed to ensure the node is selected when clicking the image itself
+    // as opposed to just the wrapper. Tiptap's NodeViewWrapper handles selection
+    // but sometimes direct clicks on content inside might not register.
+    if (!selected && typeof getPos === 'function') {
+      const pos = getPos();
+      if (pos !== undefined && pos !== null && pos >= 0) {
+        editor.commands.setNodeSelection(pos);
+      }
+    }
   };
 
   // Render loading state
-  if (uploadStatus === 'uploading') {
+  if (isUploading) {
     return (
       <NodeViewWrapper className="image-block-wrapper">
         <div className="image-block-loading">
@@ -164,57 +169,83 @@ export function ImageBlockView({ node, editor, updateAttributes, getPos }: NodeV
     );
   }
 
-  // Render error state
-  if (uploadStatus === 'error') {
-    return (
-      <NodeViewWrapper className="image-block-wrapper">
-        <div className="image-block-error">
-          <span>Failed to upload image</span>
-        </div>
-      </NodeViewWrapper>
-    );
-  }
-
   // Render image
   return (
     <NodeViewWrapper
-      className={`image-block-wrapper image-align-${align || 'center'} ${showToolbar ? 'selected' : ''} ${isResizing ? 'resizing' : ''}`}
-      data-align={align || 'center'}
+      ref={refs.setReference}
+      className={`image-block-wrapper ${align ? `align-${align}` : ''} ${selected ? 'ProseMirror-selectednode' : ''}`}
+      data-align={align}
     >
-      <div className="image-block-container">
-        <div className="image-block-image-wrapper">
+      <div 
+        className="image-block-container" 
+        style={{ 
+          width: width ? `${width}px` : 'auto',
+          maxWidth: '100%',
+        }}
+      >
+        <div className="image-wrapper" onClick={handleClick}>
+          {isUploading && (
+            <div className="image-uploading-overlay">
+              <div className="image-uploading-spinner" />
+            </div>
+          )}
+          
           <img
             ref={imageRef}
             src={src}
-            alt={alt}
-            width={dimensions.width || undefined}
-            height={dimensions.height || undefined}
-            className="image-block-img"
+            alt={alt || ''}
+            title={title || ''}
+            style={{ 
+              width: '100%',
+              height: height ? `${height}px` : 'auto' 
+            }}
             onLoad={handleImageLoad}
             draggable={false}
+            loading="lazy"
           />
-          {showToolbar && editor.isEditable && (
-            <div
-              className="image-resize-handle image-resize-handle-right"
-              onMouseDown={startResize}
-            />
+
+          {!isUploading && editor.isEditable && selected && (
+            <>
+              {/* Resize handles */}
+              <div 
+                className="image-resize-handle top-left" 
+                onMouseDown={(e) => handleResizeStart(e, 'top-left')}
+              />
+              <div 
+                className="image-resize-handle top-right" 
+                onMouseDown={(e) => handleResizeStart(e, 'top-right')}
+              />
+              <div 
+                className="image-resize-handle bottom-left" 
+                onMouseDown={(e) => handleResizeStart(e, 'bottom-left')}
+              />
+              <div 
+                className="image-resize-handle bottom-right" 
+                onMouseDown={(e) => handleResizeStart(e, 'bottom-right')}
+              />
+            </>
           )}
         </div>
-        <ImageCaption
-          caption={caption}
-          editor={editor}
-          onCaptionChange={handleCaptionChange}
-        />
+
+        {/* Caption */}
+        {(title || selected) && (
+          <div className={`image-caption ${!title && selected ? 'is-empty' : ''}`}>
+            {title || (selected ? 'Add a caption...' : '')}
+          </div>
+        )}
       </div>
-      {showToolbar && editor.isEditable && (
-        <ImageFloatingMenu 
-          editor={editor} 
-          getPos={getPos}
-          currentAlign={align || 'center'}
-          updateAttributes={updateAttributes}
-        />
+
+      {/* Floating Toolbar */}
+      {showToolbar && !isResizing && !isUploading && editor.isEditable && (
+        <div ref={refs.setFloating} style={{ ...floatingStyles, zIndex: 50, pointerEvents: 'auto' }}>
+          <ImageFloatingMenu 
+            editor={editor}
+            getPos={getPos}
+            currentAlign={align || 'center'}
+            updateAttributes={updateAttributes}
+          />
+        </div>
       )}
     </NodeViewWrapper>
   );
 }
-
