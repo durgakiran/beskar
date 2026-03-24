@@ -162,6 +162,8 @@ export default function DocumentEditor({ slug }: { slug: string[] }) {
     };
 
     const updateContent = (content: any, title: string) => {
+        if (!isLeader) return;
+
         const payLoad: IPayload = {
             data: content,
             id: Number(slug[1]),

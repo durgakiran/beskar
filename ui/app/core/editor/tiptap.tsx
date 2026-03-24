@@ -49,6 +49,7 @@ export function TipTap({ setEditorContext, user, content, pageId, id, editable =
 
     const editedDataFn = (data: JSONContent) => {
         setEditedData(data as any);
+        setUpdated(true);
     };
 
     // Image upload handler for the editor
