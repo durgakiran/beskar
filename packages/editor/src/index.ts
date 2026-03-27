@@ -5,6 +5,15 @@ export { Editor } from './core/Editor';
 export { BubbleMenu, BubbleMenuButton } from './components/BubbleMenu';
 export type { BubbleMenuProps, BubbleMenuButtonProps } from './components/BubbleMenu';
 export { TextFormattingMenu } from './components/TextFormattingMenu';
+export type { TextFormattingMenuProps } from './components/TextFormattingMenu';
+export { CommentInputPopover } from './components/CommentInputPopover';
+export type { CommentInputPopoverProps } from './components/CommentInputPopover';
+export { CommentSidePanel } from './components/CommentSidePanel';
+export type { CommentSidePanelProps } from './components/CommentSidePanel';
+export { CommentGutter } from './components/CommentGutter';
+export type { CommentGutterProps } from './components/CommentGutter';
+export { CommentThreadCard } from './components/CommentThreadCard';
+export type { CommentThreadCardProps } from './components/CommentThreadCard';
 
 // Table Components
 export { TableToolbar } from './components/table/TableToolbar';
@@ -35,13 +44,16 @@ export type {
   EditorContentProps,
   ImageAPIHandler,
   ImageUploadResult,
+  CommentAPIHandler,
+  CommentThread,
+  CommentReply,
 } from './types';
 
 // Hooks
 export { useEditor, useDebounce } from './hooks';
 
 // Extensions
-export { getExtensions, CustomAttributes } from './extensions';
+export { getExtensions, CustomAttributes, CommentMark } from './extensions';
 
 // Utilities
 export { useDebounce as useDebounceUtil } from './utils/debounce';

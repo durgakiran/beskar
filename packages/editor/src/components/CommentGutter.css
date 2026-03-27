@@ -1,0 +1,57 @@
+/**
+ * Comment gutter — aligned with @radix-ui/themes (plum accent, mauve gray).
+ * Inherits tokens from Theme; fallbacks match light plum/mauve.
+ */
+
+.comment-gutter {
+  pointer-events: none;
+}
+
+.comment-gutter-pill {
+  position: absolute;
+  left: 0;
+  transform: translateY(-50%);
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1, 4px);
+  background: var(--accent-a3, #cc00cc14);
+  border: 1px solid var(--accent-a7, #9900a852);
+  border-radius: var(--radius-full, 9999px);
+  padding: 2px var(--space-2, 8px);
+  font-size: var(--font-size-1, 12px);
+  font-family: var(--default-font-family, ui-sans-serif, system-ui, sans-serif);
+  font-weight: var(--font-weight-medium, 500);
+  cursor: pointer;
+  white-space: nowrap;
+  line-height: 1.5;
+  color: var(--accent-12, #53195d);
+  box-shadow: 0 1px 3px var(--gray-a4, #20003618);
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    box-shadow 0.15s ease,
+    transform 0.15s ease;
+}
+
+.comment-gutter-pill-icon {
+  font-size: 1em;
+  line-height: 1;
+}
+
+.comment-gutter-pill-count {
+  font-variant-numeric: tabular-nums;
+  color: var(--accent-11, #953ea3);
+}
+
+.comment-gutter-pill:hover {
+  background: var(--accent-4, #f7def8);
+  border-color: var(--accent-9, #ab4aba);
+  box-shadow: 0 2px 8px var(--accent-a5, #b700bd2e);
+  transform: translateY(-50%) scale(1.04);
+}
+
+.comment-gutter-pill:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--gray-1, #fdfcfd), 0 0 0 4px var(--accent-a8, #9000a56e);
+}

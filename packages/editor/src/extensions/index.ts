@@ -18,6 +18,7 @@ import { SlashCommand } from './slash-command';
 import { BlockId } from './block-id';
 import { BlockDragDrop } from './block-drag-drop';
 import Emoji, { gitHubEmojis } from '@tiptap/extension-emoji';
+import { Placeholder } from '@tiptap/extensions';
 import {
   BlockHeading,
   BlockParagraph,
@@ -38,6 +39,7 @@ import { TableOfContents } from '../nodes/TableOfContents';
 import { InlineMath } from './math-inline';
 import { Columns } from '../nodes/layout/Columns';
 import { Column } from '../nodes/layout/Column';
+import { CommentMark } from './comment';
 
 export { CustomAttributes };
 export { Table, TableCell, TableHeader, TableRow } from '../nodes/table';
@@ -61,6 +63,7 @@ export interface GetExtensionsOptions {
   collaboration?: CollaborationConfig;
   additionalExtensions?: Extensions;
   imageHandler?: ImageAPIHandler;
+  onCommentOrphaned?: (commentId: string) => void;
 }
 
 /**
@@ -72,6 +75,7 @@ export function getExtensions(options: GetExtensionsOptions = {}): Extensions {
     collaboration,
     additionalExtensions = [],
     imageHandler,
+    onCommentOrphaned,
   } = options;
 
   const baseExtensions: Extensions = [
@@ -88,6 +92,9 @@ export function getExtensions(options: GetExtensionsOptions = {}): Extensions {
       orderedList: false,
       horizontalRule: false,
       listItem: false,
+    }),
+    Placeholder.configure({
+      placeholder: placeholder,
     }),
     // Add our custom block-enabled nodes
     BlockHeading,
@@ -137,6 +144,12 @@ export function getExtensions(options: GetExtensionsOptions = {}): Extensions {
     Columns,
     Column,
     SlashCommand, // Slash command menu for inserting content
+    CommentMark.configure({
+      onCommentOrphaned: (id: string) => {
+        console.log(`[CommentMark] Comment orphaned: ${id}`);
+        onCommentOrphaned?.(id);
+      },
+    }), // Inline comments
   ];
 
   // Add collaboration extensions if provided
@@ -169,4 +182,4 @@ export function getExtensions(options: GetExtensionsOptions = {}): Extensions {
 }
 
 export * from './custom-attributes';
-
+export * from './comment';

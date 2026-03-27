@@ -1,0 +1,534 @@
+/**
+ * Comment thread card — styled for @radix-ui/themes (plum accent, mauve gray).
+ * Tokens inherit from <Theme accentColor="plum" grayColor="mauve" />; fallbacks
+ * match light plum/mauve when variables are absent.
+ */
+
+/* ─── Backdrop ─────────────────────────────────────────────────────────────── */
+
+.ctc-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 290;
+}
+
+/* ─── Card surface ─────────────────────────────────────────────────────────── */
+
+.ctc-card {
+  z-index: 300;
+  width: 320px;
+  font-family: var(--default-font-family, ui-sans-serif, system-ui, sans-serif);
+  color: var(--gray-12, #211f26);
+  background: var(--gray-1, #fdfcfd);
+  border-radius: var(--radius-4, 8px);
+  border: 1px solid var(--gray-a5, #20003820);
+  box-shadow: var(--shadow-4, 0 4px 24px rgba(32, 0, 56, 0.08), 0 0 0 1px rgba(32, 0, 56, 0.06));
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.ctc-card.is-resolved {
+  opacity: 0.88;
+}
+
+.ctc-card.is-orphaned {
+  border-color: var(--red-8, #e54666);
+}
+
+/* ─── Navigation bar ───────────────────────────────────────────────────────── */
+
+.ctc-nav-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-2, 8px) var(--space-3, 10px);
+  border-bottom: 1px solid var(--gray-a4, #20003618);
+  background: var(--gray-2, #faf9fb);
+}
+
+.ctc-nav-arrows {
+  display: flex;
+  gap: 2px;
+}
+
+.ctc-nav-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: var(--radius-3, 6px);
+  background: transparent;
+  cursor: pointer;
+  font-size: var(--font-size-2, 14px);
+  color: var(--gray-11, #65636d);
+  transition: background 0.12s ease, color 0.12s ease;
+  line-height: 1;
+}
+
+.ctc-nav-btn:hover:not(:disabled) {
+  background: var(--gray-a3, #30004010);
+  color: var(--gray-12, #211f26);
+}
+
+.ctc-nav-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.ctc-nav-right {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.ctc-nav-icon-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: var(--radius-3, 6px);
+  background: transparent;
+  cursor: pointer;
+  color: var(--gray-11, #65636d);
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.ctc-nav-icon-btn:hover {
+  background: var(--gray-a3, #30004010);
+  color: var(--gray-12, #211f26);
+}
+
+.ctc-close-btn {
+  font-size: var(--font-size-1, 13px);
+}
+
+/* ─── Thread body ─────────────────────────────────────────────────────────── */
+
+.ctc-thread-body {
+  padding: var(--space-3, 14px) var(--space-3, 14px) var(--space-2, 10px);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2, 10px);
+  max-height: 420px;
+  overflow-y: auto;
+}
+
+.ctc-author-row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2, 10px);
+}
+
+.ctc-author-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ctc-name {
+  font-size: var(--font-size-2, 13px);
+  font-weight: var(--font-weight-bold, 600);
+  color: var(--gray-12, #211f26);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ctc-time {
+  font-size: var(--font-size-1, 11px);
+  color: var(--gray-10, #84828e);
+}
+
+.ctc-thread-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  flex-shrink: 0;
+}
+
+.ctc-author-row:hover .ctc-thread-actions {
+  opacity: 1;
+}
+
+.ctc-action-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--gray-a5, #20003820);
+  border-radius: var(--radius-3, 6px);
+  background: var(--gray-2, #faf9fb);
+  cursor: pointer;
+  font-size: var(--font-size-2, 14px);
+  color: var(--gray-11, #65636d);
+  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+
+.ctc-action-btn:hover {
+  background: var(--gray-3, #f2eff3);
+  border-color: var(--gray-a6, #14003527);
+  color: var(--gray-12, #211f26);
+}
+
+.ctc-action-btn.is-active {
+  background: var(--accent-a3, #cc00cc14);
+  border-color: var(--accent-a7, #9900a852);
+  color: var(--accent-11, #953ea3);
+}
+
+.ctc-resolve-btn:hover {
+  background: var(--green-a3, #00c95112);
+  border-color: var(--green-8, #2b9a66);
+  color: var(--green-11, #218358);
+}
+
+.ctc-resolved-chip {
+  font-size: var(--font-size-1, 11px);
+  font-weight: var(--font-weight-medium, 600);
+  color: var(--green-11, #218358);
+  padding: 3px var(--space-2, 8px);
+  background: var(--green-a3, #00c95112);
+  border-radius: var(--radius-full, 9999px);
+  white-space: nowrap;
+}
+
+.ctc-dots {
+  font-size: 10px;
+  letter-spacing: 1px;
+  line-height: 1;
+}
+
+/* Quoted text — subtle plum tint */
+.ctc-quote {
+  margin: 0;
+  padding: var(--space-2, 6px) var(--space-2, 10px);
+  background: var(--accent-a3, #cc00cc14);
+  border-left: 3px solid var(--accent-9, #ab4aba);
+  border-radius: 0 var(--radius-3, 6px) var(--radius-3, 6px) 0;
+  font-size: var(--font-size-2, 12px);
+  font-style: italic;
+  color: var(--gray-11, #65636d);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ctc-quote + .ctc-reply-item--embedded {
+  margin-top: 2px;
+}
+
+/* Opening message: same author as thread — body next to quote, no second avatar row */
+.ctc-reply-item--embedded {
+  margin-top: 0;
+}
+
+.ctc-reply-body--embedded {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: var(--space-2, 8px);
+  width: 100%;
+}
+
+.ctc-reply-text--embedded {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: var(--font-size-2, 13px);
+  color: var(--gray-12, #211f26);
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.ctc-reply-body--embedded .ctc-edit-area {
+  flex: 1;
+  min-width: 0;
+}
+
+.ctc-reply-actions--embedded {
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+  margin-top: 1px;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.ctc-reply-item--embedded:hover .ctc-reply-actions--embedded {
+  opacity: 1;
+}
+
+.ctc-orphaned {
+  margin: 0;
+  font-size: var(--font-size-2, 12px);
+  color: var(--red-11, #d31e29);
+  font-style: italic;
+}
+
+/* ─── Replies ─────────────────────────────────────────────────────────────── */
+
+.ctc-replies-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2, 10px);
+  padding-top: 4px;
+  border-top: 1px solid var(--gray-a4, #20003618);
+}
+
+.ctc-reply-item {
+  display: flex;
+  gap: var(--space-2, 8px);
+  align-items: flex-start;
+}
+
+.ctc-reply-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.ctc-reply-header {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2, 6px);
+  margin-bottom: 3px;
+}
+
+.ctc-reply-actions {
+  display: flex;
+  gap: 2px;
+  margin-left: auto;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.ctc-reply-item:hover .ctc-reply-actions {
+  opacity: 1;
+}
+
+.ctc-reply-text {
+  margin: 0;
+  font-size: var(--font-size-2, 13px);
+  color: var(--gray-12, #211f26);
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.ctc-edit-area {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2, 6px);
+}
+
+.ctc-reply-input-textarea {
+  width: 100%;
+  border: 1px solid var(--accent-8, #cf91d8);
+  border-radius: var(--radius-3, 6px);
+  padding: var(--space-2, 6px) var(--space-2, 8px);
+  font-size: var(--font-size-2, 13px);
+  font-family: inherit;
+  color: var(--gray-12, #211f26);
+  background: var(--gray-1, #fdfcfd);
+  resize: none;
+  outline: none;
+  box-sizing: border-box;
+  line-height: 1.5;
+}
+
+.ctc-reply-input-textarea:focus {
+  box-shadow: 0 0 0 2px var(--accent-a8, #9000a56e);
+}
+
+.ctc-edit-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2, 6px);
+}
+
+.ctc-tiny-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: var(--radius-2, 4px);
+  background: transparent;
+  cursor: pointer;
+  font-size: 11px;
+  color: var(--gray-10, #84828e);
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.ctc-tiny-btn:hover {
+  background: var(--gray-a3, #30004010);
+  color: var(--gray-12, #211f26);
+}
+
+.ctc-tiny-btn--danger:hover {
+  background: var(--red-a3, #ff000f12);
+  color: var(--red-11, #d31e29);
+}
+
+/* ─── Reply bar ───────────────────────────────────────────────────────────── */
+
+.ctc-reply-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 6px);
+  padding: var(--space-3, 10px) var(--space-3, 14px) var(--space-3, 12px);
+  border-top: 1px solid var(--gray-a4, #20003618);
+  background: var(--gray-2, #faf9fb);
+}
+
+.ctc-reply-field {
+  flex: 1;
+  border: 1px solid var(--gray-a6, #14003527);
+  border-radius: var(--radius-4, 8px);
+  padding: var(--space-2, 8px) var(--space-3, 12px);
+  font-size: var(--font-size-2, 13px);
+  font-family: inherit;
+  color: var(--gray-12, #211f26);
+  background: var(--gray-1, #fdfcfd);
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.ctc-reply-field:focus {
+  border-color: var(--accent-8, #cf91d8);
+  box-shadow: 0 0 0 2px var(--accent-a6, #a400b03d);
+}
+
+.ctc-reply-field::placeholder {
+  color: var(--gray-9, #8e8c99);
+}
+
+.ctc-send-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: var(--radius-4, 8px);
+  background: var(--accent-9, #ab4aba);
+  color: var(--gray-1, #fefcff);
+  cursor: pointer;
+  font-size: var(--font-size-3, 16px);
+  flex-shrink: 0;
+  transition: background 0.12s ease, filter 0.12s ease;
+}
+
+.ctc-send-btn:hover:not(:disabled) {
+  background: var(--accent-10, #a144af);
+}
+
+.ctc-send-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ─── Buttons (edit actions) ───────────────────────────────────────────────── */
+
+.ctc-btn {
+  padding: 4px var(--space-2, 10px);
+  border-radius: var(--radius-3, 6px);
+  font-size: var(--font-size-1, 12px);
+  font-weight: var(--font-weight-medium, 500);
+  cursor: pointer;
+  border: none;
+  font-family: inherit;
+  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+
+.ctc-btn--ghost {
+  background: transparent;
+  color: var(--gray-11, #65636d);
+  border: 1px solid var(--gray-a5, #20003820);
+}
+
+.ctc-btn--ghost:hover {
+  background: var(--gray-a3, #30004010);
+}
+
+.ctc-btn--primary {
+  background: var(--accent-9, #ab4aba);
+  color: var(--gray-1, #fefcff);
+}
+
+.ctc-btn--primary:hover {
+  background: var(--accent-10, #a144af);
+}
+
+/* ─── Avatar ──────────────────────────────────────────────────────────────── */
+
+.ctc-avatar {
+  border-radius: var(--radius-full, 9999px);
+  background: linear-gradient(
+    145deg,
+    var(--accent-9, #ab4aba) 0%,
+    var(--accent-7, #deade3) 100%
+  );
+  color: var(--gray-1, #fefcff);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: var(--font-weight-bold, 700);
+  flex-shrink: 0;
+  letter-spacing: -0.5px;
+}
+
+/* ─── Kebab menu ──────────────────────────────────────────────────────────── */
+
+.ctc-kebab-wrapper {
+  position: relative;
+}
+
+.ctc-kebab-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  background: var(--gray-1, #fdfcfd);
+  border: 1px solid var(--gray-a5, #20003820);
+  border-radius: var(--radius-4, 8px);
+  box-shadow: var(--shadow-4, 0 4px 16px rgba(32, 0, 56, 0.12));
+  min-width: 130px;
+  z-index: 10;
+  overflow: hidden;
+  padding: var(--space-1, 4px) 0;
+}
+
+.ctc-menu-item {
+  display: block;
+  width: 100%;
+  padding: var(--space-2, 8px) var(--space-3, 14px);
+  font-size: var(--font-size-2, 13px);
+  color: var(--gray-12, #211f26);
+  background: none;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.1s ease;
+}
+
+.ctc-menu-item:hover {
+  background: var(--gray-a3, #30004010);
+}
+
+.ctc-menu-item--danger {
+  color: var(--red-11, #d31e29);
+}
+
+.ctc-menu-item--danger:hover {
+  background: var(--red-a3, #ff000f12);
+}

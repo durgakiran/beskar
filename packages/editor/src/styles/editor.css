@@ -2440,3 +2440,22 @@ td.selectedCell {
   max-width: 100% !important;
   height: auto !important;
 }
+
+/* ─── Inline Comment Highlights ─────────────────────────────────────────────── */
+
+.comment-highlight {
+  background: rgb(254 249 195);           /* yellow-100 */
+  border-bottom: 2px dashed #facc15;      /* yellow-400 */
+  cursor: pointer;
+  border-radius: 2px;
+  transition: background 0.15s ease;
+}
+
+.comment-highlight:hover {
+  background: rgb(254 240 138);           /* yellow-200 */
+}
+
+.comment-highlight.active {
+  background: rgb(253 230 138);           /* amber-200 */
+  border-bottom-color: #eab308;           /* yellow-500 */
+}

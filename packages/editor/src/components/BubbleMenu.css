@@ -59,6 +59,21 @@
 .bubble-menu-button svg {
   width: 16px;
   height: 16px;
+  flex-shrink: 0;
+}
+
+.bubble-menu-button--with-label {
+  width: auto;
+  min-width: unset;
+  padding: 0 10px;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.bubble-menu-button--with-label .bubble-menu-button__label {
+  line-height: 1;
 }
 
 .bubble-menu-separator {
@@ -68,3 +83,13 @@
   margin: 0 4px;
 }
 
+.bubble-menu-button.is-disabled,
+.bubble-menu-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.bubble-menu-button.is-disabled:hover,
+.bubble-menu-button:disabled:hover {
+  background: transparent;
+}

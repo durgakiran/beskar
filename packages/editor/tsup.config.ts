@@ -9,7 +9,7 @@ export default defineConfig({
   splitting: false,
   sourcemap: true,
   clean: true,
-  external: ['react', 'react-dom'],
+  external: ['react', 'react-dom', '@radix-ui/themes'],
   treeshake: true,
   minify: false,
   tsconfig: './tsconfig.json',

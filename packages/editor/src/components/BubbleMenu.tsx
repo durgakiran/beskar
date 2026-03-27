@@ -132,22 +132,27 @@ export function BubbleMenu({
 export interface BubbleMenuButtonProps {
   onClick: () => void;
   isActive?: boolean;
+  disabled?: boolean;
   children: React.ReactNode;
   title?: string;
+  className?: string;
 }
 
 export function BubbleMenuButton({
   onClick,
   isActive = false,
+  disabled = false,
   children,
   title,
+  className = '',
 }: BubbleMenuButtonProps) {
   return (
     <button
       type="button"
-      onClick={onClick}
-      className={`bubble-menu-button ${isActive ? 'is-active' : ''}`}
+      onClick={disabled ? undefined : onClick}
+      className={`bubble-menu-button ${isActive ? 'is-active' : ''} ${disabled ? 'is-disabled' : ''} ${className}`.trim()}
       title={title}
+      disabled={disabled}
     >
       {children}
     </button>

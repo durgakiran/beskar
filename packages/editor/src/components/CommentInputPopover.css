@@ -1,0 +1,66 @@
+/* Comment Input Popover */
+.comment-input-popover {
+  background: var(--gray-1, #fdfcfd);
+  border: 1px solid var(--gray-a5, #20003820);
+  border-radius: var(--radius-4, 10px);
+  box-shadow: var(--shadow-4, 0 4px 24px rgba(32, 0, 56, 0.12), 0 0 0 1px var(--gray-a4, #20003618));
+  padding: var(--space-3, 12px);
+  width: 320px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2, 8px);
+  font-family: var(--default-font-family, inherit);
+  animation: commentPopoverIn 0.15s ease-out;
+}
+
+/* Opacity only: inline `transform` sets anchor (right/left of block). */
+@keyframes commentPopoverIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.comment-input-textarea {
+  width: 100%;
+  min-height: 60px;
+  max-height: 140px;
+  resize: none;
+  border: 1px solid var(--gray-a6, #14003527);
+  border-radius: var(--radius-3, 6px);
+  padding: var(--space-2, 8px) var(--space-2, 10px);
+  font-size: var(--font-size-2, 14px);
+  font-family: inherit;
+  line-height: 1.5;
+  color: var(--gray-12, #211f26);
+  background: var(--gray-2, #faf9fb);
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+  box-sizing: border-box;
+}
+
+.comment-input-textarea:focus {
+  border-color: var(--accent-8, #cf91d8);
+  background: var(--gray-1, #fdfcfd);
+  box-shadow: 0 0 0 2px var(--accent-a6, #a400b03d);
+}
+
+.comment-input-textarea::placeholder {
+  color: var(--gray-9, #8e8c99);
+}
+
+.comment-input-error {
+  font-size: 12px;
+  color: #ef4444;
+  margin: 0;
+}
+
+.comment-input-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2, 8px);
+}

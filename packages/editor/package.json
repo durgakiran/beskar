@@ -18,7 +18,8 @@
       "import": "./dist/index.mjs",
       "require": "./dist/index.js"
     },
-    "./styles.css": "./dist/styles.css"
+    "./styles.css": "./dist/styles.css",
+    "./index.css": "./dist/index.css"
   },
   "files": [
     "dist"
@@ -33,6 +34,7 @@
     "npm": ">=10.0.0"
   },
   "peerDependencies": {
+    "@radix-ui/themes": "^3.2.0",
     "@tiptap/core": "3.6.6",
     "@tiptap/react": "3.6.6",
     "react": "^19.0.0",
@@ -121,6 +123,7 @@
     "tippy.js": "^6.3.7"
   },
   "devDependencies": {
+    "@radix-ui/themes": "^3.2.1",
     "@tiptap/core": "3.6.6",
     "@tiptap/react": "3.6.6",
     "@types/katex": "^0.16.7",

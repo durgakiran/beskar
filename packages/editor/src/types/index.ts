@@ -28,6 +28,45 @@ export interface ImageAPIHandler {
   getImageUrl?: (url: string) => string; // Optional CDN transformation
 }
 
+// ─── Inline Comments ──────────────────────────────────────────────────────────
+
+export interface CommentReply {
+  id: string;
+  threadId: string;
+  authorId: string | null;      // null = deleted user
+  authorName: string | null;    // null = deleted user
+  body: string;
+  editedAt?: string;            // ISO timestamp
+  createdAt: string;            // ISO timestamp
+}
+
+export interface CommentThread {
+  id: string;
+  documentId: string;
+  commentId: string;            // UUID stored as TipTap mark attribute
+  quotedText: string;
+  createdBy: string | null;     // null = deleted user
+  createdByName: string | null; // null = deleted user
+  resolvedBy?: string | null;
+  resolvedAt?: string | null;   // ISO timestamp
+  createdAt: string;            // ISO timestamp
+  orphaned?: boolean;           // true when the anchoring text was deleted
+  replies: CommentReply[];
+}
+
+export interface CommentAPIHandler {
+  getThreads: (documentId: string) => Promise<CommentThread[]>;
+  createThread: (documentId: string, commentId: string, quotedText: string, body: string) => Promise<CommentThread>;
+  resolveThread: (threadId: string) => Promise<CommentThread>;
+  deleteThread: (threadId: string) => Promise<void>;
+  addReply: (threadId: string, body: string) => Promise<CommentReply>;
+  editReply: (replyId: string, body: string) => Promise<CommentReply>;
+  deleteReply: (replyId: string) => Promise<void>;
+  orphanThread: (threadId: string) => Promise<void>;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 export interface EditorProps {
   initialContent?: any;
   editable?: boolean;
@@ -39,6 +78,7 @@ export interface EditorProps {
   className?: string;
   autoFocus?: boolean | 'start' | 'end' | number;
   imageHandler?: ImageAPIHandler;
+  commentHandler?: CommentAPIHandler;
 }
 
 export interface EditorContentProps {

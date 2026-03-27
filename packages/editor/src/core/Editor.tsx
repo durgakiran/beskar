@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useRef, useState, useMemo } from 'react';
+import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import { EditorContent, useEditor } from '@tiptap/react';
 import type { EditorProps } from '../types';
 import { getExtensions } from '../extensions';
@@ -8,7 +8,7 @@ import { useDebounce } from '../utils/debounce';
 
 /**
  * Main Editor component
- * 
+ *
  * @example
  * ```tsx
  * <Editor
@@ -23,7 +23,7 @@ import { useDebounce } from '../utils/debounce';
 export function Editor({
   initialContent,
   editable = true,
-  placeholder = 'Write something....',
+  placeholder = 'Write something or type "/" for commands....',
   collaboration,
   onUpdate,
   onReady,
@@ -31,6 +31,7 @@ export function Editor({
   className = '',
   autoFocus = false,
   imageHandler,
+  commentHandler,
 }: EditorProps) {
   const [content, setContent] = useState<any>(null);
   const [hasInitialized, setHasInitialized] = useState(false);
@@ -48,6 +49,17 @@ export function Editor({
     onReadyRef.current = onReady;
   }, [onReady]);
 
+  // Orphan callback — call commentHandler.orphanThread when a mark is removed
+  const onCommentOrphaned = useCallback(
+    (commentId: string) => {
+      if (!commentHandler) return;
+      commentHandler.orphanThread(commentId).catch((err) => {
+        console.error('[Editor] orphanThread failed', err);
+      });
+    },
+    [commentHandler],
+  );
+
   // Get all extensions - memoize to prevent recreation
   const extensions = useMemo(
     () =>
@@ -56,8 +68,10 @@ export function Editor({
         collaboration,
         additionalExtensions: customExtensions,
         imageHandler,
+        onCommentOrphaned: commentHandler ? onCommentOrphaned : undefined,
       }),
-    [placeholder, collaboration, customExtensions, imageHandler]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [placeholder, collaboration, customExtensions, imageHandler, commentHandler],
   );
 
   // Initialize editor
@@ -70,12 +84,12 @@ export function Editor({
     onCreate: ({ editor: currentEditor }) => {
       console.log('[Editor] onCreate called, adding blockIds...');
       setHasInitialized(true);
-      
+
       // Add blockIds to all block nodes right after creation
       const { state, view } = currentEditor;
       const tr = state.tr;
       let modified = false;
-      
+
       state.doc.descendants((node, pos) => {
         // Only process block-level nodes
         const blockTypes = ['heading', 'paragraph', 'blockquote', 'codeBlock', 'bulletList', 'orderedList', 'horizontalRule'];
@@ -86,20 +100,13 @@ export function Editor({
             blockId,
           });
           modified = true;
-          console.log(`[Editor] Added blockId to ${node.type.name} at pos ${pos}:`, blockId);
         }
       });
-      
+
       if (modified) {
-        console.log('[Editor] Applying blockId transaction...');
         view.dispatch(tr);
-        console.log('[Editor] BlockIds applied!');
       }
-      
-      if (collaboration) {
-        // For collaborative editing, connect to the provider
-        // The collaboration extension handles the sync
-      }
+
       if (onReadyRef.current) {
         onReadyRef.current(currentEditor);
       }
@@ -133,4 +140,3 @@ export function Editor({
     </div>
   );
 }
-
