@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { Editor } from '@tiptap/core';
 import { posToDOMRect } from '@tiptap/core';
+import { CellSelection } from '@tiptap/pm/tables';
 import * as Popover from '@radix-ui/react-popover';
 import './BubbleMenu.css';
 
@@ -59,8 +60,8 @@ export function BubbleMenu({
         return;
       }
 
-      // Don't show in tables or special nodes
-      if (editor.isActive('table') || editor.isActive('mermaid')) {
+      // Suppress on multi-cell selection or special nodes; allow text selection inside cells
+      if (selection instanceof CellSelection || editor.isActive('mermaid')) {
         setIsOpen(false);
         return;
       }

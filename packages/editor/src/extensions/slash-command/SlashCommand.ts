@@ -68,6 +68,16 @@ export const SlashCommand = Extension.create<SlashCommandOptions>({
             }
           }
 
+          if (!isAllowedDepth) {
+            for (let depth = $from.depth; depth > 0; depth--) {
+              const node = $from.node(depth);
+              if (node.type.name === 'tableCell') {
+                isAllowedDepth = true;
+                break;
+              }
+            }
+          }
+
           return isAllowedDepth && isParagraph && isStartOfNode && isValidAfterContent;
         },
         items: ({ query, editor }: { query: string; editor: any }) => {

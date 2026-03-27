@@ -882,6 +882,11 @@
 
 .beskar-editor .ProseMirror table th {
   font-weight: 700;
+  background-color: rgb(243, 244, 246);
+}
+
+.beskar-editor.dark .ProseMirror table th {
+  background-color: rgba(255, 255, 255, 0.06);
 }
 
 .beskar-editor .ProseMirror table .selectedCell {

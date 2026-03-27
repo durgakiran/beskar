@@ -184,27 +184,41 @@ export const TableCell = Node.create<TableCellOptions>({
             const { doc, selection } = state;
             const decorations: Decoration[] = [];
             const cells = getCellsInColumn(0)(selection);
+            const table = findTable(selection);
+            const map = table ? TableMap.get(table.node) : null;
 
             if (cells) {
               cells.forEach(({ pos }: { pos: number }, index: number) => {
                 const cellPos = pos; // Capture cell position for this row
-                
+
+                let actualRowIndex = index;
+                if (table && map) {
+                  const cellPosInTable = pos - table.start;
+                  const rect = map.findCell(cellPosInTable);
+                  if (rect) actualRowIndex = rect.top;
+                }
+
+                const isFirstRow = actualRowIndex === 0;
+                const isLastRow = map
+                  ? actualRowIndex === map.height - 1
+                  : index === cells.length - 1;
+
                 decorations.push(
                   Decoration.widget(
                     pos + 1,
                     () => {
-                    const rowSelected = isRowSelected(index)(selection);
+                    const rowSelected = isRowSelected(actualRowIndex)(selection);
                     let className = 'grip-row';
 
                     if (rowSelected) {
                       className += ' selected';
                     }
 
-                    if (index === 0) {
+                    if (isFirstRow) {
                       className += ' first';
                     }
 
-                    if (index === cells.length - 1) {
+                    if (isLastRow) {
                       className += ' last';
                     }
 
@@ -219,18 +233,15 @@ export const TableCell = Node.create<TableCellOptions>({
                     root.render(
                       React.createElement(RowDragHandle, {
                         editor: this.editor,
-                        rowIndex: index,
-                        isFirst: index === 0,
-                        isLast: index === cells.length - 1,
+                        rowIndex: actualRowIndex,
+                        isFirst: isFirstRow,
+                        isLast: isLastRow,
                         onHighlight: () => {
-                          // Set the selected row index to trigger highlighting
-                          selectedRowIndex = index;
-                          
-                          // Actually select the row in the editor (not just decorations)
+                          selectedRowIndex = actualRowIndex;
+
                           const view = this.editor.view;
-                          const tr = selectRow(index)(view.state.tr, cellPos);
-                          // Add metadata to coordinate with column selection
-                          tr.setMeta('highlightRow', index);
+                          const tr = selectRow(actualRowIndex)(view.state.tr, cellPos);
+                          tr.setMeta('highlightRow', actualRowIndex);
                           tr.setMeta('clearColumnSelection', true);
                           view.dispatch(tr);
                         },
@@ -240,7 +251,7 @@ export const TableCell = Node.create<TableCellOptions>({
                     return grip;
                   },
                     {
-                      key: `row-grip-${index}`,
+                      key: `row-grip-${actualRowIndex}`,
                       destroy: (node) => {
                         const root = reactRoots.get(node as HTMLElement);
                         if (root) {
