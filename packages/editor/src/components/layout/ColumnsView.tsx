@@ -1,27 +1,33 @@
-import React, { useCallback, useRef, useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { NodeViewWrapper, NodeViewContent } from '@tiptap/react';
 import type { NodeViewProps } from '@tiptap/react';
 import { useFloating, flip, shift, offset, autoUpdate } from '@floating-ui/react';
 import { ColumnsFloatingMenu } from './ColumnsFloatingMenu';
 
-export function ColumnsView({ node, editor, getPos, updateAttributes }: NodeViewProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const latestWidthsRef = useRef<{ left: number, right: number } | null>(null);
-  const [isResizing, setIsResizing] = useState(false);
+export function ColumnsView({ node, editor, getPos }: NodeViewProps) {
   const [showToolbar, setShowToolbar] = useState(false);
 
-  const { refs, floatingStyles } = useFloating({
+  const { refs, floatingStyles, isPositioned } = useFloating({
     placement: 'bottom',
     middleware: [offset(10), flip({ padding: 10 }), shift({ padding: 10 })],
     whileElementsMounted: autoUpdate,
     open: showToolbar,
   });
 
-  // Default widths are 50/50 initially
-  const leftWidth = node.child(0)?.attrs.width || 50;
-  const rightWidth = node.child(1)?.attrs.width || 50;
+  useEffect(() => {
+    if (node.attrs.columnCount !== node.childCount && typeof getPos === 'function') {
+      const pos = getPos();
+      if (pos !== undefined && pos >= 0) {
+        editor.view.dispatch(
+          editor.state.tr.setNodeMarkup(pos, undefined, {
+            ...node.attrs,
+            columnCount: node.childCount,
+          })
+        );
+      }
+    }
+  }, [editor, getPos, node.attrs.columnCount, node.childCount]);
 
-  // Monitor selection to show/hide handler or selection state
   useEffect(() => {
     const checkSelection = () => {
       if (!editor.isEditable) {
@@ -38,7 +44,10 @@ export function ColumnsView({ node, editor, getPos, updateAttributes }: NodeView
       const nodeStart = pos;
       const nodeEnd = pos + node.nodeSize;
 
-      const isInside = from >= nodeStart && to <= nodeEnd;
+      const isInside =
+        (from >= nodeStart && to <= nodeEnd) ||
+        from === nodeStart;
+
       setShowToolbar(isInside);
     };
 
@@ -53,134 +62,42 @@ export function ColumnsView({ node, editor, getPos, updateAttributes }: NodeView
     };
   }, [editor, getPos, node.nodeSize]);
 
-  const startResize = useCallback(
-    (e: React.MouseEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
+  const columnCount = node.attrs.columnCount === 3 ? 3 : 2;
 
-      if (!containerRef.current || !editor.isEditable) return;
-      if (typeof getPos !== 'function') return;
-
-      setIsResizing(true);
-      const startX = e.clientX;
-      const initialLeftWidth = leftWidth;
-      const initialRightWidth = rightWidth;
-
-      const containerWidth = containerRef.current.getBoundingClientRect().width;
-
-      const handleMouseMove = (mouseEvent: MouseEvent) => {
-        const deltaX = mouseEvent.clientX - startX;
-        const deltaPercent = (deltaX / containerWidth) * 100;
-
-        let newLeftWidth = initialLeftWidth + deltaPercent;
-        let newRightWidth = initialRightWidth - deltaPercent;
-
-        // Constraint minimum widths (e.g., min 10%)
-        if (newLeftWidth < 10) {
-          newRightWidth -= 10 - newLeftWidth;
-          newLeftWidth = 10;
-        } else if (newRightWidth < 10) {
-          newLeftWidth -= 10 - newRightWidth;
-          newRightWidth = 10;
-        }
-
-        // Update CSS variables on the wrapper to prevent ProseMirror from reverting DOM nodes for silky smooth dragging
-        if (containerRef.current) {
-          containerRef.current.style.setProperty('--left-column-width', `${newLeftWidth}%`);
-          containerRef.current.style.setProperty('--right-column-width', `${newRightWidth}%`);
-          
-          const handle = containerRef.current.querySelector('.columns-resize-handle') as HTMLElement;
-          if (handle) {
-            handle.style.left = `calc(${newLeftWidth}% - 8px)`;
-          }
-        }
-        
-        // Save latest values to ref for mouseup to use
-        latestWidthsRef.current = { left: newLeftWidth, right: newRightWidth };
-      };
-
-      const handleMouseUp = () => {
-        setIsResizing(false);
-        document.removeEventListener('mousemove', handleMouseMove);
-        document.removeEventListener('mouseup', handleMouseUp);
-        
-        // Clean up CSS variables to return control to React/Tiptap state
-        if (containerRef.current) {
-          containerRef.current.style.removeProperty('--left-column-width');
-          containerRef.current.style.removeProperty('--right-column-width');
-          
-          const handle = containerRef.current.querySelector('.columns-resize-handle') as HTMLElement;
-          if (handle) {
-            handle.style.removeProperty('left');
-          }
-        }
-        
-        const finalWidths = latestWidthsRef.current;
-        if (!finalWidths) return;
-
-        // Update Tiptap only on mouseup
-        const pos = getPos();
-        if (pos !== undefined) {
-           const transaction = editor.state.tr;
-           const leftNodeSize = node.child(0).nodeSize;
-           const leftNodePos = pos + 1;
-           const rightNodePos = pos + 1 + leftNodeSize;
-
-           transaction.setNodeMarkup(leftNodePos, undefined, {
-             ...node.child(0).attrs,
-             width: finalWidths.left,
-           });
-
-           transaction.setNodeMarkup(rightNodePos, undefined, {
-             ...node.child(1).attrs,
-             width: finalWidths.right,
-           });
-
-           editor.view.dispatch(transaction);
-        }
-      };
-
-      document.addEventListener('mousemove', handleMouseMove);
-      document.addEventListener('mouseup', handleMouseUp);
-    },
-    [editor, getPos, leftWidth, rightWidth, node]
-  );
+  const columnPlaceholderText =
+    (editor.storage as { editorUi?: { columnLayoutPlaceholder?: string } }).editorUi
+      ?.columnLayoutPlaceholder ?? '/ to insert';
 
   return (
     <NodeViewWrapper
-      ref={(node: HTMLElement | null) => {
-        containerRef.current = node as HTMLDivElement;
-        refs.setReference(node);
+      ref={(el: HTMLElement | null) => {
+        refs.setReference(el);
       }}
-      className={`columns-wrapper ${showToolbar ? 'selected' : ''} ${isResizing ? 'resizing' : ''}`}
+      className={`columns-wrapper ${showToolbar ? 'selected' : ''}`}
+      role="group"
+      aria-label={`${columnCount}-column layout`}
+      style={
+        {
+          ['--editor-column-placeholder' as string]: JSON.stringify(columnPlaceholderText),
+        } as React.CSSProperties
+      }
     >
-      <div className="columns-container" style={{ display: 'flex', gap: '1rem', width: '100%', overflowX: 'auto', position: 'relative' }}>
-        <NodeViewContent className="editor-columns columns-content" style={{ display: 'flex', width: '100%', gap: '1rem' }} />
+      <div className="columns-container">
+        <NodeViewContent className="editor-columns columns-content" />
       </div>
-      
-      <div 
-        className="columns-resize-handle"
-        onMouseDown={editor.isEditable ? startResize : undefined}
-        contentEditable={false}
-        style={{
-          position: 'absolute',
-          left: `calc(${leftWidth}% - 8px)`,
-          top: 0,
-          bottom: 0,
-          width: '16px',
-          cursor: editor.isEditable ? 'col-resize' : 'default',
-          zIndex: 10,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}
-      >
-        <div style={{ width: '2px', height: '100%', backgroundColor: '#e2e8f0', transition: 'background-color 0.15s ease' }} />
-      </div>
-      
+
       {showToolbar && editor.isEditable && (
-        <div ref={refs.setFloating} style={{ ...floatingStyles, zIndex: 50, pointerEvents: 'auto' }} className="image-block-toolbar-floating">
-          <ColumnsFloatingMenu editor={editor} getPos={getPos} />
+        <div
+          ref={refs.setFloating}
+          style={{
+            ...floatingStyles,
+            zIndex: 50,
+            pointerEvents: 'auto',
+            visibility: isPositioned ? 'visible' : 'hidden',
+          }}
+          className="image-block-toolbar-floating"
+        >
+          <ColumnsFloatingMenu editor={editor} getPos={getPos} columnsNode={node} />
         </div>
       )}
     </NodeViewWrapper>

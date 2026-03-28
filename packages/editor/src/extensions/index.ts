@@ -9,7 +9,7 @@ import { CollaborationCaret } from '@tiptap/extension-collaboration-caret';
 import { Typography } from '@tiptap/extension-typography';
 import { TaskList, TaskItem } from '@tiptap/extension-list';
 import { ListItem } from '@tiptap/extension-list-item';
-import type { Extensions } from '@tiptap/core';
+import { Extension, type Extensions } from '@tiptap/core';
 import type { AttachmentAPIHandler, AttachmentRef, CollaborationConfig, ImageAPIHandler } from '../types';
 import { CustomAttributes } from './custom-attributes';
 import { ImagePasteDrop } from './image-paste-drop';
@@ -36,6 +36,7 @@ import {
 import { NoteBlock } from '../nodes/NoteBlock';
 import { ImageBlock } from '../nodes/ImageBlock';
 import { AttachmentInline } from '../nodes/AttachmentInline';
+import { StatusBadge } from '../nodes/StatusBadge';
 import { MathBlock } from '../nodes/MathBlock';
 import { TableOfContents } from '../nodes/TableOfContents';
 import { InlineMath } from './math-inline';
@@ -53,6 +54,7 @@ export { NoteBlock } from '../nodes/NoteBlock';
 export * from '../nodes/note/utils';
 export { ImageBlock } from '../nodes/ImageBlock';
 export { AttachmentInline } from '../nodes/AttachmentInline';
+export { StatusBadge } from '../nodes/StatusBadge';
 export * from '../components/image/utils';
 export { SlashCommand } from './slash-command';
 export { ImagePasteDrop } from './image-paste-drop';
@@ -62,8 +64,32 @@ export { BlockDragDrop } from './block-drag-drop';
 export { Columns } from '../nodes/layout/Columns';
 export { Column } from '../nodes/layout/Column';
 
+/** Exposes editor-level UI strings (e.g. column placeholders) to NodeViews via `editor.storage.editorUi`. */
+const EditorUi = Extension.create({
+  name: 'editorUi',
+  addOptions() {
+    return {
+      placeholder: 'Write something....',
+      /** Hint inside layout column cells (Confluence-style short line). */
+      columnLayoutPlaceholder: '/ to insert',
+    };
+  },
+  addStorage() {
+    return {
+      placeholder: 'Write something....',
+      columnLayoutPlaceholder: '/ to insert',
+    };
+  },
+  onCreate() {
+    this.storage.placeholder = this.options.placeholder;
+    this.storage.columnLayoutPlaceholder = this.options.columnLayoutPlaceholder;
+  },
+});
+
 export interface GetExtensionsOptions {
   placeholder?: string;
+  /** Placeholder shown in empty paragraphs inside column layouts (default: `/ to insert`). */
+  columnLayoutPlaceholder?: string;
   collaboration?: CollaborationConfig;
   additionalExtensions?: Extensions;
   imageHandler?: ImageAPIHandler;
@@ -81,6 +107,7 @@ export interface GetExtensionsOptions {
 export function getExtensions(options: GetExtensionsOptions = {}): Extensions {
   const {
     placeholder = 'Write something....',
+    columnLayoutPlaceholder = '/ to insert',
     collaboration,
     additionalExtensions = [],
     imageHandler,
@@ -107,12 +134,34 @@ export function getExtensions(options: GetExtensionsOptions = {}): Extensions {
       horizontalRule: false,
       listItem: false,
     }),
+    EditorUi.configure({ placeholder, columnLayoutPlaceholder }),
     Placeholder.configure({
-      placeholder: ({ node }) => {
+      // Defaults skip nested blocks: returning `includeChildren: false` from the
+      // descendants callback stops ProseMirror from recursing, so empty paragraphs
+      // inside `columns` never received `is-empty`. Traverse the full tree.
+      includeChildren: true,
+      // Show every empty text block in the doc (including all column cells), not only
+      // the block that contains the caret.
+      showOnlyCurrent: false,
+      placeholder: ({ node, pos, editor }) => {
         // Do not show placeholder inside noteBlock — the is-empty class lands on the
         // react-renderer wrapper (not the inner content), causing it to render outside
         // the visual note block due to float:left; height:0 on the ::before rule.
         if (node.type.name === 'noteBlock') return '';
+        // Layout wrappers can be marked empty when every cell is empty; keep attr empty
+        // so global ::before does not run (see editor.css).
+        if (node.type.name === 'columns' || node.type.name === 'column') return '';
+        // Inside column cells: global ::before breaks flex; use ::after + CSS var.
+        try {
+          const $pos = editor.state.doc.resolve(pos);
+          for (let d = $pos.depth; d > 0; d--) {
+            if ($pos.node(d).type.name === 'column') {
+              return columnLayoutPlaceholder;
+            }
+          }
+        } catch {
+          /* ignore resolve errors during transient states */
+        }
         return placeholder;
       },
     }),
@@ -134,6 +183,7 @@ export function getExtensions(options: GetExtensionsOptions = {}): Extensions {
     NoteBlock, // Custom note block with themes and styling
     ImageBlock, // Custom image block with upload and resize
     AttachmentInline, // Non-image file attachments as inline chips
+    StatusBadge, // Inline status pill (e.g. IN PROGRESS, DONE)
     MathBlock, // Custom math block for LaTeX formulas
     TableOfContents, // Auto-generated table of contents
     InlineMath, // Inline math formulas within text

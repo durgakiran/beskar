@@ -37,6 +37,8 @@ export * from './components/image';
 
 // Attachment inline chip
 export { AttachmentInline } from './nodes/AttachmentInline';
+export { StatusBadge } from './nodes/StatusBadge';
+export type { StatusBadgeColor } from './nodes/statusBadgeConstants';
 
 // Types
 export type {

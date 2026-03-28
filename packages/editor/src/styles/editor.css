@@ -1067,6 +1067,16 @@
   content: attr(data-placeholder);
 }
 
+/* When `columns` / `column` are decorated as empty (all cells empty), disable ::before — float breaks layout */
+.beskar-editor .ProseMirror .editor-column.is-empty::before,
+.beskar-editor .ProseMirror .editor-columns.is-empty::before {
+  content: none !important;
+  display: none !important;
+  float: none !important;
+  height: auto !important;
+  width: auto !important;
+}
+
 .beskar-editor.dark .ProseMirror .is-empty::before {
   color: rgba(255, 255, 255, 0.4);
 }
@@ -1797,22 +1807,25 @@ td.selectedCell {
   padding: 0;
 }
 
-/* Note Block Toolbar Floating */
-.note-block-toolbar-floating {
-  z-index: 50;
-  animation: fadeIn 0.15s ease;
-}
-
-@keyframes fadeIn {
+/*
+ * Floating toolbar: opacity-only entrance. Do not animate `transform` here —
+ * @floating-ui/react positions via inline `transform: translate(x,y)`; a CSS
+ * keyframe transform replaces it and flashes the bar at the wrong place (e.g. top-left).
+ */
+@keyframes floatingToolbarFadeIn {
   from {
     opacity: 0;
-    transform: translateX(-50%) translateY(-4px);
   }
 
   to {
     opacity: 1;
-    transform: translateX(-50%) translateY(0);
   }
+}
+
+/* Note Block Toolbar Floating */
+.note-block-toolbar-floating {
+  z-index: 50;
+  animation: floatingToolbarFadeIn 0.15s ease;
 }
 
 .note-block-toolbar-bottom {
@@ -2294,10 +2307,10 @@ td.selectedCell {
   cursor: ew-resize;
 }
 
-/* Floating Menu - positioned relative to the full-width wrapper */
+/* Floating Menu - positioned relative to the full-width wrapper (also used by columns layout) */
 .image-block-toolbar-floating {
   z-index: 50;
-  animation: fadeIn 0.15s ease;
+  animation: floatingToolbarFadeIn 0.15s ease;
   pointer-events: auto;
 }
 
@@ -2404,58 +2417,160 @@ td.selectedCell {
 }
 
 /* =====================================================
-   LAYOUT (COLUMNS) STYLES
+   LAYOUT (COLUMNS) STYLES (Confluence-style frame + dividers)
    ===================================================== */
-
-.editor-columns {
-  display: flex !important;
-  gap: 1rem;
-  width: 100%;
-  overflow-x: auto;
-  margin: 1.5rem 0;
-}
-
-.editor-column {
-  flex: 1 1 0;
-  min-width: 0;
-  /* Prevents flex items from overflowing when content is too wide */
-  /* Remove flex-basis here, inline styles will set it for asymmetric columns */
-}
 
 .columns-wrapper {
   position: relative;
   display: block;
+  margin: 1.25rem 0;
+}
+
+.columns-wrapper .columns-container {
+  display: flex;
+  flex-direction: row;
+  width: 100%;
+  overflow-x: auto;
+  position: relative;
+  gap: 0;
+  border: 1px solid var(--editor-border, #dfe1e6);
+  border-radius: 6px;
+  background: var(--editor-surface, #fff);
+  box-sizing: border-box;
+}
+
+.beskar-editor.dark .columns-wrapper .columns-container {
+  border-color: rgba(255, 255, 255, 0.14);
+  background: var(--editor-surface, transparent);
 }
 
 .columns-wrapper.selected .columns-container {
   outline: 2px solid var(--editor-accent, #0ea5e9);
   outline-offset: 2px;
-  border-radius: 4px;
 }
 
-/* Fix for Tiptap reacting NodeViewContent auto-generated intermediate div wrapper */
+/* Columns floating toolbar: layout label + chevron, icon-only presets */
+.columns-layout-dropdown-trigger {
+  min-width: 6.5rem;
+  justify-content: space-between;
+}
+
+.columns-layout-dropdown-chevron {
+  flex-shrink: 0;
+  opacity: 0.65;
+}
+
+.columns-layout-dropdown-content {
+  min-width: var(--radix-dropdown-menu-trigger-width, 8rem);
+}
+
+.editor-floating-toolbar-toggle.columns-preset-icon-btn {
+  padding: 0.35rem 0.5rem;
+}
+
+.editor-floating-toolbar-toggle.columns-preset-icon-btn svg {
+  display: block;
+}
+
+.editor-floating-toolbar-toggle.columns-preset-icon-btn[data-state="on"] svg rect {
+  opacity: 0.92;
+}
+
+.dark .editor-floating-toolbar-toggle.columns-preset-icon-btn[data-state="off"] svg rect {
+  opacity: 0.5;
+}
+
+.editor-columns {
+  display: flex !important;
+  flex: 1;
+  min-width: 0;
+  width: 100%;
+  margin: 0;
+  gap: 0 !important;
+}
+
+/*
+ * Tiptap's NodeViewContent injects an unstyled wrapper <div> between
+ * .columns-content and the actual .editor-column children. This rule
+ * forces that wrapper to be a flex container so columns lay out correctly.
+ */
 .columns-content>div {
   display: flex !important;
+  flex: 1;
+  min-width: 0;
   width: 100%;
-  gap: 1rem;
+  gap: 0 !important;
 }
 
-.columns-resize-handle {
-  transition: background-color 0.15s ease;
+.editor-column {
+  flex-grow: 1;
+  flex-shrink: 1;
+  flex-basis: 0;
+  min-width: 0;
+  min-height: 3rem;
+  padding: 0.75rem 1rem;
+  box-sizing: border-box;
+  border-radius: 0;
 }
 
-.columns-resize-handle:hover>div,
-.columns-wrapper.resizing .columns-resize-handle>div {
-  background-color: var(--editor-accent, #0ea5e9) !important;
+/*
+ * Column dividers: .beskar-editor .ProseMirror .block-node sets `border: 1px solid transparent`
+ * (high specificity), which overrides a plain .editor-column border-left. These selectors are
+ * scoped under .columns-wrapper so they win and the gutter line actually renders.
+ */
+.ProseMirror .columns-wrapper .editor-column:not(:first-child) {
+  border-left: 1px solid var(--editor-column-divider, #b3bac5);
 }
 
-/* While resizing, override Tiptap inline styles via CSS vars on the wrapper to prevent mutating proseMirror nodes */
-.columns-wrapper.resizing .columns-content>div>.editor-column:first-child {
-  flex-basis: var(--left-column-width, 50%) !important;
+.beskar-editor.dark .ProseMirror .columns-wrapper .editor-column:not(:first-child) {
+  border-left-color: var(--editor-column-divider, rgba(255, 255, 255, 0.22));
 }
 
-.columns-wrapper.resizing .columns-content>div>.editor-column:last-child {
-  flex-basis: var(--right-column-width, 50%) !important;
+.ProseMirror .columns-wrapper .editor-column:first-child {
+  border-left: none;
+}
+
+/*
+ * Column placeholders: TipTap uses data-placeholder on .is-empty + ::before with float:left;
+ * that breaks inside flex cells. We return '' from Placeholder inside columns and draw the
+ * hint from --editor-column-placeholder (set on .columns-wrapper) via ::after instead.
+ */
+.editor-column .is-empty {
+  position: relative;
+  min-height: 1.5em;
+}
+
+.editor-column .is-empty::before {
+  content: none !important;
+  display: none !important;
+}
+
+.editor-column .is-empty::after {
+  content: var(--editor-column-placeholder, "/ to insert");
+  position: absolute;
+  left: 0;
+  top: 0;
+  line-height: 1.625;
+  font-size: inherit;
+  font-weight: inherit;
+  color: rgba(0, 0, 0, 0.45);
+  pointer-events: none;
+  user-select: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.beskar-editor.dark .ProseMirror .editor-column .is-empty::after {
+  color: rgba(255, 255, 255, 0.42);
+}
+
+/* First block in a column: headings keep global margin-top; zero so cursor lines up with frame */
+.editor-column h1:first-child,
+.editor-column h2:first-child,
+.editor-column h3:first-child {
+  margin-top: 0;
 }
 
 /* Responsive Images inside Columns */
@@ -2624,4 +2739,194 @@ td.selectedCell {
 .dark .attachment-inline-wrapper.ProseMirror-selectednode .attachment-inline-chip {
   outline-color: var(--accent-8, var(--editor-accent-8));
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent-9, var(--editor-accent)) 45%, transparent);
+}
+
+/* --- Status badge (inline pill) --- */
+.status-badge-wrapper {
+  display: inline;
+}
+
+.status-badge-wrapper--readonly .status-badge {
+  cursor: default;
+}
+
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 9999px;
+  padding: 0.1rem 0.5rem;
+  font-size: 0.7rem;
+  font-weight: 700;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  letter-spacing: 0.05em;
+  border-width: 1px;
+  border-style: solid;
+  vertical-align: middle;
+  cursor: pointer;
+  user-select: none;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  box-sizing: border-box;
+}
+
+.status-badge--gray {
+  background: #f3f4f6;
+  color: #374151;
+  border-color: #d1d5db;
+}
+
+.status-badge--blue {
+  background: #dbeafe;
+  color: #1d4ed8;
+  border-color: #93c5fd;
+}
+
+.status-badge--green {
+  background: #dcfce7;
+  color: #15803d;
+  border-color: #86efac;
+}
+
+.status-badge--yellow {
+  background: #fef9c3;
+  color: #854d0e;
+  border-color: #fde047;
+}
+
+.status-badge--red {
+  background: #fee2e2;
+  color: #b91c1c;
+  border-color: #fca5a5;
+}
+
+.beskar-editor.dark .status-badge--gray,
+.dark .status-badge--gray {
+  background: #1f2937;
+  color: #d1d5db;
+  border-color: #374151;
+}
+
+.beskar-editor.dark .status-badge--blue,
+.dark .status-badge--blue {
+  background: #1e3a5f;
+  color: #93c5fd;
+  border-color: #1d4ed8;
+}
+
+.beskar-editor.dark .status-badge--green,
+.dark .status-badge--green {
+  background: #052e16;
+  color: #86efac;
+  border-color: #166534;
+}
+
+.beskar-editor.dark .status-badge--yellow,
+.dark .status-badge--yellow {
+  background: #422006;
+  color: #fde047;
+  border-color: #854d0e;
+}
+
+.beskar-editor.dark .status-badge--red,
+.dark .status-badge--red {
+  background: #450a0a;
+  color: #fca5a5;
+  border-color: #991b1b;
+}
+
+.status-badge--selected {
+  outline: 2px solid #3b82f6;
+  outline-offset: 2px;
+}
+
+.beskar-editor .ProseMirror-selectednode .status-badge,
+.ProseMirror-selectednode .status-badge {
+  outline: 2px solid #3b82f6;
+  outline-offset: 2px;
+}
+
+.status-badge-popover {
+  /* Explicit text color: portaled popovers often sit under <body>, where host apps may set
+     :root { color: light-on-dark }; color: inherit on inputs then yields invisible text on white. */
+  color: var(--editor-text-primary, #202020);
+  background: var(--editor-bg-primary, #fff);
+  border: 1px solid var(--editor-border, var(--editor-border-default, #e5e7eb));
+  border-radius: 8px;
+  padding: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 60;
+}
+
+.beskar-editor.dark .status-badge-popover,
+.dark .status-badge-popover {
+  color: var(--editor-text-primary, #fcfcfc);
+  background: var(--editor-bg-primary, var(--gray-2, #1f1f1f));
+  border-color: var(--gray-6, #3f3f46);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+}
+
+.status-badge-swatches {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.status-badge-swatch {
+  width: 16px;
+  height: 16px;
+  min-width: 16px;
+  min-height: 16px;
+  padding: 0;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: border-color 0.1s;
+  flex-shrink: 0;
+}
+
+.status-badge-swatch:focus-visible {
+  outline: 2px solid #3b82f6;
+  outline-offset: 2px;
+}
+
+.status-badge-swatch--active {
+  border-color: #3b82f6;
+}
+
+.status-badge-input {
+  width: 140px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  border: 1px solid var(--editor-border, var(--editor-border-default, #e5e7eb));
+  border-radius: 4px;
+  padding: 3px 6px;
+  outline: none;
+  box-sizing: border-box;
+  background: var(--editor-bg-primary, #fff);
+  color: var(--editor-text-primary, #202020);
+  caret-color: var(--editor-text-primary, #202020);
+}
+
+.beskar-editor.dark .status-badge-input,
+.dark .status-badge-input {
+  background: var(--editor-bg-secondary, var(--gray-3, #262626));
+  color: var(--editor-text-primary, #fcfcfc);
+  caret-color: var(--editor-text-primary, #fcfcfc);
+  border-color: var(--editor-border-default, #3a3a3a);
+}
+
+.status-badge-input:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+}
+
+.status-badge-input--error {
+  border-color: #ef4444;
+  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.2);
 }

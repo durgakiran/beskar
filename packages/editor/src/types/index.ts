@@ -101,6 +101,8 @@ export interface EditorProps {
   initialContent?: any;
   editable?: boolean;
   placeholder?: string;
+  /** Hint in empty paragraphs inside column layouts (default: `/ to insert`). */
+  columnLayoutPlaceholder?: string;
   collaboration?: CollaborationConfig;
   onUpdate?: (content: any) => void;
   onReady?: (editor: TiptapEditor) => void;

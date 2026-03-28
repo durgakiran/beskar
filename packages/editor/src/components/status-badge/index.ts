@@ -1,0 +1,1 @@
+export { StatusBadgeView } from './StatusBadgeView';

@@ -189,28 +189,102 @@ export const GROUPS: Group[] = [
           }).run();
         },
       },
+    ],
+  },
+  {
+    name: 'layout',
+    title: 'Layout',
+    commands: [
       {
         name: 'twoColumns',
         label: '2 Columns',
         icon: '◫',
         description: 'Create a 2-column layout',
-        aliases: ['columns', 'layout', 'grid', 'split'],
+        aliases: ['columns', 'layout', 'grid', 'split', 'two'],
         action: (editor) => {
-          editor.chain().focus().insertContent({
-            type: 'columns',
-            content: [
-              {
-                type: 'column',
-                attrs: { width: 50 },
-                content: [{ type: 'paragraph' }],
-              },
-              {
-                type: 'column',
-                attrs: { width: 50 },
-                content: [{ type: 'paragraph' }],
-              },
-            ],
-          }).run();
+          const insertAt = editor.state.selection.from;
+          const blockId = crypto.randomUUID();
+          editor
+            .chain()
+            .focus()
+            .insertContent({
+              type: 'columns',
+              attrs: { columnCount: 2, blockId },
+              content: [
+                {
+                  type: 'column',
+                  attrs: { width: null, blockId: crypto.randomUUID() },
+                  content: [{ type: 'paragraph' }],
+                },
+                {
+                  type: 'column',
+                  attrs: { width: null, blockId: crypto.randomUUID() },
+                  content: [{ type: 'paragraph' }],
+                },
+              ],
+            })
+            .run();
+          editor.commands.setTextSelection(insertAt + 3);
+        },
+      },
+      {
+        name: 'threeColumns',
+        label: '3 Columns',
+        icon: '▦',
+        description: 'Create a 3-column layout',
+        aliases: ['three', '3col', '3 columns'],
+        action: (editor) => {
+          const insertAt = editor.state.selection.from;
+          const blockId = crypto.randomUUID();
+          editor
+            .chain()
+            .focus()
+            .insertContent({
+              type: 'columns',
+              attrs: { columnCount: 3, blockId },
+              content: [
+                {
+                  type: 'column',
+                  attrs: { width: null, blockId: crypto.randomUUID() },
+                  content: [{ type: 'paragraph' }],
+                },
+                {
+                  type: 'column',
+                  attrs: { width: null, blockId: crypto.randomUUID() },
+                  content: [{ type: 'paragraph' }],
+                },
+                {
+                  type: 'column',
+                  attrs: { width: null, blockId: crypto.randomUUID() },
+                  content: [{ type: 'paragraph' }],
+                },
+              ],
+            })
+            .run();
+          editor.commands.setTextSelection(insertAt + 3);
+        },
+      },
+    ],
+  },
+  {
+    name: 'inline',
+    title: 'Inline',
+    commands: [
+      {
+        name: 'status',
+        label: 'Status Badge',
+        icon: '🏷️',
+        description: 'Insert an inline status badge',
+        aliases: ['badge', 'pill', 'state', 'status'],
+        action: (editor) => {
+          editor
+            .chain()
+            .focus()
+            .insertContent({
+              type: 'statusBadge',
+              attrs: { label: 'IN PROGRESS', color: 'gray' },
+            })
+            .run();
         },
       },
     ],

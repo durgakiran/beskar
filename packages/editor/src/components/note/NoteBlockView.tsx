@@ -13,7 +13,7 @@ export function NoteBlockView({ node, editor, updateAttributes, getPos }: NodeVi
   const { icon, emoji, backgroundColor, theme } = node.attrs;
   const [showToolbar, setShowToolbar] = useState(false);
 
-  const { refs, floatingStyles } = useFloating({
+  const { refs, floatingStyles, isPositioned } = useFloating({
     placement: 'bottom',
     middleware: [offset(10), flip({ padding: 10 }), shift({ padding: 10 })],
     whileElementsMounted: autoUpdate,
@@ -104,9 +104,13 @@ export function NoteBlockView({ node, editor, updateAttributes, getPos }: NodeVi
         <NodeViewContent className="note-block-content" />
       </div>
       {showToolbar && (
-        <div 
-          ref={refs.setFloating} 
-          style={{ ...floatingStyles, zIndex: 50 }}
+        <div
+          ref={refs.setFloating}
+          style={{
+            ...floatingStyles,
+            zIndex: 50,
+            visibility: isPositioned ? 'visible' : 'hidden',
+          }}
           className="note-block-toolbar-floating"
         >
           <NoteBlockToolbar

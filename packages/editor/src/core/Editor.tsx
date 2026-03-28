@@ -24,6 +24,7 @@ export function Editor({
   initialContent,
   editable = true,
   placeholder = 'Write something or type "/" for commands....',
+  columnLayoutPlaceholder,
   collaboration,
   onUpdate,
   onReady,
@@ -70,6 +71,7 @@ export function Editor({
     () =>
       getExtensions({
         placeholder,
+        columnLayoutPlaceholder,
         collaboration,
         additionalExtensions: customExtensions,
         imageHandler,
@@ -83,6 +85,7 @@ export function Editor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [
       placeholder,
+      columnLayoutPlaceholder,
       collaboration,
       customExtensions,
       imageHandler,
