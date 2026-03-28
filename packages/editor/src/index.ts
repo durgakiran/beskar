@@ -35,6 +35,9 @@ export { ImageBlock } from './nodes/ImageBlock';
 export * from './components/image/utils';
 export * from './components/image';
 
+// Attachment inline chip
+export { AttachmentInline } from './nodes/AttachmentInline';
+
 // Types
 export type {
   Editor as TiptapEditor,
@@ -44,6 +47,10 @@ export type {
   EditorContentProps,
   ImageAPIHandler,
   ImageUploadResult,
+  AttachmentAPIHandler,
+  AttachmentUploadResult,
+  AttachmentUploadOptions,
+  AttachmentRef,
   CommentAPIHandler,
   CommentThread,
   CommentReply,

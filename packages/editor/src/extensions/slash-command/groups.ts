@@ -1,4 +1,6 @@
 import type { Editor } from '@tiptap/core';
+import { getAttachmentPasteStorage } from '../attachment-paste-drop';
+import { insertAttachmentsAt } from '../attachment-upload';
 
 export interface Command {
   name: string;
@@ -144,18 +146,6 @@ export const GROUPS: Group[] = [
         },
       },
       {
-        name: 'image',
-        label: 'Image',
-        icon: '🖼️',
-        description: 'Upload and display an image',
-        aliases: ['img', 'photo', 'picture', 'upload'],
-        action: (editor) => {
-          editor.chain().focus().insertContent({
-            type: 'imageBlock',
-          }).run();
-        },
-      },
-      {
         name: 'horizontalRule',
         label: 'Divider',
         icon: '—',
@@ -225,7 +215,69 @@ export const GROUPS: Group[] = [
       },
     ],
   },
+  {
+    name: 'media',
+    title: 'Media',
+    commands: [
+      {
+        name: 'image',
+        label: 'Image',
+        icon: '🖼️',
+        description: 'Upload and display an image',
+        aliases: ['img', 'photo', 'picture'],
+        action: (editor) => {
+          editor.chain().focus().insertContent({
+            type: 'imageBlock',
+          }).run();
+        },
+      },
+      {
+        name: 'fileAttachment',
+        label: 'File attachment',
+        icon: '📎',
+        description: 'Upload a file (PDF, zip, spreadsheet, …)',
+        aliases: ['file', 'attachment', 'upload', 'pdf', 'zip', 'csv', 'doc'],
+        shouldBeHidden: (editor) =>
+          !editor.isEditable || !getAttachmentPasteStorage(editor)?.attachmentHandler,
+        action: (editor) => {
+          const pasteOpts = getAttachmentPasteStorage(editor);
+          const handler = pasteOpts?.attachmentHandler;
+          if (!handler) return;
+
+          const input = document.createElement('input');
+          input.type = 'file';
+          input.multiple = true;
+          input.accept = pasteOpts?.allowedMimeAccept ?? '*';
+          input.style.cssText = 'position:fixed;left:-1000px;top:-1000px;width:1px;height:1px;opacity:0;';
+          document.body.appendChild(input);
+
+          const cleanup = () => {
+            input.remove();
+            editor.chain().focus().run();
+          };
+
+          input.addEventListener('change', () => {
+            const files = input.files ? Array.from(input.files) : [];
+            if (files.length > 0) {
+              const pos = editor.state.selection.from;
+              insertAttachmentsAt(editor.view, pos, files, {
+                handler,
+                maxAttachmentBytes: pasteOpts?.maxAttachmentBytes,
+                onAttachmentRejected: pasteOpts?.onAttachmentRejected,
+              });
+            }
+            cleanup();
+          });
+
+          input.addEventListener('cancel', cleanup);
+
+          requestAnimationFrame(() => {
+            input.click();
+          });
+        },
+      },
+    ],
+  },
 ];
 
 export default GROUPS;
-

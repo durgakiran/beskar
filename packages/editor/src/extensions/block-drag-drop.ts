@@ -226,7 +226,13 @@ export const BlockDragDrop = Extension.create<BlockDragDropOptions>({
                 blockElement = innerWrapper;
               }
             }
-            
+            if (blockElement.classList.contains('react-renderer') && blockInfo.node.type.name === 'attachmentBlock') {
+              const innerCard = blockElement.querySelector('.attachment-block-card') as HTMLElement;
+              if (innerCard) {
+                blockElement = innerCard;
+              }
+            }
+
             // For details blocks, ensure we're using the details element, not the summary
             if (blockInfo.node.type.name === 'details') {
               // Make sure we're targeting the actual <details> element

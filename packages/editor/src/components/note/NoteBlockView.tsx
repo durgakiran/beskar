@@ -81,13 +81,19 @@ export function NoteBlockView({ node, editor, updateAttributes, getPos }: NodeVi
     };
   }, [editor, getPos, node.nodeSize]);
 
+  const isEmpty = node.textContent === '';
+
   return (
     <NodeViewWrapper
       ref={refs.setReference}
       className={`note-block-wrapper ${showToolbar ? 'selected' : ''}`}
       data-theme={theme}
     >
-      <div className="note-block-content-wrapper" style={{ backgroundColor }}>
+      <div
+        className="note-block-content-wrapper"
+        style={{ backgroundColor }}
+        {...(isEmpty ? { 'data-is-empty': '' } : {})}
+      >
         <div className="note-block-icon">
           {IconComponent ? (
             <IconComponent size={24} color={getIconColor()} />

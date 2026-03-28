@@ -28,6 +28,36 @@ export interface ImageAPIHandler {
   getImageUrl?: (url: string) => string; // Optional CDN transformation
 }
 
+export interface AttachmentUploadResult {
+  url: string;
+  attachmentId: string;
+  mimeType: string;
+  fileName: string;
+  fileSize: number;
+}
+
+export interface AttachmentUploadOptions {
+  signal?: AbortSignal;
+}
+
+export interface AttachmentAPIHandler {
+  uploadAttachment: (
+    file: File,
+    options?: AttachmentUploadOptions,
+  ) => Promise<AttachmentUploadResult>;
+  getAttachmentUrl?: (url: string) => string;
+  downloadAttachment?: (params: { url: string; fileName: string }) => void | Promise<void>;
+}
+
+/** Lightweight reference to a successfully uploaded attachment — emitted via `onAttachmentsChange`. */
+export interface AttachmentRef {
+  attachmentId: string;
+  fileName: string;
+  fileSize: number;
+  fileType: string;
+  fileUrl: string;
+}
+
 // ─── Inline Comments ──────────────────────────────────────────────────────────
 
 export interface CommentReply {
@@ -78,6 +108,15 @@ export interface EditorProps {
   className?: string;
   autoFocus?: boolean | 'start' | 'end' | number;
   imageHandler?: ImageAPIHandler;
+  /** When set, file attachments (slash /file, paste, drop) are enabled. */
+  attachmentHandler?: AttachmentAPIHandler;
+  /** Client-side max size; omit to skip the check. */
+  maxAttachmentBytes?: number;
+  onAttachmentRejected?: (reason: 'too_large', file: File) => void;
+  /** Passed to `<input type="file" accept="...">` for the slash picker (hint only). */
+  allowedMimeAccept?: string;
+  /** Called whenever the set of successfully uploaded attachments in the document changes. */
+  onAttachmentsChange?: (attachments: AttachmentRef[]) => void;
   commentHandler?: CommentAPIHandler;
 }
 

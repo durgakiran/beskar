@@ -1,13 +1,18 @@
 /**
  * ImagePasteDrop - Extension for handling image paste and drag-drop upload
+ * When attachments are configured, mixed file drops also enqueue non-image files.
  */
 
 import { Extension } from '@tiptap/core';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
-import type { ImageAPIHandler } from '../types';
+import type { AttachmentAPIHandler, ImageAPIHandler } from '../types';
+import { insertAttachmentsAt } from './attachment-upload';
 
 export interface ImagePasteDropOptions {
   imageHandler?: ImageAPIHandler;
+  attachmentHandler?: AttachmentAPIHandler;
+  maxAttachmentBytes?: number;
+  onAttachmentRejected?: (reason: 'too_large', file: File) => void;
 }
 
 export const ImagePasteDrop = Extension.create<ImagePasteDropOptions>({
@@ -16,16 +21,20 @@ export const ImagePasteDrop = Extension.create<ImagePasteDropOptions>({
   addOptions() {
     return {
       imageHandler: undefined,
+      attachmentHandler: undefined,
+      maxAttachmentBytes: undefined,
+      onAttachmentRejected: undefined,
     };
   },
 
   addProseMirrorPlugins() {
-    const { imageHandler } = this.options;
+    const options = this.options;
+    const { imageHandler } = options;
 
     return [
       new Plugin({
         key: new PluginKey('imagePasteDrop'),
-        
+
         props: {
           handlePaste: (view, event) => {
             const items = Array.from(event.clipboardData?.items || []);
@@ -41,7 +50,6 @@ export const ImagePasteDrop = Extension.create<ImagePasteDropOptions>({
               const file = item.getAsFile();
               if (!file) return;
 
-              // Insert image block with loading state
               const { tr, selection } = view.state;
               const tempImageNode = view.state.schema.nodes.imageBlock.create({
                 src: URL.createObjectURL(file),
@@ -53,7 +61,6 @@ export const ImagePasteDrop = Extension.create<ImagePasteDropOptions>({
               const insertPos = selection.from;
               view.dispatch(transaction);
 
-              // Upload image if handler is provided
               if (imageHandler) {
                 imageHandler
                   .uploadImage(file)
@@ -61,7 +68,6 @@ export const ImagePasteDrop = Extension.create<ImagePasteDropOptions>({
                     const { state } = view;
                     let foundPos = -1;
 
-                    // Find the uploaded image node
                     state.doc.descendants((node, pos) => {
                       if (
                         node.type.name === 'imageBlock' &&
@@ -88,7 +94,7 @@ export const ImagePasteDrop = Extension.create<ImagePasteDropOptions>({
                   })
                   .catch((error) => {
                     console.error('[ImagePasteDrop] Upload failed:', error);
-                    
+
                     const { state } = view;
                     let foundPos = -1;
 
@@ -125,11 +131,15 @@ export const ImagePasteDrop = Extension.create<ImagePasteDropOptions>({
               return false;
             }
 
-            const images = Array.from(event.dataTransfer.files).filter((file) =>
-              /image/i.test(file.type)
-            );
+            const allFiles = Array.from(event.dataTransfer.files);
+            const images = allFiles.filter((file) => file.type.startsWith('image/'));
+            const nonImages = allFiles.filter((file) => !file.type.startsWith('image/'));
 
-            if (images.length === 0) {
+            if (images.length === 0 && nonImages.length === 0) {
+              return false;
+            }
+
+            if (images.length === 0 && nonImages.length > 0) {
               return false;
             }
 
@@ -143,7 +153,9 @@ export const ImagePasteDrop = Extension.create<ImagePasteDropOptions>({
 
             if (!coordinates) return true;
 
-            images.forEach((file, index) => {
+            let dropPos = coordinates.pos;
+
+            for (const file of images) {
               const tempSrc = URL.createObjectURL(file);
               const node = schema.nodes.imageBlock.create({
                 src: tempSrc,
@@ -151,11 +163,11 @@ export const ImagePasteDrop = Extension.create<ImagePasteDropOptions>({
                 uploadStatus: imageHandler ? 'uploading' : 'idle',
               });
 
-              const transaction = view.state.tr.insert(coordinates.pos + index, node);
-              const insertPos = coordinates.pos + index;
-              view.dispatch(transaction);
+              const insertPos = dropPos;
+              const tr = view.state.tr.insert(dropPos, node);
+              view.dispatch(tr);
+              dropPos += node.nodeSize;
 
-              // Upload image if handler is provided
               if (imageHandler) {
                 imageHandler
                   .uploadImage(file)
@@ -163,10 +175,10 @@ export const ImagePasteDrop = Extension.create<ImagePasteDropOptions>({
                     const { state } = view;
                     let foundPos = -1;
 
-                    state.doc.descendants((node, pos) => {
+                    state.doc.descendants((n, pos) => {
                       if (
-                        node.type.name === 'imageBlock' &&
-                        node.attrs.uploadStatus === 'uploading' &&
+                        n.type.name === 'imageBlock' &&
+                        n.attrs.uploadStatus === 'uploading' &&
                         pos >= insertPos - 5 &&
                         pos <= insertPos + 5
                       ) {
@@ -193,10 +205,10 @@ export const ImagePasteDrop = Extension.create<ImagePasteDropOptions>({
                     const { state } = view;
                     let foundPos = -1;
 
-                    state.doc.descendants((node, pos) => {
+                    state.doc.descendants((n, pos) => {
                       if (
-                        node.type.name === 'imageBlock' &&
-                        node.attrs.uploadStatus === 'uploading' &&
+                        n.type.name === 'imageBlock' &&
+                        n.attrs.uploadStatus === 'uploading' &&
                         pos >= insertPos - 5 &&
                         pos <= insertPos + 5
                       ) {
@@ -215,7 +227,15 @@ export const ImagePasteDrop = Extension.create<ImagePasteDropOptions>({
                     }
                   });
               }
-            });
+            }
+
+            if (nonImages.length > 0 && options.attachmentHandler) {
+              insertAttachmentsAt(view, dropPos, nonImages, {
+                handler: options.attachmentHandler,
+                maxAttachmentBytes: options.maxAttachmentBytes,
+                onAttachmentRejected: options.onAttachmentRejected,
+              });
+            }
 
             return true;
           },
@@ -226,4 +246,3 @@ export const ImagePasteDrop = Extension.create<ImagePasteDropOptions>({
 });
 
 export default ImagePasteDrop;
-

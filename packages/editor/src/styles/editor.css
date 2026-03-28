@@ -1772,7 +1772,25 @@ td.selectedCell {
   flex: 1;
   min-height: 1.5rem;
   outline: none;
+  position: relative;
 }
+
+/* Note block placeholder — rendered via React, not TipTap's Placeholder extension,
+   so it stays inside the note block rather than floating outside it */
+.note-block-content-wrapper[data-is-empty] .note-block-content::before {
+  content: 'Add a note...';
+  position: absolute;
+  top: 0;
+  left: 0;
+  color: rgba(0, 0, 0, 0.4);
+  pointer-events: none;
+  user-select: none;
+}
+
+.beskar-editor.dark .note-block-content-wrapper[data-is-empty] .note-block-content::before {
+  color: rgba(255, 255, 255, 0.4);
+}
+
 
 .note-block-content p {
   margin: 0;
@@ -2463,4 +2481,147 @@ td.selectedCell {
 .comment-highlight.active {
   background: rgb(253 230 138);           /* amber-200 */
   border-bottom-color: #eab308;           /* yellow-500 */
+}
+
+/* ─── Attachment inline chip (Radix Themes: accent e.g. plum) ─────────────── */
+
+/* NodeViewWrapper renders as <span> for inline placement */
+.attachment-inline-wrapper {
+  display: inline;
+  line-height: inherit;
+}
+
+.attachment-inline-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 6px 1px 5px;
+  border: 1px solid var(--accent-6, var(--editor-border-default));
+  border-radius: max(var(--radius-2, 4px), 4px);
+  background: color-mix(in srgb, var(--accent-3, var(--editor-accent-3)) 45%, var(--gray-2, var(--editor-bg-secondary)));
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--accent-11, var(--editor-text-primary));
+  vertical-align: baseline;
+  white-space: nowrap;
+  max-width: 22ch;
+  user-select: none;
+  transition: background 0.12s ease, border-color 0.12s ease;
+  position: relative;
+  top: -1px;
+}
+
+/* Selected: Radix accent ring */
+.attachment-inline-wrapper.ProseMirror-selectednode .attachment-inline-chip {
+  outline: 2px solid var(--accent-8, var(--editor-accent-8));
+  outline-offset: 1px;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent-9, var(--editor-accent)) 30%, transparent);
+}
+
+.attachment-inline-chip.attachment-inline-uploading {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.attachment-inline-chip.attachment-inline-success {
+  cursor: pointer;
+}
+
+.attachment-inline-chip.attachment-inline-success:hover {
+  background: color-mix(in srgb, var(--accent-4, var(--editor-accent-4)) 55%, var(--gray-2, var(--editor-bg-secondary)));
+  border-color: var(--accent-7, var(--editor-accent-7));
+}
+
+.attachment-inline-chip.attachment-inline-error {
+  border-color: var(--red-7, #f87171);
+  background: color-mix(in srgb, var(--red-3, #fee2e2) 50%, var(--gray-2, var(--editor-bg-secondary)));
+  color: var(--red-11, #b91c1c);
+}
+
+.attachment-inline-icon {
+  font-size: 0.75rem;
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+.attachment-inline-filename {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  flex: 1 1 0;
+  font-weight: 500;
+}
+
+.attachment-inline-spinner {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border: 1.5px solid color-mix(in srgb, var(--accent-9, var(--editor-accent)) 28%, var(--gray-5, #d1d5db));
+  border-top-color: var(--accent-9, var(--editor-accent));
+  border-radius: 50%;
+  animation: attachment-inline-spin 0.65s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes attachment-inline-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.attachment-inline-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: 2px;
+}
+
+.attachment-inline-action-btn {
+  font-size: 0.6875rem;
+  font-weight: 500;
+  padding: 0 4px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: var(--red-11, #b91c1c);
+  line-height: 1.4;
+  border-radius: 2px;
+}
+
+.attachment-inline-action-btn:hover {
+  background: color-mix(in srgb, var(--red-4, #fecaca) 60%, transparent);
+}
+
+.attachment-inline-action-btn:focus-visible {
+  outline: 2px solid var(--red-8, #f87171);
+  outline-offset: 1px;
+}
+
+.attachment-inline-action-btn:not(.attachment-inline-remove-btn) {
+  color: var(--accent-11, var(--editor-accent-11));
+}
+
+.attachment-inline-action-btn:not(.attachment-inline-remove-btn):hover {
+  background: color-mix(in srgb, var(--accent-4, var(--editor-accent-4)) 60%, transparent);
+}
+
+/* Dark mode adjustments */
+.dark .attachment-inline-chip {
+  background: color-mix(in srgb, var(--accent-3, var(--editor-accent-3)) 22%, var(--gray-3, var(--editor-bg-tertiary)));
+  border-color: var(--accent-6, var(--editor-border-default));
+}
+
+.dark .attachment-inline-chip.attachment-inline-success:hover {
+  background: color-mix(in srgb, var(--accent-4, var(--editor-accent-4)) 30%, var(--gray-3, var(--editor-bg-tertiary)));
+}
+
+.dark .attachment-inline-chip.attachment-inline-error {
+  background: color-mix(in srgb, var(--red-3, #450a0a) 40%, var(--gray-3, var(--editor-bg-tertiary)));
+  border-color: var(--red-7, #dc2626);
+}
+
+.dark .attachment-inline-wrapper.ProseMirror-selectednode .attachment-inline-chip {
+  outline-color: var(--accent-8, var(--editor-accent-8));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent-9, var(--editor-accent)) 45%, transparent);
 }

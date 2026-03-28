@@ -29,6 +29,7 @@ export const BlockId = Extension.create<BlockIdOptions>({
         'details', // Only details should be a block, not detailsSummary/detailsContent
         'noteBlock',
         'imageBlock',
+        'attachmentBlock',
         'mathBlock',
         'tableOfContents',
       ],

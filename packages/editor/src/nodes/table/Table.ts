@@ -2,7 +2,10 @@ import { Table as TiptapTable } from '@tiptap/extension-table';
 import { Plugin } from '@tiptap/pm/state';
 import { TextSelection } from '@tiptap/pm/state';
 import { mergeAttributes } from '@tiptap/core';
+import { TableMap } from '@tiptap/pm/tables';
 import { blockDragDropKey } from '../../extensions/block-drag-drop';
+import { exitNodeAfter } from '../../extensions/node-escape';
+import { findCellClosestToPos } from './utils';
 
 /**
  * Custom Table extension
@@ -79,6 +82,99 @@ export const Table = TiptapTable.extend({
     ];
   },
 
+
+  addKeyboardShortcuts() {
+    /**
+     * Resolves which table cell the cursor is currently in and returns
+     * its position within the TableMap, or null if not inside a table.
+     */
+    const resolveCell = (state: ReturnType<typeof this.editor.state.apply>) => {
+      const $pos = state.selection.$anchor;
+
+      let tableNode: ReturnType<typeof $pos.node> | null = null;
+      let tableDepth = -1;
+
+      for (let depth = $pos.depth; depth > 0; depth--) {
+        const node = $pos.node(depth);
+        if (node.type.name === 'table') {
+          tableNode = node;
+          tableDepth = depth;
+          break;
+        }
+      }
+
+      if (!tableNode || tableDepth === -1) return null;
+
+      const map = TableMap.get(tableNode as any);
+      const tableStart = $pos.start(tableDepth);
+      const tablePos = $pos.before(tableDepth);
+      const cell = findCellClosestToPos($pos);
+
+      if (!cell) return null;
+
+      try {
+        const rect = map.findCell(cell.pos - tableStart);
+        return { map, tableNode, tablePos, rect };
+      } catch {
+        return null;
+      }
+    };
+
+    return {
+      /**
+       * Tab behaviour:
+       *   • Regular cell  → move to next cell (default Tiptap behaviour).
+       *   • Last cell     → exit the table entirely (Confluence / Notion
+       *                     users can still add rows via the row handle).
+       */
+      Tab: () => {
+        const info = resolveCell(this.editor.state);
+        if (!info) return false;
+
+        const { map, tableNode, tablePos, rect } = info;
+        const isLastCell =
+          rect.bottom === map.height && rect.right === map.width;
+
+        if (isLastCell) {
+          return exitNodeAfter(
+            this.editor,
+            tablePos + (tableNode as any).nodeSize
+          );
+        }
+
+        // Not in last cell — use default cell navigation.
+        return this.editor.commands.goToNextCell();
+      },
+
+      /**
+       * Keep Shift-Tab navigating backwards through cells.
+       */
+      'Shift-Tab': () => this.editor.commands.goToPreviousCell(),
+
+      /**
+       * ArrowDown from the last row when the table is the last block in
+       * the document: create a paragraph below so the user is never trapped.
+       */
+      ArrowDown: () => {
+        const { state } = this.editor;
+        const info = resolveCell(state);
+        if (!info) return false;
+
+        const { map, tableNode, tablePos, rect } = info;
+        const tableEndPos = tablePos + (tableNode as any).nodeSize;
+
+        // Only intervene when in the last row AND the table ends the document.
+        if (
+          rect.bottom === map.height &&
+          tableEndPos >= state.doc.content.size
+        ) {
+          return exitNodeAfter(this.editor, tableEndPos);
+        }
+
+        return false;
+      },
+    };
+  },
 
   addProseMirrorPlugins() {
     const { isEditable } = this.editor;

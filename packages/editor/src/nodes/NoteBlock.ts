@@ -5,8 +5,9 @@
 
 import { Node, mergeAttributes } from '@tiptap/core';
 import { ReactNodeViewRenderer } from '@tiptap/react';
-import { Plugin } from '@tiptap/pm/state';
+import { Plugin, TextSelection } from '@tiptap/pm/state';
 import { NoteBlockView } from '../components/note/NoteBlockView';
+import { exitNodeAfter } from '../extensions/node-escape';
 
 export interface NoteBlockAttributes {
   icon: 'info' | 'note' | 'success' | 'warning' | 'error' | 'emoji';
@@ -116,6 +117,43 @@ export const NoteBlock = Node.create({
             type: this.name,
           })
           .run();
+      },
+
+      // Exit the note block downward when cursor is at the end of its content.
+      ArrowDown: () => {
+        const { state } = this.editor;
+        const { $from } = state.selection;
+
+        if ($from.parent.type.name !== 'noteBlock') return false;
+        if ($from.parentOffset < $from.parent.content.size) return false;
+
+        const noteBlockPos = $from.before($from.depth);
+        const noteBlockEnd = noteBlockPos + $from.parent.nodeSize;
+        return exitNodeAfter(this.editor, noteBlockEnd);
+      },
+
+      // Exit the note block upward when cursor is at the start of its content.
+      ArrowUp: () => {
+        const { state } = this.editor;
+        const { $from } = state.selection;
+
+        if ($from.parent.type.name !== 'noteBlock') return false;
+        if ($from.parentOffset > 0) return false;
+
+        const noteBlockPos = $from.before($from.depth);
+        if (noteBlockPos === 0) return false;
+
+        const $before = state.doc.resolve(noteBlockPos - 1);
+        const nodeBefore = $before.nodeBefore;
+        if (nodeBefore && nodeBefore.isTextblock) {
+          const tr = state.tr.setSelection(
+            TextSelection.create(state.doc, noteBlockPos - 1)
+          );
+          this.editor.view.dispatch(tr);
+          return true;
+        }
+
+        return false;
       },
     };
   },

@@ -10,9 +10,10 @@ import { Typography } from '@tiptap/extension-typography';
 import { TaskList, TaskItem } from '@tiptap/extension-list';
 import { ListItem } from '@tiptap/extension-list-item';
 import type { Extensions } from '@tiptap/core';
-import type { CollaborationConfig, ImageAPIHandler } from '../types';
+import type { AttachmentAPIHandler, AttachmentRef, CollaborationConfig, ImageAPIHandler } from '../types';
 import { CustomAttributes } from './custom-attributes';
 import { ImagePasteDrop } from './image-paste-drop';
+import { AttachmentPasteDrop } from './attachment-paste-drop';
 import { Table, TableCell, TableHeader, TableRow } from '../nodes/table';
 import { SlashCommand } from './slash-command';
 import { BlockId } from './block-id';
@@ -34,6 +35,7 @@ import {
 } from '../nodes/block-nodes';
 import { NoteBlock } from '../nodes/NoteBlock';
 import { ImageBlock } from '../nodes/ImageBlock';
+import { AttachmentInline } from '../nodes/AttachmentInline';
 import { MathBlock } from '../nodes/MathBlock';
 import { TableOfContents } from '../nodes/TableOfContents';
 import { InlineMath } from './math-inline';
@@ -50,9 +52,11 @@ export * from '../nodes/table/utils';
 export { NoteBlock } from '../nodes/NoteBlock';
 export * from '../nodes/note/utils';
 export { ImageBlock } from '../nodes/ImageBlock';
+export { AttachmentInline } from '../nodes/AttachmentInline';
 export * from '../components/image/utils';
 export { SlashCommand } from './slash-command';
 export { ImagePasteDrop } from './image-paste-drop';
+export { AttachmentPasteDrop } from './attachment-paste-drop';
 export { BlockId } from './block-id';
 export { BlockDragDrop } from './block-drag-drop';
 export { Columns } from '../nodes/layout/Columns';
@@ -63,6 +67,11 @@ export interface GetExtensionsOptions {
   collaboration?: CollaborationConfig;
   additionalExtensions?: Extensions;
   imageHandler?: ImageAPIHandler;
+  attachmentHandler?: AttachmentAPIHandler;
+  maxAttachmentBytes?: number;
+  onAttachmentRejected?: (reason: 'too_large', file: File) => void;
+  allowedMimeAccept?: string;
+  onAttachmentsChange?: (attachments: AttachmentRef[]) => void;
   onCommentOrphaned?: (commentId: string) => void;
 }
 
@@ -75,6 +84,11 @@ export function getExtensions(options: GetExtensionsOptions = {}): Extensions {
     collaboration,
     additionalExtensions = [],
     imageHandler,
+    attachmentHandler,
+    maxAttachmentBytes,
+    onAttachmentRejected,
+    allowedMimeAccept = '*',
+    onAttachmentsChange,
     onCommentOrphaned,
   } = options;
 
@@ -94,7 +108,13 @@ export function getExtensions(options: GetExtensionsOptions = {}): Extensions {
       listItem: false,
     }),
     Placeholder.configure({
-      placeholder: placeholder,
+      placeholder: ({ node }) => {
+        // Do not show placeholder inside noteBlock — the is-empty class lands on the
+        // react-renderer wrapper (not the inner content), causing it to render outside
+        // the visual note block due to float:left; height:0 on the ::before rule.
+        if (node.type.name === 'noteBlock') return '';
+        return placeholder;
+      },
     }),
     // Add our custom block-enabled nodes
     BlockHeading,
@@ -113,11 +133,22 @@ export function getExtensions(options: GetExtensionsOptions = {}): Extensions {
     TaskItem, // Task item (checkbox item) - extends ListItem
     NoteBlock, // Custom note block with themes and styling
     ImageBlock, // Custom image block with upload and resize
+    AttachmentInline, // Non-image file attachments as inline chips
     MathBlock, // Custom math block for LaTeX formulas
     TableOfContents, // Auto-generated table of contents
     InlineMath, // Inline math formulas within text
     ImagePasteDrop.configure({
       imageHandler,
+      attachmentHandler,
+      maxAttachmentBytes,
+      onAttachmentRejected,
+    }),
+    AttachmentPasteDrop.configure({
+      attachmentHandler,
+      maxAttachmentBytes,
+      onAttachmentRejected,
+      allowedMimeAccept,
+      onAttachmentsChange,
     }),
     TextAlign.configure({
       types: ['heading', 'paragraph'],
@@ -183,3 +214,4 @@ export function getExtensions(options: GetExtensionsOptions = {}): Extensions {
 
 export * from './custom-attributes';
 export * from './comment';
+export { exitNodeAfter } from './node-escape';

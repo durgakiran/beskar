@@ -31,6 +31,11 @@ export function Editor({
   className = '',
   autoFocus = false,
   imageHandler,
+  attachmentHandler,
+  maxAttachmentBytes,
+  onAttachmentRejected,
+  allowedMimeAccept,
+  onAttachmentsChange,
   commentHandler,
 }: EditorProps) {
   const [content, setContent] = useState<any>(null);
@@ -68,10 +73,26 @@ export function Editor({
         collaboration,
         additionalExtensions: customExtensions,
         imageHandler,
+        attachmentHandler,
+        maxAttachmentBytes,
+        onAttachmentRejected,
+        allowedMimeAccept,
+        onAttachmentsChange,
         onCommentOrphaned: commentHandler ? onCommentOrphaned : undefined,
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [placeholder, collaboration, customExtensions, imageHandler, commentHandler],
+    [
+      placeholder,
+      collaboration,
+      customExtensions,
+      imageHandler,
+      attachmentHandler,
+      maxAttachmentBytes,
+      onAttachmentRejected,
+      allowedMimeAccept,
+      onAttachmentsChange,
+      commentHandler,
+    ],
   );
 
   // Initialize editor
