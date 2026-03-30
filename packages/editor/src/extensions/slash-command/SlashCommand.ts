@@ -1,5 +1,5 @@
-import { Extension } from '@tiptap/core';
-import { PluginKey } from '@tiptap/pm/state';
+import { Extension, type Editor } from '@tiptap/core';
+import { EditorState, PluginKey } from '@tiptap/pm/state';
 import Suggestion, { SuggestionOptions } from '@tiptap/suggestion';
 import { ReactRenderer } from '@tiptap/react';
 import tippy, { Instance as TippyInstance } from 'tippy.js';
@@ -8,6 +8,20 @@ import GROUPS from './groups';
 import type { Command } from './groups';
 
 const extensionName = 'slashCommand';
+
+/** Shared key so `items` can read the active suggestion range from editor state. */
+export const slashCommandPluginKey = new PluginKey(extensionName);
+
+/** True when the active `/…` query is not at the start of the paragraph (hide block-only commands). */
+function hideBlockOnlyForSelection(editor: Editor): boolean {
+  const { $from } = editor.state.selection;
+  if ($from.parent.type.name !== 'paragraph') return false;
+  // textBetween expects positions relative to the node (0 = start of node content)
+  const relCursor = $from.pos - $from.start();
+  const beforeCursor = $from.parent.textBetween(0, relCursor, '');
+  const slashIdx = beforeCursor.lastIndexOf('/');
+  return slashIdx > 0;
+}
 
 export interface SlashCommandOptions {
   suggestion: Omit<SuggestionOptions, 'editor'>;
@@ -21,92 +35,75 @@ export const SlashCommand = Extension.create<SlashCommandOptions>({
       suggestion: {
         char: '/',
         allowSpaces: true,
-        startOfLine: true,
-        pluginKey: new PluginKey(extensionName),
-        command: ({ editor, range, props }: { editor: any; range: any; props: any }) => {
-          const { view, state } = editor;
-          const { $head, $from } = view.state.selection;
-
-          const end = $from.pos;
-          const from = $head?.nodeBefore
-            ? end - ($head.nodeBefore.text?.substring($head.nodeBefore.text?.indexOf('/')).length ?? 0)
-            : $from.start();
-
-          const tr = state.tr.deleteRange(from, end);
-          view.dispatch(tr);
-
+        pluginKey: slashCommandPluginKey,
+        command: ({ editor, range, props }: { editor: Editor; range: { from: number; to: number }; props: { action: (e: Editor) => void } }) => {
+          const { from, to } = range;
+          const maxPos = editor.state.doc.content.size + 1;
+          if (typeof from !== 'number' || typeof to !== 'number' || from >= to || from < 0 || to > maxPos) {
+            return;
+          }
+          const { state, view } = editor;
+          view.dispatch(state.tr.deleteRange(from, to));
           props.action(editor);
           view.focus();
         },
-        allow: ({ state, range }: { state: any; range: any }) => {
+        allow: ({ state, range }: { state: EditorState; range: { from: number; to: number } }) => {
           const $from = state.doc.resolve(range.from);
           const isParagraph = $from.parent.type.name === 'paragraph';
-          const isStartOfNode = $from.parent.textContent?.charAt(0) === '/';
+          const parentStart = $from.start(); // absolute start of parent node content
 
-          const afterContent = $from.parent.textContent?.substring(
-            $from.parent.textContent?.indexOf('/')
-          );
-          const isValidAfterContent = !afterContent?.endsWith('  ');
+          // textBetween expects positions relative to the node (0 = start of node content)
+          const relSlash = range.from - parentStart;
+          const textBeforeSlash = $from.parent.textBetween(0, relSlash, '');
+          const isValidPosition = textBeforeSlash === '' || textBeforeSlash.endsWith(' ');
 
-          // Check if we're at root depth OR inside detailsContent
-          let isAllowedDepth = false;
-          if ($from.depth === 1) {
-            // Root level paragraph
-            isAllowedDepth = true;
-          } else {
-            // Check if we're inside detailsContent (which is allowed)
+          const textFromSlash = $from.parent.textBetween(relSlash, $from.parent.content.size, '');
+          const isValidAfterContent = !textFromSlash.endsWith('  ');
+
+          // Allow paragraphs anywhere (columns, lists, blockquotes, nested doc), plus table cells.
+          let isAllowedDepth = isParagraph;
+          if (isParagraph) {
             for (let depth = $from.depth; depth > 0; depth--) {
-              const node = $from.node(depth);
-              if (node.type.name === 'detailsContent') {
-                isAllowedDepth = true;
-                break;
-              }
-              // Stop checking if we reach root or a non-details node
-              if (depth === 1 || node.type.name === 'details') {
+              const name = $from.node(depth).type.name;
+              if (name === 'codeBlock') {
+                isAllowedDepth = false;
                 break;
               }
             }
           }
 
-          if (!isAllowedDepth) {
-            for (let depth = $from.depth; depth > 0; depth--) {
-              const node = $from.node(depth);
-              if (node.type.name === 'tableCell') {
-                isAllowedDepth = true;
-                break;
-              }
-            }
-          }
-
-          return isAllowedDepth && isParagraph && isStartOfNode && isValidAfterContent;
+          return isAllowedDepth && isValidPosition && isValidAfterContent;
         },
-        items: ({ query, editor }: { query: string; editor: any }) => {
-          const withFilteredCommands = GROUPS.map((group) => ({
-            ...group,
-            commands: group.commands
-              .filter((item: Command) => {
-                const labelNormalized = item.label.toLowerCase().trim();
-                const queryNormalized = query.toLowerCase().trim();
+        items: ({ query, editor }: { query: string; editor: Editor }) => {
+          try {
+            const hideBlockOnly = hideBlockOnlyForSelection(editor);
 
-                if (item.aliases) {
-                  const aliases = item.aliases.map((alias) => alias.toLowerCase().trim());
-                  return (
-                    labelNormalized.includes(queryNormalized) || aliases.includes(queryNormalized)
-                  );
-                }
+            const withFilteredCommands = GROUPS.map((group) => ({
+              ...group,
+              commands: group.commands
+                .filter((item: Command) => !(hideBlockOnly && item.blockOnly))
+                .filter((item: Command) => {
+                  const labelNormalized = item.label.toLowerCase().trim();
+                  const queryNormalized = query.toLowerCase().trim();
 
-                return labelNormalized.includes(queryNormalized);
-              })
-              .filter((command) =>
-                command.shouldBeHidden ? !command.shouldBeHidden(editor) : true
-              ),
-          }));
+                  if (item.aliases) {
+                    const aliases = item.aliases.map((alias) => alias.toLowerCase().trim());
+                    return (
+                      labelNormalized.includes(queryNormalized) || aliases.includes(queryNormalized)
+                    );
+                  }
 
-          const withoutEmptyGroups = withFilteredCommands.filter((group) => {
-            return group.commands.length > 0;
-          });
+                  return labelNormalized.includes(queryNormalized);
+                })
+                .filter((command) =>
+                  command.shouldBeHidden ? !command.shouldBeHidden(editor) : true
+                ),
+            }));
 
-          return withoutEmptyGroups;
+            return withFilteredCommands.filter((group) => group.commands.length > 0);
+          } catch {
+            return GROUPS;
+          }
         },
         render: () => {
           let component: ReactRenderer<{ onKeyDown: (props: any) => boolean }> | null = null;

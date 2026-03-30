@@ -11,6 +11,7 @@
 .beskar-editor .editor-content {
   height: 100%;
   width: 100%;
+  position: relative; /* makes this the containing block for the absolute-positioned drag handle */
 }
 
 .beskar-editor .ProseMirror {
@@ -123,7 +124,7 @@
 
 /* Dragging state */
 .beskar-editor .ProseMirror .block-node.dragging {
-  opacity: 0.5;
+  opacity: 0.4;
   background-color: var(--editor-drag-bg, color-mix(in srgb, var(--editor-accent, #0ea5e9) 5%, transparent));
 }
 
@@ -131,32 +132,33 @@
   background-color: var(--editor-drag-bg, color-mix(in srgb, var(--editor-accent, #0ea5e9) 5%, transparent));
 }
 
-/* Drop indicators */
-.beskar-editor .ProseMirror .block-node.drag-over-top::before,
-.beskar-editor .ProseMirror .block-node.drag-over-bottom::after {
-  content: '';
-  position: absolute;
-  left: -2rem;
-  width: calc(100% + 4rem);
-  height: 3px;
-  background: color-mix(in srgb, var(--editor-drag-indicator, var(--editor-accent, #0ea5e9)) 60%, transparent);
-  border-radius: 2px;
-  pointer-events: none;
-  box-shadow: 0 0 6px color-mix(in srgb, var(--editor-drag-indicator, var(--editor-accent, #0ea5e9)) 40%, transparent);
+/* Dedicated drop-position indicator line — managed via JS in block-drag-drop.ts.
+   This element is appended to .editor-content (position: relative) so left/right
+   stretch across the full editor width regardless of block type. */
+.block-drag-drop-indicator {
+  background: var(--editor-drag-indicator, var(--editor-accent, #0ea5e9));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--editor-drag-indicator, var(--editor-accent, #0ea5e9)) 25%, transparent);
 }
 
-.beskar-editor.dark .ProseMirror .block-node.drag-over-top::before,
-.beskar-editor.dark .ProseMirror .block-node.drag-over-bottom::after {
-  background: color-mix(in srgb, var(--editor-drag-indicator, var(--editor-accent, #0ea5e9)) 70%, transparent);
-  box-shadow: 0 0 6px color-mix(in srgb, var(--editor-drag-indicator, var(--editor-accent, #0ea5e9)) 50%, transparent);
+.beskar-editor.dark .block-drag-drop-indicator {
+  background: var(--editor-drag-indicator, var(--editor-accent, #0ea5e9));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--editor-drag-indicator, var(--editor-accent, #0ea5e9)) 35%, transparent);
 }
 
-.beskar-editor .ProseMirror .block-node.drag-over-top::before {
-  top: -4px;
+/* Hover highlight — applied to whatever element blockInfo.dom points to (may be a
+   native <p>/<h1> or a div.react-renderer for React NodeViews). We intentionally
+   do NOT require .block-node here because react-renderer divs for noteBlock,
+   imageBlock etc. may not carry that class. */
+.beskar-editor .ProseMirror .drag-handle-hover {
+  background-color: color-mix(in srgb, var(--editor-accent, #0ea5e9) 6%, transparent);
+  border-radius: 0.25rem;
+  outline: 1px solid color-mix(in srgb, var(--editor-accent, #0ea5e9) 15%, transparent);
+  outline-offset: 1px;
 }
 
-.beskar-editor .ProseMirror .block-node.drag-over-bottom::after {
-  bottom: -4px;
+.beskar-editor.dark .ProseMirror .drag-handle-hover {
+  background-color: color-mix(in srgb, var(--editor-accent, #0ea5e9) 8%, transparent);
+  outline-color: color-mix(in srgb, var(--editor-accent, #0ea5e9) 20%, transparent);
 }
 
 /* Block selection styling */
@@ -2253,7 +2255,6 @@ td.selectedCell {
 }
 
 .image-block-caption:focus {
-  /* border-color: rgba(0, 0, 0, 0.1); */
   background-color: rgba(0, 0, 0, 0.02);
   color: rgba(0, 0, 0, 0.9);
 }
@@ -2277,34 +2278,101 @@ td.selectedCell {
   opacity: 0.5;
 }
 
-/* Resize Handle */
-.image-resize-handle {
-  position: absolute;
-  width: 12px;
-  height: 12px;
-  background-color: var(--editor-accent, #0ea5e9);
-  border: 2px solid var(--editor-bg-primary, white);
-  border-radius: 50%;
-  cursor: ew-resize;
-  z-index: 10;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
-  transition: all 0.15s ease;
+/* Caption wrapper — contentEditable=false prevents ProseMirror interfering */
+.image-caption-wrapper {
+  width: 100%;
+  margin-top: 0.375rem;
 }
 
-.image-resize-handle-right {
-  right: -6px;
+.image-caption-input {
+  display: block;
+  width: 100%;
+  padding: 0.25rem 0.5rem;
+  text-align: center;
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  color: var(--editor-text-secondary, rgba(0, 0, 0, 0.6));
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 0.25rem;
+  outline: none;
+  box-sizing: border-box;
+  transition: border-color 0.15s, background 0.15s, color 0.15s;
+  font-family: inherit;
+}
+
+.image-caption-input:focus {
+  border-color: rgba(0, 0, 0, 0.12);
+  background: rgba(0, 0, 0, 0.02);
+  color: var(--editor-text-primary, rgba(0, 0, 0, 0.85));
+}
+
+.image-caption-input::placeholder {
+  color: var(--editor-text-placeholder, rgba(0, 0, 0, 0.35));
+}
+
+.beskar-editor.dark .image-caption-input {
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.beskar-editor.dark .image-caption-input:focus {
+  border-color: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.03);
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.beskar-editor.dark .image-caption-input::placeholder {
+  color: rgba(255, 255, 255, 0.3);
+}
+
+/* Read-only caption displayed in non-editable view */
+.image-caption-readonly {
+  width: 100%;
+  margin-top: 0.375rem;
+  padding: 0.25rem 0.5rem;
+  text-align: center;
+  font-size: 0.8125rem;
+  color: var(--editor-text-secondary, rgba(0, 0, 0, 0.55));
+  font-family: inherit;
+  box-sizing: border-box;
+}
+
+/* image-wrapper must be a positioning context for the resize handles */
+.image-wrapper {
+  position: relative;
+}
+
+/* Resize Handles — centred on the left and right edges of the image */
+.image-resize-handle {
+  position: absolute;
   top: 50%;
   transform: translateY(-50%);
+  width: 10px;
+  height: 32px;
+  border-radius: 5px;
+  background-color: var(--editor-accent, #0ea5e9);
+  border: 2px solid var(--editor-bg-primary, white);
+  cursor: ew-resize;
+  z-index: 10;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+  transition: background-color 0.15s, transform 0.15s;
+}
+
+.image-resize-handle--left {
+  left: -5px;
+}
+
+.image-resize-handle--right {
+  right: -5px;
 }
 
 .image-resize-handle:hover {
-  transform: translateY(-50%) scale(1.2);
   background-color: var(--editor-accent-8, #0369a1);
+  transform: translateY(-50%) scaleY(1.1);
 }
 
 .image-resize-handle:active {
-  transform: translateY(-50%) scale(1.1);
-  cursor: ew-resize;
+  background-color: var(--editor-accent-8, #0369a1);
 }
 
 /* Floating Menu - positioned relative to the full-width wrapper (also used by columns layout) */
@@ -2930,3 +2998,112 @@ td.selectedCell {
   border-color: #ef4444;
   box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.2);
 }
+
+/* =====================================================
+   INLINE IMAGE STYLES
+   ===================================================== */
+
+/* The NodeViewWrapper renders as <span> */
+.image-inline-wrapper {
+  display: inline;
+  position: relative;
+  line-height: 1;
+}
+
+/* Inner span that holds the img + resize handle */
+.image-inline-inner {
+  display: inline-flex;
+  align-items: center;
+  position: relative;
+  vertical-align: middle;
+  border-radius: 3px;
+  cursor: default;
+  user-select: none;
+}
+
+.image-inline-selected .image-inline-inner {
+  outline: 2px solid #3b82f6;
+  outline-offset: 1px;
+}
+
+.image-inline-img {
+  display: inline-block;
+  vertical-align: middle;
+  border-radius: 2px;
+  object-fit: contain;
+  max-height: 600px;
+}
+
+/* Resize handle — bottom-right corner of the inline image */
+.image-inline-resize-handle {
+  position: absolute;
+  right: -4px;
+  bottom: -4px;
+  width: 10px;
+  height: 10px;
+  background: #3b82f6;
+  border: 1.5px solid #fff;
+  border-radius: 2px;
+  cursor: se-resize;
+  z-index: 10;
+}
+
+/* Uploading state */
+.image-inline-uploading .image-inline-upload-spinner {
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  vertical-align: middle;
+  border: 2px solid rgba(0, 0, 0, 0.1);
+  border-top-color: #3b82f6;
+  border-radius: 50%;
+  animation: image-inline-spin 0.7s linear infinite;
+}
+
+.beskar-editor.dark .image-inline-uploading .image-inline-upload-spinner {
+  border-color: rgba(255, 255, 255, 0.1);
+  border-top-color: #60a5fa;
+}
+
+@keyframes image-inline-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Error chip */
+.image-inline-error-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: #fee2e2;
+  border: 1px solid #fca5a5;
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-size: 0.8em;
+  vertical-align: middle;
+}
+
+.beskar-editor.dark .image-inline-error-chip {
+  background: #450a0a;
+  border-color: #991b1b;
+  color: #fca5a5;
+}
+
+.image-inline-error-icon {
+  font-style: normal;
+}
+
+.image-inline-remove-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 0.85em;
+  color: inherit;
+  padding: 0;
+  line-height: 1;
+  opacity: 0.7;
+}
+.image-inline-remove-btn:hover {
+  opacity: 1;
+}
+
+/* Inline image toolbar reuses .editor-floating-toolbar and .image-block-toolbar-floating */

@@ -35,6 +35,7 @@ import {
 } from '../nodes/block-nodes';
 import { NoteBlock } from '../nodes/NoteBlock';
 import { ImageBlock } from '../nodes/ImageBlock';
+import { ImageInline } from '../nodes/ImageInline';
 import { AttachmentInline } from '../nodes/AttachmentInline';
 import { StatusBadge } from '../nodes/StatusBadge';
 import { MathBlock } from '../nodes/MathBlock';
@@ -53,11 +54,12 @@ export * from '../nodes/table/utils';
 export { NoteBlock } from '../nodes/NoteBlock';
 export * from '../nodes/note/utils';
 export { ImageBlock } from '../nodes/ImageBlock';
+export { ImageInline } from '../nodes/ImageInline';
 export { AttachmentInline } from '../nodes/AttachmentInline';
 export { StatusBadge } from '../nodes/StatusBadge';
 export * from '../components/image/utils';
 export { SlashCommand } from './slash-command';
-export { ImagePasteDrop } from './image-paste-drop';
+export { ImagePasteDrop, getImagePasteStorage, insertImageAt } from './image-paste-drop';
 export { AttachmentPasteDrop } from './attachment-paste-drop';
 export { BlockId } from './block-id';
 export { BlockDragDrop } from './block-drag-drop';
@@ -182,6 +184,7 @@ export function getExtensions(options: GetExtensionsOptions = {}): Extensions {
     TaskItem, // Task item (checkbox item) - extends ListItem
     NoteBlock, // Custom note block with themes and styling
     ImageBlock, // Custom image block with upload and resize
+    ImageInline, // Inline image that flows within text (like Confluence)
     AttachmentInline, // Non-image file attachments as inline chips
     StatusBadge, // Inline status pill (e.g. IN PROGRESS, DONE)
     MathBlock, // Custom math block for LaTeX formulas

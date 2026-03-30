@@ -32,6 +32,7 @@ export const BlockId = Extension.create<BlockIdOptions>({
         'attachmentBlock',
         'mathBlock',
         'tableOfContents',
+        'columns',
       ],
     };
   },
@@ -106,14 +107,12 @@ export const BlockId = Extension.create<BlockIdOptions>({
                 const newAttrs = { ...node.attrs, blockId: null };
                 
                 let newContent = node.content;
-                console.log("node in removeBlockIds", node);
                 if (node.content && node.content.content) {
                   newContent = node.content.content.map((child: any) => removeBlockIds(child));
                 }
                 
                 return node.type.create(newAttrs, Fragment.from(newContent), node.marks);
               }
-              console.log('node in removeBlockIds', node);
               if (node.content && node.content.content) {
                 const newContent = node.content.content.map((child: any) => removeBlockIds(child));
                 if (newContent !== node.content) {

@@ -77,7 +77,13 @@ export const Columns = Node.create({
         parseHTML: (element) => element.getAttribute('data-block-id'),
         renderHTML: (attributes) => {
           if (!attributes.blockId) return {};
-          return { 'data-block-id': attributes.blockId };
+          // Must include class: 'block-node' so the drag-handle extension can
+          // detect this element via closest('.react-renderer.block-node').
+          return {
+            'data-block-id': attributes.blockId,
+            class: 'block-node',
+            draggable: 'false',
+          };
         },
       },
       columnCount: {

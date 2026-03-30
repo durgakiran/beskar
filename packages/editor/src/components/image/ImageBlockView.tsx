@@ -9,140 +9,97 @@ import { ImageFloatingMenu } from './ImageFloatingMenu';
 import { useFloating, flip, shift, offset, autoUpdate } from '@floating-ui/react';
 
 export function ImageBlockView({ node, updateAttributes, selected, editor, getPos }: NodeViewProps) {
-  const { src, alt, title, align, width, height, isUploading } = node.attrs;
+  const { src, alt, caption, align, width, height, isUploading } = node.attrs;
   const [isResizing, setIsResizing] = useState(false);
-  const [showToolbar, setShowToolbar] = useState(false);
+  const [isToolbarHovered, setIsToolbarHovered] = useState(false);
   
   const { refs, floatingStyles } = useFloating({
     placement: 'bottom',
     middleware: [offset(10), flip({ padding: 10 }), shift({ padding: 10 })],
     whileElementsMounted: autoUpdate,
-    open: showToolbar,
   });
 
-  const imageRef = useRef<HTMLImageElement>(null);
-  const resizeStartRef = useRef<{ startX: number; startY: number; width: number; height: number; aspectRatio: number; direction: string } | null>(null);
+  const showToolbar = (selected || isToolbarHovered) && !isResizing && editor.isEditable;
 
-  // Get dynamic max width based on the parent container
+  const imageRef = useRef<HTMLImageElement>(null);
+  // containerRef is the element whose width we update live during drag.
+  // Updating the container (not the <img>) means:
+  //   • img (width:100%) follows automatically
+  //   • handles stay on the container edges — they move with it
+  //   • margin:0 auto keeps centred images centred throughout the drag
+  const containerRef = useRef<HTMLDivElement>(null);
+
   const getMaxWidth = useCallback(() => {
-    // We walk up to find the closest appropriate constraint container
-    // Either the column or the editor text area itself
-    const container = imageRef.current?.closest('.editor-column') || imageRef.current?.closest('.ProseMirror');
-    return container?.clientWidth || 800;
+    const el = containerRef.current ?? imageRef.current;
+    const scope = el?.closest('.editor-column') ?? el?.closest('.ProseMirror');
+    return (scope as HTMLElement | null)?.clientWidth ?? 800;
   }, []);
 
-  // Debug: Log when node attributes change
-  useEffect(() => {
-    console.log('[ImageBlockView] Node attrs changed:', { width, height, align, src: src.substring(0, 50) });
-  }, [width, height, align, src]);
-
-  // Monitor selection to show/hide toolbar
-  useEffect(() => {
-    setShowToolbar(selected && editor.isEditable);
-  }, [selected, editor.isEditable]);
-
-  // Handle image load to set initial dimensions
   const handleImageLoad = () => {
     if (imageRef.current && (!width || !height)) {
       const img = imageRef.current;
       const aspectRatio = img.naturalWidth / img.naturalHeight;
-      const currentMaxWidth = getMaxWidth();
-      const constrainedWidth = Math.min(img.naturalWidth, currentMaxWidth);
-      const constrainedHeight = constrainedWidth / aspectRatio;
-
+      const maxW = getMaxWidth();
+      const constrainedWidth = Math.min(img.naturalWidth, maxW);
       updateAttributes({
         width: Math.round(constrainedWidth),
-        height: Math.round(constrainedHeight),
+        height: Math.round(constrainedWidth / aspectRatio),
       });
     }
   };
 
-  // Resize handlers
-  const handleResizeStart = (e: React.MouseEvent, direction: string) => {
+  const handleResizeStart = (e: React.MouseEvent, direction: 'left' | 'right') => {
     e.preventDefault();
     e.stopPropagation();
 
-    if (!imageRef.current) return;
+    if (!containerRef.current) return;
 
-    const img = imageRef.current;
-    const currentWidth = width || img.width;
-    const currentHeight = height || img.height;
-    const aspectRatio = currentWidth / currentHeight;
-
-    resizeStartRef.current = {
-      startX: e.clientX,
-      startY: e.clientY,
-      width: currentWidth,
-      height: currentHeight,
-      aspectRatio,
-      direction,
-    };
+    const startX = e.clientX;
+    const initWidth = width || containerRef.current.offsetWidth;
+    const initHeight = height || (imageRef.current?.offsetHeight ?? initWidth);
+    const aspectRatio = initWidth / initHeight;
 
     setIsResizing(true);
-    
-    console.log('[ImageResize] Started resizing:', resizeStartRef.current);
 
-    let latestWidth = currentWidth;
-    let latestHeight = currentHeight;
+    let latestWidth = initWidth;
+    let latestHeight = initHeight;
 
-    const handleMouseMove = (moveEvent: MouseEvent) => {
-      if (!resizeStartRef.current || !imageRef.current) return;
+    const onMove = (ev: MouseEvent) => {
+      const delta = ev.clientX - startX;
+      const maxW = getMaxWidth();
+      // Left handle dragged right → shrink; right handle dragged right → grow
+      const raw = direction === 'left' ? initWidth - delta : initWidth + delta;
+      const newW = Math.max(100, Math.min(raw, maxW));
+      const newH = newW / aspectRatio;
 
-      const { startX, width: initialWidth, aspectRatio, direction } = resizeStartRef.current;
-      const deltaX = moveEvent.clientX - startX;
-      const currentMaxWidth = getMaxWidth();
-      
-      let newWidth = initialWidth;
+      latestWidth = Math.round(newW);
+      latestHeight = Math.round(newH);
 
-      if (direction.includes('left')) {
-        newWidth = initialWidth - deltaX;
-      } else { // 'right'
-        newWidth = initialWidth + deltaX;
+      // Drive the container width live — <img width:100%> and handles follow
+      if (containerRef.current) {
+        containerRef.current.style.width = `${latestWidth}px`;
       }
-
-      newWidth = Math.max(100, Math.min(newWidth, currentMaxWidth));
-      const newHeight = newWidth / aspectRatio;
-
-      latestWidth = Math.round(newWidth);
-      latestHeight = Math.round(newHeight);
-
-      // Temporarily update the image element's style for visual feedback
-      imageRef.current.style.width = `${latestWidth}px`;
-      imageRef.current.style.height = `${latestHeight}px`;
     };
 
-    const handleMouseUp = () => {
-      console.log('[ImageResize] Mouse up, final dimensions:', { width: latestWidth, height: latestHeight });
+    const onUp = () => {
       setIsResizing(false);
-      
-      if (resizeStartRef.current && latestWidth && latestHeight) {
-        // Update attributes with the final dimensions
-        console.log('[ImageResize] About to update attributes with:', { width: latestWidth, height: latestHeight });
-        console.log('[ImageResize] Current node attrs before update:', { width, height });
-        updateAttributes({
-          width: latestWidth,
-          height: latestHeight,
-        });
-        console.log('[ImageResize] updateAttributes called');
+      // Remove inline override before React re-renders with committed attr value
+      if (containerRef.current) {
+        containerRef.current.style.width = '';
       }
-
-      // Reset image element style
-      if (imageRef.current) {
-        imageRef.current.style.width = '100%';
-        imageRef.current.style.height = height ? `${height}px` : 'auto';
+      if (latestWidth && latestHeight) {
+        updateAttributes({ width: latestWidth, height: latestHeight });
       }
-
-      resizeStartRef.current = null;
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
     };
 
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
   };
 
-  const handleTitleChange = (newTitle: string) => {
-    updateAttributes({ title: newTitle });
+  const handleCaptionChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    updateAttributes({ caption: e.target.value });
   };
 
   const handleClick = () => {
@@ -176,9 +133,10 @@ export function ImageBlockView({ node, updateAttributes, selected, editor, getPo
       className={`image-block-wrapper ${align ? `align-${align}` : ''} ${selected ? 'ProseMirror-selectednode' : ''}`}
       data-align={align}
     >
-      <div 
-        className="image-block-container" 
-        style={{ 
+      <div
+        ref={containerRef}
+        className="image-block-container"
+        style={{
           width: width ? `${width}px` : 'auto',
           maxWidth: '100%',
         }}
@@ -194,10 +152,14 @@ export function ImageBlockView({ node, updateAttributes, selected, editor, getPo
             ref={imageRef}
             src={src}
             alt={alt || ''}
-            title={title || ''}
-            style={{ 
+            style={{
+              display: 'block',
               width: '100%',
-              height: height ? `${height}px` : 'auto' 
+              height: 'auto',
+              // Reserve the right aspect-ratio slot before load so there's no layout jump.
+              // The browser uses this to compute height from the container width on every
+              // frame — including during drag — so resize is always smooth.
+              aspectRatio: (width && height) ? `${width} / ${height}` : undefined,
             }}
             onLoad={handleImageLoad}
             draggable={false}
@@ -206,38 +168,47 @@ export function ImageBlockView({ node, updateAttributes, selected, editor, getPo
 
           {!isUploading && editor.isEditable && selected && (
             <>
-              {/* Resize handles */}
-              <div 
-                className="image-resize-handle top-left" 
-                onMouseDown={(e) => handleResizeStart(e, 'top-left')}
+              <div
+                className="image-resize-handle image-resize-handle--left"
+                onMouseDown={(e) => handleResizeStart(e, 'left')}
               />
-              <div 
-                className="image-resize-handle top-right" 
-                onMouseDown={(e) => handleResizeStart(e, 'top-right')}
-              />
-              <div 
-                className="image-resize-handle bottom-left" 
-                onMouseDown={(e) => handleResizeStart(e, 'bottom-left')}
-              />
-              <div 
-                className="image-resize-handle bottom-right" 
-                onMouseDown={(e) => handleResizeStart(e, 'bottom-right')}
+              <div
+                className="image-resize-handle image-resize-handle--right"
+                onMouseDown={(e) => handleResizeStart(e, 'right')}
               />
             </>
           )}
         </div>
 
-        {/* Caption */}
-        {(title || selected) && (
-          <div className={`image-caption ${!title && selected ? 'is-empty' : ''}`}>
-            {title || (selected ? 'Add a caption...' : '')}
+        {/* Caption — editable input, shown when selected or already has content */}
+        {(caption || selected) && editor.isEditable && (
+          <div className="image-caption-wrapper" contentEditable={false}>
+            <input
+              type="text"
+              className={`image-caption-input${!caption ? ' is-empty' : ''}`}
+              value={caption || ''}
+              placeholder="Add a caption…"
+              onChange={handleCaptionChange}
+              onKeyDown={(e) => e.stopPropagation()}
+              onKeyUp={(e) => e.stopPropagation()}
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={(e) => e.stopPropagation()}
+            />
           </div>
+        )}
+        {caption && !editor.isEditable && (
+          <div className="image-caption-readonly">{caption}</div>
         )}
       </div>
 
       {/* Floating Toolbar */}
-      {showToolbar && !isResizing && !isUploading && editor.isEditable && (
-        <div ref={refs.setFloating} style={{ ...floatingStyles, zIndex: 50, pointerEvents: 'auto' }}>
+      {showToolbar && !isUploading && (
+        <div
+          ref={refs.setFloating}
+          style={{ ...floatingStyles, zIndex: 50, pointerEvents: 'auto' }}
+          onMouseEnter={() => setIsToolbarHovered(true)}
+          onMouseLeave={() => setIsToolbarHovered(false)}
+        >
           <ImageFloatingMenu 
             editor={editor}
             getPos={getPos}

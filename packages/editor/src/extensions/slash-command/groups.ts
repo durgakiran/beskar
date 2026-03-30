@@ -1,6 +1,7 @@
 import type { Editor } from '@tiptap/core';
 import { getAttachmentPasteStorage } from '../attachment-paste-drop';
 import { insertAttachmentsAt } from '../attachment-upload';
+import { getImagePasteStorage, insertImageAt } from '../image-paste-drop';
 
 export interface Command {
   name: string;
@@ -10,12 +11,50 @@ export interface Command {
   icon: string;
   action: (editor: Editor) => void;
   shouldBeHidden?: (editor: Editor) => boolean;
+  /** When true, command is hidden if `/` is typed mid-paragraph (only at line start / empty node). */
+  blockOnly?: boolean;
 }
 
 export interface Group {
   name: string;
   title: string;
   commands: Command[];
+}
+
+/** Open a native file picker and insert the chosen image(s) at the current cursor position. */
+function openImageFilePicker(editor: Editor, nodeType: 'imageBlock' | 'imageInline'): void {
+  const imageHandler = getImagePasteStorage(editor)?.imageHandler;
+
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.multiple = true;
+  input.accept = 'image/*';
+  input.style.cssText = 'position:fixed;left:-1000px;top:-1000px;width:1px;height:1px;opacity:0;';
+  document.body.appendChild(input);
+
+  const cleanup = () => {
+    input.remove();
+    editor.chain().focus().run();
+  };
+
+  input.addEventListener('change', () => {
+    const files = input.files ? Array.from(input.files) : [];
+    if (files.length > 0) {
+      let pos = editor.state.selection.from;
+      for (const file of files) {
+        insertImageAt(editor.view, pos, file, nodeType, imageHandler);
+        // Advance past the inserted node (all image nodes have nodeSize ≥ 1)
+        pos += editor.state.schema.nodes[nodeType]?.create().nodeSize ?? 1;
+      }
+    }
+    cleanup();
+  });
+
+  input.addEventListener('cancel', cleanup);
+
+  requestAnimationFrame(() => {
+    input.click();
+  });
 }
 
 export const GROUPS: Group[] = [
@@ -29,6 +68,7 @@ export const GROUPS: Group[] = [
         icon: 'H1',
         description: 'Large section heading',
         aliases: ['h1'],
+        blockOnly: true,
         action: (editor) => {
           editor.chain().focus().setHeading({ level: 1 }).run();
         },
@@ -39,6 +79,7 @@ export const GROUPS: Group[] = [
         icon: 'H2',
         description: 'Medium section heading',
         aliases: ['h2'],
+        blockOnly: true,
         action: (editor) => {
           editor.chain().focus().setHeading({ level: 2 }).run();
         },
@@ -49,6 +90,7 @@ export const GROUPS: Group[] = [
         icon: 'H3',
         description: 'Small section heading',
         aliases: ['h3'],
+        blockOnly: true,
         action: (editor) => {
           editor.chain().focus().setHeading({ level: 3 }).run();
         },
@@ -59,6 +101,7 @@ export const GROUPS: Group[] = [
         icon: '•',
         description: 'Create a bulleted list',
         aliases: ['ul', 'list'],
+        blockOnly: true,
         action: (editor) => {
           editor.chain().focus().toggleBulletList().run();
         },
@@ -69,6 +112,7 @@ export const GROUPS: Group[] = [
         icon: '1.',
         description: 'Create a numbered list',
         aliases: ['ol', 'ordered'],
+        blockOnly: true,
         action: (editor) => {
           editor.chain().focus().toggleOrderedList().run();
         },
@@ -79,6 +123,7 @@ export const GROUPS: Group[] = [
         icon: '☐',
         description: 'Create a task list with checkboxes',
         aliases: ['todo', 'check', 'checkbox'],
+        blockOnly: true,
         action: (editor) => {
           editor.chain().focus().toggleTaskList().run();
         },
@@ -89,6 +134,7 @@ export const GROUPS: Group[] = [
         icon: '"',
         description: 'Add a quote block',
         aliases: ['quote'],
+        blockOnly: true,
         action: (editor) => {
           editor.chain().focus().setBlockquote().run();
         },
@@ -99,6 +145,7 @@ export const GROUPS: Group[] = [
         icon: '</>',
         description: 'Add a code block',
         aliases: ['code', 'pre'],
+        blockOnly: true,
         action: (editor) => {
           editor.chain().focus().setCodeBlock().run();
         },
@@ -109,6 +156,7 @@ export const GROUPS: Group[] = [
         icon: '∑',
         description: 'Add a LaTeX math formula',
         aliases: ['latex', 'equation', 'formula', 'math'],
+        blockOnly: true,
         action: (editor) => {
           editor.chain().focus().setMathBlock().run();
         },
@@ -119,6 +167,7 @@ export const GROUPS: Group[] = [
         icon: '📑',
         description: 'Insert a table of contents',
         aliases: ['toc', 'contents', 'index'],
+        blockOnly: true,
         action: (editor) => {
           editor.chain().focus().setTableOfContents().run();
         },
@@ -129,6 +178,7 @@ export const GROUPS: Group[] = [
         icon: '⊞',
         description: 'Insert a 3x3 table',
         aliases: ['grid'],
+        blockOnly: true,
         action: (editor) => {
           editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run();
         },
@@ -139,6 +189,7 @@ export const GROUPS: Group[] = [
         icon: '📝',
         description: 'Add a highlighted note with custom styling',
         aliases: ['callout', 'info', 'alert'],
+        blockOnly: true,
         action: (editor) => {
           editor.chain().focus().insertContent({
             type: 'noteBlock',
@@ -151,6 +202,7 @@ export const GROUPS: Group[] = [
         icon: '—',
         description: 'Insert a horizontal line',
         aliases: ['hr', 'line', 'divider'],
+        blockOnly: true,
         action: (editor) => {
           editor.chain().focus().setHorizontalRule().run();
         },
@@ -161,6 +213,7 @@ export const GROUPS: Group[] = [
         icon: '▼',
         description: 'Create a collapsible details block',
         aliases: ['collapse', 'summary', 'expand', 'dropdown'],
+        blockOnly: true,
         action: (editor) => {
           editor.chain().focus().insertContent({
             type: 'details',
@@ -201,6 +254,7 @@ export const GROUPS: Group[] = [
         icon: '◫',
         description: 'Create a 2-column layout',
         aliases: ['columns', 'layout', 'grid', 'split', 'two'],
+        blockOnly: true,
         action: (editor) => {
           const insertAt = editor.state.selection.from;
           const blockId = crypto.randomUUID();
@@ -233,6 +287,7 @@ export const GROUPS: Group[] = [
         icon: '▦',
         description: 'Create a 3-column layout',
         aliases: ['three', '3col', '3 columns'],
+        blockOnly: true,
         action: (editor) => {
           const insertAt = editor.state.selection.from;
           const blockId = crypto.randomUUID();
@@ -299,10 +354,19 @@ export const GROUPS: Group[] = [
         icon: '🖼️',
         description: 'Upload and display an image',
         aliases: ['img', 'photo', 'picture'],
+        blockOnly: true,
         action: (editor) => {
-          editor.chain().focus().insertContent({
-            type: 'imageBlock',
-          }).run();
+          openImageFilePicker(editor, 'imageBlock');
+        },
+      },
+      {
+        name: 'imageInline',
+        label: 'Inline Image',
+        icon: '🖼️',
+        description: 'Insert an image inline within text',
+        aliases: ['inline-image', 'img-inline', 'inlineimg'],
+        action: (editor) => {
+          openImageFilePicker(editor, 'imageInline');
         },
       },
       {

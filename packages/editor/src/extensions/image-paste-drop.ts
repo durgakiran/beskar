@@ -5,6 +5,8 @@
 
 import { Extension } from '@tiptap/core';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
+import type { Editor } from '@tiptap/core';
+import type { EditorView } from '@tiptap/pm/view';
 import type { AttachmentAPIHandler, ImageAPIHandler } from '../types';
 import { insertAttachmentsAt } from './attachment-upload';
 
@@ -13,6 +15,94 @@ export interface ImagePasteDropOptions {
   attachmentHandler?: AttachmentAPIHandler;
   maxAttachmentBytes?: number;
   onAttachmentRejected?: (reason: 'too_large', file: File) => void;
+}
+
+export interface ImagePasteDropStorage {
+  imageHandler?: ImageAPIHandler;
+}
+
+/** Read live image config from extension storage (set in onCreate). */
+export function getImagePasteStorage(editor: Editor): ImagePasteDropStorage | undefined {
+  return (editor.storage as unknown as { imagePasteDrop?: ImagePasteDropStorage }).imagePasteDrop;
+}
+
+/**
+ * Insert one image file as a block or inline node at `insertPos` in `view`,
+ * uploading it via `imageHandler` when provided.
+ */
+export function insertImageAt(
+  view: EditorView,
+  insertPos: number,
+  file: File,
+  nodeType: 'imageBlock' | 'imageInline',
+  imageHandler?: ImageAPIHandler,
+): void {
+  const { schema, tr } = view.state;
+  const nodeSpec = schema.nodes[nodeType];
+  if (!nodeSpec) return;
+
+  const tempNode = nodeSpec.create({
+    src: URL.createObjectURL(file),
+    alt: file.name,
+    uploadStatus: imageHandler ? 'uploading' : 'idle',
+  });
+
+  view.dispatch(tr.insert(insertPos, tempNode));
+
+  if (!imageHandler) return;
+
+  imageHandler
+    .uploadImage(file)
+    .then((result) => {
+      const { state } = view;
+      let foundPos = -1;
+      state.doc.descendants((node, pos) => {
+        if (
+          node.type.name === nodeType &&
+          node.attrs.uploadStatus === 'uploading' &&
+          pos >= insertPos - 5 &&
+          pos <= insertPos + 5
+        ) {
+          foundPos = pos;
+          return false;
+        }
+      });
+      if (foundPos >= 0) {
+        view.dispatch(
+          state.tr.setNodeMarkup(foundPos, undefined, {
+            src: imageHandler.getImageUrl?.(result.url) || result.url,
+            alt: result.alt || file.name,
+            width: result.width || null,
+            height: result.height || null,
+            ...(nodeType === 'imageBlock' ? { caption: '', uploadStatus: 'idle' } : { uploadStatus: 'idle' }),
+          }),
+        );
+      }
+    })
+    .catch(() => {
+      const { state } = view;
+      let foundPos = -1;
+      state.doc.descendants((node, pos) => {
+        if (
+          node.type.name === nodeType &&
+          node.attrs.uploadStatus === 'uploading' &&
+          pos >= insertPos - 5 &&
+          pos <= insertPos + 5
+        ) {
+          foundPos = pos;
+          return false;
+        }
+      });
+      if (foundPos >= 0) {
+        view.dispatch(
+          state.tr.setNodeMarkup(foundPos, undefined, {
+            src: '',
+            alt: file.name,
+            uploadStatus: 'error',
+          }),
+        );
+      }
+    });
 }
 
 export const ImagePasteDrop = Extension.create<ImagePasteDropOptions>({
@@ -25,6 +115,14 @@ export const ImagePasteDrop = Extension.create<ImagePasteDropOptions>({
       maxAttachmentBytes: undefined,
       onAttachmentRejected: undefined,
     };
+  },
+
+  addStorage(): ImagePasteDropStorage {
+    return { imageHandler: undefined };
+  },
+
+  onCreate() {
+    this.storage.imageHandler = this.options.imageHandler;
   },
 
   addProseMirrorPlugins() {
@@ -46,11 +144,85 @@ export const ImagePasteDrop = Extension.create<ImagePasteDropOptions>({
 
             event.preventDefault();
 
+            // Detect whether the cursor sits inside non-empty inline content.
+            // If so, insert an imageInline node so it flows with the text.
+            const { selection, schema } = view.state;
+            const $from = selection.$from;
+            const parentIsTextBlock = $from.parent.isTextblock;
+            const parentHasContent = $from.parent.content.size > 0;
+            const useInline = parentIsTextBlock && parentHasContent && !!schema.nodes.imageInline;
+
             imageItems.forEach((item) => {
               const file = item.getAsFile();
               if (!file) return;
 
-              const { tr, selection } = view.state;
+              const { tr } = view.state;
+              const insertPos = selection.from;
+
+              if (useInline) {
+                const inlineNode = schema.nodes.imageInline.create({
+                  src: URL.createObjectURL(file),
+                  alt: file.name,
+                  uploadStatus: imageHandler ? 'uploading' : 'idle',
+                });
+                const transaction = tr.replaceSelectionWith(inlineNode);
+                view.dispatch(transaction);
+
+                if (imageHandler) {
+                  imageHandler
+                    .uploadImage(file)
+                    .then((result) => {
+                      const { state } = view;
+                      let foundPos = -1;
+                      state.doc.descendants((node, pos) => {
+                        if (
+                          node.type.name === 'imageInline' &&
+                          node.attrs.uploadStatus === 'uploading' &&
+                          pos >= insertPos - 5 &&
+                          pos <= insertPos + 5
+                        ) {
+                          foundPos = pos;
+                          return false;
+                        }
+                      });
+                      if (foundPos >= 0) {
+                        const updateTr = state.tr.setNodeMarkup(foundPos, undefined, {
+                          src: imageHandler.getImageUrl?.(result.url) || result.url,
+                          alt: result.alt || file.name,
+                          width: result.width || null,
+                          height: result.height || null,
+                          uploadStatus: 'idle',
+                        });
+                        view.dispatch(updateTr);
+                      }
+                    })
+                    .catch(() => {
+                      const { state } = view;
+                      let foundPos = -1;
+                      state.doc.descendants((node, pos) => {
+                        if (
+                          node.type.name === 'imageInline' &&
+                          node.attrs.uploadStatus === 'uploading' &&
+                          pos >= insertPos - 5 &&
+                          pos <= insertPos + 5
+                        ) {
+                          foundPos = pos;
+                          return false;
+                        }
+                      });
+                      if (foundPos >= 0) {
+                        const updateTr = state.tr.setNodeMarkup(foundPos, undefined, {
+                          src: '',
+                          alt: file.name,
+                          uploadStatus: 'error',
+                        });
+                        view.dispatch(updateTr);
+                      }
+                    });
+                }
+                return;
+              }
+
               const tempImageNode = view.state.schema.nodes.imageBlock.create({
                 src: URL.createObjectURL(file),
                 alt: file.name,
@@ -58,7 +230,6 @@ export const ImagePasteDrop = Extension.create<ImagePasteDropOptions>({
               });
 
               const transaction = tr.replaceSelectionWith(tempImageNode);
-              const insertPos = selection.from;
               view.dispatch(transaction);
 
               if (imageHandler) {

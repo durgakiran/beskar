@@ -4,7 +4,7 @@
 
 import React from 'react';
 import type { Editor } from '@tiptap/core';
-import { FiCopy, FiTrash2, FiAlignLeft, FiAlignCenter, FiAlignRight } from 'react-icons/fi';
+import { FiCopy, FiTrash2, FiAlignLeft, FiAlignCenter, FiAlignRight, FiType } from 'react-icons/fi';
 import * as Toolbar from '@radix-ui/react-toolbar';
 import * as Separator from '@radix-ui/react-separator';
 import { copyImageBlock, deleteImageBlock } from './utils';
@@ -14,9 +14,10 @@ interface ImageFloatingMenuProps {
   getPos: (() => number | undefined) | boolean;
   currentAlign: 'left' | 'center' | 'right';
   updateAttributes: (attrs: Record<string, any>) => void;
+  nodeAttrs?: Record<string, any>;
 }
 
-export function ImageFloatingMenu({ editor, getPos, currentAlign, updateAttributes }: ImageFloatingMenuProps) {
+export function ImageFloatingMenu({ editor, getPos, currentAlign, updateAttributes, nodeAttrs }: ImageFloatingMenuProps) {
   const handleCopy = () => {
     console.log('[ImageFloatingMenu] Copy clicked');
     
@@ -57,6 +58,35 @@ export function ImageFloatingMenu({ editor, getPos, currentAlign, updateAttribut
     updateAttributes({ align });
   };
 
+  const handleConvertToInline = () => {
+    if (typeof getPos !== 'function') return;
+    const pos = getPos();
+    if (pos === undefined) return;
+
+    const { schema, doc } = editor.state;
+    const inlineSchema = schema.nodes.imageInline;
+    if (!inlineSchema) return;
+
+    const blockNode = doc.nodeAt(pos);
+    if (!blockNode) return;
+
+    const { src, alt } = blockNode.attrs;
+    // Don't carry over block dimensions — ImageInlineView will auto-size to the
+    // default inline height (24 px) once the image loads, matching paste behaviour.
+    const inlineNode = inlineSchema.create({ src, alt, width: null, height: null, uploadStatus: 'idle' });
+
+    editor
+      .chain()
+      .focus()
+      .command(({ tr }) => {
+        // Replace the block node with a paragraph containing the inline image
+        const para = schema.nodes.paragraph.create({}, inlineNode);
+        tr.replaceWith(pos, pos + blockNode.nodeSize, para);
+        return true;
+      })
+      .run();
+  };
+
   return (
     <div className="image-block-toolbar-floating" style={{ top: '-3.5rem', bottom: 'auto' }}>
       <Toolbar.Root className="editor-floating-toolbar">
@@ -76,6 +106,20 @@ export function ImageFloatingMenu({ editor, getPos, currentAlign, updateAttribut
         >
           <FiTrash2 size={16} />
           <span>Delete</span>
+        </Toolbar.Button>
+
+        {/* Divider */}
+        <Separator.Root className="editor-floating-toolbar-separator" orientation="vertical" />
+
+        {/* Convert to inline image */}
+        <Toolbar.Button
+          className="editor-floating-toolbar-button"
+          onClick={handleConvertToInline}
+          aria-label="Convert to inline image"
+          title="Place image inline within text"
+        >
+          <FiType size={16} />
+          <span>Inline</span>
         </Toolbar.Button>
 
         {/* Divider */}
