@@ -1,6 +1,5 @@
 "use client";
 import React, { useCallback } from "react";
-import { EditorContent, useEditor } from "@tiptap/react";
 import type { Editor, JSONContent } from "@tiptap/core";
 import { useDebounce } from "../hooks/debounce";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -10,7 +9,18 @@ import { uploadImageData } from "../http/uploadImageData";
 import Collaboration from "@tiptap/extension-collaboration";
 import CollaborationCursor from "@tiptap/extension-collaboration-caret";
 import { HocuspocusProvider } from "@hocuspocus/provider";
-import { getExtensions, Editor as EditorBeskar, TableFloatingMenu, type ImageAPIHandler, TiptapEditor, TextFormattingMenu, CodeBlockFloatingMenu, ImageFloatingMenu } from "@durgakiran/editor";
+import {
+    getExtensions,
+    Editor as EditorBeskar,
+    TableFloatingMenu,
+    type ImageAPIHandler,
+    type AttachmentAPIHandler,
+    type AttachmentRef,
+    TiptapEditor,
+    TextFormattingMenu,
+    CodeBlockFloatingMenu,
+} from "@durgakiran/editor";
+import { uploadAttachmentData, downloadAttachmentBlob } from "../http/uploadAttachmentData";
 import { WebrtcProvider } from "y-webrtc";
 import * as Y from "yjs";
 
@@ -19,15 +29,21 @@ interface TipTapProps {
     user: UserInfo;
     content: Object;
     pageId: string;
+    /** Numeric page id for attachment upload API (`pageId` form field). */
     id: number;
     editable?: boolean;
     title: string;
     updateContent: (content: any, title: string) => void;
     provider?: WebrtcProvider;
     ydoc?: Y.Doc;
+    /** Fired when the set of successfully uploaded inline attachments in the doc changes. */
+    onDocAttachmentsChange?: (attachments: AttachmentRef[]) => void;
 }
 
 const MAX_DEFAULT_WIDTH = 760;
+const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
+const ATTACHMENT_ACCEPT =
+    "application/pdf,application/zip,application/x-zip-compressed,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/plain,text/csv,.pdf,.zip,.doc,.docx,.xls,.xlsx,.csv,.txt";
 
 interface UserInfo {
     email: string;
@@ -37,7 +53,19 @@ interface UserInfo {
     color?: string;
 }
 
-export function TipTap({ setEditorContext, user, content, pageId, id, editable = true, title, updateContent, provider, ydoc }: TipTapProps) {
+export function TipTap({
+    setEditorContext,
+    user,
+    content,
+    pageId,
+    id,
+    editable = true,
+    title,
+    updateContent,
+    provider,
+    ydoc,
+    onDocAttachmentsChange,
+}: TipTapProps) {
     const [editedData, setEditedData] = useState(null);
     const menuContainerRef = useRef(null);
     const debouncedValue = useDebounce(editedData, 10000);
@@ -77,6 +105,32 @@ export function TipTap({ setEditorContext, user, content, pageId, id, editable =
             }
         },
     };
+
+    const handleAttachmentRejected = useCallback((reason: "too_large", file: File) => {
+        console.warn(`[TipTap] Attachment rejected (${reason}):`, file.name, file.size);
+    }, []);
+
+    const attachmentHandler: AttachmentAPIHandler = useMemo(
+        () => ({
+            uploadAttachment: async (file, opts) => {
+                if (!Number.isFinite(id) || id < 1) {
+                    throw new Error("Invalid page id for attachment upload");
+                }
+                const result = await uploadAttachmentData(file, id, { signal: opts?.signal });
+                return {
+                    attachmentId: result.attachmentId,
+                    url: result.url,
+                    fileName: result.fileName,
+                    fileSize: result.fileSize,
+                    mimeType: result.mimeType,
+                };
+            },
+            downloadAttachment: async ({ url, fileName }) => {
+                await downloadAttachmentBlob(url, fileName);
+            },
+        }),
+        [id],
+    );
 
     const collaborationExtensions = () => {
         return [
@@ -154,9 +208,34 @@ export function TipTap({ setEditorContext, user, content, pageId, id, editable =
         <div ref={menuContainerRef} className="beskar-editor">
             <div>Rendered: {countRenderRef.current}</div>
             {editable ? (
-                <EditorBeskar imageHandler={imageHandler} extensions={collaborationExtensions()} editable={editable} placeholder="Start typing..." onUpdate={editedDataFn} onReady={handleReady} />
+                <EditorBeskar
+                    imageHandler={imageHandler}
+                    attachmentHandler={attachmentHandler}
+                    maxAttachmentBytes={MAX_ATTACHMENT_BYTES}
+                    onAttachmentRejected={handleAttachmentRejected}
+                    allowedMimeAccept={ATTACHMENT_ACCEPT}
+                    onAttachmentsChange={onDocAttachmentsChange}
+                    extensions={collaborationExtensions()}
+                    editable={editable}
+                    placeholder="Start typing..."
+                    onUpdate={editedDataFn}
+                    onReady={handleReady}
+                />
             ) : (
-                <EditorBeskar imageHandler={imageHandler} initialContent={content} extensions={[]} editable={editable} placeholder="Start typing..." onUpdate={editedDataFn} onReady={handleReady} />
+                <EditorBeskar
+                    imageHandler={imageHandler}
+                    attachmentHandler={attachmentHandler}
+                    maxAttachmentBytes={MAX_ATTACHMENT_BYTES}
+                    onAttachmentRejected={handleAttachmentRejected}
+                    allowedMimeAccept={ATTACHMENT_ACCEPT}
+                    onAttachmentsChange={onDocAttachmentsChange}
+                    initialContent={content}
+                    extensions={[]}
+                    editable={editable}
+                    placeholder="Start typing..."
+                    onUpdate={editedDataFn}
+                    onReady={handleReady}
+                />
             )}
             {editor && editable && (
                 <>

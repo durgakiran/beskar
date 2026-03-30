@@ -1,6 +1,7 @@
 "use client";
 import ToastComponent from "@components/ui/ToastComponent";
-import { TipTap } from "@editor";
+import { TipTap, AttachmentPanel } from "@editor";
+import type { AttachmentRef } from "@durgakiran/editor";
 import { useGet, useDelete } from "@http/hooks";
 import { Button, Spinner, Tooltip, Flex, Box, IconButton, Text, Dialog } from "@radix-ui/themes";
 import Link from "next/link";
@@ -21,6 +22,7 @@ export default function Page({ params }: { params: Promise<{ page: string; space
     const [workerInitiated, setWorkerInitiated] = useState(false);
     const [content, setContent] = useState();
     const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+    const [docAttachments, setDocAttachments] = useState<AttachmentRef[]>([]);
     const router = useRouter();
     const [{ isLoading, data, errors }, fetchData] = useGet<{ data: any; status: string }>(`editor/space/${spaceId}/page/${page}`);
     const [{ isLoading: loadingBreadCrum, data: dataBreadCrum, errors: breadCrumErrors }, getBreadCrum] = useGet<{ data: BreadCrumbData[]; status: string }>(`page/${page}/breadCrumbs`);
@@ -193,9 +195,11 @@ export default function Page({ params }: { params: Promise<{ page: string; space
                                 editable={false}
                                 content={content}
                                 pageId={page}
-                                id={data.data.docId}
+                                id={Number(page)}
                                 user={null}
+                                onDocAttachmentsChange={setDocAttachments}
                             />
+                            <AttachmentPanel attachments={docAttachments} pageId={Number(page)} />
                         </Box>
                     </Box>
                 )}

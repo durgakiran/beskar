@@ -1,6 +1,7 @@
 "use client";
 
-import { TipTap } from "@editor";
+import { TipTap, AttachmentPanel } from "@editor";
+import type { AttachmentRef } from "@durgakiran/editor";
 import { EditorContext } from "@editor/context/editorContext";
 import { Editorheader } from "@editor/header";
 import TextArea from "@editor/textarea/TextArea";
@@ -90,6 +91,7 @@ export default function DocumentEditor({ slug }: { slug: string[] }) {
     const activeSockets = useRef<Map<WebSocket, number>>(new Map());
     const [isLeader, setIsLeader] = useState<boolean>(false);
     const [isDocumentFetched, setIsDocumentFetched] = useState<boolean>(false);
+    const [docAttachments, setDocAttachments] = useState<AttachmentRef[]>([]);
     // end of editor handling
 
     // wasm handling
@@ -117,6 +119,11 @@ export default function DocumentEditor({ slug }: { slug: string[] }) {
     const ydoc = useMemo(() => {
         return new y.Doc();
     }, []);
+
+    const pageIdNum = useMemo(() => {
+        const n = parseInt(slug[1], 10);
+        return Number.isFinite(n) ? n : 0;
+    }, [slug]);
 
     const user = useMemo(() => {
         if (!profileData) return;
@@ -659,14 +666,16 @@ export default function DocumentEditor({ slug }: { slug: string[] }) {
                                     content={""}
                                     pageId={slug[1]}
                                     editable={true}
-                                    id={49}
+                                    id={pageIdNum}
                                     user={user}
                                     updateContent={(content, title) => {
                                         updateContent(content, title);
                                     }}
                                     provider={provider}
                                     ydoc={ydoc}
+                                    onDocAttachmentsChange={setDocAttachments}
                                 />
+                                <AttachmentPanel attachments={docAttachments} pageId={pageIdNum} />
                             </div>
                         </div>
                     </div>

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 
+	attachment "github.com/durgakiran/beskar/attachment/controller"
 	auth "github.com/durgakiran/beskar/auth"
 	"github.com/durgakiran/beskar/core"
 	editor "github.com/durgakiran/beskar/editor"
@@ -103,6 +104,7 @@ func main() {
 	r.Mount("/auth/", core.ZitadelAuthenticator())
 	r.Mount("/api/v1", auth.Router())
 	r.Mount("/api/v1/media", mw.CheckAuthentication()(media.Router()))
+	r.Mount("/api/v1/attachments", mw.CheckAuthentication()(attachment.Router()))
 	r.Mount("/api/v1/profile", mw.CheckAuthentication()(profile.Router()))
 	r.Mount("/api/v1/editor", mw.CheckAuthentication()(editor.Router()))
 	r.Mount("/api/v1/space", mw.CheckAuthentication()(space.Router()))

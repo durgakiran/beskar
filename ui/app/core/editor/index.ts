@@ -1,6 +1,8 @@
 // import { RefObject, useCallback, useEffect, useRef, useState } from "react";
 // import Quill, { QuillOptionsStatic } from 'quill';
-export { TipTap } from './tiptap';
+export { TipTap } from "./tiptap";
+export { AttachmentPanel } from "./AttachmentPanel";
+export type { AttachmentPanelProps } from "./AttachmentPanel";
 
 // interface QuillObj {
 //     editor: Quill | undefined,
