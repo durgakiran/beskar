@@ -25,6 +25,10 @@ export function Editor({
   editable = true,
   placeholder = 'Write something or type "/" for commands....',
   columnLayoutPlaceholder,
+  columnCodeBlockPlaceholder,
+  columnMathBlockPlaceholder,
+  columnTableOfContentsPlaceholder,
+  columnDetailsSummaryPlaceholder,
   collaboration,
   onUpdate,
   onReady,
@@ -55,16 +59,7 @@ export function Editor({
     onReadyRef.current = onReady;
   }, [onReady]);
 
-  // Orphan callback — call commentHandler.orphanThread when a mark is removed
-  const onCommentOrphaned = useCallback(
-    (commentId: string) => {
-      if (!commentHandler) return;
-      commentHandler.orphanThread(commentId).catch((err) => {
-        console.error('[Editor] orphanThread failed', err);
-      });
-    },
-    [commentHandler],
-  );
+
 
   // Get all extensions - memoize to prevent recreation
   const extensions = useMemo(
@@ -72,6 +67,10 @@ export function Editor({
       getExtensions({
         placeholder,
         columnLayoutPlaceholder,
+        columnCodeBlockPlaceholder,
+        columnMathBlockPlaceholder,
+        columnTableOfContentsPlaceholder,
+        columnDetailsSummaryPlaceholder,
         collaboration,
         additionalExtensions: customExtensions,
         imageHandler,
@@ -80,12 +79,15 @@ export function Editor({
         onAttachmentRejected,
         allowedMimeAccept,
         onAttachmentsChange,
-        onCommentOrphaned: commentHandler ? onCommentOrphaned : undefined,
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [
       placeholder,
       columnLayoutPlaceholder,
+      columnCodeBlockPlaceholder,
+      columnMathBlockPlaceholder,
+      columnTableOfContentsPlaceholder,
+      columnDetailsSummaryPlaceholder,
       collaboration,
       customExtensions,
       imageHandler,

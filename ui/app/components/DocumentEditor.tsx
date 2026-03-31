@@ -81,7 +81,6 @@ export default function DocumentEditor({ slug }: { slug: string[] }) {
     const [title, setTitle] = useState<string>();
     const [titleTextProvider, setTitleTextProvider] = useState<y.Text>();
     const [publishableDocument, setPublishableDocument] = useState<any>();
-    const [updatedData, setUpdatedData] = useState<DocumentDTO>();
     const [updatedTitle, setUpdatedTitle] = useState<string>();
     const [docId, setDocId] = useState<number>();
     const [parentId, setParentId] = useState<number>();
@@ -92,6 +91,7 @@ export default function DocumentEditor({ slug }: { slug: string[] }) {
     const [isLeader, setIsLeader] = useState<boolean>(false);
     const [isDocumentFetched, setIsDocumentFetched] = useState<boolean>(false);
     const [docAttachments, setDocAttachments] = useState<AttachmentRef[]>([]);
+    const [isSidePanelOpen, setIsSidePanelOpen] = useState(false);
     // end of editor handling
 
     // wasm handling
@@ -160,16 +160,14 @@ export default function DocumentEditor({ slug }: { slug: string[] }) {
     }, []);
 
     const handleUpdate = () => {
-        if (updatedData) {
-            workerRef.current.postMessage({ type: "data", data: updatedData });
-        } else {
-            // there is no updatedData on load and so we need to get data from editor context it self
+        if (!isEditorReady) return;
+        if (editorContext) {
             workerRef.current.postMessage({ type: "data", data: { data: editorContext.getJSON(), pageId: Number(slug[1]), id: docId } });
         }
     };
 
     const updateContent = (content: any, title: string) => {
-        if (!isLeader) return;
+        if (!isLeader || !isEditorReady) return;
 
         const payLoad: IPayload = {
             data: content,
@@ -180,7 +178,6 @@ export default function DocumentEditor({ slug }: { slug: string[] }) {
             parentId: parentId,
             title: title,
         };
-        setUpdatedData({ data: content, pageId: Number(slug[1]), id: docId });
         setUpdatedTitle(title);
         updateDraftData({ ...payLoad, data: Buffer.from(y.encodeStateAsUpdate(ydoc)).toString('base64') });
     };
@@ -483,7 +480,9 @@ export default function DocumentEditor({ slug }: { slug: string[] }) {
 
         const docIdObserver = () => {
             const newDocId = docIdProvider.toString();
-            setDocId(Number(newDocId));
+            if (newDocId) {
+                setDocId(Number(newDocId));
+            }
         };
 
         const parentIdObserver = () => {
@@ -629,7 +628,13 @@ export default function DocumentEditor({ slug }: { slug: string[] }) {
                             }}
                         >
                             <EditorContext.Provider value={editorContext}>
-                                <Editorheader handleClose={handleClose} handleUpdate={handleUpdate} />
+                                <Editorheader
+                                    isEditorReady={isEditorReady}
+                                    handleClose={handleClose}
+                                    handleUpdate={handleUpdate}
+                                    isSidePanelOpen={isSidePanelOpen}
+                                    setIsSidePanelOpen={setIsSidePanelOpen}
+                                />
                             </EditorContext.Provider>
                         </div>
                         <div style={{ maxWidth: "1024px", margin: "auto" }}>
@@ -674,6 +679,8 @@ export default function DocumentEditor({ slug }: { slug: string[] }) {
                                     provider={provider}
                                     ydoc={ydoc}
                                     onDocAttachmentsChange={setDocAttachments}
+                                    isInlineMessageSidePanelOpen={isSidePanelOpen}
+                                    setIsInlineMessageSidePanelOpen={setIsSidePanelOpen}
                                 />
                                 <AttachmentPanel attachments={docAttachments} pageId={pageIdNum} />
                             </div>

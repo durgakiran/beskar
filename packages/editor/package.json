@@ -1,6 +1,6 @@
 {
   "name": "@durgakiran/editor",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "A rich text editor built on TipTap with Radix UI",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
@@ -80,7 +80,7 @@
     "@tiptap/suggestion": "3.6.6",
     "prosemirror-model": "1.23.0",
     "prosemirror-state": "1.4.3",
-    "prosemirror-view": "1.34.3",
+    "prosemirror-view": "1.41.4",
     "prosemirror-transform": "1.8.0"
   },
   "dependencies": {

@@ -74,17 +74,29 @@ const EditorUi = Extension.create({
       placeholder: 'Write something....',
       /** Hint inside layout column cells (Confluence-style short line). */
       columnLayoutPlaceholder: '/ to insert',
+      columnCodeBlockPlaceholder: 'Add code…',
+      columnMathBlockPlaceholder: 'Add equation…',
+      columnTableOfContentsPlaceholder: 'Add headings above to populate…',
+      columnDetailsSummaryPlaceholder: 'Add summary…',
     };
   },
   addStorage() {
     return {
       placeholder: 'Write something....',
       columnLayoutPlaceholder: '/ to insert',
+      columnCodeBlockPlaceholder: 'Add code…',
+      columnMathBlockPlaceholder: 'Add equation…',
+      columnTableOfContentsPlaceholder: 'Add headings above to populate…',
+      columnDetailsSummaryPlaceholder: 'Add summary…',
     };
   },
   onCreate() {
     this.storage.placeholder = this.options.placeholder;
     this.storage.columnLayoutPlaceholder = this.options.columnLayoutPlaceholder;
+    this.storage.columnCodeBlockPlaceholder = this.options.columnCodeBlockPlaceholder;
+    this.storage.columnMathBlockPlaceholder = this.options.columnMathBlockPlaceholder;
+    this.storage.columnTableOfContentsPlaceholder = this.options.columnTableOfContentsPlaceholder;
+    this.storage.columnDetailsSummaryPlaceholder = this.options.columnDetailsSummaryPlaceholder;
   },
 });
 
@@ -92,6 +104,14 @@ export interface GetExtensionsOptions {
   placeholder?: string;
   /** Placeholder shown in empty paragraphs inside column layouts (default: `/ to insert`). */
   columnLayoutPlaceholder?: string;
+  /** Empty code block inside a column (default: `Add code…`). */
+  columnCodeBlockPlaceholder?: string;
+  /** Empty math block inside a column (default: `Add equation…`). */
+  columnMathBlockPlaceholder?: string;
+  /** Empty TOC block inside a column (default: short hint). */
+  columnTableOfContentsPlaceholder?: string;
+  /** Empty details/summary toggle label inside a column (default: `Add summary…`). */
+  columnDetailsSummaryPlaceholder?: string;
   collaboration?: CollaborationConfig;
   additionalExtensions?: Extensions;
   imageHandler?: ImageAPIHandler;
@@ -100,7 +120,9 @@ export interface GetExtensionsOptions {
   onAttachmentRejected?: (reason: 'too_large', file: File) => void;
   allowedMimeAccept?: string;
   onAttachmentsChange?: (attachments: AttachmentRef[]) => void;
-  onCommentOrphaned?: (commentId: string) => void;
+  onAddCommentShortcut?: () => void;
+  onNextCommentShortcut?: () => void;
+  onPrevCommentShortcut?: () => void;
 }
 
 /**
@@ -110,6 +132,10 @@ export function getExtensions(options: GetExtensionsOptions = {}): Extensions {
   const {
     placeholder = 'Write something....',
     columnLayoutPlaceholder = '/ to insert',
+    columnCodeBlockPlaceholder = 'Add code…',
+    columnMathBlockPlaceholder = 'Add equation…',
+    columnTableOfContentsPlaceholder = 'Add headings above to populate…',
+    columnDetailsSummaryPlaceholder = 'Add summary…',
     collaboration,
     additionalExtensions = [],
     imageHandler,
@@ -118,7 +144,9 @@ export function getExtensions(options: GetExtensionsOptions = {}): Extensions {
     onAttachmentRejected,
     allowedMimeAccept = '*',
     onAttachmentsChange,
-    onCommentOrphaned,
+    onAddCommentShortcut,
+    onNextCommentShortcut,
+    onPrevCommentShortcut,
   } = options;
 
   const baseExtensions: Extensions = [
@@ -136,7 +164,14 @@ export function getExtensions(options: GetExtensionsOptions = {}): Extensions {
       horizontalRule: false,
       listItem: false,
     }),
-    EditorUi.configure({ placeholder, columnLayoutPlaceholder }),
+    EditorUi.configure({
+      placeholder,
+      columnLayoutPlaceholder,
+      columnCodeBlockPlaceholder,
+      columnMathBlockPlaceholder,
+      columnTableOfContentsPlaceholder,
+      columnDetailsSummaryPlaceholder,
+    }),
     Placeholder.configure({
       // Defaults skip nested blocks: returning `includeChildren: false` from the
       // descendants callback stops ProseMirror from recursing, so empty paragraphs
@@ -153,13 +188,58 @@ export function getExtensions(options: GetExtensionsOptions = {}): Extensions {
         // Layout wrappers can be marked empty when every cell is empty; keep attr empty
         // so global ::before does not run (see editor.css).
         if (node.type.name === 'columns' || node.type.name === 'column') return '';
-        // Inside column cells: global ::before breaks flex; use ::after + CSS var.
+        // Details NodeView wrapper + body container get recursive is-empty; CSS suppresses
+        // pseudo-elements — empty attr avoids redundant placeholder text on those nodes.
+        if (node.type.name === 'details' || node.type.name === 'detailsContent') return '';
+        // Blockquote & lists: same recursive is-empty on wrapper + li + inner block (see editor.css).
+        if (
+          node.type.name === 'blockquote' ||
+          node.type.name === 'bulletList' ||
+          node.type.name === 'orderedList' ||
+          node.type.name === 'listItem' ||
+          node.type.name === 'taskList' ||
+          node.type.name === 'taskItem'
+        ) {
+          return '';
+        }
+        // Inside columns: never use global ::before (float breaks flex). CSS uses ::after +
+        // attr(data-placeholder). Per-block hints here; nested p/headings in lists/blockquotes work.
         try {
           const $pos = editor.state.doc.resolve(pos);
+          let inColumn = false;
+          let inTableCell = false;
           for (let d = $pos.depth; d > 0; d--) {
-            if ($pos.node(d).type.name === 'column') {
+            const nm = $pos.node(d).type.name;
+            if (nm === 'column') inColumn = true;
+            if (nm === 'tableCell' || nm === 'tableHeader') inTableCell = true;
+          }
+          if (inColumn && inTableCell) {
+            if (node.type.name === 'paragraph' || node.type.name === 'heading') {
+              return placeholder;
+            }
+            if (node.type.name === 'detailsSummary') {
+              return columnDetailsSummaryPlaceholder;
+            }
+            return '';
+          }
+          if (inColumn) {
+            const n = node.type.name;
+            if (n === 'paragraph' || n === 'heading') {
               return columnLayoutPlaceholder;
             }
+            if (n === 'codeBlock') {
+              return columnCodeBlockPlaceholder;
+            }
+            if (n === 'mathBlock') {
+              return columnMathBlockPlaceholder;
+            }
+            if (n === 'tableOfContents') {
+              return columnTableOfContentsPlaceholder;
+            }
+            if (n === 'detailsSummary') {
+              return columnDetailsSummaryPlaceholder;
+            }
+            return '';
           }
         } catch {
           /* ignore resolve errors during transient states */
@@ -229,10 +309,9 @@ export function getExtensions(options: GetExtensionsOptions = {}): Extensions {
     Column,
     SlashCommand, // Slash command menu for inserting content
     CommentMark.configure({
-      onCommentOrphaned: (id: string) => {
-        console.log(`[CommentMark] Comment orphaned: ${id}`);
-        onCommentOrphaned?.(id);
-      },
+      onAddCommentShortcut,
+      onNextCommentShortcut,
+      onPrevCommentShortcut,
     }), // Inline comments
   ];
 

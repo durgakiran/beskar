@@ -504,6 +504,7 @@
 
 .beskar-editor .ProseMirror div[data-type="details"] {
   display: flex;
+  align-items: flex-start;
   gap: 0.25rem;
   margin: 1.5rem 0px;
   border: 1px solid var(--gray-3);
@@ -511,6 +512,40 @@
   padding: 0.5rem;
 }
 
+/* Second flex child is TipTap contentDOM (summary + detailsContent); let it grow with text */
+.beskar-editor .ProseMirror div[data-type="details"] > div {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+}
+
+/*
+ * NodeView uses div[data-type="details"], not <details> — .ProseMirror details summary rules do
+ * not apply. Summary must be block + full width: inline-block shrink-wraps to the caret (~2ch),
+ * so placeholder max-width:100% ellipsizes to "S…".
+ */
+.beskar-editor .ProseMirror div[data-type="details"] summary {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  cursor: pointer;
+  user-select: none;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.beskar-editor .ProseMirror div[data-type="details"] summary::-webkit-details-marker {
+  display: none !important;
+}
+
+.beskar-editor .ProseMirror div[data-type="details"] summary::marker {
+  display: none !important;
+  content: none !important;
+}
 
 /* TipTap Details extension creates a button element for toggling */
 .beskar-editor .ProseMirror div[data-type="details"]>button {
@@ -1072,6 +1107,219 @@
 /* When `columns` / `column` are decorated as empty (all cells empty), disable ::before — float breaks layout */
 .beskar-editor .ProseMirror .editor-column.is-empty::before,
 .beskar-editor .ProseMirror .editor-columns.is-empty::before {
+  content: none !important;
+  display: none !important;
+  float: none !important;
+  height: auto !important;
+  width: auto !important;
+}
+
+/*
+ * Table placeholders: with Placeholder.includeChildren, TipTap marks every recursively-empty node
+ * (table, tr, td/th, and the inner paragraph). Each gets is-empty + data-placeholder, so the
+ * global float ::before runs on multiple nested DOM nodes — stacked text and broken layout.
+ * The table node's outer DOM is div.tableWrapper (TableView / renderHTML), not <table> — that
+ * wrapper was showing a floated ::before outside the grid.
+ * Suppress hints on table structure only; keep a single hint on text blocks inside cells.
+ */
+.beskar-editor .ProseMirror .tableWrapper.is-empty::before,
+.beskar-editor .ProseMirror .tableWrapper.is-empty::after,
+.beskar-editor .ProseMirror table.is-empty::before,
+.beskar-editor .ProseMirror table.is-empty::after,
+.beskar-editor .ProseMirror table tr.is-empty::before,
+.beskar-editor .ProseMirror table tr.is-empty::after,
+.beskar-editor .ProseMirror table td.is-empty::before,
+.beskar-editor .ProseMirror table td.is-empty::after,
+.beskar-editor .ProseMirror table th.is-empty::before,
+.beskar-editor .ProseMirror table th.is-empty::after {
+  content: none !important;
+  display: none !important;
+  float: none !important;
+  height: auto !important;
+  width: auto !important;
+}
+
+/*
+ * Inner blocks inside cells: global ::before (float:left; height:0; width:100%) still breaks.
+ * Use ::after + absolute positioning with attr(data-placeholder).
+ */
+.beskar-editor .ProseMirror table td .is-empty::before,
+.beskar-editor .ProseMirror table th .is-empty::before {
+  content: none !important;
+  display: none !important;
+  float: none !important;
+  height: auto !important;
+  width: auto !important;
+}
+
+.beskar-editor .ProseMirror table td .is-empty,
+.beskar-editor .ProseMirror table th .is-empty {
+  position: relative;
+  min-height: 1.5em;
+}
+
+.beskar-editor .ProseMirror table td .is-empty::after,
+.beskar-editor .ProseMirror table th .is-empty::after {
+  content: attr(data-placeholder);
+  position: absolute;
+  left: 0;
+  top: 0;
+  line-height: 1.625;
+  font-size: inherit;
+  font-weight: inherit;
+  color: rgba(0, 0, 0, 0.45);
+  pointer-events: none;
+  user-select: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.beskar-editor.dark .ProseMirror table td .is-empty::after,
+.beskar-editor.dark .ProseMirror table th .is-empty::after {
+  color: rgba(255, 255, 255, 0.42);
+}
+
+/*
+ * Details / collapsible: Placeholder.includeChildren marks every recursively-empty node. Same
+ * stacking as tables — outer DOM is div[data-type="details"] (NodeView), body is
+ * div[data-type="detailsContent"], plus summary and inner blocks — stacked float ::before hints.
+ */
+.beskar-editor .ProseMirror div[data-type="details"].is-empty::before,
+.beskar-editor .ProseMirror div[data-type="details"].is-empty::after,
+.beskar-editor .ProseMirror div[data-type="detailsContent"].is-empty::before,
+.beskar-editor .ProseMirror div[data-type="detailsContent"].is-empty::after {
+  content: none !important;
+  display: none !important;
+  float: none !important;
+  height: auto !important;
+  width: auto !important;
+}
+
+/* Summary uses display:inline elsewhere — float placeholder breaks; single hint via ::after */
+.beskar-editor .ProseMirror div[data-type="details"] summary.is-empty::before {
+  content: none !important;
+  display: none !important;
+  float: none !important;
+  height: auto !important;
+  width: auto !important;
+}
+
+.beskar-editor .ProseMirror div[data-type="details"] summary.is-empty {
+  position: relative;
+  min-height: 1.5em;
+  line-height: 1.5;
+}
+
+.beskar-editor .ProseMirror div[data-type="details"] summary.is-empty::after {
+  content: attr(data-placeholder);
+  position: absolute;
+  left: 0;
+  top: 0.05em;
+  right: 0;
+  line-height: 1.5;
+  font-size: inherit;
+  font-weight: inherit;
+  color: rgba(0, 0, 0, 0.45);
+  pointer-events: none;
+  user-select: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.beskar-editor.dark .ProseMirror div[data-type="details"] summary.is-empty::after {
+  color: rgba(255, 255, 255, 0.42);
+}
+
+/* Collapsible body (block+) — same as table cells */
+.beskar-editor .ProseMirror div[data-type="detailsContent"] .is-empty::before {
+  content: none !important;
+  display: none !important;
+  float: none !important;
+  height: auto !important;
+  width: auto !important;
+}
+
+.beskar-editor .ProseMirror div[data-type="detailsContent"] .is-empty {
+  position: relative;
+  min-height: 1.5em;
+}
+
+.beskar-editor .ProseMirror div[data-type="detailsContent"] .is-empty::after {
+  content: attr(data-placeholder);
+  position: absolute;
+  left: 0;
+  top: 0;
+  line-height: 1.625;
+  font-size: inherit;
+  font-weight: inherit;
+  color: rgba(0, 0, 0, 0.45);
+  pointer-events: none;
+  user-select: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.beskar-editor.dark .ProseMirror div[data-type="detailsContent"] .is-empty::after {
+  color: rgba(255, 255, 255, 0.42);
+}
+
+/*
+ * Blockquote & lists: recursive is-empty on blockquote / ul / ol / li and inner blocks — stacked
+ * float ::before. Fix inner blocks first, then strip all placeholder pseudo-elements from wrappers
+ * (second block must follow so li.is-empty does not inherit li .is-empty::after content).
+ */
+.beskar-editor .ProseMirror blockquote .is-empty::before,
+.beskar-editor .ProseMirror li .is-empty::before {
+  content: none !important;
+  display: none !important;
+  float: none !important;
+  height: auto !important;
+  width: auto !important;
+}
+
+.beskar-editor .ProseMirror blockquote .is-empty,
+.beskar-editor .ProseMirror li .is-empty {
+  position: relative;
+  min-height: 1.5em;
+}
+
+.beskar-editor .ProseMirror blockquote .is-empty::after,
+.beskar-editor .ProseMirror li .is-empty::after {
+  content: attr(data-placeholder);
+  position: absolute;
+  left: 0;
+  top: 0;
+  line-height: 1.625;
+  font-size: inherit;
+  font-weight: inherit;
+  font-style: normal;
+  color: rgba(0, 0, 0, 0.45);
+  pointer-events: none;
+  user-select: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.beskar-editor.dark .ProseMirror blockquote .is-empty::after,
+.beskar-editor.dark .ProseMirror li .is-empty::after {
+  color: rgba(255, 255, 255, 0.42);
+}
+
+.beskar-editor .ProseMirror blockquote.is-empty::before,
+.beskar-editor .ProseMirror blockquote.is-empty::after,
+.beskar-editor .ProseMirror ul.is-empty::before,
+.beskar-editor .ProseMirror ul.is-empty::after,
+.beskar-editor .ProseMirror ol.is-empty::before,
+.beskar-editor .ProseMirror ol.is-empty::after,
+.beskar-editor .ProseMirror li.is-empty::before,
+.beskar-editor .ProseMirror li.is-empty::after {
   content: none !important;
   display: none !important;
   float: none !important;
@@ -2599,9 +2847,8 @@ td.selectedCell {
 }
 
 /*
- * Column placeholders: TipTap uses data-placeholder on .is-empty + ::before with float:left;
- * that breaks inside flex cells. We return '' from Placeholder inside columns and draw the
- * hint from --editor-column-placeholder (set on .columns-wrapper) via ::after instead.
+ * Column placeholders: hide global ::before (float breaks flex). Use ::after + attr(data-placeholder)
+ * so each block gets its own hint from the Placeholder extension (p/heading, code, math, TOC, …).
  */
 .editor-column .is-empty {
   position: relative;
@@ -2614,7 +2861,7 @@ td.selectedCell {
 }
 
 .editor-column .is-empty::after {
-  content: var(--editor-column-placeholder, "/ to insert");
+  content: attr(data-placeholder);
   position: absolute;
   left: 0;
   top: 0;
@@ -2631,6 +2878,31 @@ td.selectedCell {
 }
 
 .beskar-editor.dark .ProseMirror .editor-column .is-empty::after {
+  color: rgba(255, 255, 255, 0.42);
+}
+
+/*
+ * Details inside columns: generic .editor-column .is-empty::after comes later in the sheet and can
+ * override the details summary rule; re-apply summary geometry + attr(data-placeholder) here.
+ */
+.beskar-editor .ProseMirror .editor-column div[data-type="details"] summary.is-empty::after {
+  content: attr(data-placeholder);
+  position: absolute;
+  left: 0;
+  top: 0.05em;
+  right: 0;
+  line-height: 1.5;
+  font-size: inherit;
+  font-weight: inherit;
+  color: rgba(0, 0, 0, 0.45);
+  pointer-events: none;
+  user-select: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.beskar-editor.dark .ProseMirror .editor-column div[data-type="details"] summary.is-empty::after {
   color: rgba(255, 255, 255, 0.42);
 }
 

@@ -14,10 +14,12 @@ export interface CommentSidePanelProps {
   editor: Editor;
   commentHandler: CommentAPIHandler;
   documentId: string;
+  threads: CommentThread[];
   isOpen: boolean;
   activeThreadId?: string | null;
   onClose: () => void;
-  onThreadsUpdated?: (threads: CommentThread[]) => void;
+  onThreadUpdated: (thread: CommentThread) => void;
+  onThreadDeleted: (threadId: string) => void;
 }
 
 // ─── Utils ────────────────────────────────────────────────────────────────────
@@ -115,6 +117,7 @@ interface ThreadCardProps {
   thread: CommentThread;
   isActive: boolean;
   onResolve: (threadId: string) => void;
+  onUnresolve: (threadId: string) => void;
   onDelete: (threadId: string) => void;
   onAddReply: (threadId: string, body: string) => void;
   onDeleteReply: (threadId: string, replyId: string) => void;
@@ -125,6 +128,7 @@ function ThreadCard({
   thread,
   isActive,
   onResolve,
+  onUnresolve,
   onDelete,
   onAddReply,
   onDeleteReply,
@@ -173,6 +177,15 @@ function ThreadCard({
               onClick={() => onResolve(thread.id)}
             >
               <FiCheck size={14} />
+            </button>
+          )}
+          {isResolved && !isOrphaned && (
+            <button
+              className="csp-icon-btn csp-icon-btn--unresolve"
+              title="Unresolve thread"
+              onClick={() => onUnresolve(thread.id)}
+            >
+              ↩
             </button>
           )}
           <button
@@ -243,44 +256,34 @@ function ThreadCard({
 
 export function CommentSidePanel({
   editor,
+  threads,
   commentHandler,
-  documentId,
   isOpen,
   activeThreadId,
   onClose,
-  onThreadsUpdated,
+  onThreadUpdated,
+  onThreadDeleted,
 }: CommentSidePanelProps) {
-  const [threads, setThreads] = useState<CommentThread[]>([]);
   const [showResolved, setShowResolved] = useState(false);
   const [loading, setLoading] = useState(false);
-
-  // Load threads
-  const loadThreads = useCallback(async () => {
-    setLoading(true);
-    try {
-      const data = await commentHandler.getThreads(documentId);
-      setThreads(data);
-      onThreadsUpdated?.(data);
-    } catch (err) {
-      console.error('[CommentSidePanel] getThreads failed', err);
-    } finally {
-      setLoading(false);
-    }
-  }, [commentHandler, documentId, onThreadsUpdated]);
-
-  useEffect(() => {
-    if (isOpen) {
-      loadThreads();
-    }
-  }, [isOpen, loadThreads]);
 
   // Handle resolve
   const handleResolve = async (threadId: string) => {
     try {
       const updated = await commentHandler.resolveThread(threadId);
-      setThreads((prev) => prev.map((t) => (t.id === threadId ? updated : t)));
+      onThreadUpdated(updated);
     } catch (err) {
       console.error('[CommentSidePanel] resolveThread failed', err);
+    }
+  };
+
+  // Handle unresolve
+  const handleUnresolve = async (threadId: string) => {
+    try {
+      const updated = await commentHandler.unresolveThread(threadId);
+      onThreadUpdated(updated);
+    } catch (err) {
+      console.error('[CommentSidePanel] unresolveThread failed', err);
     }
   };
 
@@ -288,12 +291,7 @@ export function CommentSidePanel({
   const handleDeleteThread = async (threadId: string) => {
     try {
       await commentHandler.deleteThread(threadId);
-      // Also remove the mark from the editor
-      const thread = threads.find((t) => t.id === threadId);
-      if (thread) {
-        editor.commands.removeComment(thread.commentId);
-      }
-      setThreads((prev) => prev.filter((t) => t.id !== threadId));
+      onThreadDeleted(threadId);
     } catch (err) {
       console.error('[CommentSidePanel] deleteThread failed', err);
     }
@@ -303,11 +301,10 @@ export function CommentSidePanel({
   const handleAddReply = async (threadId: string, body: string) => {
     try {
       const reply = await commentHandler.addReply(threadId, body);
-      setThreads((prev) =>
-        prev.map((t) =>
-          t.id === threadId ? { ...t, replies: [...t.replies, reply] } : t,
-        ),
-      );
+      const thread = threads.find((t) => t.id === threadId);
+      if (thread) {
+        onThreadUpdated({ ...thread, replies: [...thread.replies, reply] });
+      }
     } catch (err) {
       console.error('[CommentSidePanel] addReply failed', err);
     }
@@ -317,11 +314,10 @@ export function CommentSidePanel({
   const handleDeleteReply = async (threadId: string, replyId: string) => {
     try {
       await commentHandler.deleteReply(replyId);
-      setThreads((prev) =>
-        prev.map((t) =>
-          t.id === threadId ? { ...t, replies: t.replies.filter((r) => r.id !== replyId) } : t,
-        ),
-      );
+      const thread = threads.find((t) => t.id === threadId);
+      if (thread) {
+        onThreadUpdated({ ...thread, replies: thread.replies.filter((r) => r.id !== replyId) });
+      }
     } catch (err) {
       console.error('[CommentSidePanel] deleteReply failed', err);
     }
@@ -331,31 +327,18 @@ export function CommentSidePanel({
   const handleEditReply = async (replyId: string, newBody: string) => {
     try {
       const updated = await commentHandler.editReply(replyId, newBody);
-      setThreads((prev) =>
-        prev.map((t) => ({
-          ...t,
-          replies: t.replies.map((r) => (r.id === replyId ? updated : r)),
-        })),
-      );
+      // We need to find the thread that contains this reply to create the updated payload
+      const thread = threads.find((t) => t.replies.some((r) => r.id === replyId));
+      if (thread) {
+        onThreadUpdated({
+          ...thread,
+          replies: thread.replies.map((r) => (r.id === replyId ? updated : r))
+        });
+      }
     } catch (err) {
       console.error('[CommentSidePanel] editReply failed', err);
     }
   };
-
-  // Mark a thread as orphaned (called externally)
-  const markOrphaned = useCallback((commentId: string) => {
-    setThreads((prev) =>
-      prev.map((t) => (t.commentId === commentId ? { ...t, orphaned: true } : t)),
-    );
-  }, []);
-
-  // Expose markOrphaned so parent can call it
-  useEffect(() => {
-    (editor as any).__markOrphaned = markOrphaned;
-    return () => {
-      delete (editor as any).__markOrphaned;
-    };
-  }, [editor, markOrphaned]);
 
   const visibleThreads = showResolved
     ? threads
@@ -404,6 +387,7 @@ export function CommentSidePanel({
               thread={thread}
               isActive={thread.id === activeThreadId}
               onResolve={handleResolve}
+              onUnresolve={handleUnresolve}
               onDelete={handleDeleteThread}
               onAddReply={handleAddReply}
               onDeleteReply={handleDeleteReply}

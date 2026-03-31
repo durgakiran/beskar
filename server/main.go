@@ -10,6 +10,7 @@ import (
 	attachment "github.com/durgakiran/beskar/attachment/controller"
 	auth "github.com/durgakiran/beskar/auth"
 	"github.com/durgakiran/beskar/core"
+	"github.com/durgakiran/beskar/comment"
 	editor "github.com/durgakiran/beskar/editor"
 	"github.com/durgakiran/beskar/invite"
 	media "github.com/durgakiran/beskar/media/controller"
@@ -110,6 +111,7 @@ func main() {
 	r.Mount("/api/v1/space", mw.CheckAuthentication()(space.Router()))
 	r.Mount("/api/v1/invite", mw.CheckAuthentication()(invite.Router()))
 	r.Mount("/api/v1/page", mw.CheckAuthentication()(page.Router()))
+	r.Mount("/api/v1/comment", mw.CheckAuthentication()(comment.Router()))
 	r.Mount("/api/v1/user", user.Router())
 
 	logger().Info(fmt.Sprintf("Serving on port: %s", port))

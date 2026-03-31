@@ -70,6 +70,7 @@ type Human struct {
 
 type User struct {
 	UserId string `json:"userId"`
+	Id     string `json:"id"`
 	Human  Human  `json:"human"`
 }
 
@@ -131,6 +132,7 @@ func SearchUsersByIds(userIds []string) (UserSearchResponse, error) {
 		Logger.Error(err.Error())
 		return UserSearchResponse{}, err
 	}
+	Logger.Info("SearchUsersByIds raw response: " + string(data))
 	err = json.Unmarshal(data, &users)
 	if err != nil {
 		Logger.Error(err.Error())

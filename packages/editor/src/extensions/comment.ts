@@ -1,9 +1,10 @@
 import { Mark, mergeAttributes } from '@tiptap/core';
-import { Plugin, PluginKey } from '@tiptap/pm/state';
 
 export interface CommentOptions {
-  onCommentOrphaned?: (commentId: string) => void;
   HTMLAttributes: Record<string, any>;
+  onAddCommentShortcut?: () => void;
+  onNextCommentShortcut?: () => void;
+  onPrevCommentShortcut?: () => void;
 }
 
 declare module '@tiptap/core' {
@@ -26,10 +27,12 @@ export const CommentMark = Mark.create<CommentOptions>({
 
   addOptions() {
     return {
-      onCommentOrphaned: undefined,
       HTMLAttributes: {
         class: 'comment-highlight',
       },
+      onAddCommentShortcut: undefined,
+      onNextCommentShortcut: undefined,
+      onPrevCommentShortcut: undefined,
     };
   },
 
@@ -85,50 +88,29 @@ export const CommentMark = Mark.create<CommentOptions>({
     };
   },
 
-  addProseMirrorPlugins() {
-    return [
-      new Plugin({
-        key: new PluginKey('commentOrphanDetection'),
-        appendTransaction: (transactions, oldState, newState) => {
-          const { onCommentOrphaned } = this.options;
-          if (!onCommentOrphaned) return;
-
-          const docChanged = transactions.some(tr => tr.docChanged);
-          if (!docChanged) return;
-
-          // Find all comment UUIDs in old doc
-          const oldCommentIds = new Set<string>();
-          oldState.doc.descendants((node) => {
-            node.marks.forEach((mark) => {
-              if (mark.type.name === this.name && mark.attrs.commentId) {
-                oldCommentIds.add(mark.attrs.commentId);
-              }
-            });
-          });
-
-          // Find all comment UUIDs in new doc
-          const newCommentIds = new Set<string>();
-          newState.doc.descendants((node) => {
-            node.marks.forEach((mark) => {
-              if (mark.type.name === this.name && mark.attrs.commentId) {
-                newCommentIds.add(mark.attrs.commentId);
-              }
-            });
-          });
-
-          // Find difference
-          oldCommentIds.forEach((id) => {
-            if (!newCommentIds.has(id)) {
-              // Defer callback to avoid state update loops inside transactions
-              setTimeout(() => {
-                onCommentOrphaned(id);
-              }, 0);
-            }
-          });
-
-          return undefined;
-        },
-      }),
-    ];
+  addKeyboardShortcuts() {
+    return {
+      'Mod-Alt-m': () => {
+        if (this.options.onAddCommentShortcut) {
+          this.options.onAddCommentShortcut();
+          return true;
+        }
+        return false;
+      },
+      'Alt-]': () => {
+        if (this.options.onNextCommentShortcut) {
+          this.options.onNextCommentShortcut();
+          return true;
+        }
+        return false;
+      },
+      'Alt-[': () => {
+        if (this.options.onPrevCommentShortcut) {
+          this.options.onPrevCommentShortcut();
+          return true;
+        }
+        return false;
+      },
+    };
   },
 });

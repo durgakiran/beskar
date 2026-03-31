@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext"
+    xmlns:pro="http://www.liquibase.org/xml/ns/pro"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd
+                        http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd
+                        http://www.liquibase.org/xml/ns/pro http://www.liquibase.org/xml/ns/pro/liquibase-pro-latest.xsd">
+
+  <changeSet id="1-create-comment-threads-table" author="kiran kumar">
+    <createTable tableName="comment_threads" schemaName="core">
+      <column name="id" type="UUID" defaultValueComputed="gen_random_uuid()">
+        <constraints primaryKey="true" nullable="false"/>
+      </column>
+      <column name="document_id" type="BIGINT">
+        <constraints nullable="false"
+          foreignKeyName="fk_ct_document"
+          references="core.page_doc_map(doc_id)"
+          deleteCascade="true"/>
+      </column>
+      <column name="comment_id" type="UUID">
+        <constraints nullable="false" unique="true"/>
+      </column>
+      <column name="quoted_text" type="TEXT">
+        <constraints nullable="false"/>
+      </column>
+      <column name="created_by" type="VARCHAR(255)"/>
+      <column name="resolved_by" type="VARCHAR(255)"/>
+      <column name="resolved_at" type="TIMESTAMPTZ"/>
+      <column name="created_at" type="TIMESTAMPTZ" defaultValueComputed="now()">
+        <constraints nullable="false"/>
+      </column>
+    </createTable>
+
+  </changeSet>
+
+  <changeSet id="2-create-comment-replies-table" author="kiran kumar">
+    <createTable tableName="comment_replies" schemaName="core">
+      <column name="id" type="UUID" defaultValueComputed="gen_random_uuid()">
+        <constraints primaryKey="true" nullable="false"/>
+      </column>
+      <column name="thread_id" type="UUID">
+        <constraints nullable="false"
+          foreignKeyName="fk_cr_thread"
+          references="core.comment_threads(id)"
+          deleteCascade="true"/>
+      </column>
+      <column name="author_id" type="VARCHAR(255)"/>
+      <column name="body" type="TEXT">
+        <constraints nullable="false"/>
+      </column>
+      <column name="edited_at" type="TIMESTAMPTZ"/>
+      <column name="created_at" type="TIMESTAMPTZ" defaultValueComputed="now()">
+        <constraints nullable="false"/>
+      </column>
+    </createTable>
+
+  </changeSet>
+
+  <changeSet id="3-grant-usage-to-app-user" author="kiran kumar">
+    <sql>
+      GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE core.comment_threads TO ${app_user};
+      GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE core.comment_replies TO ${app_user};
+    </sql>
+    <rollback />
+  </changeSet>
+
+  <changeSet id="4-alter-comment-threads-document-id" author="kiran kumar">
+    <sql>TRUNCATE TABLE core.comment_threads CASCADE;</sql>
+    <dropForeignKeyConstraint baseTableName="comment_threads" baseTableSchemaName="core" constraintName="fk_ct_document"/>
+    <addForeignKeyConstraint baseTableName="comment_threads" baseTableSchemaName="core" constraintName="fk_ct_document" baseColumnNames="document_id" referencedTableName="page" referencedTableSchemaName="core" referencedColumnNames="id" onDelete="CASCADE"/>
+  </changeSet>
+
+</databaseChangeLog>

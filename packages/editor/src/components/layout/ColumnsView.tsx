@@ -64,10 +64,6 @@ export function ColumnsView({ node, editor, getPos }: NodeViewProps) {
 
   const columnCount = node.attrs.columnCount === 3 ? 3 : 2;
 
-  const columnPlaceholderText =
-    (editor.storage as { editorUi?: { columnLayoutPlaceholder?: string } }).editorUi
-      ?.columnLayoutPlaceholder ?? '/ to insert';
-
   return (
     <NodeViewWrapper
       ref={(el: HTMLElement | null) => {
@@ -76,11 +72,6 @@ export function ColumnsView({ node, editor, getPos }: NodeViewProps) {
       className={`columns-wrapper ${showToolbar ? 'selected' : ''}`}
       role="group"
       aria-label={`${columnCount}-column layout`}
-      style={
-        {
-          ['--editor-column-placeholder' as string]: JSON.stringify(columnPlaceholderText),
-        } as React.CSSProperties
-      }
     >
       <div className="columns-container">
         <NodeViewContent className="editor-columns columns-content" />

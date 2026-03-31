@@ -89,7 +89,7 @@ export function TextFormattingMenu({
     };
   }, [editor]);
 
-  if (!isFormattingEnabled && !commentHandler) {
+  if (!isFormattingEnabled) {
     return null;
   }
 
@@ -176,10 +176,10 @@ export function TextFormattingMenu({
         </>
       )}
 
-      {/* Comment — available in read-only when commentHandler is set */}
+      {/* Comment */}
       {commentHandler && (
         <>
-          {isFormattingEnabled && <div className="bubble-menu-separator" />}
+          <div className="bubble-menu-separator" />
           <BubbleMenuButton
             className="bubble-menu-button--with-label"
             onClick={() => onCommentClick?.()}

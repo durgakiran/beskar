@@ -11,7 +11,8 @@ const (
 	SPACE_INVITE_MEMBER = "invite_member"
 
 	// page permissions
-	PAGE_EDIT   = "edit"
-	PAGE_VIEW   = "view"
-	PAGE_DELETE = "delete"
+	PAGE_EDIT        = "edit"
+	PAGE_VIEW        = "view"
+	PAGE_DELETE      = "delete"
+	PAGE_ADD_COMMENT = "add_comment"
 )

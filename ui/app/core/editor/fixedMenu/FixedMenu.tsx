@@ -8,7 +8,7 @@ import { ContentTypePicker } from "@editor/menus/contentTypePicker/ContentTypePi
 import FormatTypePicker from "@editor/menus/formatTypePicker/formatTypePicker";
 import ContentAlignPicker from "@editor/menus/contentAlignTypePicker/contentAlignPicker";
 
-export default function FixedMenu({ handleClose, handleUpdate }: { handleClose: () => void, handleUpdate: () => void }) {
+export default function FixedMenu({ isEditorReady, handleClose, handleUpdate, isSidePanelOpen, setIsSidePanelOpen }: { isEditorReady: boolean, handleClose: () => void, handleUpdate: () => void, isSidePanelOpen: boolean, setIsSidePanelOpen: (open: boolean) => void }) {
     const editor = useContext(EditorContext);
 
     if (!editor) {
@@ -16,14 +16,14 @@ export default function FixedMenu({ handleClose, handleUpdate }: { handleClose: 
     }
 
     return (
-        <Flex 
-            align="center" 
-            justify="between" 
+        <Flex
+            align="center"
+            justify="between"
             py="3"
             px="4"
             gap="4"
-            style={{ 
-                width: "100%", 
+            style={{
+                width: "100%",
                 maxWidth: "100%",
                 borderBottom: "1px solid var(--gray-6)",
                 minHeight: "52px"
@@ -31,28 +31,28 @@ export default function FixedMenu({ handleClose, handleUpdate }: { handleClose: 
         >
             <Flex align="center" gap="4" style={{ flex: 1 }}>
                 <Flex align="center" gap="2" pr="4" style={{ borderRight: "1px solid var(--gray-6)", height: "32px" }}>
-                    <IconButton 
-                        variant="ghost" 
-                        size="2" 
-                        aria-label="home" 
+                    <IconButton
+                        variant="ghost"
+                        size="2"
+                        aria-label="home"
                         onClick={() => console.log("Home clicked")}
                         style={{ height: "32px", width: "32px" }}
                     >
                         <HiHome size={18} />
                     </IconButton>
-                    <IconButton 
-                        variant="ghost" 
-                        size="2" 
-                        onClick={() => editor.chain().undo().run()} 
+                    <IconButton
+                        variant="ghost"
+                        size="2"
+                        onClick={() => editor.chain().undo().run()}
                         aria-label="undo"
                         style={{ height: "32px", width: "32px" }}
                     >
                         <LuUndo size={18} />
                     </IconButton>
-                    <IconButton 
-                        variant="ghost" 
-                        size="2" 
-                        onClick={() => editor.chain().redo().run()} 
+                    <IconButton
+                        variant="ghost"
+                        size="2"
+                        onClick={() => editor.chain().redo().run()}
                         aria-label="redo"
                         style={{ height: "32px", width: "32px" }}
                     >
@@ -71,7 +71,8 @@ export default function FixedMenu({ handleClose, handleUpdate }: { handleClose: 
                 </Flex>
             </Flex>
             <Flex align="center" gap="3">
-                <Button size="2" onClick={handleUpdate}>Update</Button>
+                <Button size="2" variant="surface" onClick={() => setIsSidePanelOpen(!isSidePanelOpen)}>{isSidePanelOpen ? "Hide" : "Show"} All Comments </Button>
+                <Button size="2" onClick={handleUpdate} disabled={!isEditorReady}>Update</Button>
                 <Button size="2" variant="ghost" color="gray" onClick={handleClose}>
                     Close
                 </Button>

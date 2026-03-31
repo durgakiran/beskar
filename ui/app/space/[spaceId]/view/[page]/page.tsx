@@ -8,7 +8,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import WhiteboardEditor from "@components/WhiteboardEditor";
 import { use, useEffect, useRef, useState } from "react";
-import { HiHome, HiPencil, HiOutlineTrash } from "react-icons/hi";
+import { HiHome, HiPencil, HiOutlineTrash, HiChatAlt2 } from "react-icons/hi";
 
 interface BreadCrumbData {
     name: string;
@@ -21,6 +21,7 @@ export default function Page({ params }: { params: Promise<{ page: string; space
     const workerRef = useRef<Worker>(null);
     const [workerInitiated, setWorkerInitiated] = useState(false);
     const [content, setContent] = useState();
+    const [isSidePanelOpen, setIsSidePanelOpen] = useState(false);
     const [showDeleteDialog, setShowDeleteDialog] = useState(false);
     const [docAttachments, setDocAttachments] = useState<AttachmentRef[]>([]);
     const router = useRouter();
@@ -133,8 +134,8 @@ export default function Page({ params }: { params: Promise<{ page: string; space
                                                     <Link
                                                         href={`/space/${spaceId}/view/${item.id}`}
                                                         className={`px-2 py-1 rounded-sm transition-colors ${isLast
-                                                                ? 'bg-primary-50 text-primary-700 font-semibold'
-                                                                : 'hover:bg-mauve-50 text-neutral-700 hover:text-primary-700'
+                                                            ? 'bg-primary-50 text-primary-700 font-semibold'
+                                                            : 'hover:bg-mauve-50 text-neutral-700 hover:text-primary-700'
                                                             }`}
                                                     >
                                                         <Text size="2" className="truncate max-w-[200px]">
@@ -150,6 +151,17 @@ export default function Page({ params }: { params: Promise<{ page: string; space
 
                         {/* Action Buttons */}
                         <Flex gap="4" className="flex-shrink-0">
+                            <Tooltip content="View all inline comments">
+                                <IconButton
+                                    variant="ghost"
+                                    color="indigo"
+                                    size="2"
+                                    onClick={() => setIsSidePanelOpen(true)}
+                                    className="text-primary-600 hover:bg-primary-50 hover:text-primary-700 transition-colors p-2"
+                                >
+                                    <HiChatAlt2 size={18} />
+                                </IconButton>
+                            </Tooltip>
                             <Tooltip content="Edit page">
                                 <IconButton
                                     variant="ghost"
@@ -198,6 +210,8 @@ export default function Page({ params }: { params: Promise<{ page: string; space
                                 id={Number(page)}
                                 user={null}
                                 onDocAttachmentsChange={setDocAttachments}
+                                isInlineMessageSidePanelOpen={isSidePanelOpen}
+                                setIsInlineMessageSidePanelOpen={setIsSidePanelOpen}
                             />
                             <AttachmentPanel attachments={docAttachments} pageId={Number(page)} />
                         </Box>

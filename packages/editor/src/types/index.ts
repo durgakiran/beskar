@@ -92,7 +92,7 @@ export interface CommentAPIHandler {
   addReply: (threadId: string, body: string) => Promise<CommentReply>;
   editReply: (replyId: string, body: string) => Promise<CommentReply>;
   deleteReply: (replyId: string) => Promise<void>;
-  orphanThread: (threadId: string) => Promise<void>;
+  unresolveThread: (threadId: string) => Promise<CommentThread>;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -103,6 +103,10 @@ export interface EditorProps {
   placeholder?: string;
   /** Hint in empty paragraphs inside column layouts (default: `/ to insert`). */
   columnLayoutPlaceholder?: string;
+  columnCodeBlockPlaceholder?: string;
+  columnMathBlockPlaceholder?: string;
+  columnTableOfContentsPlaceholder?: string;
+  columnDetailsSummaryPlaceholder?: string;
   collaboration?: CollaborationConfig;
   onUpdate?: (content: any) => void;
   onReady?: (editor: TiptapEditor) => void;

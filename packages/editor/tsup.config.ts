@@ -9,7 +9,37 @@ export default defineConfig({
   splitting: false,
   sourcemap: true,
   clean: true,
-  external: ['react', 'react-dom', '@radix-ui/themes'],
+  external: [
+    // React
+    'react',
+    'react-dom',
+    // Radix
+    '@radix-ui/themes',
+    // Core TipTap singletons — must be the exact same instance as the host app.
+    '@tiptap/core',
+    '@tiptap/react',
+    '@tiptap/pm',
+    '@tiptap/y-tiptap',
+    '@tiptap/extension-collaboration',
+    '@tiptap/extension-collaboration-caret',
+    // All ProseMirror packages — EditorView / Schema / Plugin are compared by reference
+    /^prosemirror-/,
+    // Yjs ecosystem
+    'yjs',
+    'y-protocols',
+    'y-prosemirror',
+    '@hocuspocus/provider',
+  ],
+  // Force-bundle all TipTap extension packages and other deps so they are inlined
+  // into this dist rather than left as external imports pointing at
+  // /opt/packages/editor/node_modules/ (which has its own @tiptap/pm copy).
+  // Bundled code still imports @tiptap/pm / @tiptap/core externally above,
+  // so the singleton constraint is preserved.
+  noExternal: [
+    /^@tiptap\/extension-(?!collaboration)/,
+    '@tiptap/starter-kit',
+    '@tiptap/suggestion',
+  ],
   treeshake: true,
   minify: false,
   tsconfig: './tsconfig.json',

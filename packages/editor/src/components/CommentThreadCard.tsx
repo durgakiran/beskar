@@ -349,6 +349,16 @@ export function CommentThreadCard({
     }
   }, [thread, commentHandler, onThreadUpdated]);
 
+  const handleUnresolve = useCallback(async () => {
+    if (!thread) return;
+    try {
+      const updated = await commentHandler.unresolveThread(thread.id);
+      onThreadUpdated(updated);
+    } catch (err) {
+      console.error('[CommentThreadCard] unresolveThread failed', err);
+    }
+  }, [thread, commentHandler, onThreadUpdated]);
+
   const handleDelete = useCallback(async () => {
     if (!thread) return;
     try {
@@ -490,9 +500,14 @@ export function CommentThreadCard({
             {/* Action buttons shown on hover of author row */}
             <div className="ctc-thread-actions">
               <button className="ctc-action-btn" title="Add reaction">☺</button>
-              {!isResolved && (
+              {!isResolved && !isOrphaned && (
                 <button className="ctc-action-btn ctc-resolve-btn" title="Resolve comment thread" onClick={handleResolve}>
                   ✓
+                </button>
+              )}
+              {isResolved && !isOrphaned && (
+                <button className="ctc-action-btn ctc-unresolve-btn" title="Unresolve comment thread" onClick={handleUnresolve}>
+                  ↩
                 </button>
               )}
               {isResolved && <span className="ctc-resolved-chip">✓ Resolved</span>}
