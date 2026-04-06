@@ -57,39 +57,42 @@ export default function AddPage({ isOpen, setIsOpen, spaceId, parentId, editPage
 
     return (
         <Dialog.Root open={isOpen} onOpenChange={setIsOpen}>
-            <Dialog.Content size="2" maxWidth="450px">
-                <Dialog.Title>Add a new Page</Dialog.Title>
+            <Dialog.Content maxWidth="520px">
+                <Dialog.Title size="6">Create new page</Dialog.Title>
+                <Dialog.Description size="2" color="gray" mb="4">
+                    Choose the page type and title. This page will be added under the current location.
+                </Dialog.Description>
                 <Flex direction="column" gap="4">
-                    <label>
-                        <Text as="div" size="2" mb="1" weight="bold">
-                            Title of Page
-                        </Text>
-                        <TextField.Root
-                            value={name}
-                            onChange={(ev) => handleInput(ev.target.value)}
-                            placeholder="Enter page title..."
-                        />
-                    </label>
                     <label>
                         <Text as="div" size="2" mb="1" weight="bold">
                             Page Type
                         </Text>
                         <Select.Root value={pageType} onValueChange={(val: "document" | "whiteboard") => setPageType(val)}>
-                            <Select.Trigger />
+                            <Select.Trigger className="w-full" />
                             <Select.Content>
                                 <Select.Item value="document">Document</Select.Item>
                                 <Select.Item value="whiteboard">Whiteboard</Select.Item>
                             </Select.Content>
                         </Select.Root>
                     </label>
+                    <label>
+                        <Text as="div" size="2" mb="1" weight="bold">
+                            Page Title
+                        </Text>
+                        <TextField.Root
+                            value={name}
+                            onChange={(ev) => handleInput(ev.target.value)}
+                            placeholder="Untitled page"
+                        />
+                    </label>
                     <Flex gap="3" mt="4" justify="end">
                         <Dialog.Close>
-                            <Button variant="soft" color="gray">
+                            <Button variant="surface" color="gray">
                                 Cancel
                             </Button>
                         </Dialog.Close>
                         <Button onClick={handleSubmit} disabled={loading || added || !name.trim()} loading={loading}>
-                            Add
+                            Create
                         </Button>
                     </Flex>
                 </Flex>

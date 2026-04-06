@@ -53,11 +53,11 @@ export default function Page({ params }: { params: Promise<PageParams> }) {
     }, [errors]);
 
     if (isLoading || !workerInitiated) {
-        return <div>Loading data .... </div>;
+        return <div className="px-8 py-6 text-sm text-neutral-700">Loading data...</div>;
     }
 
     if (errors) {
-        return <div>something went wrong ... </div>;
+        return <div className="px-8 py-6 text-sm text-neutral-700">Something went wrong...</div>;
     }
 
     if (data) {
@@ -77,5 +77,5 @@ export default function Page({ params }: { params: Promise<PageParams> }) {
         );
     }
 
-    return <div>Editor</div>;
+    return <div className="px-8 py-6 text-sm text-neutral-700">Editor</div>;
 }

@@ -1,11 +1,20 @@
 package space
 
 const (
-	GET_SPACE           = `SELECT * FROM core.space WHERE id = $1`
-	GET_SPACES          = `SELECT * FROM core.space WHERE id = ANY($1);`
-	INSERT_SPACE        = `INSERT INTO core.space (name, date_created, date_updated, user_id) VALUES ( $1, $2, $3, $4) RETURNING id`
-	UPDATE_SPACE        = `UPDATE core.space SET name = $1, date_updated = $2 WHERE id = $3`
-	DELETE_SPACE        = `DELETE FROM core.space WHERE id = $3 RETURNING id`
+	GET_SPACE             = `SELECT id, name, description, date_created, date_updated, user_id FROM core.space WHERE id = $1`
+	GET_SPACES            = `SELECT id, name, description, date_updated, user_id FROM core.space WHERE id = ANY($1) ORDER BY date_updated DESC;`
+	INSERT_SPACE          = `INSERT INTO core.space (name, description, date_created, date_updated, user_id) VALUES ( $1, $2, $3, $4, $5) RETURNING id`
+	UPDATE_SPACE          = `UPDATE core.space SET name = $1, description = $2, date_updated = $3 WHERE id = $4`
+	DELETE_SPACE          = `DELETE FROM core.space WHERE id = $3 RETURNING id`
+	GET_SPACE_PAGE_COUNTS = `SELECT 
+								p.space_id,
+								COUNT(*) FILTER (WHERE COALESCE(p.type, 'document') = 'document') AS doc_count,
+								COUNT(*) FILTER (WHERE p.type = 'whiteboard') AS whiteboard_count
+							FROM
+								core.page p
+							WHERE
+								p.space_id = ANY($1)
+							GROUP BY p.space_id`
 	GET_PAGE_LIST_QUERY = `SELECT 
 								DISTINCT ON (p.id)
 								p.id,

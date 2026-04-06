@@ -8,6 +8,7 @@ interface props {
     type: "success" | "error" | "warning";
     toggle: boolean;
     message: string;
+    className?: string;
 }
 
 export default function ToastComponent(props: props) {
@@ -22,7 +23,7 @@ export default function ToastComponent(props: props) {
     } as const;
 
     return (
-        <div className="fixed bottom-5 right-5 z-50">
+        <div className={props.className || "fixed bottom-5 right-5 z-50"}>
             <Callout.Root color={colorMap[props.type]} style={{ minWidth: '300px' }}>
                 <Flex align="center" gap="2">
                     <Callout.Icon>

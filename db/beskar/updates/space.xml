@@ -435,5 +435,21 @@
             <dropTable tableName="whiteboard_data" schemaName="core"/>
         </rollback>
     </changeSet>
+
+    <changeSet id="34-add-description-to-space" author="Kiran Kumar">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <columnExists schemaName="core" tableName="space" columnName="description"/>
+            </not>
+        </preConditions>
+        <addColumn tableName="space" schemaName="core">
+            <column name="description" type="TEXT" defaultValue="">
+                <constraints nullable="false"/>
+            </column>
+        </addColumn>
+        <rollback>
+            <dropColumn tableName="space" schemaName="core" columnName="description"/>
+        </rollback>
+    </changeSet>
     
 </databaseChangeLog>

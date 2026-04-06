@@ -1,8 +1,9 @@
-"use client"
+"use client";
+
+import { useMemo } from "react";
+import { useRouter, usePathname } from "next/navigation";
 import { useGetCall } from "@http";
-import { Avatar, DropdownMenu, Flex, Box, Text, IconButton, Tooltip, Button, Link } from "@radix-ui/themes";
-// import Link from "next/link";
-import ModifiedIcon from "./modifiedIcon";
+import { Topbar, TopbarMenuItem, TopbarUser } from "@components/primitives";
 
 interface UserInfo {
     email: string;
@@ -13,92 +14,66 @@ interface UserInfo {
 
 const USER_URI = process.env.NEXT_PUBLIC_USER_SERVER_URL;
 
-export default function MenuBar() {
-    const [status, res] = useGetCall<UserInfo>(USER_URI + "/profile/details");
-
-    const handleLogout = () => {
-        window.location.href = "/auth/logout";
+function getInitials(name?: string) {
+    if (!name) {
+        return "U";
     }
 
+    const initials = name
+        .split(" ")
+        .filter(Boolean)
+        .slice(0, 2)
+        .map((part) => part[0]?.toUpperCase())
+        .join("");
+
+    return initials || "U";
+}
+
+export default function MenuBar() {
+    const router = useRouter();
+    const pathname = usePathname();
+    const [, res] = useGetCall<UserInfo>(USER_URI + "/profile/details");
+
+    const user: TopbarUser = useMemo(
+        () => ({
+            name: res?.data?.name || "Unknown User",
+            email: res?.data?.email || "",
+            initials: getInitials(res?.data?.name),
+        }),
+        [res?.data?.email, res?.data?.name],
+    );
+
+    const userMenuItems: TopbarMenuItem[] = useMemo(
+        () => [
+            { id: "profile", label: "Profile", icon: "User", href: "#" },
+            { id: "settings", label: "Settings", icon: "Settings", href: "#" },
+            { id: "notifications", label: "Notifications", icon: "Bell", href: "/user/notifications" },
+            {
+                id: "signout",
+                label: "Sign out",
+                icon: "LogOut",
+                tone: "danger",
+                onSelect: () => {
+                    window.location.href = "/auth/logout";
+                },
+            },
+        ],
+        [],
+    );
+
     return (
-        <Box className="fixed w-full bg-white z-50 shadow-sm border-b border-neutral-200" py="3" px="4">
-            <Flex align="center" justify="between">
-                <Link href="/" className="hover:opacity-80 transition-opacity">
-                    <Text size="5" weight="bold" className="text-primary-700">TedEDox</Text>
-                </Link>
-                <Flex align="center" gap="6">
-                    <Flex align="center" gap="5">
-                        <Link 
-                            href="/space" 
-                            underline="hover"
-                            className="text-neutral-700 hover:text-primary-700 font-medium transition-colors"
-                        >
-                            Spaces
-                        </Link>
-                        <Link 
-                            href="#" 
-                            underline="hover"
-                            className="text-neutral-700 hover:text-primary-700 font-medium transition-colors"
-                        >
-                            Contact
-                        </Link>
-                    </Flex>
-                    <Flex align="center" gap="3">
-                        <Tooltip content="Notifications">
-                            <IconButton 
-                                variant="ghost" 
-                                asChild
-                                className="text-mauve-600 hover:text-primary-600 hover:bg-mauve-50"
-                            >
-                                <a
-                                    rel="noopener"
-                                    href="/user/notifications"
-                                    aria-label="Notifications"
-                                >
-                                    <ModifiedIcon name="Bell" size={16} />
-                                </a>
-                            </IconButton>
-                        </Tooltip>
-                        <DropdownMenu.Root>
-                            <DropdownMenu.Trigger>
-                                <IconButton 
-                                    variant="surface" 
-                                    radius="full" 
-                                    highContrast
-                                    className="hover:bg-mauve-50"
-                                >
-                                    <Avatar
-                                        size="2"
-                                        fallback={res && res.data && res.data.name ? res.data.name.charAt(0).toUpperCase() : "U"}
-                                        className="ring-2 ring-mauve-200"
-                                        style={{ cursor: "pointer" }}
-                                    />
-                                </IconButton>
-                            </DropdownMenu.Trigger>
-                            <DropdownMenu.Content className="bg-white border border-neutral-200 shadow-lg rounded-sm">
-                                {res && res.data ? (
-                                    <>
-                                        <Box px="2" py="2" className="border-b border-neutral-100">
-                                            <Text size="2" weight="bold" as="div" className="text-neutral-900">{res.data.name}</Text>
-                                            <Text size="1" as="div" className="text-neutral-500">{res.data.email}</Text>
-                                        </Box>
-                                        <DropdownMenu.Separator className="bg-neutral-200" />
-                                        <DropdownMenu.Item className="hover:bg-mauve-50 text-neutral-700">Dashboard</DropdownMenu.Item>
-                                        <DropdownMenu.Item className="hover:bg-mauve-50 text-neutral-700">Settings</DropdownMenu.Item>
-                                        <DropdownMenu.Separator className="bg-neutral-200" />
-                                        <DropdownMenu.Item 
-                                            onClick={() => handleLogout()}
-                                            className="hover:bg-error-50 text-error-600"
-                                        >
-                                            Sign out
-                                        </DropdownMenu.Item>
-                                    </>
-                                ) : null}
-                            </DropdownMenu.Content>
-                        </DropdownMenu.Root>
-                    </Flex>
-                </Flex>
-            </Flex>
-        </Box>
+        <Topbar
+            className="fixed inset-x-0 top-0 z-50"
+            brand="Tededox"
+            brandHref="/"
+            navItems={[
+                { id: "spaces", label: "Spaces", href: "/space", active: pathname?.startsWith("/space") },
+                { id: "contact", label: "Contact", href: "#", active: false },
+            ]}
+            user={user}
+            userMenuItems={userMenuItems}
+            notificationOpen={pathname === "/user/notifications"}
+            onNotificationsClick={() => router.push("/user/notifications")}
+        />
     );
 }

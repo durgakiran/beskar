@@ -1,11 +1,10 @@
-import { Inter, Noto_Color_Emoji } from "next/font/google";
+import { Geist, Noto_Color_Emoji } from "next/font/google";
 import "./global.css";
 import SessionGuard from "./core/auth/sessionProvider";
 import { Theme } from "@radix-ui/themes";
-import "@radix-ui/themes/styles.css";
 
 const notoColorEmoji = Noto_Color_Emoji({ weight: "400", subsets: ["emoji"] });
-const inter = Inter({ subsets: ["latin"] });
+const geist = Geist({ subsets: ["latin"] });
 
 export const metadata = {
     title: "TedEDox",
@@ -15,11 +14,11 @@ export const metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
     return (
         <html lang="en" className="light" style={{ colorScheme: 'light' }}>
-            <body>
+            <body className={`${geist.className} ${notoColorEmoji.className}`}>
                 <Theme
-                    accentColor="plum"
-                    grayColor="mauve"
-                    panelBackground="translucent"
+                    accentColor="blue"
+                    grayColor="slate"
+                    panelBackground="solid"
                     radius="small"
                     appearance="light"
                 >

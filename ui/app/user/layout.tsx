@@ -13,23 +13,23 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             <MenuBar />
             <Box className="px-4 pt-16 mx-auto max-w-8xl">
                 <Flex gap="4">
-                    <Box className="w-64 border-r border-gray-200" p="4">
+                    <Box className="w-64 border-r border-neutral-200" p="4">
                         <Flex direction="column" gap="2">
                             <Link 
                                 href="/user/notifications"
-                                className={`px-3 py-2 rounded text-sm ${isNotifications ? 'bg-plum-100 text-plum-900 font-medium' : 'hover:bg-gray-100'}`}
+                                className={`px-3 py-2 rounded text-sm ${isNotifications ? 'bg-primary-100 text-primary-900 font-medium' : 'hover:bg-neutral-100 text-neutral-700'}`}
                             >
                                 Notifications
                             </Link>
                             <Link 
                                 href="#"
-                                className="px-3 py-2 rounded text-sm hover:bg-gray-100"
+                                className="px-3 py-2 rounded text-sm hover:bg-neutral-100 text-neutral-700"
                             >
                                 Profile
                             </Link>
                             <Link 
                                 href="#"
-                                className="px-3 py-2 rounded text-sm hover:bg-gray-100"
+                                className="px-3 py-2 rounded text-sm hover:bg-neutral-100 text-neutral-700"
                             >
                                 Settings
                             </Link>

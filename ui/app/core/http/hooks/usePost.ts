@@ -21,21 +21,35 @@ export function usePost<T, P>(path: string, headers: Record<string, any> = {}): 
             headers: { "Content-Type": "application/json", ...headers },
         })
             .then((res) => {
-                setIsDataFetching(false);
                 if (res.ok) {
                     res.clone()
                         .json()
-                        .then((data) => setData(data as T))
-                        .catch((e) => setData(res.text() as T));
+                        .then((data) => {
+                            setIsDataFetching(false);
+                            setData(data as T);
+                        })
+                        .catch(() => {
+                            setIsDataFetching(false);
+                            res.text().then((text) => setData(text as T));
+                        });
                 } else {
-                    setErrors(new Error(`Request failed with status ${res.status}`));
+                    res.json()
+                        .then((body) => {
+                            const message = body?.error?.detail || body?.error?.message || `Request failed with status ${res.status}`;
+                            setIsDataFetching(false);
+                            setErrors(new Error(message));
+                        })
+                        .catch(() => {
+                            setIsDataFetching(false);
+                            setErrors(new Error(`Request failed with status ${res.status}`));
+                        });
                 }
             })
             .catch((err) => {
                 setIsDataFetching(false);
                 setErrors(err);
             });
-    }, []);
+    }, [headers, path]);
 
     return [{ isLoading: isDataFetching, data, errors }, mutateData];
 }

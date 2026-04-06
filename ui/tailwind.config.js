@@ -7,49 +7,54 @@ module.exports = {
     "./components/**/*.{ts,tsx}",
   ],
   theme: {
+    fontFamily: {
+      sans: ["Geist", "Inter", "-apple-system", "BlinkMacSystemFont", "Segoe UI", "Roboto", "sans-serif"],
+    },
+    fontSize: {
+      xs: ["13px", { lineHeight: "18px", fontWeight: "400" }],
+      sm: ["14px", { lineHeight: "20px", fontWeight: "400" }],
+      base: ["16px", { lineHeight: "24px", fontWeight: "400" }],
+    },
     extend: {
       colors: {
-        // Primary brand color - Plum
         primary: {
-          50: '#faf5ff',
-          100: '#f3e8ff',
-          200: '#e9d5ff',
-          300: '#d8b4fe',
-          400: '#c084fc',
-          500: '#a855f7',  // Main plum
-          600: '#9333ea',
-          700: '#7e22ce',
-          800: '#6b21a8',
-          900: '#581c87',
-          950: '#3b0764',
+          50: '#f8f7f9',
+          100: '#efe9f2',
+          200: '#e8dfed',
+          300: '#e2d4e9',
+          400: '#dac9e3',
+          500: '#cfbada',
+          600: '#bea2cc',
+          700: '#6b4c7a',
+          800: '#5c3e6a',
+          900: '#6f507f',
+          950: '#2f1d37',
         },
-        // Secondary/Gray color - Mauve (purple-tinted gray)
         mauve: {
-          50: '#fdfcfd',
-          100: '#faf9fb',
-          200: '#f2eff3',
-          300: '#e9e5ea',
-          400: '#dcd8dd',
-          500: '#bfb9c1',  // Main mauve
-          600: '#9f96a3',
-          700: '#817588',
-          800: '#665e6b',
-          900: '#524b56',
-          950: '#3e3742',
+          50: '#f8f7f9',
+          100: '#f5f4f6',
+          200: '#ebeaee',
+          300: '#e3e1e7',
+          400: '#dcd9e1',
+          500: '#d4d1da',
+          600: '#b7b2c0',
+          700: '#898492',
+          800: '#605c67',
+          900: '#221f26',
+          950: '#111013',
         },
-        // Neutral grays with mauve tint
         neutral: {
-          50: '#fdfcfd',
-          100: '#f9f8f9',
-          200: '#efedf0',
-          300: '#e3e1e4',
-          400: '#c1bdc3',
-          500: '#8e8a92',
-          600: '#6e6a73',
-          700: '#57545c',
-          800: '#48454d',
-          900: '#3a3840',
-          950: '#2b2930',
+          50: '#f8f7f9',
+          100: '#f5f4f6',
+          200: '#ebeaee',
+          300: '#e3e1e7',
+          400: '#d4d1da',
+          500: '#b7b2c0',
+          600: '#898492',
+          700: '#7f7a87',
+          800: '#605c67',
+          900: '#221f26',
+          950: '#111013',
         },
         // Semantic colors
         success: {
@@ -82,20 +87,19 @@ module.exports = {
         },
       },
       borderRadius: {
-        'sm': '0.25rem',   // 4px - matches Radix "small"
-        DEFAULT: '0.375rem', // 6px
-        'md': '0.5rem',     // 8px
-        'lg': '0.75rem',    // 12px
-        'xl': '1rem',       // 16px
+        'sm': '0.25rem',
+        DEFAULT: '0.375rem',
+        'md': '0.5rem',
+        'lg': '0.75rem',
+        'xl': '1rem',
       },
       boxShadow: {
-        'sm': '0 1px 2px 0 rgb(0 0 0 / 0.05)',
-        DEFAULT: '0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1)',
-        'md': '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)',
-        'lg': '0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1)',
+        'sm': '0 1px 2px rgb(9 30 66 / 0.08)',
+        DEFAULT: '0 1px 3px rgb(9 30 66 / 0.12), 0 1px 2px -1px rgb(9 30 66 / 0.08)',
+        'md': '0 4px 8px -2px rgb(9 30 66 / 0.12), 0 2px 4px -2px rgb(9 30 66 / 0.08)',
+        'lg': '0 12px 24px -8px rgb(9 30 66 / 0.18), 0 4px 8px -4px rgb(9 30 66 / 0.1)',
       },
     },
   },
   plugins: [],
 }
-

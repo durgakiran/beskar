@@ -30,7 +30,9 @@ redis-logs
 .npmrc
 # packages/whiteboard
 packages/whiteboard-demo
+packages/editor-demo
 packages/rtc-collaboration
 packages/rtc-collaboration-demo
 signalserver/signalserver
 server/server
+new-features

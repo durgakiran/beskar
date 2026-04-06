@@ -17,21 +17,21 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(({ active
 
         variant === "primary" &&
             cn(
-                "text-white bg-black border-black",
-                !disabled && !active && "hover:bg-neutral-800 active:bg-neutral-900",
-                active && cn("bg-neutral-900", activeClassname),
+                "text-white bg-primary-700 border-primary-700",
+                !disabled && !active && "hover:bg-primary-800 active:bg-primary-900",
+                active && cn("bg-primary-900 border-primary-900", activeClassname),
             ),
 
         variant === "secondary" &&
             cn(
-                "text-neutral-900",
+                "border-neutral-400 bg-white text-neutral-900",
                 !disabled && !active && "hover:bg-neutral-100 active:bg-neutral-200",
                 active && "bg-neutral-200",
             ),
 
         variant === "tertiary" &&
             cn(
-                "bg-neutral-50 text-neutral-900",
+                "border-transparent bg-neutral-50 text-neutral-900",
                 !disabled && !active && "hover:bg-neutral-100 active:bg-neutral-200",
                 active && cn("bg-neutral-200", activeClassname),
             ),
@@ -41,8 +41,8 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(({ active
                 "bg-transparent border-transparent text-neutral-500",
                 !disabled &&
                     !active &&
-                    "hover:bg-black/5 hover:text-neutral-700 active:bg-black/10 active:text-neutral-800",
-                active && cn("bg-black/10 text-neutral-800", activeClassname),
+                    "hover:bg-primary-50 hover:text-primary-700 active:bg-primary-100 active:text-primary-800",
+                active && cn("bg-primary-100 text-primary-800", activeClassname),
             ),
 
         buttonSize === "medium" && "py-2 px-3",

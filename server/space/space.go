@@ -1,7 +1,6 @@
 package space
 
 import (
-	"fmt"
 	"io"
 	"net/http"
 
@@ -37,11 +36,10 @@ func createSpace(w http.ResponseWriter, r *http.Request) {
 	ownerId := uuid.MustParse(userId)
 	space, err := validateSpace(data)
 	if err != nil {
-		core.SendFailedReponse(w, r, http.StatusForbidden, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNAUTHORIZED])
+		core.SendFailedReponse(w, r, http.StatusBadRequest, err.Error())
 		return
 	}
 	space.CreatedBy = ownerId
-	fmt.Println(space)
 	spaceId, err := createSpaceEntry(space)
 	if err != nil {
 		core.SendFailedReponse(w, r, http.StatusInternalServerError, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNSPECIFIED])
@@ -127,6 +125,50 @@ func listUsers(w http.ResponseWriter, r *http.Request) {
 	core.SendSuccessResponse(w, r, http.StatusOK, data)
 }
 
+func updateSpace(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	user, err := core.GetUserInfo(ctx)
+	if err != nil {
+		core.SendFailedReponse(w, r, http.StatusForbidden, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNAUTHORIZED])
+		return
+	}
+	if user.Id == "" {
+		core.SendFailedReponse(w, r, http.StatusForbidden, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNAUTHORIZED])
+		return
+	}
+	userIdParsed := uuid.MustParse(user.AId)
+	spaceId := uuid.MustParse(chi.URLParam(r, "spaceId"))
+
+	// Validate Admin/Owner permission for editing space metadata
+	validSpaceUserPermissions := core.ValidateUserSpacePermissions(spaceId, userIdParsed, "edit")
+	if !validSpaceUserPermissions {
+		core.SendFailedReponse(w, r, http.StatusForbidden, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNAUTHORIZED])
+		return
+	}
+
+	data, err := io.ReadAll(r.Body)
+	defer r.Body.Close()
+	if err != nil {
+		logger().Error(err.Error())
+		core.SendFailedReponse(w, r, http.StatusBadRequest, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_INVALID_INPUT])
+		return
+	}
+
+	space, err := validateSpace(data)
+	if err != nil {
+		core.SendFailedReponse(w, r, http.StatusBadRequest, err.Error())
+		return
+	}
+	space.Id = spaceId
+
+	err = space.Update()
+	if err != nil {
+		core.SendFailedReponse(w, r, http.StatusInternalServerError, err.Error())
+		return
+	}
+	core.SendSuccessResponse(w, r, http.StatusOK, space)
+}
+
 func getSpaceDetailsController(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	user, err := core.GetUserInfo(ctx)
@@ -147,7 +189,7 @@ func getSpaceDetailsController(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	space, err := getSpaceDetails(spaceId)
+	space, err := getSpaceDetails(spaceId, userIdParsed)
 	if err != nil {
 		core.SendFailedReponse(w, r, 0, err.Error())
 		return
@@ -163,5 +205,6 @@ func Router() *chi.Mux {
 	r.Get("/{spaceId}/page/list", getPageList)
 	r.Get("/{spaceId}/users", listUsers)
 	r.Get("/{spaceId}/details", getSpaceDetailsController)
+	r.Put("/{spaceId}", updateSpace)
 	return r
 }

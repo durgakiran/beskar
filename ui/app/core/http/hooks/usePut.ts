@@ -3,10 +3,10 @@ import { useCallback, useState } from "react";
 const USER_URI = process.env.NEXT_PUBLIC_USER_SERVER_URL;
 
 /**
- *
- * @param path
- * @param headers
- * @returns isLoading, Data type and any errors
+ * Custom hook for PUT requests
+ * @param path API path
+ * @param headers Optional headers
+ * @returns isLoading, Data, and any errors, plus a mutate function
  */
 export function usePUT<T, P>(path: string, headers: Record<string, any> = {}): [{ isLoading: boolean; data: T; errors: any }, mutateData: (payLoad: P) => void] {
     const [isDataFetching, setIsDataFetching] = useState<boolean>(false);
@@ -21,21 +21,37 @@ export function usePUT<T, P>(path: string, headers: Record<string, any> = {}): [
             headers: { "Content-Type": "application/json", ...headers },
         })
             .then((res) => {
-                setIsDataFetching(false);
                 if (res.ok) {
                     res.clone()
                         .json()
-                        .then((data) => setData(data as T))
-                        .catch((e) => setErrors(e));
+                        .then((data) => {
+                            setIsDataFetching(false);
+                            setData(data as T);
+                        })
+                        .catch(() => {
+                            setIsDataFetching(false);
+                            res.text().then((text) => setData(text as T));
+                        });
                 } else {
-                    setErrors(new Error(`Request failed with status ${res.status}`))
+                    res.json()
+                        .then((body) => {
+                            const message = body?.error?.detail || body?.error?.message || `Request failed with status ${res.status}`;
+                            setIsDataFetching(false);
+                            setErrors(new Error(message));
+                        })
+                        .catch(() => {
+                            setIsDataFetching(false);
+                            setErrors(new Error(`Request failed with status ${res.status}`));
+                        });
                 }
             })
             .catch((err) => {
                 setIsDataFetching(false);
                 setErrors(err);
             });
-    }, []);
+    }, [headers, path]);
 
     return [{ isLoading: isDataFetching, data, errors }, mutateData];
 }
+
+export const usePut = usePUT;
