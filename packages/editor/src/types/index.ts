@@ -70,23 +70,34 @@ export interface CommentReply {
   createdAt: string;            // ISO timestamp
 }
 
+export interface CommentAnchor {
+  quotedText: string;
+  prefixText: string;
+  suffixText: string;
+  blockId: string;
+  start: number;
+  end: number;
+  versionHint: 'draft' | 'published';
+}
+
 export interface CommentThread {
   id: string;
   documentId: string;
   commentId: string;            // UUID stored as TipTap mark attribute
-  quotedText: string;
+  anchor: CommentAnchor;        // Source of truth for anchoring
+  publishedVisible: boolean;    // Controls view-mode visibility
   createdBy: string | null;     // null = deleted user
   createdByName: string | null; // null = deleted user
   resolvedBy?: string | null;
   resolvedAt?: string | null;   // ISO timestamp
   createdAt: string;            // ISO timestamp
-  orphaned?: boolean;           // true when the anchoring text was deleted
+  orphaned?: boolean;           // true when resolution fails
   replies: CommentReply[];
 }
 
 export interface CommentAPIHandler {
   getThreads: (documentId: string) => Promise<CommentThread[]>;
-  createThread: (documentId: string, commentId: string, quotedText: string, body: string) => Promise<CommentThread>;
+  createThread: (documentId: string, commentId: string, anchor: CommentAnchor, body: string) => Promise<CommentThread>;
   resolveThread: (threadId: string) => Promise<CommentThread>;
   deleteThread: (threadId: string) => Promise<void>;
   addReply: (threadId: string, body: string) => Promise<CommentReply>;

@@ -202,8 +202,6 @@ export const BlockCodeBlockLowlight = CodeBlockLowlight
     },
 
     renderHTML({ node, HTMLAttributes }) {
-      console.log('node', node.attrs);
-      console.log('HTMLAttributes', HTMLAttributes);
       const blockAttrs = node.attrs.blockId ? {
         'data-block-id': node.attrs.blockId,
         class: 'block-node',

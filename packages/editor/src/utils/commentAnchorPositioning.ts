@@ -1,9 +1,8 @@
-/**
- * Shared helpers for anchoring comment UI to block nodes (see CommentInputPopover).
- */
 import { Editor, findParentNode, posToDOMRect } from '@tiptap/core';
 import type { Node as PMNode } from '@tiptap/pm/model';
 import { TextSelection } from '@tiptap/pm/state';
+import { CommentThread } from '../types';
+import { resolveAnchor } from './anchorResolution';
 
 export const COMMENT_ANCHOR_GAP_PX = 10;
 export const COMMENT_ANCHOR_MARGIN_PX = 8;
@@ -26,7 +25,7 @@ export function resolveBlockWrapperElement(
     return dom;
   }
 
-  if (useCodeWrapper) {
+  if (dom instanceof Node) {
     const htmlDom = dom as unknown as {
       classList?: { contains?: (c: string) => boolean };
       closest?: (s: string) => HTMLElement | null;
@@ -83,8 +82,8 @@ export function findCommentDocRange(doc: PMNode, commentId: string): { from: num
   return { from, to };
 }
 
-export function getAnchorRectForCommentId(editor: Editor, commentId: string): DOMRect | null {
-  const range = findCommentDocRange(editor.state.doc, commentId);
+export function getAnchorRectForCommentId(editor: Editor, thread: CommentThread): DOMRect | null {
+  const range = resolveAnchor(editor.state.doc, thread.anchor);
   if (!range) return null;
   return getAnchorRectForRange(editor, range.from, range.to);
 }

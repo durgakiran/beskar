@@ -14,6 +14,8 @@ export { CommentGutter } from './components/CommentGutter';
 export type { CommentGutterProps } from './components/CommentGutter';
 export { CommentThreadCard } from './components/CommentThreadCard';
 export type { CommentThreadCardProps } from './components/CommentThreadCard';
+export { OverlapDisambiguationPopover } from './components/OverlapDisambiguationPopover';
+export type { OverlapDisambiguationPopoverProps } from './components/OverlapDisambiguationPopover';
 
 // Table Components
 export { TableToolbar } from './components/table/TableToolbar';

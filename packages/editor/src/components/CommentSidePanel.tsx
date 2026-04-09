@@ -8,6 +8,7 @@ import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { Editor } from '@tiptap/core';
 import { FiX, FiCheck, FiTrash2, FiSend, FiUser, FiMessageSquare } from 'react-icons/fi';
 import type { CommentAPIHandler, CommentThread, CommentReply } from '../types';
+import { commentDecorationKey } from '../extensions/comment-decoration';
 import './CommentSidePanel.css';
 
 export interface CommentSidePanelProps {
@@ -202,7 +203,9 @@ function ThreadCard({
       {isOrphaned ? (
         <p className="csp-orphaned-badge">⚠ Text was deleted</p>
       ) : (
-        <blockquote className="csp-quoted-text">"{thread.quotedText}"</blockquote>
+        <blockquote className="csp-quoted-text">
+          "{thread.anchor?.quotedText || (thread as any).quotedText || 'Unknown text'}"
+        </blockquote>
       )}
 
       {/* Resolved badge */}
@@ -266,6 +269,13 @@ export function CommentSidePanel({
 }: CommentSidePanelProps) {
   const [showResolved, setShowResolved] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  // Sync decorations with the editor plugin
+  useEffect(() => {
+    if (isOpen) {
+      editor.view.dispatch(editor.state.tr.setMeta(commentDecorationKey, { threads, activeThreadId }));
+    }
+  }, [editor, threads, activeThreadId, isOpen]);
 
   // Handle resolve
   const handleResolve = async (threadId: string) => {
@@ -340,9 +350,20 @@ export function CommentSidePanel({
     }
   };
 
-  const visibleThreads = showResolved
-    ? threads
-    : threads.filter((t) => !t.resolvedAt || t.id === activeThreadId);
+  const isEditable = editor.isEditable;
+
+  // Filter threads based on visibility policy:
+  // - In edit mode (isEditable === true), show all threads.
+  // - In view mode (isEditable === false), show only publishedVisible === true threads.
+  const filteredThreads = threads.filter((t) => {
+    if (isEditable) return true;
+    return t.publishedVisible === true;
+  });
+
+  const activeThreads = filteredThreads.filter((t) => !t.orphaned && (showResolved || !t.resolvedAt || t.id === activeThreadId));
+  const orphanedThreads = filteredThreads.filter((t) => t.orphaned);
+
+  const visibleThreads = [...activeThreads, ...orphanedThreads];
 
   return (
     <div className={`csp-container ${isOpen ? 'is-open' : ''}`}>

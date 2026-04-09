@@ -17,6 +17,7 @@ import {
   getAnchorRectForRange,
   computePlacementInParent,
 } from '../utils/commentAnchorPositioning';
+import { extractAnchor } from '../utils/anchorResolution';
 import './CommentInputPopover.css';
 
 const POPOVER_WIDTH_PX = 320;
@@ -104,24 +105,14 @@ export function CommentInputPopover({
     e.target.style.height = `${Math.min(e.target.scrollHeight, 140)}px`;
   };
 
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        onClose();
-      }
-      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
-        e.preventDefault();
-        handleSubmit();
-      }
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [body, onClose],
-  );
-
   const handleSubmit = async () => {
     if (!body.trim() || isSubmitting) return;
-    const sel = selectionRef.current;
-    if (!sel) return;
+
+    const anchor = extractAnchor(editor);
+    if (!anchor) {
+      setError('Could not find a valid anchor for the selection.');
+      return;
+    }
 
     const commentId = crypto.randomUUID();
     setIsSubmitting(true);
@@ -145,13 +136,14 @@ export function CommentInputPopover({
       const thread = await commentHandler.createThread(
         documentId,
         commentId,
-        sel.quotedText,
+        anchor,
         body.trim(),
       );
       onClose();
       onThreadCreated?.(thread.id);
     } catch (err) {
       console.error('[CommentInputPopover] createThread failed:', err);
+      // Rollback mark
       withMarkWrites(() => {
         editor.commands.removeComment(commentId);
       });
@@ -160,6 +152,20 @@ export function CommentInputPopover({
       setIsSubmitting(false);
     }
   };
+
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+        e.preventDefault();
+        handleSubmit();
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [body, onClose, isSubmitting],
+  );
 
   return createPortal(
     <div

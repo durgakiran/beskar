@@ -294,7 +294,7 @@ export function CommentThreadCard({
     if (thread.orphaned) {
       return fallbackAnchorRect;
     }
-    return getAnchorRectForCommentId(editor, thread.commentId) ?? fallbackAnchorRect;
+    return getAnchorRectForCommentId(editor, thread) ?? fallbackAnchorRect;
   }, [thread, editor, fallbackAnchorRect]);
 
   // Two-pass: measure card, then place to the right of the block (parent space).
@@ -523,7 +523,9 @@ export function CommentThreadCard({
           {isOrphaned ? (
             <p className="ctc-orphaned">⚠ The commented text was deleted</p>
           ) : (
-            <blockquote className="ctc-quote">"{thread.quotedText}"</blockquote>
+            <blockquote className="ctc-quote">
+              "{thread.anchor?.quotedText || (thread as any).quotedText || 'Unknown text'}"
+            </blockquote>
           )}
 
           {openingReply && (

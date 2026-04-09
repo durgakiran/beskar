@@ -90,7 +90,9 @@ export function TextFormattingMenu({
   }, [editor]);
 
   if (!isFormattingEnabled) {
-    return null;
+    if (!commentHandler) {
+      return null;
+    }
   }
 
   return (

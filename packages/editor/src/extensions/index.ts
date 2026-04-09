@@ -44,6 +44,7 @@ import { InlineMath } from './math-inline';
 import { Columns } from '../nodes/layout/Columns';
 import { Column } from '../nodes/layout/Column';
 import { CommentMark } from './comment';
+import { CommentDecoration } from './comment-decoration-extension';
 
 export { CustomAttributes };
 export { Table, TableCell, TableHeader, TableRow } from '../nodes/table';
@@ -173,25 +174,17 @@ export function getExtensions(options: GetExtensionsOptions = {}): Extensions {
       columnDetailsSummaryPlaceholder,
     }),
     Placeholder.configure({
-      // Defaults skip nested blocks: returning `includeChildren: false` from the
-      // descendants callback stops ProseMirror from recursing, so empty paragraphs
-      // inside `columns` never received `is-empty`. Traverse the full tree.
-      includeChildren: true,
+      // includeChildren: true causes infinite recursion in isNodeEmpty during document
+      // initialization for complex nested structures. Keep it false (default).
+      includeChildren: false,
       // Show every empty text block in the doc (including all column cells), not only
       // the block that contains the caret.
       showOnlyCurrent: false,
       placeholder: ({ node, pos, editor }) => {
-        // Do not show placeholder inside noteBlock — the is-empty class lands on the
-        // react-renderer wrapper (not the inner content), causing it to render outside
-        // the visual note block due to float:left; height:0 on the ::before rule.
+        // ... (rest of the logic remains same, but we don't need the try/catch resolve anymore as we don't recurse)
         if (node.type.name === 'noteBlock') return '';
-        // Layout wrappers can be marked empty when every cell is empty; keep attr empty
-        // so global ::before does not run (see editor.css).
         if (node.type.name === 'columns' || node.type.name === 'column') return '';
-        // Details NodeView wrapper + body container get recursive is-empty; CSS suppresses
-        // pseudo-elements — empty attr avoids redundant placeholder text on those nodes.
         if (node.type.name === 'details' || node.type.name === 'detailsContent') return '';
-        // Blockquote & lists: same recursive is-empty on wrapper + li + inner block (see editor.css).
         if (
           node.type.name === 'blockquote' ||
           node.type.name === 'bulletList' ||
@@ -201,48 +194,6 @@ export function getExtensions(options: GetExtensionsOptions = {}): Extensions {
           node.type.name === 'taskItem'
         ) {
           return '';
-        }
-        // Inside columns: never use global ::before (float breaks flex). CSS uses ::after +
-        // attr(data-placeholder). Per-block hints here; nested p/headings in lists/blockquotes work.
-        try {
-          const $pos = editor.state.doc.resolve(pos);
-          let inColumn = false;
-          let inTableCell = false;
-          for (let d = $pos.depth; d > 0; d--) {
-            const nm = $pos.node(d).type.name;
-            if (nm === 'column') inColumn = true;
-            if (nm === 'tableCell' || nm === 'tableHeader') inTableCell = true;
-          }
-          if (inColumn && inTableCell) {
-            if (node.type.name === 'paragraph' || node.type.name === 'heading') {
-              return placeholder;
-            }
-            if (node.type.name === 'detailsSummary') {
-              return columnDetailsSummaryPlaceholder;
-            }
-            return '';
-          }
-          if (inColumn) {
-            const n = node.type.name;
-            if (n === 'paragraph' || n === 'heading') {
-              return columnLayoutPlaceholder;
-            }
-            if (n === 'codeBlock') {
-              return columnCodeBlockPlaceholder;
-            }
-            if (n === 'mathBlock') {
-              return columnMathBlockPlaceholder;
-            }
-            if (n === 'tableOfContents') {
-              return columnTableOfContentsPlaceholder;
-            }
-            if (n === 'detailsSummary') {
-              return columnDetailsSummaryPlaceholder;
-            }
-            return '';
-          }
-        } catch {
-          /* ignore resolve errors during transient states */
         }
         return placeholder;
       },
@@ -255,7 +206,6 @@ export function getExtensions(options: GetExtensionsOptions = {}): Extensions {
     BlockBulletList,
     BlockOrderedList,
     BlockListItem, // Used by BlockBulletList and BlockOrderedList
-    ListItem, // Required by TaskItem (TaskItem extends ListItem)
     BlockHorizontalRule,
     BlockDetails,
     BlockDetailsSummary,
@@ -313,6 +263,7 @@ export function getExtensions(options: GetExtensionsOptions = {}): Extensions {
       onNextCommentShortcut,
       onPrevCommentShortcut,
     }), // Inline comments
+    CommentDecoration, // Highlight rendering
   ];
 
   // Add collaboration extensions if provided

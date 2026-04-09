@@ -10,6 +10,8 @@ import { createPortal } from 'react-dom';
 import { Editor } from '@tiptap/core';
 import type { CommentThread } from '../types';
 import { findPositioningParent, COMMENT_ANCHOR_GAP_PX } from '../utils/commentAnchorPositioning';
+import { resolveAnchor } from '../utils/anchorResolution';
+import { commentDecorationKey } from '../extensions/comment-decoration';
 import './CommentGutter.css';
 
 export interface CommentGutterProps {
@@ -56,34 +58,41 @@ export function CommentGutter({ editor, threads, onThreadClick }: CommentGutterP
 
     const newPositions: PillPosition[] = [];
     const activeThreads = threads.filter((t) => !t.resolvedAt && !t.orphaned);
-    const commentIdToThread = new Map<string, CommentThread>();
-    activeThreads.forEach((t) => commentIdToThread.set(t.commentId, t));
 
-    const seen = new Set<string>();
-    state.doc.descendants((node, pos) => {
-      node.marks.forEach((mark) => {
-        if (mark.type.name === 'comment' && mark.attrs.commentId) {
-          const thread = commentIdToThread.get(mark.attrs.commentId);
-          if (thread && !seen.has(thread.id)) {
-            seen.add(thread.id);
-            try {
-              const coords = view.coordsAtPos(pos);
-              const y = coords.top - pmRect.top;
-              newPositions.push({
-                threadId: thread.id,
-                y,
-                count: thread.replies.length,
-              });
-            } catch {
-              // pos out of range
-            }
-          }
+    activeThreads.forEach((thread) => {
+      const range = resolveAnchor(state.doc, thread.anchor);
+      if (range) {
+        try {
+          const coords = view.coordsAtPos(range.from);
+          const y = coords.top - pmRect.top;
+          newPositions.push({
+            threadId: thread.id,
+            y,
+            count: thread.replies.length,
+          });
+        } catch {
+          // pos out of range
         }
-      });
+      }
     });
 
     setLayout({ frame, positions: newPositions });
   }, [editor, threads, positioningParent]);
+
+  useEffect(() => {
+    const { state, view } = editor;
+    const pluginState = commentDecorationKey.getState(state);
+    const currentThreads = pluginState?.threads ?? [];
+    const sameThreads =
+      currentThreads.length === threads.length &&
+      currentThreads.every((thread: CommentThread, index: number) => thread === threads[index]);
+
+    if (sameThreads) {
+      return;
+    }
+
+    view.dispatch(state.tr.setMeta(commentDecorationKey, { threads }));
+  }, [editor, threads]);
 
   useLayoutEffect(() => {
     const parent = positioningParent;
