@@ -83,6 +83,47 @@ func WriteRelations(entityId string, entity string, subjectId string, subject st
 	return err
 }
 
+func DeleteRelation(entityId string, entity string, subjectId string, subject string, relation string) error {
+	_, err := GetPermifyInstance().Data.DeleteRelationships(
+		context.Background(),
+		&permify_payload.RelationshipDeleteRequest{
+			TenantId: "t1",
+			Filter: &permify_payload.TupleFilter{
+				Entity: &permify_payload.EntityFilter{
+					Type: entity,
+					Ids:  []string{entityId},
+				},
+				Relation: relation,
+				Subject: &permify_payload.SubjectFilter{
+					Type: subject,
+					Ids:  []string{subjectId},
+				},
+			},
+		},
+	)
+	return err
+}
+
+func DeleteSubjectRelations(entityId string, entity string, subjectId string, subject string) error {
+	_, err := GetPermifyInstance().Data.DeleteRelationships(
+		context.Background(),
+		&permify_payload.RelationshipDeleteRequest{
+			TenantId: "t1",
+			Filter: &permify_payload.TupleFilter{
+				Entity: &permify_payload.EntityFilter{
+					Type: entity,
+					Ids:  []string{entityId},
+				},
+				Subject: &permify_payload.SubjectFilter{
+					Type: subject,
+					Ids:  []string{subjectId},
+				},
+			},
+		},
+	)
+	return err
+}
+
 func GetEntitiesWithPermission(entity string, subject string, subjectId string, permission string) ([]string, error) {
 	rr, err := GetPermifyInstance().Permission.LookupEntity(
 		context.Background(),

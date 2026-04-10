@@ -171,6 +171,25 @@ func (i Invite) invite() (string, error) {
 	}
 	defer tx.Rollback(ctx)
 	defer conn.Release()
+	var exists int
+	if i.UserId != uuid.Nil {
+		err = conn.QueryRow(ctx, CHECK_PENDING_INVITE_EXISTS_BY_USER_QUERY, i.Entity, i.EntityId, i.UserId).Scan(&exists)
+		if err == nil && exists == 1 {
+			return token, errors.New("pending invite already exists")
+		}
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			logger().Error(err.Error())
+			return token, err
+		}
+	}
+	err = conn.QueryRow(ctx, CHECK_PENDING_INVITE_EXISTS_QUERY, i.Entity, i.EntityId, i.Email).Scan(&exists)
+	if err == nil && exists == 1 {
+		return token, errors.New("pending invite already exists")
+	}
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		logger().Error(err.Error())
+		return token, err
+	}
 	// create entry in the database
 	tag, err := tx.Exec(ctx, CREATE_INVITE, i.SenderId, token, i.UserId, i.Entity, i.EntityId, i.Email, i.Role)
 	if err != nil {

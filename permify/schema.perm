@@ -16,6 +16,9 @@ entity space {
     permission invite_admin = owner
     permission invite_member = owner or admin
     permission add_comment = owner or admin or editor or commentor
+    permission manage_members = owner or admin
+    permission transfer_owner = owner
+    permission archive = owner or admin
 }
 entity page {
     relation owner @space#owner @space#admin @space#editor
@@ -27,4 +30,3 @@ entity page {
     permission delete = owner or space.owner
     permission add_comment = space.add_comment
 }
-

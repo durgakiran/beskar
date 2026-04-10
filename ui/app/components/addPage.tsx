@@ -9,6 +9,8 @@ interface IAddPage {
     parentId?: number;
     setIsOpen: (open: boolean) => void;
     editPage: (pageId: number) => void;
+    disabled?: boolean;
+    disabledMessage?: string;
 }
 
 interface Page {
@@ -21,16 +23,16 @@ interface PageResponse {
     page: number;
 }
 
-export default function AddPage({ isOpen, setIsOpen, spaceId, parentId, editPage }: IAddPage) {
+export default function AddPage({ isOpen, setIsOpen, spaceId, parentId, editPage, disabled = false, disabledMessage = "This space is archived and read-only." }: IAddPage) {
     const [name, setName] = useState("");
     const [pageType, setPageType] = useState<"document" | "whiteboard">("document");
+    const [pendingCreate, setPendingCreate] = useState(false);
     
-    const [{ data: docData, isLoading: docLoading }, createDoc] = usePost<Response<PageResponse>, Page>(`editor/space/${spaceId}/page/create`);
-    const [{ data: wbData, isLoading: wbLoading }, createWb] = usePost<Response<PageResponse>, Page>(`editor/space/${spaceId}/whiteboard/create`);
-    
-    const [isAdded, setIsAdded] = useState(false);
+    const [{ data: docData, isLoading: docLoading, errors: docErrors }, createDoc] = usePost<Response<PageResponse>, Page>(`editor/space/${spaceId}/page/create`);
+    const [{ data: wbData, isLoading: wbLoading, errors: wbErrors }, createWb] = usePost<Response<PageResponse>, Page>(`editor/space/${spaceId}/whiteboard/create`);
+
     const loading = docLoading || wbLoading;
-    const added = isAdded || !!docData || !!wbData;
+    const added = pendingCreate && !loading;
 
     const handleInput = useCallback((value: string) => {
         setName(value);
@@ -38,22 +40,43 @@ export default function AddPage({ isOpen, setIsOpen, spaceId, parentId, editPage
 
     const handleSubmit = async (ev: MouseEvent<HTMLButtonElement>) => {
         ev.preventDefault();
+        if (disabled) {
+            return;
+        }
+        setPendingCreate(true);
         if (pageType === "document") {
-            await createDoc({ title: name, spaceId, parentId });
+            createDoc({ title: name, spaceId, parentId });
         } else {
-            await createWb({ title: name, spaceId, parentId });
+            createWb({ title: name, spaceId, parentId });
         }
     };
 
     useEffect(() => {
-        if (docData) {
-            setIsAdded(true);
+        if (!pendingCreate) {
+            return;
+        }
+        if (docData?.data?.page) {
+            setPendingCreate(false);
             editPage(docData.data.page);
-        } else if (wbData) {
-            setIsAdded(true);
+        } else if (wbData?.data?.page) {
+            setPendingCreate(false);
             editPage(wbData.data.page);
         }
-    }, [docData, wbData, editPage]);
+    }, [docData, wbData, editPage, pendingCreate]);
+
+    useEffect(() => {
+        if (!loading && pendingCreate && (docErrors || wbErrors)) {
+            setPendingCreate(false);
+        }
+    }, [docErrors, wbErrors, loading, pendingCreate]);
+
+    useEffect(() => {
+        if (!isOpen) {
+            setName("");
+            setPageType("document");
+            setPendingCreate(false);
+        }
+    }, [isOpen]);
 
     return (
         <Dialog.Root open={isOpen} onOpenChange={setIsOpen}>
@@ -63,6 +86,11 @@ export default function AddPage({ isOpen, setIsOpen, spaceId, parentId, editPage
                     Choose the page type and title. This page will be added under the current location.
                 </Dialog.Description>
                 <Flex direction="column" gap="4">
+                    {disabled ? (
+                        <Text size="2" color="red">
+                            {disabledMessage}
+                        </Text>
+                    ) : null}
                     <label>
                         <Text as="div" size="2" mb="1" weight="bold">
                             Page Type
@@ -91,7 +119,7 @@ export default function AddPage({ isOpen, setIsOpen, spaceId, parentId, editPage
                                 Cancel
                             </Button>
                         </Dialog.Close>
-                        <Button onClick={handleSubmit} disabled={loading || added || !name.trim()} loading={loading}>
+                        <Button onClick={handleSubmit} disabled={disabled || loading || added || !name.trim()} loading={loading}>
                             Create
                         </Button>
                     </Flex>

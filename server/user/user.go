@@ -33,7 +33,7 @@ func searchUser(w http.ResponseWriter, r *http.Request) {
 		core.SendFailedReponse(w, r, http.StatusBadRequest, err.Error())
 		return
 	}
-	users, err := core.SearchUserByEmail(searchQuery.Search, searchQuery.Limit, searchQuery.Offset)
+	users, err := core.SearchUsers(searchQuery.Search, searchQuery.Limit, searchQuery.Offset)
 	if err != nil {
 		core.Logger.Error(err.Error())
 		core.SendFailedReponse(w, r, http.StatusInternalServerError, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNSPECIFIED])

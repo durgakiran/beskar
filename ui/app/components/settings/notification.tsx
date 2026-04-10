@@ -1,77 +1,206 @@
-import ToastComponent from "@components/ui/ToastComponent";
-import { Response, useGet } from "@http/hooks";
-import { Avatar, Button, Flex, Text, Box } from "@radix-ui/themes";
+"use client";
 
-interface props {
+import ModifiedIcon from "@components/modifiedIcon";
+import { Response, useGet } from "@http/hooks";
+import { Avatar, Button, Dialog, Flex, Text } from "@radix-ui/themes";
+import { useEffect, useMemo, useState } from "react";
+
+interface NotificationInvite {
+    entity: string;
     entityId: string;
-    senderName: string;
+    senderId: string;
     name: string;
+    senderName: string;
     role: string;
     token: string;
+    createdAt?: string;
 }
 
-export default function Notification(props: props) {
-    const [{ isLoading, data, errors, response }, acceptInvitation] = useGet<Response<any>>("invite/user/accept");
-    const [{ isLoading: isRejectLoading, data: rejectData, errors: rejectErrors, response: rejectResponse }, rejectInvitation] = useGet<Response<any>>("invite/user/reject");
+interface NotificationItemProps {
+    invite: NotificationInvite;
+    compact?: boolean;
+    onResolved: (token: string, action: "accepted" | "declined") => void;
+}
+
+function formatInviteTime(value?: string) {
+    if (!value) {
+        return "Pending";
+    }
+
+    const createdAt = new Date(value);
+    if (Number.isNaN(createdAt.getTime())) {
+        return "Pending";
+    }
+
+    const diffMs = Date.now() - createdAt.getTime();
+    const diffMinutes = Math.max(1, Math.floor(diffMs / 60000));
+    if (diffMinutes < 60) {
+        return `${diffMinutes}m`;
+    }
+
+    const diffHours = Math.floor(diffMinutes / 60);
+    if (diffHours < 24) {
+        return `${diffHours}h`;
+    }
+
+    const diffDays = Math.floor(diffHours / 24);
+    if (diffDays < 7) {
+        return `${diffDays}d`;
+    }
+
+    return createdAt.toLocaleDateString("en-GB", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+    });
+}
+
+function normalizeRole(role: string) {
+    if (role === "commentor") {
+        return "commenter";
+    }
+    return role;
+}
+
+export default function Notification({ invite, compact = false, onResolved }: NotificationItemProps) {
+    const [{ isLoading: isAccepting, data: acceptData, errors: acceptErrors, response: acceptResponse }, acceptInvitation] =
+        useGet<Response<any>>("invite/user/accept");
+    const [{ isLoading: isRejecting, data: rejectData, errors: rejectErrors, response: rejectResponse }, rejectInvitation] =
+        useGet<Response<any>>("invite/user/reject");
+    const [showDeclineDialog, setShowDeclineDialog] = useState(false);
+    const [resolvedAction, setResolvedAction] = useState<"accepted" | "declined" | null>(null);
+
+    const roleLabel = useMemo(() => {
+        const role = normalizeRole(invite.role);
+        return role.charAt(0).toUpperCase() + role.slice(1);
+    }, [invite.role]);
+
+    useEffect(() => {
+        if (resolvedAction !== "accepted") {
+            return;
+        }
+        if (acceptResponse === 200 && acceptData) {
+            onResolved(invite.token, "accepted");
+            setResolvedAction(null);
+        } else if (acceptErrors) {
+            setResolvedAction(null);
+        }
+    }, [acceptData, acceptErrors, acceptResponse, invite.token, onResolved, resolvedAction]);
+
+    useEffect(() => {
+        if (resolvedAction !== "declined") {
+            return;
+        }
+        if (rejectResponse === 200 && rejectData) {
+            onResolved(invite.token, "declined");
+            setResolvedAction(null);
+            setShowDeclineDialog(false);
+        } else if (rejectErrors) {
+            setResolvedAction(null);
+        }
+    }, [invite.token, onResolved, rejectData, rejectErrors, rejectResponse, resolvedAction]);
 
     const acceptInvite = () => {
-        acceptInvitation({ token: props.token });
+        setResolvedAction("accepted");
+        acceptInvitation({ token: invite.token });
     };
 
-    const rejectInvite = () => {
-        rejectInvitation({ token: props.token });
+    const declineInvite = () => {
+        setResolvedAction("declined");
+        rejectInvitation({ token: invite.token });
     };
 
     return (
         <>
-            <tr className="border-b">
-                <td className="px-4 py-3">
-                    <Flex gap="3" align="center">
-                        <Avatar 
-                            size="3" 
-                            fallback={props.senderName.charAt(0).toUpperCase()} 
-                            radius="full"
-                        />
-                        <Box>
-                            <Text as="div" size="2" color="gray">
-                                <Text weight="bold" color="gray">{props.senderName}</Text>
-                                {` invited you to space `}
-                                <Text weight="bold" color="gray">{props.name}</Text>
-                            </Text>
-                            <Text size="1" color="gray" style={{ textTransform: 'capitalize' }}>
-                                Space · {props.role}
-                            </Text>
-                        </Box>
+            <div
+                className={`rounded-xl border border-[#d4d1da] ${compact ? "bg-[#fbfafc]" : "bg-[#efe9f2]"} p-4 md:p-[18px]`}
+            >
+                <div className={`${compact ? "space-y-3" : "space-y-3.5"}`}>
+                    <div className={`flex ${compact ? "flex-col gap-3" : "items-start justify-between gap-4"}`}>
+                        <div className="flex items-start gap-3 min-w-0">
+                            <Avatar
+                                size={compact ? "3" : "4"}
+                                fallback={invite.senderName.charAt(0).toUpperCase()}
+                                radius="full"
+                            />
+                            <div className="min-w-0 space-y-1">
+                                <Text as="p" size={compact ? "2" : "3"} weight="medium" className="!text-[#221f26]">
+                                    {invite.senderName} invited you to join {invite.name}
+                                </Text>
+                                <Text as="p" size="2" className="!text-[#605c67]">
+                                    Accept the invite to join this space, or decline to remove it from your action list.
+                                </Text>
+                            </div>
+                        </div>
+                        <Text as="span" size="1" weight="medium" className="shrink-0 !text-[#898492]">
+                            {formatInviteTime(invite.createdAt)}
+                        </Text>
+                    </div>
+
+                    <div className={`flex ${compact ? "flex-col gap-3" : "items-center justify-between gap-4"}`}>
+                        <div className={`flex ${compact ? "flex-col items-start gap-2" : "items-center gap-3"}`}>
+                            <span className="inline-flex items-center rounded-full border border-[#bea2cc] bg-[#e8dfed] px-3 py-1 text-sm font-semibold text-[#6f507f]">
+                                {roleLabel}
+                            </span>
+                            <span className="inline-flex items-center gap-2 text-xs font-semibold text-[#898492]">
+                                <ModifiedIcon name="Bell" size={14} />
+                                Action required
+                            </span>
+                        </div>
+
+                        <Flex gap="2" direction={compact ? "column" : "row"} className={compact ? "w-full" : ""}>
+                            <Button
+                                variant="outline"
+                                color="gray"
+                                size={compact ? "3" : "2"}
+                                className={compact ? "!w-full" : ""}
+                                onClick={() => setShowDeclineDialog(true)}
+                                disabled={isAccepting || isRejecting}
+                            >
+                                Decline
+                            </Button>
+                            <Button
+                                size={compact ? "3" : "2"}
+                                className={compact ? "!w-full" : ""}
+                                onClick={acceptInvite}
+                                loading={isAccepting}
+                                disabled={isAccepting || isRejecting}
+                            >
+                                Accept
+                            </Button>
+                        </Flex>
+                    </div>
+                </div>
+            </div>
+
+            <Dialog.Root open={showDeclineDialog} onOpenChange={setShowDeclineDialog}>
+                <Dialog.Content maxWidth={compact ? "360px" : "456px"}>
+                    <Dialog.Title>{compact ? "Decline invite?" : "Decline invite?"}</Dialog.Title>
+                    <Dialog.Description size="2" className="!text-[#605c67]">
+                        Declining removes the {invite.name} invite from your Action Required list. You can be invited again later.
+                    </Dialog.Description>
+                    <Flex gap="3" justify={compact ? "between" : "end"} mt="4" direction={compact ? "column" : "row"}>
+                        <Button
+                            variant="outline"
+                            color="gray"
+                            size="2"
+                            onClick={() => setShowDeclineDialog(false)}
+                            className={compact ? "!w-full" : ""}
+                        >
+                            Cancel
+                        </Button>
+                        <Button
+                            color="red"
+                            size="2"
+                            onClick={declineInvite}
+                            loading={isRejecting}
+                            className={compact ? "!w-full" : ""}
+                        >
+                            Decline invite
+                        </Button>
                     </Flex>
-                </td>
-                <td className="px-4 py-3">
-                    <Button 
-                        variant="outline" 
-                        size="1" 
-                        color="gray" 
-                        onClick={rejectInvite} 
-                        loading={isRejectLoading} 
-                        disabled={isLoading || isRejectLoading || !!(response || rejectResponse)}
-                    >
-                        Reject
-                    </Button>
-                </td>
-                <td className="px-4 py-3">
-                    <Button 
-                        variant="soft" 
-                        size="1" 
-                        onClick={acceptInvite} 
-                        loading={isLoading} 
-                        disabled={isLoading || isRejectLoading || !!(response || rejectResponse)}
-                    >
-                        Accept
-                    </Button>
-                </td>
-            </tr>
-            {data && response === 200 && <ToastComponent icon="Check" type="success" toggle={true} message="Invitation accepted" />}
-            {(data || errors) && response != 200 && <ToastComponent icon="AlertTriangle" type="warning" toggle={true} message="Unable to accept invitation" />}
-            {rejectData && rejectResponse === 200 && <ToastComponent icon="Check" type="success" toggle={true} message="Invitation Rejection Success" />}
-            {(rejectData || rejectErrors) && rejectResponse != 200 && <ToastComponent icon="AlertTriangle" type="warning" toggle={true} message="Invitation Rejection Failed" />}
+                </Dialog.Content>
+            </Dialog.Root>
         </>
     );
 }

@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -31,6 +32,12 @@ type Filter struct {
 	InUserIdsQuery    *InUserIdsQUeryFilter `json:"inUserIdsQuery,omitempty"`
 	EmailQuery        *EmailQueryFilter     `json:"emailQuery,omitempty"`
 	InUserEmailsQuery *InUserEmailsQuery    `json:"inUserEmailsQuery,omitempty"`
+	DisplayNameQuery  *DisplayNameQuery     `json:"displayNameQuery,omitempty"`
+	FirstNameQuery    *FirstNameQuery       `json:"firstNameQuery,omitempty"`
+	LastNameQuery     *LastNameQuery        `json:"lastNameQuery,omitempty"`
+	LoginNameQuery    *LoginNameQuery       `json:"loginNameQuery,omitempty"`
+	UserNameQuery     *UserNameQuery        `json:"userNameQuery,omitempty"`
+	OrQuery           *OrQuery              `json:"orQuery,omitempty"`
 }
 
 type InUserIdsQUeryFilter struct {
@@ -46,6 +53,35 @@ type InUserEmailsQuery struct {
 	UserEmails []string `json:"userEmails"`
 }
 
+type DisplayNameQuery struct {
+	DisplayName string `json:"displayName"`
+	Method      string `json:"method"`
+}
+
+type FirstNameQuery struct {
+	FirstName string `json:"firstName"`
+	Method    string `json:"method"`
+}
+
+type LastNameQuery struct {
+	LastName string `json:"lastName"`
+	Method   string `json:"method"`
+}
+
+type LoginNameQuery struct {
+	LoginName string `json:"loginName"`
+	Method    string `json:"method"`
+}
+
+type UserNameQuery struct {
+	UserName string `json:"userName"`
+	Method   string `json:"method"`
+}
+
+type OrQuery struct {
+	Queries []Filter `json:"queries"`
+}
+
 type UserSearchQuery struct {
 	Query         Query    `json:"query"`
 	SortingColumn string   `json:"sortingColumn"`
@@ -53,6 +89,8 @@ type UserSearchQuery struct {
 }
 
 type Profile struct {
+	GivenName   string `json:"givenName"`
+	FamilyName  string `json:"familyName"`
 	DisplayName string `json:"displayName"`
 	Gender      string `json:"gender"`
 }
@@ -106,47 +144,14 @@ func SearchUsersByIds(userIds []string) (UserSearchResponse, error) {
 		SortingColumn: "USER_FIELD_NAME_UNSPECIFIED",
 		Queries:       filters,
 	}
-	jsonData, err := json.Marshal(query)
-	if err != nil {
-		Logger.Error(err.Error())
-		return UserSearchResponse{}, err
-	}
-	req, err := http.NewRequest(http.MethodPost, providerURL+"/v2/users", bytes.NewReader(jsonData))
-	if err != nil {
-		Logger.Error(err.Error())
-		return UserSearchResponse{}, err
-	}
-	req.Header.Set("Authorization", "Bearer "+os.Getenv("SERVER_PAT"))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Add("Accept", "application/json")
-	httpClient := &http.Client{}
-	resp, err := httpClient.Do(req)
-	if err != nil {
-		Logger.Error(err.Error())
-		return UserSearchResponse{}, err
-	}
-	defer resp.Body.Close()
-	var users UserSearchResponse
-	data, err := io.ReadAll(resp.Body)
-	if err != nil {
-		Logger.Error(err.Error())
-		return UserSearchResponse{}, err
-	}
-	Logger.Info("SearchUsersByIds raw response: " + string(data))
-	err = json.Unmarshal(data, &users)
-	if err != nil {
-		Logger.Error(err.Error())
-		return UserSearchResponse{}, err
-	}
-	return users, nil
+	return runUserSearch(providerURL, query)
 }
 
 func SearchUserByEmail(search string, limit uint32, offset uint64) (UserSearchResponse, error) {
 	var providerURL = fmt.Sprintf("https://%s", os.Getenv("ISSUER_URL"))
-	// providerURL := "http://app.tededox.com"
 	filter := Filter{
 		InUserEmailsQuery: &InUserEmailsQuery{
-			UserEmails: []string{search},
+			UserEmails: []string{strings.TrimSpace(strings.ToLower(search))},
 		},
 	}
 	filters := make([]Filter, 0)
@@ -160,12 +165,78 @@ func SearchUserByEmail(search string, limit uint32, offset uint64) (UserSearchRe
 		SortingColumn: "USER_FIELD_NAME_UNSPECIFIED",
 		Queries:       filters,
 	}
+	return runUserSearch(providerURL, query)
+}
+
+func SearchUsers(search string, limit uint32, offset uint64) (UserSearchResponse, error) {
+	search = strings.TrimSpace(search)
+	if search == "" {
+		return UserSearchResponse{}, errors.New("missing search input")
+	}
+	var providerURL = fmt.Sprintf("https://%s", os.Getenv("ISSUER_URL"))
+	method := "TEXT_QUERY_METHOD_CONTAINS_IGNORE_CASE"
+	orFilters := []Filter{
+		{
+			EmailQuery: &EmailQueryFilter{
+				EmailAddress: search,
+				Method:       method,
+			},
+		},
+		{
+			DisplayNameQuery: &DisplayNameQuery{
+				DisplayName: search,
+				Method:      method,
+			},
+		},
+		{
+			FirstNameQuery: &FirstNameQuery{
+				FirstName: search,
+				Method:    method,
+			},
+		},
+		{
+			LastNameQuery: &LastNameQuery{
+				LastName: search,
+				Method:   method,
+			},
+		},
+		{
+			LoginNameQuery: &LoginNameQuery{
+				LoginName: search,
+				Method:    method,
+			},
+		},
+		{
+			UserNameQuery: &UserNameQuery{
+				UserName: search,
+				Method:   method,
+			},
+		},
+	}
+	query := UserSearchQuery{
+		Query: Query{
+			Offset: offset,
+			Limit:  limit,
+			ASC:    true,
+		},
+		SortingColumn: "USER_FIELD_NAME_UNSPECIFIED",
+		Queries: []Filter{
+			{
+				OrQuery: &OrQuery{
+					Queries: orFilters,
+				},
+			},
+		},
+	}
+	return runUserSearch(providerURL, query)
+}
+
+func runUserSearch(providerURL string, query UserSearchQuery) (UserSearchResponse, error) {
 	jsonData, err := json.Marshal(query)
 	if err != nil {
 		Logger.Error(err.Error())
 		return UserSearchResponse{}, err
 	}
-	fmt.Println(string(jsonData))
 	req, err := http.NewRequest(http.MethodPost, providerURL+"/v2/users", bytes.NewReader(jsonData))
 	if err != nil {
 		Logger.Error(err.Error())
@@ -183,7 +254,6 @@ func SearchUserByEmail(search string, limit uint32, offset uint64) (UserSearchRe
 	defer resp.Body.Close()
 	var users UserSearchResponse
 	data, err := io.ReadAll(resp.Body)
-	fmt.Println(string(data))
 	if err != nil {
 		Logger.Error(err.Error())
 		return UserSearchResponse{}, err

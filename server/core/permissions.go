@@ -3,12 +3,15 @@ package core
 // permission strinfs for various actions
 const (
 	// space permissions
-	SPACE_DELETE        = "delete"
-	SPACE_EDIT          = "edit"
-	SPACE_EDIT_PAGE     = "edit_page"
-	SPACE_VIEW          = "view"
-	SPACE_INVITE_ADMIN  = "invite_admin"
-	SPACE_INVITE_MEMBER = "invite_member"
+	SPACE_DELETE         = "delete"
+	SPACE_EDIT           = "edit"
+	SPACE_EDIT_PAGE      = "edit_page"
+	SPACE_VIEW           = "view"
+	SPACE_INVITE_ADMIN   = "invite_admin"
+	SPACE_INVITE_MEMBER  = "invite_member"
+	SPACE_MANAGE_MEMBERS = "manage_members"
+	SPACE_TRANSFER_OWNER = "transfer_owner"
+	SPACE_ARCHIVE        = "archive"
 
 	// page permissions
 	PAGE_EDIT        = "edit"

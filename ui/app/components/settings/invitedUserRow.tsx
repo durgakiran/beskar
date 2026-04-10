@@ -1,7 +1,9 @@
+"use client";
+
 import { Button } from "@radix-ui/themes";
 import User from "./User";
 import { Icon } from "@components/ui/Icon";
-import { useDelete } from "app/core/http/hooks/useDelete";
+import { useDelete } from "@http/hooks";
 import { useEffect } from "react";
 
 interface Invite {
@@ -33,7 +35,7 @@ export default function InvitedUserRow({ user, refresh }: { user: Invite; refres
     return (
         <tr className="border-b">
             <td className="px-4 py-3">
-                <User key={user.email} id={user.email} name={user.email} role={user.role} />
+                <User key={user.email} id={user.email} name={user.email} subtitle={user.email} />
             </td>
             <td className="px-4 py-3">{user.role}</td>
             <td className="px-4 py-3">

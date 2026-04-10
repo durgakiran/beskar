@@ -1,6 +1,7 @@
 import { useCallback, useState } from "react";
 
 const USER_URI = process.env.NEXT_PUBLIC_USER_SERVER_URL;
+const EMPTY_HEADERS: Record<string, any> = {};
 
 /**
  *
@@ -12,13 +13,15 @@ export function usePost<T, P>(path: string, headers: Record<string, any> = {}): 
     const [isDataFetching, setIsDataFetching] = useState<boolean>(false);
     const [data, setData] = useState<T>();
     const [errors, setErrors] = useState<any>();
+    const requestHeaders = headers ?? EMPTY_HEADERS;
+    const headersKey = JSON.stringify(requestHeaders);
 
     const mutateData = useCallback((payLoad: P) => {
         setIsDataFetching(true);
         fetch(USER_URI + "/" + path, {
             method: "POST",
             body: JSON.stringify(payLoad),
-            headers: { "Content-Type": "application/json", ...headers },
+            headers: { "Content-Type": "application/json", ...requestHeaders },
         })
             .then((res) => {
                 if (res.ok) {
@@ -49,7 +52,7 @@ export function usePost<T, P>(path: string, headers: Record<string, any> = {}): 
                 setIsDataFetching(false);
                 setErrors(err);
             });
-    }, [headers, path]);
+    }, [headersKey, path]);
 
     return [{ isLoading: isDataFetching, data, errors }, mutateData];
 }

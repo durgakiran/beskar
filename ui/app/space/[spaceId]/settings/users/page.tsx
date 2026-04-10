@@ -1,174 +1,196 @@
 "use client";
-import InviteUser from "@components/settings/inviteUser";
+
+import SettingsBreadcrumb from "@components/settings/SettingsBreadcrumb";
+import SettingsPageHeader from "@components/settings/SettingsPageHeader";
 import User from "@components/settings/User";
-import { Icon } from "@components/ui/Icon";
+import RoleChip from "@components/settings/RoleChip";
+import RoleSelectMenu from "@components/settings/RoleSelectMenu";
+import MemberActions from "@components/settings/MemberActions";
 import ToastComponent from "@components/ui/ToastComponent";
-import { Response, useGet, usePost } from "@http/hooks";
-import { Button, Spinner, Table, Flex, Box, Heading, Text } from "@radix-ui/themes";
-import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { Response, useDelete, useGet, usePut } from "@http/hooks";
+import { Button, Spinner } from "@radix-ui/themes";
+import { spaceSettingsPaths } from "../../../../core/queries/space/settings";
+import type { SpaceMember } from "../types";
 import { use, useEffect, useState } from "react";
-import { HiExclamation } from "react-icons/hi";
+import { FiPlus } from "react-icons/fi";
+import { useRouter } from "next/navigation";
 
-interface User {
+type Profile = {
     id: string;
-    name: string;
-    role: string;
     email: string;
-}
+    name?: string;
+};
 
-interface Invite {
-    email: string;
-    role: string;
-    entityId: string;
-    entity: string;
-    senderId: string;
-}
+type SpaceState = {
+    archivedAt?: string | null;
+};
 
 export default function Page({ params }: { params: Promise<{ spaceId: string }> }) {
     const { spaceId } = use(params);
-    const router = usePathname();
-    const [openModal, setOpenModal] = useState(false);
-    const [{ isLoading, data, errors }, fetchData] = useGet<Response<User[]>>(`space/${spaceId}/users`);
-    const [{ data: profileData, errors: profileErrors, isLoading: profileLoading }, getProfile] = useGet<Response<User>>(`profile/details`);
-    const [{ isLoading: inviteLoading, data: inviteData, errors: inviteErrors }, sendInvite] = usePost<string, Invite>(`invite/user/create`);
-
-    const handleInvite = (email: string, role: string) => {
-        setOpenModal(false);
-        const invite: Invite = {
-            email: email,
-            role: role,
-            entityId: spaceId,
-            entity: "space",
-            senderId: profileData.data.id,
-        };
-        sendInvite(invite);
-    };
+    const router = useRouter();
+    const [{ isLoading, data, errors }, fetchUsers] = useGet<Response<SpaceMember[]>>(spaceSettingsPaths.users(spaceId));
+    const [{ data: profileData, isLoading: profileLoading }, getProfile] = useGet<Response<Profile>>("profile/details");
+    const [{ data: spaceDetails }, fetchSpaceDetails] = useGet<Response<SpaceState>>(`space/${spaceId}/details`);
+    const [{ data: roleData, errors: roleErrors, isLoading: roleLoading }, changeRole] = usePut<Response<SpaceMember>, { userId: string; role: string }>(
+        spaceSettingsPaths.changeMemberRole(spaceId)
+    );
+    const [{ data: removedData, errors: removeErrors, isLoading: removeLoading }, removeMember] = useDelete<Response<{ removed: boolean }>, { userId: string }>(
+        spaceSettingsPaths.removeMember(spaceId)
+    );
+    const [toast, setToast] = useState<{ type: "success" | "warning"; message: string } | null>(null);
 
     useEffect(() => {
-        fetchData();
+        fetchUsers();
         getProfile();
-    }, []);
+        fetchSpaceDetails();
+    }, [fetchUsers, getProfile, fetchSpaceDetails]);
 
+    useEffect(() => {
+        if (roleData?.data) {
+            setToast({ type: "success", message: "Member role updated" });
+            fetchUsers();
+        }
+    }, [roleData, fetchUsers]);
+
+    useEffect(() => {
+        if (removedData?.data?.removed) {
+            setToast({ type: "success", message: "Member removed from space" });
+            fetchUsers();
+        }
+    }, [removedData, fetchUsers]);
+
+    useEffect(() => {
+        if (roleErrors) {
+            setToast({ type: "warning", message: roleErrors.message || "Unable to update role" });
+        }
+    }, [roleErrors]);
+
+    useEffect(() => {
+        if (removeErrors) {
+            setToast({ type: "warning", message: removeErrors.message || "Unable to remove member" });
+        }
+    }, [removeErrors]);
 
     if (isLoading || profileLoading) {
         return (
-            <div>
-                <Spinner />
+            <div className="flex min-h-[240px] items-center justify-center">
+                <Spinner size="3" />
             </div>
         );
     }
 
+    const members = data?.data ?? [];
+    const profileId = profileData?.data?.id;
+    const currentUser = members.find((member) => member.id === profileId);
+    const archived = Boolean(spaceDetails?.data?.archivedAt);
+    const canManage = (currentUser?.role === "owner" || currentUser?.role === "admin") && !archived;
+
     return (
-        <Box className="p-4 md:p-6 max-w-7xl mx-auto">
-            {/* Breadcrumb */}
-            <Flex align="center" gap="2" mb="4" className="text-sm">
-                <Link href={`/space/${spaceId}/settings`}>
-                    <Text size="2" className="text-neutral-500 hover:text-primary-600 transition-colors">Settings</Text>
-                </Link>
-                <Text className="text-neutral-300">/</Text>
-                <Text size="2" className="text-neutral-700 font-medium">Users</Text>
-            </Flex>
+        <div className="space-y-6">
+            <SettingsBreadcrumb
+                items={[
+                    { label: "Settings", href: `/space/${spaceId}/settings/users` },
+                    { label: "Users" },
+                ]}
+            />
 
-            {/* Header */}
-            <Flex justify="between" align="center" mb="6" className="flex-col sm:flex-row gap-4">
-                <Heading size="6" className="text-neutral-900">Active Users</Heading>
-                {data && data.data
-                    ? data.data
-                          .filter((user: User) => user.id === profileData.data.id)
-                          .map((user: User) => {
-                              if (user.role === "owner" || user.role === "admin") {
-                                  return (
-                                      <Button 
-                                          key={user.id} 
-                                          size="2" 
-                                          onClick={() => setOpenModal(true)} 
-                                          className="bg-primary-500 hover:bg-primary-600 text-white"
-                                      >
-                                          <Icon name="Plus" className="mr-2 h-4 w-4" /> Add User
-                                      </Button>
-                                  );
-                              }
-                          })
-                    : null}
-            </Flex>
+            <SettingsPageHeader
+                title="Active Users"
+                subtitle="Review active members in this space and adjust roles or membership where permitted."
+                action={
+                    currentUser?.role === "owner" || currentUser?.role === "admin" ? (
+                        <Button disabled={archived} onClick={() => router.push(`/space/${spaceId}/settings/users/add`)}>
+                            <span className="inline-flex items-center">
+                                <FiPlus className="mr-2 h-4 w-4" /> Invite User
+                            </span>
+                        </Button>
+                    ) : null
+                }
+            />
 
-            {/* Desktop Table View */}
-            <Box className="hidden md:block overflow-x-auto bg-white rounded-sm border border-neutral-200">
-                <Table.Root>
-                    <Table.Header>
-                        <Table.Row className="bg-neutral-50">
-                            <Table.ColumnHeaderCell className="text-neutral-700 font-semibold">Name</Table.ColumnHeaderCell>
-                            <Table.ColumnHeaderCell className="text-neutral-700 font-semibold">Email</Table.ColumnHeaderCell>
-                            <Table.ColumnHeaderCell className="text-neutral-700 font-semibold">Role</Table.ColumnHeaderCell>
-                            <Table.ColumnHeaderCell className="text-neutral-700 font-semibold">Actions</Table.ColumnHeaderCell>
-                        </Table.Row>
-                    </Table.Header>
-                    <Table.Body>
-                        {data && data.data
-                            ? data.data.map((user: User) => {
-                                  return (
-                                      <Table.Row key={user.id} className="hover:bg-mauve-50 transition-colors">
-                                          <Table.Cell>
-                                              <User key={user.id} id={user.id} name={user.name} role={user.role} />
-                                          </Table.Cell>
-                                          <Table.Cell className="text-neutral-600">{user.email}</Table.Cell>
-                                          <Table.Cell>
-                                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-sm text-xs font-medium bg-mauve-100 text-mauve-800">
-                                                  {user.role}
-                                              </span>
-                                          </Table.Cell>
-                                          <Table.Cell>
-                                              <Button variant="outline" color="red" size="1" disabled className="opacity-50">
-                                                  <Icon className="color-red" name="BadgeX" />
-                                              </Button>
-                                          </Table.Cell>
-                                      </Table.Row>
-                                  );
-                              })
-                            : null}
-                    </Table.Body>
-                </Table.Root>
-            </Box>
+            {errors ? <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{errors.message}</div> : null}
+            {archived ? (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                    This space is archived. Member roles can be reviewed, but adding or removing users is disabled until the space is unarchived.
+                </div>
+            ) : null}
 
-            {/* Mobile Card View */}
-            <Box className="md:hidden space-y-3">
-                {data && data.data
-                    ? data.data.map((user: User) => {
-                          return (
-                              <Box 
-                                  key={user.id} 
-                                  className="bg-white border border-neutral-200 rounded-sm p-4 shadow-sm hover:shadow-md transition-shadow"
-                              >
-                                  <Flex direction="column" gap="3">
-                                      <Flex align="start" justify="between">
-                                          <User id={user.id} name={user.name} role={user.role} />
-                                          <Button variant="outline" color="red" size="1" disabled className="opacity-50">
-                                              <Icon className="color-red" name="BadgeX" />
-                                          </Button>
-                                      </Flex>
-                                      <Flex direction="column" gap="2" className="text-sm">
-                                          <Flex align="center" gap="2">
-                                              <Text className="text-neutral-500 font-medium">Email:</Text>
-                                              <Text className="text-neutral-700">{user.email}</Text>
-                                          </Flex>
-                                          <Flex align="center" gap="2">
-                                              <Text className="text-neutral-500 font-medium">Role:</Text>
-                                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-sm text-xs font-medium bg-mauve-100 text-mauve-800">
-                                                  {user.role}
-                                              </span>
-                                          </Flex>
-                                      </Flex>
-                                  </Flex>
-                              </Box>
-                          );
-                      })
-                    : null}
-            </Box>
+            <div className="hidden overflow-hidden rounded-xl border border-neutral-200 bg-white md:block">
+                <div className="grid grid-cols-[minmax(0,1.6fr)_minmax(0,1.2fr)_160px_170px] gap-4 bg-neutral-50 px-4 py-3 text-sm font-semibold text-neutral-600">
+                    <span>Name</span>
+                    <span>Email</span>
+                    <span>Role</span>
+                    <span>Actions</span>
+                </div>
+                {members.map((member) => {
+                    const canEditMember = canManage && !member.isOwner;
+                    return (
+                        <div key={member.id} className="grid grid-cols-[minmax(0,1.6fr)_minmax(0,1.2fr)_160px_170px] items-center gap-4 border-t border-neutral-200 px-4 py-3">
+                            <User id={member.id} name={member.name} subtitle={member.joinedAt ? `Joined ${new Date(member.joinedAt).toLocaleDateString()}` : null} />
+                            <div className="truncate text-sm text-neutral-600">{member.email}</div>
+                            <div>
+                                {canEditMember ? (
+                                    <RoleSelectMenu
+                                        value={member.role}
+                                        disabled={roleLoading}
+                                        onChange={(role) => changeRole({ userId: member.id, role })}
+                                    />
+                                ) : (
+                                    <RoleChip role={member.role} />
+                                )}
+                            </div>
+                            <div>
+                                <MemberActions
+                                    locked={member.isOwner}
+                                    disabled={!canEditMember || removeLoading}
+                                    onRemove={canEditMember ? () => removeMember({ userId: member.id }) : undefined}
+                                />
+                            </div>
+                        </div>
+                    );
+                })}
+            </div>
 
-            <InviteUser open={openModal} setOpen={setOpenModal} handleInvite={handleInvite} />
-            {inviteErrors && <ToastComponent icon="AlertTriangle" message="Unable to invite user" toggle type="warning" />}
-            {inviteData && <ToastComponent icon="Check" message="Successfully invited user to space" toggle type="success" />}
-        </Box>
+            <div className="space-y-3 md:hidden">
+                {members.map((member) => {
+                    const canEditMember = canManage && !member.isOwner;
+                    return (
+                        <div key={member.id} className="rounded-xl border border-neutral-200 bg-white p-4 shadow-sm">
+                            <div className="space-y-3">
+                                <div className="flex items-start justify-between gap-3">
+                                    <User id={member.id} name={member.name} subtitle={member.email} />
+                                    <MemberActions
+                                        locked={member.isOwner}
+                                        disabled={!canEditMember || removeLoading}
+                                        onRemove={canEditMember ? () => removeMember({ userId: member.id }) : undefined}
+                                    />
+                                </div>
+                                <div className="flex items-center justify-between gap-3">
+                                    <span className="text-sm text-neutral-500">Role</span>
+                                    {canEditMember ? (
+                                        <RoleSelectMenu
+                                            value={member.role}
+                                            disabled={roleLoading}
+                                            onChange={(role) => changeRole({ userId: member.id, role })}
+                                        />
+                                    ) : (
+                                        <RoleChip role={member.role} />
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    );
+                })}
+            </div>
+
+            {toast ? (
+                <ToastComponent
+                    icon={toast.type === "success" ? "Check" : "AlertTriangle"}
+                    message={toast.message}
+                    toggle
+                    type={toast.type}
+                />
+            ) : null}
+        </div>
     );
 }

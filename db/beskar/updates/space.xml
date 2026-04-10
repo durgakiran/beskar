@@ -451,5 +451,55 @@
             <dropColumn tableName="space" schemaName="core" columnName="description"/>
         </rollback>
     </changeSet>
+
+    <changeSet id="35-add-space-archive-columns" author="OpenAI">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <columnExists schemaName="core" tableName="space" columnName="archived_at"/>
+            </not>
+        </preConditions>
+        <addColumn tableName="space" schemaName="core">
+            <column name="archived_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="archived_by" type="UUID"/>
+        </addColumn>
+        <rollback>
+            <dropColumn tableName="space" schemaName="core" columnName="archived_at"/>
+            <dropColumn tableName="space" schemaName="core" columnName="archived_by"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="36-add-space-soft-delete-columns" author="OpenAI">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <columnExists schemaName="core" tableName="space" columnName="deleted_at"/>
+            </not>
+        </preConditions>
+        <addColumn tableName="space" schemaName="core">
+            <column name="deleted_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="deleted_by" type="UUID"/>
+        </addColumn>
+        <rollback>
+            <dropColumn tableName="space" schemaName="core" columnName="deleted_at"/>
+            <dropColumn tableName="space" schemaName="core" columnName="deleted_by"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="37-add-space-state-indexes" author="OpenAI">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <indexExists schemaName="core" tableName="space" indexName="idx_space_archived_at"/>
+            </not>
+        </preConditions>
+        <createIndex schemaName="core" tableName="space" indexName="idx_space_archived_at">
+            <column name="archived_at"/>
+        </createIndex>
+        <createIndex schemaName="core" tableName="space" indexName="idx_space_deleted_at">
+            <column name="deleted_at"/>
+        </createIndex>
+        <rollback>
+            <dropIndex schemaName="core" tableName="space" indexName="idx_space_archived_at"/>
+            <dropIndex schemaName="core" tableName="space" indexName="idx_space_deleted_at"/>
+        </rollback>
+    </changeSet>
     
 </databaseChangeLog>

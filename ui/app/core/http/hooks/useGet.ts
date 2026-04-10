@@ -1,6 +1,7 @@
 import { useCallback, useState } from "react";
 
 const USER_URI = process.env.NEXT_PUBLIC_USER_SERVER_URL;
+const EMPTY_HEADERS: Record<string, any> = {};
 
 /**
  *
@@ -13,10 +14,12 @@ export function useGet<T>(path: string, headers: Record<string, any> = {}): [{ i
     const [data, setData] = useState<T>();
     const [errors, setErrors] = useState();
     const [response, setResponse] = useState<number>();
+    const requestHeaders = headers ?? EMPTY_HEADERS;
+    const headersKey = JSON.stringify(requestHeaders);
 
     const fetchData = useCallback((queryParams?: Record<string, any>) => {
         setIsDataFetching(true);
-        fetch(USER_URI + "/" + path + (queryParams ? `?${new URLSearchParams(queryParams).toString()}` : ""), { credentials: "include", headers: { "Content-Type": "application/json", ...headers } })
+        fetch(USER_URI + "/" + path + (queryParams ? `?${new URLSearchParams(queryParams).toString()}` : ""), { credentials: "include", headers: { "Content-Type": "application/json", ...requestHeaders } })
             .then((res) => {
                 setIsDataFetching(false);
                 setResponse(res.status);
@@ -28,7 +31,7 @@ export function useGet<T>(path: string, headers: Record<string, any> = {}): [{ i
                 setIsDataFetching(false);
                 setErrors(err);
             });
-    }, []);
+    }, [headersKey, path]);
 
     return [{ isLoading: isDataFetching, data, errors, response }, fetchData];
 }

@@ -2,8 +2,8 @@ import { Avatar, Flex, Text, Box } from "@radix-ui/themes";
 
 type Props = {
     name: string;
-    role: string;
     id: string;
+    subtitle?: string | null;
 };
 
 export default function User(p: Props) {
@@ -16,7 +16,7 @@ export default function User(p: Props) {
             />
             <Box>
                 <Text weight="medium" as="div">{p.name}</Text>
-                <Text size="2" color="gray" as="div">Joined in August 2014</Text>
+                {p.subtitle ? <Text size="2" color="gray" as="div">{p.subtitle}</Text> : null}
             </Box>
         </Flex>
     );

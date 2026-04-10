@@ -16,6 +16,10 @@ interface BreadCrumbData {
     parentId: number;
 }
 
+interface SpaceState {
+    archivedAt?: string | null;
+}
+
 export default function Page({ params }: { params: Promise<{ page: string; spaceId: string }> }) {
     const { page, spaceId } = use(params);
     const workerRef = useRef<Worker>(null);
@@ -29,6 +33,7 @@ export default function Page({ params }: { params: Promise<{ page: string; space
     const [{ isLoading: loadingBreadCrum, data: dataBreadCrum, errors: breadCrumErrors }, getBreadCrum] = useGet<{ data: BreadCrumbData[]; status: string }>(`page/${page}/breadCrumbs`);
     const [{ isLoading: loadingDelete, data: deleteData, errors: deleteErrors }, _deletePage] = useDelete<{ rowsAffected: number }, null>(`editor/space/${spaceId}/page/${page}/delete`);
     const [{ isLoading: loadingMetadata, data: metadata, errors: metaErrors }, getMetadata] = useGet<{ data: { type: string }, status: string }>(`editor/space/${spaceId}/page/${page}/metadata`);
+    const [{ data: spaceDetails }, fetchSpaceDetails] = useGet<{ data: SpaceState; status: string }>(`space/${spaceId}/details`);
 
     const editPage = () => {
         router.push(`/edit/${spaceId}/${page}`);
@@ -69,6 +74,7 @@ export default function Page({ params }: { params: Promise<{ page: string; space
     useEffect(() => {
         getBreadCrum();
         getMetadata();
+        fetchSpaceDetails();
     }, []);
 
     useEffect(() => {
@@ -88,6 +94,8 @@ export default function Page({ params }: { params: Promise<{ page: string; space
             router.push(`/space/${spaceId}`);
         }
     }, [deleteData]);
+
+    const archived = Boolean(spaceDetails?.data?.archivedAt);
 
     if (isLoading || loadingMetadata || status === "loading") {
         return (
@@ -167,6 +175,7 @@ export default function Page({ params }: { params: Promise<{ page: string; space
                                     variant="ghost"
                                     size="2"
                                     onClick={editPage}
+                                    disabled={archived}
                                     className="text-primary-600 hover:bg-primary-50 hover:text-primary-700 transition-colors p-2"
                                 >
                                     <HiPencil size={18} />
@@ -177,7 +186,7 @@ export default function Page({ params }: { params: Promise<{ page: string; space
                                     variant="ghost"
                                     size="2"
                                     onClick={deletePage}
-                                    disabled={loadingDelete || deleteErrors}
+                                    disabled={archived || loadingDelete || deleteErrors}
                                     className="text-error-600 hover:bg-error-50 hover:text-error-700 transition-colors p-2"
                                 >
                                     <HiOutlineTrash size={18} />

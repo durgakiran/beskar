@@ -1,0 +1,15 @@
+export const spaceSettingsPaths = {
+    users: (spaceId: string) => `space/${spaceId}/users`,
+    settings: (spaceId: string) => `space/${spaceId}/settings`,
+    invites: (spaceId: string) => `invite/space/${spaceId}/list`,
+    addMembers: (spaceId: string) => `space/${spaceId}/members/add`,
+    changeMemberRole: (spaceId: string) => `space/${spaceId}/members/role`,
+    removeMember: (spaceId: string) => `space/${spaceId}/members/remove`,
+    searchCandidates: (spaceId: string) => `space/${spaceId}/members/candidates/search`,
+    transferOwnership: (spaceId: string) => `space/${spaceId}/ownership/transfer`,
+    archive: (spaceId: string) => `space/${spaceId}/archive`,
+    unarchive: (spaceId: string) => `space/${spaceId}/unarchive`,
+    deleteSpace: (spaceId: string) => `space/${spaceId}/delete`,
+    createInvite: () => "invite/user/create",
+    removeInvite: () => "invite/user/remove",
+};

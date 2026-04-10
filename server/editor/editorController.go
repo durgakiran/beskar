@@ -19,6 +19,23 @@ func logger() *zap.Logger {
 	return core.Logger
 }
 
+func ensureMutableSpace(w http.ResponseWriter, r *http.Request, spaceId uuid.UUID) bool {
+	err := core.ValidateSpaceMutable(spaceId)
+	if err == nil {
+		return true
+	}
+	if err.Error() == "space has been deleted" {
+		core.SendFailedReponse(w, r, http.StatusNotFound, err.Error())
+		return false
+	}
+	if err.Error() == "space is archived" {
+		core.SendFailedReponse(w, r, http.StatusForbidden, "This space is archived and read-only")
+		return false
+	}
+	core.SendFailedReponse(w, r, http.StatusInternalServerError, "Unable to validate space state")
+	return false
+}
+
 func getDocumentToView(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	user, err := core.GetUserInfo(ctx)
@@ -76,6 +93,9 @@ func getDocumentToEdit(w http.ResponseWriter, r *http.Request) {
 		core.SendFailedReponse(w, r, http.StatusForbidden, "Invalid space permissions")
 		return
 	}
+	if !ensureMutableSpace(w, r, spaceId) {
+		return
+	}
 	page, err := strconv.ParseInt(pageId, 10, 64)
 	if err != nil {
 		core.SendFailedReponse(w, r, http.StatusInternalServerError, "Unable to get document")
@@ -122,6 +142,9 @@ func saveDoc(w http.ResponseWriter, r *http.Request) {
 		core.SendFailedReponse(w, r, http.StatusForbidden, "Invalid space permissions")
 		return
 	}
+	if !ensureMutableSpace(w, r, inputDoc.SpaceId) {
+		return
+	}
 	pageId, err := inputDoc.Create()
 	if err != nil {
 		logger().Error(err.Error())
@@ -165,6 +188,9 @@ func publishDoc(w http.ResponseWriter, r *http.Request) {
 	if !validSpaceUserPermissions {
 		render.Status(r, http.StatusForbidden)
 		render.Render(w, r, core.NewFailedResponse(http.StatusForbidden, core.FAILURE, core.FAILURE, "Invalid space permissions"))
+		return
+	}
+	if !ensureMutableSpace(w, r, inputDoc.SpaceId) {
 		return
 	}
 	pageId, err := inputDoc.Publish()
@@ -218,6 +244,9 @@ func updateDraftDoc(w http.ResponseWriter, r *http.Request) {
 		render.Render(w, r, core.NewFailedResponse(http.StatusForbidden, core.FAILURE, core.FAILURE, "Invalid space permissions"))
 		return
 	}
+	if !ensureMutableSpace(w, r, inputDoc.SpaceId) {
+		return
+	}
 	pageId, err := inputDoc.Update()
 	if err != nil {
 		render.Status(r, http.StatusInternalServerError)
@@ -259,6 +288,9 @@ func deleteDocument(w http.ResponseWriter, r *http.Request) {
 	spaceId := uuid.MustParse(chi.URLParam(r, "spaceId"))
 	if spaceId == uuid.Nil {
 		core.SendFailedReponse(w, r, http.StatusBadRequest, "Invalid space ID")
+		return
+	}
+	if !ensureMutableSpace(w, r, spaceId) {
 		return
 	}
 	rowsAffected, err := DeleteDocument(page, spaceId, ownerId)

@@ -84,4 +84,42 @@
             <column name="role" type="varchar(30)" />
         </addColumn>
     </changeSet>
+
+    <changeSet id="9-add-invite-timestamps" author="OpenAI">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <columnExists schemaName="notifications" tableName="invites" columnName="created_at"/>
+            </not>
+        </preConditions>
+        <addColumn tableName="invites" schemaName="notifications">
+            <column name="created_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="now()"/>
+            <column name="updated_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="now()"/>
+        </addColumn>
+        <rollback>
+            <dropColumn tableName="invites" schemaName="notifications" columnName="created_at"/>
+            <dropColumn tableName="invites" schemaName="notifications" columnName="updated_at"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="10-add-invite-indexes" author="OpenAI">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <indexExists schemaName="notifications" tableName="invites" indexName="idx_invites_pending_lookup"/>
+            </not>
+        </preConditions>
+        <sql>
+            CREATE UNIQUE INDEX idx_invites_pending_lookup
+                ON notifications.invites(entity, entity_id, email_id)
+                WHERE status IS NULL;
+            CREATE INDEX idx_invites_space_pending_created_at
+                ON notifications.invites(entity_id, created_at DESC)
+                WHERE status IS NULL;
+        </sql>
+        <rollback>
+            <sql>
+                DROP INDEX IF EXISTS notifications.idx_invites_pending_lookup;
+                DROP INDEX IF EXISTS notifications.idx_invites_space_pending_created_at;
+            </sql>
+        </rollback>
+    </changeSet>
 </databaseChangeLog>

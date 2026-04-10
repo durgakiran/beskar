@@ -82,6 +82,17 @@ func createInvitation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	invite.SenderId = uuid.MustParse(userId)
+	if invite.Entity == "space" {
+		spaceID := uuid.MustParse(invite.EntityId)
+		if err := core.ValidateSpaceMutable(spaceID); err != nil {
+			if err.Error() == "space is archived" {
+				core.SendFailedReponse(w, r, http.StatusForbidden, "This space is archived and read-only")
+			} else {
+				core.SendFailedReponse(w, r, http.StatusForbidden, err.Error())
+			}
+			return
+		}
+	}
 	// validate sender permissions
 	isAllowed := core.ValidateUserEntityPermission(invite.Entity, invite.EntityId, invite.SenderId, core.SPACE_INVITE_MEMBER)
 	if !isAllowed {
@@ -147,6 +158,17 @@ func removeInvitation(w http.ResponseWriter, r *http.Request) {
 		logger().Error(err.Error())
 		core.SendFailedReponse(w, r, http.StatusBadRequest, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_MISSING_INPUT])
 		return
+	}
+	if invite.Entity == "space" {
+		spaceID := uuid.MustParse(invite.EntityId)
+		if err := core.ValidateSpaceMutable(spaceID); err != nil {
+			if err.Error() == "space is archived" {
+				core.SendFailedReponse(w, r, http.StatusForbidden, "This space is archived and read-only")
+			} else {
+				core.SendFailedReponse(w, r, http.StatusForbidden, err.Error())
+			}
+			return
+		}
 	}
 	isAllowed := core.ValidateUserSpacePermissions(uuid.MustParse(invite.EntityId), userIDUUID, core.SPACE_INVITE_MEMBER)
 	if !isAllowed {

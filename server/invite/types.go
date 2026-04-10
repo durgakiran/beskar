@@ -2,6 +2,7 @@ package invite
 
 import (
 	"database/sql"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -34,8 +35,10 @@ type InviteDBOV2 struct {
 
 type InviteDBOV4 struct {
 	InviteDBOV3
-	Token string `json:"token" db:"token"`
-	Name  string `json:"name" db:"name"`
+	Token     string     `json:"token" db:"token"`
+	Name      string     `json:"name" db:"name"`
+	CreatedAt *time.Time `json:"createdAt,omitempty" db:"created_at"`
+	UpdatedAt *time.Time `json:"updatedAt,omitempty" db:"updated_at"`
 }
 
 type InviteDBOV5 struct {
@@ -60,10 +63,12 @@ type InviteInput struct {
 }
 
 type InviteDBOV3 struct {
-	Entity   string         `json:"entity" db:"entity"`
-	EntityId string         `json:"entityId" db:"entity_id"`
-	SenderId uuid.UUID      `json:"senderId" db:"sender_id"`
-	Status   sql.NullString `json:"status" db:"status"`
-	Email    string         `json:"email" db:"email_id"`
-	Role     string         `json:"role" db:"role"`
+	Entity    string         `json:"entity" db:"entity"`
+	EntityId  string         `json:"entityId" db:"entity_id"`
+	SenderId  uuid.UUID      `json:"senderId" db:"sender_id"`
+	Status    sql.NullString `json:"status" db:"status"`
+	Email     string         `json:"email" db:"email_id"`
+	Role      string         `json:"role" db:"role"`
+	CreatedAt *time.Time     `json:"createdAt,omitempty" db:"created_at"`
+	UpdatedAt *time.Time     `json:"updatedAt,omitempty" db:"updated_at"`
 }

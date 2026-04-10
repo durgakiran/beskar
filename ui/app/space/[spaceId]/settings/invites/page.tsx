@@ -1,131 +1,136 @@
 "use client";
-import InvitedUserRow from "@components/settings/invitedUserRow";
-import User from "@components/settings/User";
-import { Icon } from "@components/ui/Icon";
-import { Response, useGet, usePost } from "@http/hooks";
-import { useDelete } from "app/core/http/hooks/useDelete";
-import { Button, Spinner, Table, Flex, Box, Heading, Text } from "@radix-ui/themes";
-import Link from "next/link";
-import { usePathname } from "next/navigation";
+
+import SettingsBreadcrumb from "@components/settings/SettingsBreadcrumb";
+import SettingsPageHeader from "@components/settings/SettingsPageHeader";
+import RoleChip from "@components/settings/RoleChip";
+import ToastComponent from "@components/ui/ToastComponent";
+import { Response, useDelete, useGet } from "@http/hooks";
+import { Button, Spinner } from "@radix-ui/themes";
+import { spaceSettingsPaths } from "../../../../core/queries/space/settings";
+import type { PendingInvite } from "../types";
 import { use, useEffect, useState } from "react";
 
-interface User {
-    id: string;
-    name: string;
-    role: string;
-    email: string;
-}
-
-interface Invite {
-    entity: string;
-    entityId: string;
-    email: string;
-    role: string;
-    senderId: string;
-}
+type SpaceState = {
+    archivedAt?: string | null;
+};
 
 export default function Page({ params }: { params: Promise<{ spaceId: string }> }) {
     const { spaceId } = use(params);
-    const [{ isLoading, data, errors }, fetchData] = useGet<Response<Invite[]>>(`invite/space/${spaceId}/list`);
-    const [{ data: profileData, errors: profileErrors, isLoading: profileLoading }, getProfile] = useGet<Response<User[]>>(`profile/details`);
-
-    const refresh = () => {
-        fetchData();
-    };
+    const [{ isLoading, data, errors }, fetchInvites] = useGet<Response<PendingInvite[]>>(spaceSettingsPaths.invites(spaceId));
+    const [{ data: spaceDetails }, fetchSpaceDetails] = useGet<Response<SpaceState>>(`space/${spaceId}/details`);
+    const [{ data: removedData, errors: removeErrors, isLoading: removing }, removeInvite] = useDelete<Response<string>, PendingInvite>(
+        spaceSettingsPaths.removeInvite()
+    );
+    const [toast, setToast] = useState<{ type: "success" | "warning"; message: string } | null>(null);
 
     useEffect(() => {
-        fetchData();
-        getProfile();
-    }, []);
+        fetchInvites();
+        fetchSpaceDetails();
+    }, [fetchInvites, fetchSpaceDetails]);
 
-    if (isLoading || profileLoading) {
-        return (
-            <div>
-                <Spinner />
-            </div>
-        );
-    }
+    useEffect(() => {
+        if (removedData) {
+            setToast({ type: "success", message: "Invite cancelled" });
+            fetchInvites();
+        }
+    }, [removedData, fetchInvites]);
+
+    useEffect(() => {
+        if (removeErrors) {
+            setToast({ type: "warning", message: removeErrors.message || "Unable to cancel invite" });
+        }
+    }, [removeErrors]);
+
+    const invites = data?.data ?? [];
+    const archived = Boolean(spaceDetails?.data?.archivedAt);
 
     return (
-        <Box className="p-4 md:p-6 max-w-7xl mx-auto">
-            {/* Breadcrumb */}
-            <Flex align="center" gap="2" mb="4" className="text-sm">
-                <Link href={`/space/${spaceId}/settings`}>
-                    <Text size="2" className="text-neutral-500 hover:text-primary-600 transition-colors">Settings</Text>
-                </Link>
-                <Text className="text-neutral-300">/</Text>
-                <Text size="2" className="text-neutral-700 font-medium">Invites</Text>
-            </Flex>
+        <div className="space-y-6">
+            <SettingsBreadcrumb
+                items={[
+                    { label: "Settings", href: `/space/${spaceId}/settings/users` },
+                    { label: "Invited Users" },
+                ]}
+            />
 
-            {/* Header */}
-            <Flex justify="between" align="center" mb="6" className="flex-col sm:flex-row gap-4">
-                <Heading size="6" className="text-neutral-900">Invited Users</Heading>
-            </Flex>
+            <SettingsPageHeader
+                title="Invited Users"
+                subtitle="Pending invitations stay here until someone joins or the invite is cancelled."
+            />
 
-            {/* Desktop Table View */}
-            <Box className="hidden md:block overflow-x-auto bg-white rounded-sm border border-neutral-200">
-                <Table.Root>
-                    <Table.Header>
-                        <Table.Row className="bg-neutral-50">
-                            <Table.ColumnHeaderCell className="text-neutral-700 font-semibold">Email</Table.ColumnHeaderCell>
-                            <Table.ColumnHeaderCell className="text-neutral-700 font-semibold">Role</Table.ColumnHeaderCell>
-                            <Table.ColumnHeaderCell className="text-neutral-700 font-semibold">Actions</Table.ColumnHeaderCell>
-                        </Table.Row>
-                    </Table.Header>
-                    <Table.Body>
-                        {data && data.data
-                            ? data.data.map((user: Invite) => {
-                                  return <InvitedUserRow key={user.email} user={user} refresh={refresh} />;
-                              })
-                            : null}
-                    </Table.Body>
-                </Table.Root>
-                {data && data.data && data.data.length === 0 && (
-                    <Flex align="center" justify="center" p="8">
-                        <Text size="3" className="text-neutral-500">No pending invites</Text>
-                    </Flex>
-                )}
-            </Box>
+            {isLoading ? (
+                <div className="flex min-h-[240px] items-center justify-center">
+                    <Spinner size="3" />
+                </div>
+            ) : null}
 
-            {/* Mobile Card View */}
-            <Box className="md:hidden space-y-3">
-                {data && data.data && data.data.length > 0
-                    ? data.data.map((invite: Invite) => {
-                          return (
-                              <Box 
-                                  key={invite.email} 
-                                  className="bg-white border border-neutral-200 rounded-sm p-4 shadow-sm hover:shadow-md transition-shadow"
-                              >
-                                  <Flex direction="column" gap="3">
-                                      <Flex align="center" gap="2">
-                                          <Text className="text-neutral-500 font-medium text-sm">Email:</Text>
-                                          <Text className="text-neutral-700 font-medium">{invite.email}</Text>
-                                      </Flex>
-                                      <Flex align="center" gap="2">
-                                          <Text className="text-neutral-500 font-medium text-sm">Role:</Text>
-                                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-sm text-xs font-medium bg-mauve-100 text-mauve-800">
-                                              {invite.role}
-                                          </span>
-                                      </Flex>
-                                      <Flex gap="2" mt="2">
-                                          <Button variant="outline" size="1" className="flex-1">
-                                              View Details
-                                          </Button>
-                                          <Button variant="outline" color="red" size="1">
-                                              Cancel
-                                          </Button>
-                                      </Flex>
-                                  </Flex>
-                              </Box>
-                          );
-                      })
-                    : null}
-                {data && data.data && data.data.length === 0 && (
-                    <Flex align="center" justify="center" p="8" className="bg-neutral-50 rounded-sm border border-neutral-200">
-                        <Text size="3" className="text-neutral-500">No pending invites</Text>
-                    </Flex>
-                )}
-            </Box>
-        </Box>
+            {errors ? <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{errors.message}</div> : null}
+            {archived ? (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                    This space is archived. Existing pending invites remain visible, but sending new invites is disabled until the space is unarchived.
+                </div>
+            ) : null}
+
+            {!isLoading && invites.length === 0 ? (
+                <div className="rounded-xl border border-neutral-200 bg-white px-6 py-10 text-center text-sm text-neutral-500">
+                    No pending invites
+                </div>
+            ) : null}
+
+            {invites.length > 0 ? (
+                <>
+                    <div className="hidden overflow-hidden rounded-xl border border-neutral-200 bg-white md:block">
+                        <div className="grid grid-cols-[minmax(0,1.4fr)_140px_140px_120px] gap-4 bg-neutral-50 px-4 py-3 text-sm font-semibold text-neutral-600">
+                            <span>Email</span>
+                            <span>Role</span>
+                            <span>Created</span>
+                            <span>Actions</span>
+                        </div>
+                        {invites.map((invite) => (
+                            <div key={`${invite.email}-${invite.role}`} className="grid grid-cols-[minmax(0,1.4fr)_140px_140px_120px] items-center gap-4 border-t border-neutral-200 px-4 py-3">
+                                <span className="truncate text-sm text-neutral-800">{invite.email}</span>
+                                <div className="justify-self-start">
+                                    <RoleChip role={invite.role} />
+                                </div>
+                                <span className="text-sm text-neutral-500">{invite.createdAt ? new Date(invite.createdAt).toLocaleDateString() : "Pending"}</span>
+                                <Button size="2" variant="outline" color="red" disabled={removing || archived} onClick={() => removeInvite(invite)}>
+                                    Cancel
+                                </Button>
+                            </div>
+                        ))}
+                    </div>
+
+                    <div className="space-y-3 md:hidden">
+                        {invites.map((invite) => (
+                            <div key={`${invite.email}-${invite.role}`} className="rounded-xl border border-neutral-200 bg-white p-4 shadow-sm">
+                                <div className="space-y-3">
+                                    <div className="text-sm font-medium text-neutral-900">{invite.email}</div>
+                                    <div className="flex items-center justify-between gap-3">
+                                        <span className="text-sm text-neutral-500">Role</span>
+                                        <RoleChip role={invite.role} />
+                                    </div>
+                                    <div className="flex items-center justify-between gap-3">
+                                        <span className="text-sm text-neutral-500">Created</span>
+                                        <span className="text-sm text-neutral-600">{invite.createdAt ? new Date(invite.createdAt).toLocaleDateString() : "Pending"}</span>
+                                    </div>
+                                    <Button variant="outline" color="red" disabled={removing || archived} onClick={() => removeInvite(invite)}>
+                                        Cancel invite
+                                    </Button>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </>
+            ) : null}
+
+            {toast ? (
+                <ToastComponent
+                    icon={toast.type === "success" ? "Check" : "AlertTriangle"}
+                    message={toast.message}
+                    toggle
+                    type={toast.type}
+                />
+            ) : null}
+        </div>
     );
 }

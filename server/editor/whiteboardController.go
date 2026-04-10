@@ -53,6 +53,9 @@ func createWhiteboard(w http.ResponseWriter, r *http.Request) {
 		core.SendFailedReponse(w, r, http.StatusForbidden, "Not enough permissions to add whiteboard to space")
 		return
 	}
+	if !ensureMutableSpace(w, r, inputDoc.SpaceId) {
+		return
+	}
 
 	pageId, err := CreateWhiteboard(inputDoc)
 	if err != nil {
@@ -163,6 +166,9 @@ func updateWhiteboard(w http.ResponseWriter, r *http.Request) {
 	inputDoc.SpaceId = spaceId
 	inputDoc.OwnerId = userId
 	inputDoc.Id = pageId // From URL
+	if !ensureMutableSpace(w, r, inputDoc.SpaceId) {
+		return
+	}
 
 	err = UpdateWhiteboard(inputDoc)
 	if err != nil {
@@ -211,6 +217,9 @@ func deleteWhiteboard(w http.ResponseWriter, r *http.Request) {
 		SpaceId: spaceId,
 		Id:      pageId,
 		OwnerId: userId,
+	}
+	if !ensureMutableSpace(w, r, inputDoc.SpaceId) {
+		return
 	}
 
 	err = DeleteWhiteboard(inputDoc)

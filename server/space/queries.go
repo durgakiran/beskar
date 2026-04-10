@@ -1,11 +1,15 @@
 package space
 
 const (
-	GET_SPACE             = `SELECT id, name, description, date_created, date_updated, user_id FROM core.space WHERE id = $1`
-	GET_SPACES            = `SELECT id, name, description, date_updated, user_id FROM core.space WHERE id = ANY($1) ORDER BY date_updated DESC;`
+	GET_SPACE             = `SELECT id, name, description, date_created, date_updated, user_id, archived_at, archived_by, deleted_at, deleted_by FROM core.space WHERE id = $1 AND deleted_at IS NULL`
+	GET_SPACE_SETTINGS    = `SELECT id, name, description, date_created, date_updated, user_id, archived_at, archived_by, deleted_at, deleted_by FROM core.space WHERE id = $1 AND deleted_at IS NULL`
+	GET_SPACES            = `SELECT id, name, description, date_updated, user_id, archived_at FROM core.space WHERE id = ANY($1) AND deleted_at IS NULL ORDER BY date_updated DESC;`
 	INSERT_SPACE          = `INSERT INTO core.space (name, description, date_created, date_updated, user_id) VALUES ( $1, $2, $3, $4, $5) RETURNING id`
 	UPDATE_SPACE          = `UPDATE core.space SET name = $1, description = $2, date_updated = $3 WHERE id = $4`
-	DELETE_SPACE          = `DELETE FROM core.space WHERE id = $3 RETURNING id`
+	ARCHIVE_SPACE         = `UPDATE core.space SET archived_at = now(), archived_by = $2, date_updated = now() WHERE id = $1 AND deleted_at IS NULL RETURNING id, name, description, date_created, date_updated, user_id, archived_at, archived_by, deleted_at, deleted_by`
+	UNARCHIVE_SPACE       = `UPDATE core.space SET archived_at = NULL, archived_by = NULL, date_updated = now() WHERE id = $1 AND deleted_at IS NULL RETURNING id, name, description, date_created, date_updated, user_id, archived_at, archived_by, deleted_at, deleted_by`
+	SOFT_DELETE_SPACE     = `UPDATE core.space SET deleted_at = now(), deleted_by = $2, date_updated = now() WHERE id = $1 AND deleted_at IS NULL RETURNING id`
+	GET_SPACE_STATE       = `SELECT archived_at, deleted_at FROM core.space WHERE id = $1`
 	GET_SPACE_PAGE_COUNTS = `SELECT 
 								p.space_id,
 								COUNT(*) FILTER (WHERE COALESCE(p.type, 'document') = 'document') AS doc_count,

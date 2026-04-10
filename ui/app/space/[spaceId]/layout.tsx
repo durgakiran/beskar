@@ -17,6 +17,11 @@ interface IPageList {
     type: "document" | "whiteboard";
 }
 
+interface SpaceState {
+    id: string;
+    archivedAt?: string | null;
+}
+
 export default function Layout({ children, params }: { children: React.ReactNode, params: Promise<{ spaceId: string }> }) {
     const { spaceId } = use(params);
     const pathname = usePathname();
@@ -34,10 +39,12 @@ export default function Layout({ children, params }: { children: React.ReactNode
     
     // Fetch Pages
     const [{ data, isLoading: pagesLoading }, fetchPages] = useGet<Response<IPageList[]>>(`space/${spaceId}/page/list`);
+    const [{ data: spaceDetails }, fetchSpaceDetails] = useGet<Response<SpaceState>>(`space/${spaceId}/details`);
 
     useEffect(() => {
         fetchPages();
-    }, [fetchPages]);
+        fetchSpaceDetails();
+    }, [fetchPages, fetchSpaceDetails]);
 
     useEffect(() => {
         if (data?.data) {
@@ -104,6 +111,9 @@ export default function Layout({ children, params }: { children: React.ReactNode
     }, [spaceId]);
 
     const handleAddPage = (parentId?: string) => {
+        if (spaceDetails?.data?.archivedAt) {
+            return;
+        }
         setAddPageParentId(parentId ? parseInt(parentId) : undefined);
         setIsAddPageOpen(true);
     };
@@ -120,6 +130,12 @@ export default function Layout({ children, params }: { children: React.ReactNode
             prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
         );
     };
+
+    const handleCreatedPage = useCallback((id: number) => {
+        fetchPages();
+        setIsAddPageOpen(false);
+        router.push(`/edit/${spaceId}/${id}`);
+    }, [fetchPages, router, spaceId]);
 
     const isActive = (path: string) => {
         if (path === `/space/${spaceId}`) return pathname === path;
@@ -152,7 +168,7 @@ export default function Layout({ children, params }: { children: React.ReactNode
                             <span className="text-sm">Overview</span>
                         </Link>
                         <Link
-                            href={`/space/${spaceId}/settings`}
+                            href={`/space/${spaceId}/settings/users`}
                             className={cn(
                                 "flex items-center gap-[10px] rounded-lg py-[9px] px-3 transition-colors",
                                 isActive(`/space/${spaceId}/settings`) 
@@ -170,8 +186,9 @@ export default function Layout({ children, params }: { children: React.ReactNode
                         <span className="text-[12px] font-bold tracking-wider text-neutral-700 uppercase">PAGES</span>
                         <button
                             onClick={() => handleAddPage()}
+                            disabled={Boolean(spaceDetails?.data?.archivedAt)}
                             className="flex h-6 w-6 items-center justify-center rounded-md text-primary-700 transition-colors hover:bg-primary-100"
-                            title="Add page"
+                            title={spaceDetails?.data?.archivedAt ? "Archived spaces are read-only" : "Add page"}
                         >
                             <FiPlus className="h-[18px] w-[18px] stroke-[2.5]" />
                         </button>
@@ -222,11 +239,9 @@ export default function Layout({ children, params }: { children: React.ReactNode
                 setIsOpen={setIsAddPageOpen} 
                 spaceId={spaceId} 
                 parentId={addPageParentId}
-                editPage={(id) => {
-                    fetchPages();
-                    setIsAddPageOpen(false);
-                    router.push(`/space/${spaceId}/view/${id}`);
-                }}
+                disabled={Boolean(spaceDetails?.data?.archivedAt)}
+                disabledMessage="Archived spaces cannot create new pages until the space is unarchived."
+                editPage={handleCreatedPage}
             />
         </div>
     );

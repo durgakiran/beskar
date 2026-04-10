@@ -2,7 +2,7 @@
 
 import { Response, useGet, usePut } from "@http/hooks";
 import { Spinner, Flex } from "@radix-ui/themes";
-import { use, useEffect, useState, useRef } from "react";
+import { use, useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import { SpaceSummaryStat, StatusNotice, PageTree, PageTreeNode, InlineEditable } from "@components/primitives";
 import { FiHome, FiSettings, FiPlus } from "react-icons/fi";
@@ -17,6 +17,7 @@ interface SpaceDetails {
     whiteboardCount?: number;
     memberCount?: number;
     userRole?: string;
+    archivedAt?: string | null;
 }
 
 interface IPageList {
@@ -72,6 +73,7 @@ export default function Page({ params }: { params: Promise<{ spaceId: string }> 
 
     const space = data?.data;
     const pages = pagesData?.data || [];
+    const isArchived = Boolean(space?.archivedAt);
 
     // Transform pages for mobile PageTree
     const [treeNodes, setTreeNodes] = useState<PageTreeNode[]>([]);
@@ -132,7 +134,7 @@ export default function Page({ params }: { params: Promise<{ spaceId: string }> 
                         <span className="text-[12px] font-semibold">Overview</span>
                     </Link>
                     <Link
-                        href={`/space/${spaceId}/settings`}
+                        href={`/space/${spaceId}/settings/users`}
                         className={cn(
                             "flex flex-1 items-center justify-center gap-2 rounded-md py-2 px-3 transition-colors",
                             isActive(`/space/${spaceId}/settings`) ? "bg-primary-100 text-primary-700" : "text-neutral-500"
@@ -143,12 +145,20 @@ export default function Page({ params }: { params: Promise<{ spaceId: string }> 
                     </Link>
                 </div>
 
+                {isArchived ? (
+                    <StatusNotice
+                        tone="warning"
+                        title="Read-only space"
+                        message="This space is archived. Members can still view content, but page creation and edits are disabled until the space is unarchived."
+                    />
+                ) : null}
+
                 {/* Header Section */}
                 <div className="flex flex-col gap-3 md:gap-4">
                     <InlineEditable
                         value={localName}
                         onSave={(name) => handleSave({ name })}
-                        canEdit={space?.userRole === "owner" || space?.userRole === "admin"}
+                        canEdit={!isArchived && (space?.userRole === "owner" || space?.userRole === "admin")}
                         isLoading={isUpdating}
                         placeholder="Unnamed Space"
                         textClassName="text-[28px] font-bold leading-[1.15] text-neutral-900 md:text-[36px] lg:text-[40px]"
@@ -159,7 +169,7 @@ export default function Page({ params }: { params: Promise<{ spaceId: string }> 
                         <InlineEditable
                             value={localDesc}
                             onSave={(description) => handleSave({ description })}
-                            canEdit={space?.userRole === "owner" || space?.userRole === "admin"}
+                            canEdit={!isArchived && (space?.userRole === "owner" || space?.userRole === "admin")}
                             isLoading={isUpdating}
                             multiline
                             placeholder="Add a space description for your team..."
@@ -168,7 +178,7 @@ export default function Page({ params }: { params: Promise<{ spaceId: string }> 
                         />
 
                         {/* Save Hint - Visibile only if user can edit */}
-                        {(space?.userRole === "owner" || space?.userRole === "admin") && (
+                        {!isArchived && (space?.userRole === "owner" || space?.userRole === "admin") && (
                             <StatusNotice
                                 tone="info"
                                 message="Tip: name and description save automatically as you type."
@@ -201,7 +211,7 @@ export default function Page({ params }: { params: Promise<{ spaceId: string }> 
                 <div className="flex flex-col gap-3 rounded-lg border border-neutral-200 bg-white p-3 md:hidden">
                     <div className="flex items-center justify-between border-b border-neutral-100 pb-2 px-1">
                         <span className="text-[12px] font-bold tracking-wider text-neutral-400 uppercase">PAGES</span>
-                        <button className="text-primary-700">
+                        <button className="text-primary-700" disabled={isArchived} title={isArchived ? "Archived spaces are read-only" : "Add page"}>
                             <FiPlus className="h-[18px] w-[18px] stroke-[2.5]" />
                         </button>
                     </div>

@@ -7,6 +7,17 @@ import { usePathname } from "next/navigation";
 export default function Layout({ children }: { children: React.ReactNode }) {
     const pathname = usePathname();
     const isNotifications = pathname === "/user/notifications";
+
+    if (isNotifications) {
+        return (
+            <div>
+                <MenuBar />
+                <Box className="px-4 pt-16 pb-8 mx-auto max-w-6xl">
+                    {children}
+                </Box>
+            </div>
+        );
+    }
     
     return (
         <div>
