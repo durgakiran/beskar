@@ -72,4 +72,45 @@
     <addForeignKeyConstraint baseTableName="comment_threads" baseTableSchemaName="core" constraintName="fk_ct_document" baseColumnNames="document_id" referencedTableName="page" referencedTableSchemaName="core" referencedColumnNames="id" onDelete="CASCADE"/>
   </changeSet>
 
+  <changeSet id="5-add-inline-comment-anchor-metadata" author="OpenAI Codex">
+    <sql>TRUNCATE TABLE core.comment_threads CASCADE;</sql>
+    <addColumn tableName="comment_threads" schemaName="core">
+      <column name="anchor" type="JSONB">
+        <constraints nullable="false"/>
+      </column>
+      <column name="published_visible" type="BOOLEAN" defaultValueBoolean="false">
+        <constraints nullable="false"/>
+      </column>
+      <column name="orphaned" type="BOOLEAN" defaultValueBoolean="false">
+        <constraints nullable="false"/>
+      </column>
+    </addColumn>
+  </changeSet>
+
+  <changeSet id="6-create-comment-reply-attachments-table" author="kiran kumar">
+    <createTable tableName="comment_reply_attachments" schemaName="core">
+      <column name="id" type="UUID" defaultValueComputed="gen_random_uuid()">
+        <constraints primaryKey="true" nullable="false"/>
+      </column>
+      <column name="reply_id" type="UUID">
+        <constraints nullable="false"
+          foreignKeyName="fk_cra_reply"
+          references="core.comment_replies(id)"
+          deleteCascade="true"/>
+      </column>
+      <column name="attachment_id" type="UUID">
+        <constraints nullable="false"
+          foreignKeyName="fk_cra_attachment"
+          references="core.attachment(id)"
+          deleteCascade="true"/>
+      </column>
+      <column name="created_at" type="TIMESTAMPTZ" defaultValueComputed="now()">
+        <constraints nullable="false"/>
+      </column>
+    </createTable>
+    <sql>
+      GRANT SELECT, INSERT, DELETE ON TABLE core.comment_reply_attachments TO ${app_user};
+    </sql>
+  </changeSet>
+
 </databaseChangeLog>

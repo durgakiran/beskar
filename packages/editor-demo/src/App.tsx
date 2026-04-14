@@ -620,7 +620,7 @@ function App() {
           attachmentHandler={mockAttachmentHandler}
           maxAttachmentBytes={maxAttachmentBytes}
           onAttachmentRejected={onAttachmentRejected}
-          allowedMimeAccept=".pdf,.zip,.doc,.docx,.txt,.csv,application/*"
+          allowedMimeAccept="image/*,audio/*,video/*,text/*,application/pdf,application/json,application/xml,application/zip,application/x-zip-compressed,application/x-7z-compressed,application/vnd.rar,application/gzip,application/x-tar,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation,.pdf,.json,.xml,.zip,.7z,.rar,.gz,.tar,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.csv,.txt,.md,.png,.jpg,.jpeg,.webp,.gif,.mp3,.wav,.mp4,.mov"
           commentHandler={mockCommentHandler}
         />
 
@@ -652,6 +652,7 @@ function App() {
               <CommentInputPopover
                 editor={editor}
                 commentHandler={mockCommentHandler}
+                attachmentHandler={mockAttachmentHandler}
                 documentId="demo-document"
                 onClose={() => setShowCommentPopover(false)}
                 onThreadCreated={async (threadId: string) => {

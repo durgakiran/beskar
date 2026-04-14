@@ -14,12 +14,28 @@ import React, { useState, useRef, useEffect, useLayoutEffect, useMemo, useCallba
 import { createPortal } from 'react-dom';
 import type { Editor } from '@tiptap/core';
 import { FiCheckCircle, FiCornerDownLeft, FiEdit2, FiFile, FiMessageSquare, FiPaperclip, FiRotateCcw, FiTrash2, FiX } from 'react-icons/fi';
-import type { CommentAPIHandler, CommentThread, CommentReply, CommentReplyAttachment } from '../types';
+import type {
+  AttachmentAPIHandler,
+  CommentAPIHandler,
+  CommentThread,
+  CommentReply,
+  CommentReplyAttachment,
+} from '../types';
 import {
   findPositioningParent,
   getAnchorRectForCommentId,
   computePlacementInParent,
 } from '../utils/commentAnchorPositioning';
+import {
+  buildReplyAttachments,
+  CommentAttachmentPills,
+  CommentAvatar,
+  formatCommentRelativeTime,
+  getQuotedText,
+  readFilesFromInputEvent,
+  splitOpeningReply,
+  uploadCommentAttachments,
+} from './comment-ui';
 import './CommentThreadCard.css';
 
 export interface CommentThreadCardProps {
@@ -29,6 +45,7 @@ export interface CommentThreadCardProps {
   /** When the comment span is not in the DOM, use this rect (viewport coords). */
   fallbackAnchorRect?: DOMRect | null;
   commentHandler: CommentAPIHandler;
+  attachmentHandler?: AttachmentAPIHandler;
   presentation?: 'popover' | 'bottom-sheet';
   onClose: () => void;
   onNavigate: (index: number) => void;
@@ -38,51 +55,10 @@ export interface CommentThreadCardProps {
 
 // ─── Utils ────────────────────────────────────────────────────────────────────
 
-function formatRelativeTime(isoString: string): string {
-  const diff = Date.now() - new Date(isoString).getTime();
-  const s = Math.floor(diff / 1000);
-  const m = Math.floor(s / 60);
-  const h = Math.floor(m / 60);
-  const d = Math.floor(h / 24);
-  if (s < 10) return 'just now';
-  if (s < 60) return 'less than a minute ago';
-  if (m < 60) return `${m} minute${m > 1 ? 's' : ''} ago`;
-  if (h < 24) return `${h} hour${h > 1 ? 's' : ''} ago`;
-  return `${d} day${d > 1 ? 's' : ''} ago`;
-}
-
-function getInitials(name: string | null): string {
-  if (!name) return '?';
-  return name.split(' ').map((p) => p[0]).join('').toUpperCase().slice(0, 2);
-}
-
 /**
  * API stores the opening message as the first reply when it matches the thread author.
  * Split it out so we render one author row + quote + body, not a duplicate "reply".
  */
-function splitOpeningReply(thread: CommentThread): {
-  opening: CommentReply | null;
-  followUps: CommentReply[];
-} {
-  const [first, ...rest] = thread.replies;
-  if (!first) return { opening: null, followUps: [] };
-  if (first.authorId === thread.createdBy) {
-    return { opening: first, followUps: rest };
-  }
-  return { opening: null, followUps: thread.replies };
-}
-
-function Avatar({ name, size = 'default' }: { name: string | null; size?: 'default' | 'small' }) {
-  return (
-    <div
-      className={`ctc-avatar ${size === 'small' ? 'ctc-avatar--small' : ''}`}
-      title={name ?? 'Deleted user'}
-    >
-      {getInitials(name)}
-    </div>
-  );
-}
-
 // KebabMenu removed in favor of inline actions.
 
 // ─── Reply Item ───────────────────────────────────────────────────────────────
@@ -92,6 +68,7 @@ interface ReplyItemProps {
   /** Called with new body text AND the final attachment list after edit. */
   onEdit: (body: string, attachments: CommentReplyAttachment[]) => void;
   onDelete: () => void;
+  attachmentHandler?: AttachmentAPIHandler;
   /** Opening message: no second avatar row; sits under the thread quote. */
   variant?: 'default' | 'embedded';
   /** Increment (e.g. from primary Edit btn) to open the embedded editor. */
@@ -102,21 +79,30 @@ function ReplyItem({
   reply,
   onEdit,
   onDelete,
+  attachmentHandler,
   variant = 'default',
   externalEditNonce = 0,
 }: ReplyItemProps) {
+  const editAreaRef = useRef<HTMLDivElement>(null);
   const [editing, setEditing] = useState(false);
   const [editBody, setEditBody] = useState(reply.body);
+  const [editError, setEditError] = useState<string | null>(null);
+  const [isUploadingEditAttachments, setIsUploadingEditAttachments] = useState(false);
   const prevExternalEdit = useRef(0);
 
   // Attachments during edit: existing ones the user keeps, plus new files to add
   const [editAttachments, setEditAttachments] = useState<CommentReplyAttachment[]>(reply.attachments ?? []);
-  const [editNewFiles, setEditNewFiles] = useState<File[]>([]);
+  const [editPendingAttachments, setEditPendingAttachments] = useState<CommentReplyAttachment[]>([]);
+  const [editUploadingFiles, setEditUploadingFiles] = useState<File[]>([]);
   const editFileInputRef = useRef<HTMLInputElement>(null);
-
   useEffect(() => {
     setEditBody(reply.body);
   }, [reply.body]);
+
+  useEffect(() => {
+    if (editPendingAttachments.length === 0) return;
+    editAreaRef.current?.scrollTo({ top: editAreaRef.current.scrollHeight });
+  }, [editPendingAttachments.length]);
 
   useEffect(() => {
     if (variant !== 'embedded' || !externalEditNonce) return;
@@ -124,28 +110,49 @@ function ReplyItem({
       prevExternalEdit.current = externalEditNonce;
       // Reset attachment state to current reply when edit is opened externally
       setEditAttachments(reply.attachments ?? []);
-      setEditNewFiles([]);
+      setEditPendingAttachments([]);
       setEditing(true);
     }
   }, [externalEditNonce, variant, reply.attachments]);
 
   const startEditing = () => {
     setEditAttachments(reply.attachments ?? []);
-    setEditNewFiles([]);
+    setEditPendingAttachments([]);
     setEditing(true);
   };
 
   const cancelEditing = () => {
     setEditing(false);
-    setEditNewFiles([]);
+    setEditError(null);
+    setEditPendingAttachments([]);
+    setEditUploadingFiles([]);
     setEditAttachments(reply.attachments ?? []);
   };
 
-  const handleEditFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files.length > 0) {
-      setEditNewFiles((prev) => [...prev, ...Array.from(e.target.files!)]);
-    }
+  const handleEditFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = readFilesFromInputEvent(e);
     e.target.value = '';
+    if (files.length > 0) {
+      setEditError(null);
+      if (attachmentHandler) {
+        setIsUploadingEditAttachments(true);
+        setEditUploadingFiles((prev) => [...prev, ...files]);
+        try {
+          const { uploaded, failedFiles } = await uploadCommentAttachments(attachmentHandler, files);
+          if (uploaded.length > 0) {
+            setEditPendingAttachments((prev) => [...prev, ...uploaded]);
+          }
+          if (failedFiles.length > 0) {
+            setEditError(`Failed to upload: ${failedFiles.join(', ')}`);
+          }
+        } finally {
+          setEditUploadingFiles((prev) => prev.filter((file) => !files.includes(file)));
+          setIsUploadingEditAttachments(false);
+        }
+      } else {
+        setEditPendingAttachments((prev) => [...prev, ...buildReplyAttachments(files)]);
+      }
+    }
   };
 
   const removeExistingAttachment = (attachmentId: string) => {
@@ -153,28 +160,21 @@ function ReplyItem({
   };
 
   const removeNewFile = (index: number) => {
-    setEditNewFiles((prev) => prev.filter((_, i) => i !== index));
+    setEditPendingAttachments((prev) => prev.filter((_, i) => i !== index));
   };
 
   const submitEdit = () => {
-    if (!editBody.trim() && editAttachments.length === 0 && editNewFiles.length === 0) return;
-    // Convert new files to CommentReplyAttachment using blob URLs
-    const newAtts: CommentReplyAttachment[] = editNewFiles.map((f) => ({
-      attachmentId: `att-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-      fileName: f.name,
-      fileSize: f.size,
-      mimeType: f.type,
-      url: URL.createObjectURL(f),
-    }));
-    onEdit(editBody.trim(), [...editAttachments, ...newAtts]);
+    if ((!editBody.trim() && editAttachments.length === 0 && editPendingAttachments.length === 0) || isUploadingEditAttachments) return;
+    onEdit(editBody.trim(), [...editAttachments, ...editPendingAttachments]);
     setEditing(false);
-    setEditNewFiles([]);
+    setEditError(null);
+    setEditPendingAttachments([]);
   };
 
-  const hasEditAttachments = editAttachments.length > 0 || editNewFiles.length > 0;
+  const hasEditAttachments = editAttachments.length > 0 || editPendingAttachments.length > 0;
 
   const editArea = (
-    <div className="ctc-edit-area">
+    <div ref={editAreaRef} className="ctc-edit-area">
       <textarea
         className="ctc-reply-input-textarea"
         value={editBody}
@@ -188,46 +188,43 @@ function ReplyItem({
       />
 
       {/* Existing retained attachments + new file pills */}
-      {hasEditAttachments && (
-        <div className="ctc-attachments">
-          {editAttachments.map((att) => (
-            <span key={att.attachmentId} className="ctc-attachment-pill ctc-attachment-pill--editable">
-              <FiFile size={11} />
-              {att.fileName}
-              <button
-                type="button"
-                className="ctc-attachment-remove-btn"
-                onClick={() => removeExistingAttachment(att.attachmentId)}
-                title={`Remove ${att.fileName}`}
-              >
-                <FiX size={11} />
-              </button>
-            </span>
-          ))}
-          {editNewFiles.map((file, i) => (
-            <span key={`new-${i}`} className="ctc-attachment-pill ctc-attachment-pill--new">
-              <FiPaperclip size={11} />
-              {file.name}
-              <button
-                type="button"
-                className="ctc-attachment-remove-btn"
-                onClick={() => removeNewFile(i)}
-                title={`Remove ${file.name}`}
-              >
-                <FiX size={11} />
-              </button>
-            </span>
-          ))}
-        </div>
-      )}
+      <CommentAttachmentPills
+        attachments={editAttachments}
+        editable
+        scrollable
+        onRemoveAttachment={removeExistingAttachment}
+      />
+      <CommentAttachmentPills
+        attachments={editPendingAttachments}
+        editable
+        scrollable
+        onRemoveAttachment={(attachmentId) =>
+          setEditPendingAttachments((prev) => prev.filter((att) => att.attachmentId !== attachmentId))
+        }
+      />
+      <CommentAttachmentPills files={editUploadingFiles} scrollable />
+      {editError && <p className="ctc-error-text">{editError}</p>}
+      {isUploadingEditAttachments && <p className="ctc-error-text">Uploading attachment…</p>}
 
       {/* Hidden multi-file input for edit mode */}
       <input
         type="file"
         multiple
         ref={editFileInputRef}
-        style={{ display: 'none' }}
+        style={{
+          position: 'absolute',
+          width: 1,
+          height: 1,
+          padding: 0,
+          margin: -1,
+          overflow: 'hidden',
+          clip: 'rect(0, 0, 0, 0)',
+          whiteSpace: 'nowrap',
+          border: 0,
+        }}
         onChange={handleEditFileChange}
+        tabIndex={-1}
+        aria-hidden="true"
       />
 
       <div className="ctc-edit-actions">
@@ -236,15 +233,17 @@ function ReplyItem({
           type="button"
           className="ctc-attach-btn"
           style={{ marginRight: 'auto' }}
+          onMouseDown={(e) => e.preventDefault()}
           onClick={() => editFileInputRef.current?.click()}
           title="Attach files"
+          disabled={isUploadingEditAttachments}
         >
           <FiPaperclip size={13} /> Attach
         </button>
         <button type="button" className="ctc-btn ctc-btn--ghost" onClick={cancelEditing}>
           Cancel
         </button>
-        <button type="button" className="ctc-btn ctc-btn--primary" onClick={submitEdit}>
+        <button type="button" className="ctc-btn ctc-btn--primary" onClick={submitEdit} disabled={isUploadingEditAttachments}>
           Save
         </button>
       </div>
@@ -253,13 +252,13 @@ function ReplyItem({
 
   return (
     <div className={`ctc-reply-item ${variant === 'embedded' ? 'ctc-reply-item--embedded' : ''}`}>
-      {variant !== 'embedded' && <Avatar name={reply.authorName} size="small" />}
+      {variant !== 'embedded' && <CommentAvatar name={reply.authorName} size="small" />}
       <div className="ctc-reply-body">
         <div className="ctc-reply-header">
           {variant !== 'embedded' && (
             <div className="ctc-reply-meta">
               <span className="ctc-name">{reply.authorName ?? '👤 Deleted'}</span>
-              <span className="ctc-time">{formatRelativeTime(reply.createdAt)}</span>
+              <span className="ctc-time">{formatCommentRelativeTime(reply.createdAt)}</span>
             </div>
           )}
           {reply.authorId && variant !== 'embedded' && (
@@ -276,25 +275,7 @@ function ReplyItem({
         {editing ? editArea : (
           <>
             <p className="ctc-reply-text">{reply.body}</p>
-            {reply.attachments && reply.attachments.length > 0 && (
-              <div className="ctc-attachments">
-                {reply.attachments.map((att) => (
-                  <a
-                    key={att.attachmentId}
-                    href={att.url}
-                    download={att.fileName}
-                    className="ctc-attachment-pill"
-                    title={`Download ${att.fileName}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <FiFile size={11} />
-                    {att.fileName}
-                  </a>
-                ))}
-              </div>
-            )}
+            <CommentAttachmentPills attachments={reply.attachments} />
           </>
         )}
       </div>
@@ -311,6 +292,7 @@ export function CommentThreadCard({
   activeIndex,
   fallbackAnchorRect = null,
   commentHandler,
+  attachmentHandler,
   presentation = 'popover',
   onClose,
   onNavigate,
@@ -318,8 +300,12 @@ export function CommentThreadCard({
   onThreadDeleted,
 }: CommentThreadCardProps) {
   const cardRef = useRef<HTMLDivElement>(null);
+  const replyComposerRef = useRef<HTMLDivElement>(null);
   const [replyBody, setReplyBody] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [replyError, setReplyError] = useState<string | null>(null);
+  const [isUploadingAttachments, setIsUploadingAttachments] = useState(false);
+  const [uploadingFiles, setUploadingFiles] = useState<File[]>([]);
   const [position, setPosition] = useState({ top: 0, left: 0 });
   const [externalEditNonce, setExternalEditNonce] = useState(0);
   /** true = show inline "Delete thread?" confirm row */
@@ -327,20 +313,44 @@ export function CommentThreadCard({
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   // Multiple attachments for the reply composer
-  const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
+  const [pendingAttachments, setPendingAttachments] = useState<CommentReplyAttachment[]>([]);
 
   const handleAttachClick = () => fileInputRef.current?.click();
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files.length > 0) {
-      setAttachedFiles((prev) => [...prev, ...Array.from(e.target.files!)]);
-    }
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = readFilesFromInputEvent(e);
     e.target.value = '';
+    if (files.length > 0) {
+      setReplyError(null);
+      if (attachmentHandler) {
+        setIsUploadingAttachments(true);
+        setUploadingFiles((prev) => [...prev, ...files]);
+        try {
+          const { uploaded, failedFiles } = await uploadCommentAttachments(attachmentHandler, files);
+          if (uploaded.length > 0) {
+            setPendingAttachments((prev) => [...prev, ...uploaded]);
+          }
+          if (failedFiles.length > 0) {
+            setReplyError(`Failed to upload: ${failedFiles.join(', ')}`);
+          }
+        } finally {
+          setUploadingFiles((prev) => prev.filter((file) => !files.includes(file)));
+          setIsUploadingAttachments(false);
+        }
+      } else {
+        setPendingAttachments((prev) => [...prev, ...buildReplyAttachments(files)]);
+      }
+    }
   };
 
   const handleRemoveFile = (index: number) => {
-    setAttachedFiles((prev) => prev.filter((_, i) => i !== index));
+    setPendingAttachments((prev) => prev.filter((_, i) => i !== index));
   };
+
+  useEffect(() => {
+    if (pendingAttachments.length === 0) return;
+    replyComposerRef.current?.scrollTo({ top: replyComposerRef.current.scrollHeight });
+  }, [pendingAttachments.length]);
 
   const thread = threads[activeIndex] ?? null;
 
@@ -401,16 +411,26 @@ export function CommentThreadCard({
 
     const onResize = () => run();
     window.addEventListener('resize', onResize);
+    const resizeObserver =
+      typeof ResizeObserver !== 'undefined' && cardRef.current
+        ? new ResizeObserver(() => run())
+        : null;
+    if (resizeObserver && cardRef.current) {
+      resizeObserver.observe(cardRef.current);
+    }
 
     return () => {
       cancelAnimationFrame(raf);
       window.removeEventListener('resize', onResize);
+      resizeObserver?.disconnect();
     };
   }, [thread, activeIndex, editor, positioningParent, resolveNodeRect]);
 
   useEffect(() => {
     setReplyBody('');
-    setAttachedFiles([]);
+    setPendingAttachments([]);
+    setReplyError(null);
+    setUploadingFiles([]);
   }, [activeIndex]);
 
   // ── Handlers ─────────────────────────────────────────────────────────────
@@ -463,18 +483,13 @@ export function CommentThreadCard({
   // Edit main is now inline via the ReplyItem in the PrimaryCommentBlock.
 
   const handleSubmitReply = async () => {
-    if ((!replyBody.trim() && attachedFiles.length === 0) || !thread || isSubmitting) return;
+    if ((!replyBody.trim() && pendingAttachments.length === 0) || !thread || isSubmitting || isUploadingAttachments) return;
     setIsSubmitting(true);
+    setReplyError(null);
     try {
       let attachments: CommentReplyAttachment[] | undefined;
-      if (attachedFiles.length > 0) {
-        attachments = attachedFiles.map((file) => ({
-          attachmentId: `att-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-          fileName: file.name,
-          fileSize: file.size,
-          mimeType: file.type,
-          url: URL.createObjectURL(file),
-        }));
+      if (pendingAttachments.length > 0) {
+        attachments = pendingAttachments;
       }
       const reply = await commentHandler.addReply(thread.id, replyBody.trim(), attachments);
       // If the handler mutates thread.replies in place (same ref as props), appending again duplicates.
@@ -485,9 +500,10 @@ export function CommentThreadCard({
       };
       onThreadUpdated(updated);
       setReplyBody('');
-      setAttachedFiles([]);
+      setPendingAttachments([]);
     } catch (err) {
       console.error('[CommentThreadCard] addReply failed', err);
+      setReplyError('Failed to send reply. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -565,10 +581,10 @@ export function CommentThreadCard({
         <div className="ctc-thread-body">
           <div className="primary-comment-block">
             <div className="primary-comment-header">
-              <Avatar name={mainAuthor} />
+              <CommentAvatar name={mainAuthor} />
               <div className="primary-comment-meta">
                 <span className="ctc-name">{mainAuthor ?? '👤 Deleted'}</span>
-                <span className="ctc-time">{formatRelativeTime(mainTime)}</span>
+                <span className="ctc-time">{formatCommentRelativeTime(mainTime)}</span>
               </div>
               <div className="primary-comment-actions">
                 {/* Inline delete confirmation */}
@@ -637,7 +653,7 @@ export function CommentThreadCard({
               <p className="ctc-orphaned">The commented text was deleted.</p>
             ) : (
               <div className="primary-comment-quote">
-                "{thread.anchor?.quotedText || (thread as any).quotedText || 'Unknown text'}"
+                "{getQuotedText(thread)}"
               </div>
             )}
 
@@ -645,6 +661,7 @@ export function CommentThreadCard({
               <ReplyItem
                 key={openingReply.id}
                 reply={openingReply}
+                attachmentHandler={attachmentHandler}
                 variant="embedded"
                 externalEditNonce={externalEditNonce}
                 onEdit={(body, attachments) => handleEditReply(openingReply.id, body, attachments)}
@@ -665,6 +682,7 @@ export function CommentThreadCard({
                   <ReplyItem
                     key={reply.id}
                     reply={reply}
+                    attachmentHandler={attachmentHandler}
                     onEdit={(body, attachments) => handleEditReply(reply.id, body, attachments)}
                     onDelete={() => handleDeleteReply(reply.id)}
                   />
@@ -676,7 +694,7 @@ export function CommentThreadCard({
 
         {/* ── Reply composer ── */}
         {!isResolved && (
-          <div className="ctc-reply-composer">
+          <div ref={replyComposerRef} className="ctc-reply-composer">
             <div className="ctc-reply-composer-label">Reply to thread</div>
             <textarea
               className="ctc-reply-textarea"
@@ -690,6 +708,18 @@ export function CommentThreadCard({
                 if (e.key === 'Escape') onClose();
               }}
             />
+            {/* File pills with individual remove buttons */}
+            <CommentAttachmentPills
+              attachments={pendingAttachments}
+              editable
+              scrollable
+              onRemoveAttachment={(attachmentId) =>
+                setPendingAttachments((prev) => prev.filter((att) => att.attachmentId !== attachmentId))
+              }
+            />
+            <CommentAttachmentPills files={uploadingFiles} scrollable />
+            {replyError && <p className="ctc-error-text">{replyError}</p>}
+            {isUploadingAttachments && <p className="ctc-error-text">Uploading attachment…</p>}
             <div className="ctc-reply-composer-actions">
               <input
                 type="file"
@@ -702,37 +732,19 @@ export function CommentThreadCard({
                 className="ctc-attach-btn"
                 type="button"
                 onClick={handleAttachClick}
+                disabled={isUploadingAttachments}
               >
                 <FiPaperclip size={14} /> Attach
               </button>
               <button
                 className="ctc-send-btn"
                 onClick={handleSubmitReply}
-                disabled={(!replyBody.trim() && attachedFiles.length === 0) || isSubmitting}
+                disabled={(!replyBody.trim() && pendingAttachments.length === 0) || isSubmitting || isUploadingAttachments}
                 title="Send (Cmd+Enter)"
               >
                 <FiCornerDownLeft size={14} /> Reply
               </button>
             </div>
-            {/* File pills with individual remove buttons */}
-            {attachedFiles.length > 0 && (
-              <div className="ctc-attachments" style={{ marginTop: 8 }}>
-                {attachedFiles.map((file, i) => (
-                  <span key={`${file.name}-${i}`} className="ctc-attachment-pill ctc-attachment-pill--editable">
-                    <FiPaperclip size={11} />
-                    {file.name}
-                    <button
-                      type="button"
-                      className="ctc-attachment-remove-btn"
-                      onClick={() => handleRemoveFile(i)}
-                      title={`Remove ${file.name}`}
-                    >
-                      <FiX size={11} />
-                    </button>
-                  </span>
-                ))}
-              </div>
-            )}
           </div>
         )}
       </div>

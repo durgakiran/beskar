@@ -143,7 +143,7 @@ export default function Layout({ children, params }: { children: React.ReactNode
     };
 
     return (
-        <div className="flex h-screen w-full overflow-hidden bg-white">
+        <div className="flex h-full w-full overflow-hidden bg-white">
             {/* Sidebar */}
             <aside 
                 className={cn(
@@ -152,7 +152,7 @@ export default function Layout({ children, params }: { children: React.ReactNode
                 )}
                 style={{ width: sidebarWidth }}
             >
-                <div className="flex flex-1 flex-col gap-[14px] p-5 overflow-y-auto">
+                <div className="flex flex-1 flex-col gap-[14px] p-5 min-h-0">
                     {/* Navigation Menu */}
                     <nav className="flex flex-col gap-1.5">
                         <Link

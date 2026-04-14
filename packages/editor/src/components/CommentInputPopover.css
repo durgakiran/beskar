@@ -6,11 +6,15 @@
   box-shadow: var(--shadow-4, 0 4px 24px rgba(32, 0, 56, 0.12), 0 0 0 1px var(--gray-a4, #20003618));
   padding: var(--space-3, 12px);
   width: 320px;
+  max-height: min(420px, calc(100vh - 16px));
   display: flex;
   flex-direction: column;
   gap: var(--space-2, 8px);
   font-family: var(--default-font-family, inherit);
   animation: commentPopoverIn 0.15s ease-out;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
 }
 
 /* Opacity only: inline `transform` sets anchor (right/left of block). */
@@ -136,4 +140,3 @@
   background: var(--gray-5, #dbd7e0);
   color: var(--gray-12, #211f26);
 }
-

@@ -17,6 +17,7 @@
 .ctc-card {
   z-index: 300;
   width: 352px;
+  max-height: min(80vh, 720px);
   font-family: var(--default-font-family, ui-sans-serif, system-ui, sans-serif);
   color: var(--editor-text-primary);
   background: var(--editor-bg-primary);
@@ -97,9 +98,10 @@
 .ctc-thread-body {
   padding: 14px;
   display: flex;
+  flex: 1 1 auto;
   flex-direction: column;
   gap: 12px;
-  max-height: 400px;
+  min-height: 0;
   overflow-y: auto;
 }
 
@@ -129,6 +131,12 @@
 .ctc-time {
   font-size: 12px;
   color: var(--gray-11, #898492);
+}
+
+.ctc-error-text {
+  margin: 0;
+  font-size: 12px;
+  color: var(--red-10, #e5484d);
 }
 
 .ctc-thread-actions {
@@ -339,6 +347,7 @@
 .ctc-reply-body {
   flex: 1;
   min-width: 0;
+  min-height: 0;
   padding-bottom: 16px;
   border-bottom: 1px solid var(--gray-4);
 }
@@ -415,6 +424,12 @@
   flex-wrap: wrap;
   gap: 6px;
   margin-top: 8px;
+}
+
+.ctc-attachments--scrollable {
+  max-height: 96px;
+  overflow-y: auto;
+  padding-right: 4px;
 }
 
 .ctc-attachment-pill {
@@ -582,6 +597,8 @@
   justify-content: flex-end;
   gap: 8px;
   margin-top: 4px;
+  padding-top: 6px;
+  border-top: 1px solid var(--gray-4);
 }
 
 .ctc-attach-btn {

@@ -1,12 +1,21 @@
 import { get, post } from './call';
-import type { CommentAPIHandler, CommentThread, CommentReply } from '@durgakiran/editor';
+import type { CommentAPIHandler, CommentThread, CommentReply, CommentReplyAttachment } from '@durgakiran/editor';
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || '';
+
+const mapBackendAttachment = (a: any): CommentReplyAttachment => ({
+  attachmentId: a.id,
+  url: a.url,
+  fileName: a.fileName,
+  mimeType: a.mimeType,
+  fileSize: a.fileSize,
+});
 
 const mapBackendReply = (r: any): CommentReply => ({
   ...r,
   authorId: r.author?.id || null,
   authorName: r.author?.name || "Deleted User",
+  attachments: (r.attachments || []).map(mapBackendAttachment),
 });
 
 const mapBackendThread = (t: any): CommentThread => ({
@@ -31,10 +40,16 @@ export function makeCommentApiHandler(documentId: string): CommentAPIHandler {
       return (response.data.data as any[]).map(mapBackendThread);
     },
 
-    createThread: async (docId, commentId, quotedText, body) => {
+    createThread: async (docId, commentId, anchor, body, attachments) => {
       const response = await post(
         `${BASE_URL}/api/v1/comment/documents/${docId}/threads`,
-        { commentId, quotedText, body },
+        {
+          commentId,
+          anchor,
+          publishedVisible: anchor.versionHint === 'published',
+          body,
+          attachmentIds: (attachments || []).map((a) => a.attachmentId),
+        },
         {}
       );
       return mapBackendThread(response.data.data);
@@ -74,6 +89,20 @@ export function makeCommentApiHandler(documentId: string): CommentAPIHandler {
       return mapBackendThread(json.data);
     },
 
+    orphanThread: async (threadId) => {
+      const res = await fetch(`${BASE_URL}/api/v1/comment/threads/${threadId}/orphan`, {
+        method: "PATCH",
+        headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${localStorage.getItem("access_token")}`
+        },
+        credentials: "include"
+      });
+      if (!res.ok) throw new Error(`Orphaning failed: ${res.status}`);
+      const json = await res.json();
+      return mapBackendThread(json.data);
+    },
+
     deleteThread: async (threadId) => {
       const res = await fetch(`${BASE_URL}/api/v1/comment/threads/${threadId}`, {
         method: "DELETE",
@@ -83,23 +112,23 @@ export function makeCommentApiHandler(documentId: string): CommentAPIHandler {
       if (!res.ok) throw new Error(`Delete thread failed with status: ${res.status}`);
     },
 
-    addReply: async (threadId, body) => {
+    addReply: async (threadId, body, attachments) => {
       const response = await post(
         `${BASE_URL}/api/v1/comment/threads/${threadId}/replies`,
-        { body },
+        { body, attachmentIds: (attachments || []).map((a) => a.attachmentId) },
         {}
       );
       return mapBackendReply(response.data.data);
     },
 
-    editReply: async (replyId, body) => {
+    editReply: async (replyId, body, attachments) => {
       const res = await fetch(`${BASE_URL}/api/v1/comment/replies/${replyId}`, {
         method: "PATCH",
         headers: {
             "Content-Type": "application/json",
             "Authorization": `Bearer ${localStorage.getItem("access_token")}`
         },
-        body: JSON.stringify({ body }),
+        body: JSON.stringify({ body, attachmentIds: (attachments || []).map((a) => a.attachmentId) }),
         credentials: "include"
       });
       if (!res.ok) throw new Error(`Edit reply failed: ${res.status}`);

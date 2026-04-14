@@ -4,9 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"path/filepath"
+	"strings"
 	"time"
 
+	attachmentservices "github.com/durgakiran/beskar/attachment/services"
+	"github.com/durgakiran/beskar/comment"
 	"github.com/durgakiran/beskar/core"
+	"github.com/durgakiran/beskar/page"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
@@ -352,6 +357,9 @@ func (document InputDocument) Publish() (int64, error) {
 			return document.Id, err
 		}
 	}
+	if err := comment.PromoteComments(ctx, tx, document.Id); err != nil {
+		return document.Id, err
+	}
 	// delete drafts for given docId
 	// ===== put delete on hold for now =====
 	// draftContent := ContentDraft{DocId: docId}
@@ -465,6 +473,146 @@ func GetDocument(pageId int64, spaceId uuid.UUID, ownerId uuid.UUID) (OutputDocu
 	outputDocument.Nodes = nodes
 	tx.Commit(ctx)
 	return outputDocument, nil
+}
+
+func fetchViewSpaceSummary(conn pgx.Tx, ctx context.Context, spaceId uuid.UUID) (ViewSpaceSummary, error) {
+	var summary ViewSpaceSummary
+	err := conn.QueryRow(ctx, getViewSpaceSummary, spaceId).Scan(&summary.Name, &summary.ArchivedAt)
+	return summary, err
+}
+
+func fetchViewMeta(conn pgx.Tx, ctx context.Context, pageId int64) (ViewMeta, error) {
+	var meta ViewMeta
+	err := conn.QueryRow(ctx, getViewDocumentMeta, pageId).Scan(&meta.PublishedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return meta, nil
+	}
+	return meta, err
+}
+
+func attachmentTypeLabel(mimeType string, fileName string) string {
+	switch {
+	case strings.Contains(mimeType, "pdf"):
+		return "pdf"
+	case strings.Contains(mimeType, "zip"):
+		return "zip"
+	case strings.Contains(mimeType, "word"):
+		return "doc"
+	case strings.Contains(mimeType, "sheet"), strings.Contains(mimeType, "excel"), strings.Contains(mimeType, "csv"):
+		return "sheet"
+	case strings.Contains(mimeType, "text"):
+		return "text"
+	}
+
+	ext := strings.TrimPrefix(strings.ToLower(filepath.Ext(fileName)), ".")
+	if ext == "" {
+		return "file"
+	}
+	return ext
+}
+
+func buildCapabilities(pageId int64, ownerId uuid.UUID, archived bool) ViewCapabilities {
+	pageID := fmt.Sprintf("%v", pageId)
+	canEdit, _ := core.CheckPermission("page", pageID, "user", ownerId.String(), core.PAGE_EDIT)
+	canDelete, _ := core.CheckPermission("page", pageID, "user", ownerId.String(), core.PAGE_DELETE)
+	canComment, _ := core.CheckPermission("page", pageID, "user", ownerId.String(), core.PAGE_ADD_COMMENT)
+
+	return ViewCapabilities{
+		CanEdit:    canEdit && !archived,
+		CanDelete:  canDelete && !archived,
+		CanComment: canComment,
+		CanShare:   true,
+	}
+}
+
+func GetDocumentView(pageId int64, spaceId uuid.UUID, ownerId uuid.UUID) (OutputDocumentView, error) {
+	var output OutputDocumentView
+
+	connPool := core.GetPool()
+	ctx := context.Background()
+	conn, err := connPool.Acquire(ctx)
+	if err != nil {
+		logger().Error("Unable to start transaction" + err.Error())
+		return output, err
+	}
+
+	tx, err := conn.Begin(ctx)
+	if err != nil {
+		defer conn.Release()
+		return output, err
+	}
+	defer tx.Rollback(ctx)
+	defer conn.Release()
+
+	summary, err := fetchViewSpaceSummary(tx, ctx, spaceId)
+	if err != nil {
+		return output, err
+	}
+
+	meta, err := fetchViewMeta(tx, ctx, pageId)
+	if err != nil {
+		return output, err
+	}
+
+	var document *OutputDocument
+	doc, err := GetDocument(pageId, spaceId, ownerId)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return output, err
+	}
+	if err == nil && doc.DocId != 0 {
+		document = &doc
+	}
+
+	crumbs, err := page.GetPageBreadCrumbs(pageId)
+	if err != nil {
+		return output, err
+	}
+
+	viewCrumbs := make([]ViewBreadcrumb, 0, len(crumbs))
+	for _, crumb := range crumbs {
+		href := fmt.Sprintf("/space/%s/view/%d", spaceId.String(), crumb.Id)
+		viewCrumbs = append(viewCrumbs, ViewBreadcrumb{
+			Id:    crumb.Id,
+			Title: crumb.Name,
+			Href:  &href,
+		})
+	}
+
+	attachmentRecords, err := attachmentservices.ListAttachmentsForPage(ctx, pageId)
+	if err != nil {
+		return output, err
+	}
+	attachments := make([]ViewAttachment, 0, len(attachmentRecords))
+	for _, record := range attachmentRecords {
+		attachments = append(attachments, ViewAttachment{
+			AttachmentID: record.ID,
+			FileName:     record.FileName,
+			FileSize:     record.FileSize,
+			FileType:     attachmentTypeLabel(record.MimeType, record.FileName),
+			FileURL:      "/api/v1/attachments/" + record.ID,
+		})
+	}
+
+	capabilities := buildCapabilities(pageId, ownerId, summary.ArchivedAt != nil)
+
+	output = OutputDocumentView{
+		PageID:       pageId,
+		SpaceID:      spaceId,
+		PageType:     "document",
+		Title:        "",
+		Document:     document,
+		Breadcrumbs:  viewCrumbs,
+		Space:        summary,
+		Capabilities: capabilities,
+		Meta:         meta,
+		Attachments:  attachments,
+	}
+	if document != nil {
+		output.Title = document.Title
+	}
+
+	tx.Commit(ctx)
+	return output, nil
 }
 
 // Fetches document either with latest draft data or the latest published document

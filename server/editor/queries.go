@@ -69,4 +69,14 @@ const (
 
 	// Page metadata (type lookup)
 	getPageMetadata = `SELECT p.id, p.type, p.space_id AS spaceId FROM core.page p WHERE p.id = $1 AND p.space_id = $2`
+
+	getViewSpaceSummary = `SELECT s.name, s.archived_at
+FROM core.space s
+WHERE s.id = $1`
+
+	getViewDocumentMeta = `SELECT d.version AS published_at
+FROM core.page_doc_map d
+WHERE d.page_id = $1 AND d.draft = 0
+ORDER BY d.version DESC
+LIMIT 1`
 )

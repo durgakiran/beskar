@@ -181,6 +181,7 @@ html {
     color-scheme: light;
     background-color: var(--background);
     color: var(--text);
+    height: 100%;
     --td-background-accent-gray-subtlest: #f4f5f7;
     --td-background-accent-gray-subtlest-hovered: #dfe1e6;
     --td-background-accent-gray-subtlest-pressed: #b3b9c4;
@@ -274,6 +275,8 @@ body {
     font-size: var(--fs-14);
     line-height: var(--lh-20);
     font-weight: var(--fw-regular);
+    height: 100%;
+    margin: 0;
 }
 
 

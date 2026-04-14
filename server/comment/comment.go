@@ -11,6 +11,7 @@ func Router() *chi.Mux {
 
 	r.Patch("/threads/{threadId}/resolve", resolveThread)
 	r.Patch("/threads/{threadId}/unresolve", unresolveThread)
+	r.Patch("/threads/{threadId}/orphan", orphanThread)
 	r.Delete("/threads/{threadId}", deleteThread)
 	r.Post("/threads/{threadId}/replies", createReply)
 

@@ -2,11 +2,14 @@ package comment
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
 
 	"github.com/durgakiran/beskar/core"
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -77,12 +80,12 @@ func hydrateUsers(threads []CommentThread) ([]CommentThread, error) {
 		if name == "" {
 			name = "Unknown User"
 		}
-		
+
 		idToMatch := u.UserId
 		if idToMatch == "" {
 			idToMatch = u.Id
 		}
-		
+
 		internalId := zitaToUser[idToMatch]
 		if internalId != "" {
 			userMap[internalId] = &AuthorInfo{
@@ -124,7 +127,59 @@ func hydrateUsers(threads []CommentThread) ([]CommentThread, error) {
 	return threads, nil
 }
 
-func (s *CommentService) CreateThread(ctx context.Context, docId, commentId, quotedText, body, userId string) (CommentThread, error) {
+func PromoteComments(ctx context.Context, tx pgx.Tx, docId int64) error {
+	_, err := tx.Exec(ctx, PROMOTE_COMMENTS, docId)
+	return err
+}
+
+func attachReplyAttachments(
+	ctx context.Context,
+	q interface {
+		Exec(context.Context, string, ...any) (pgconn.CommandTag, error)
+	},
+	replyID string,
+	attachmentIDs []string,
+) error {
+	for _, attachmentID := range attachmentIDs {
+		if attachmentID == "" {
+			continue
+		}
+		if _, err := q.Exec(ctx, INSERT_REPLY_ATTACHMENT, replyID, attachmentID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func loadReplyAttachments(ctx context.Context, conn *pgxpool.Conn, replyIDs []string) (map[string][]CommentAttachment, error) {
+	result := make(map[string][]CommentAttachment, len(replyIDs))
+	if len(replyIDs) == 0 {
+		return result, nil
+	}
+
+	rows, err := conn.Query(ctx, LIST_REPLY_ATTACHMENTS, replyIDs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var replyID string
+		var att CommentAttachment
+		if err := rows.Scan(&replyID, &att.ID, &att.FileName, &att.MimeType, &att.FileSize, &att.URL); err != nil {
+			return nil, err
+		}
+		result[replyID] = append(result[replyID], att)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return result, nil
+}
+
+func (s *CommentService) CreateThread(ctx context.Context, docId, commentId string, anchor CommentAnchor, publishedVisible bool, body string, attachmentIDs []string, userId string) (CommentThread, error) {
 	connPool := core.GetPool()
 	conn, err := connPool.Acquire(ctx)
 	if err != nil {
@@ -138,14 +193,21 @@ func (s *CommentService) CreateThread(ctx context.Context, docId, commentId, quo
 	}
 	defer tx.Rollback(ctx)
 
+	anchorJSON, err := json.Marshal(anchor)
+	if err != nil {
+		return CommentThread{}, fmt.Errorf("marshal anchor: %w", err)
+	}
+
 	var thread CommentThread
 	thread.DocumentID = docId
 	thread.CommentID = commentId
-	thread.QuotedText = quotedText
+	thread.Anchor = anchor
+	thread.PublishedVisible = publishedVisible
+	thread.Orphaned = false
 	thread.CreatedBy = &AuthorInfo{ID: userId}
 	thread.Replies = make([]CommentReply, 0)
 
-	err = tx.QueryRow(ctx, INSERT_THREAD, docId, commentId, quotedText, userId).Scan(&thread.ID, &thread.CreatedAt)
+	err = tx.QueryRow(ctx, INSERT_THREAD, docId, commentId, anchor.QuotedText, string(anchorJSON), publishedVisible, userId).Scan(&thread.ID, &thread.CreatedAt)
 	if err != nil {
 		return CommentThread{}, fmt.Errorf("insert thread: %w", err)
 	}
@@ -154,10 +216,15 @@ func (s *CommentService) CreateThread(ctx context.Context, docId, commentId, quo
 	reply.ThreadID = thread.ID
 	reply.Author = &AuthorInfo{ID: userId}
 	reply.Body = body
+	reply.Attachments = []CommentAttachment{}
 
 	err = tx.QueryRow(ctx, INSERT_REPLY, thread.ID, userId, body).Scan(&reply.ID, &reply.CreatedAt)
 	if err != nil {
 		return CommentThread{}, fmt.Errorf("insert initial reply: %w", err)
+	}
+
+	if err := attachReplyAttachments(ctx, tx, reply.ID, attachmentIDs); err != nil {
+		return CommentThread{}, fmt.Errorf("attach initial reply attachments: %w", err)
 	}
 
 	thread.Replies = append(thread.Replies, reply)
@@ -166,8 +233,18 @@ func (s *CommentService) CreateThread(ctx context.Context, docId, commentId, quo
 		return CommentThread{}, fmt.Errorf("tx commit: %w", err)
 	}
 
+	if len(attachmentIDs) > 0 {
+		attachmentsByReply, err := loadReplyAttachments(ctx, conn, []string{reply.ID})
+		if err != nil {
+			return CommentThread{}, fmt.Errorf("load initial reply attachments: %w", err)
+		}
+		if atts, ok := attachmentsByReply[reply.ID]; ok {
+			thread.Replies[0].Attachments = atts
+		}
+	}
+
 	// Emit Event (to be implemented)
-	
+
 	// Hydrate the user we just inserted so the API response is complete
 	hydrated, _ := hydrateUsers([]CommentThread{thread})
 	if len(hydrated) > 0 {
@@ -198,6 +275,8 @@ func (s *CommentService) ListThreads(ctx context.Context, docId string, includeR
 	for rows.Next() {
 		var (
 			tID, tCommentID, tQuotedText string
+			tAnchorJSON                  []byte
+			tPublishedVisible, tOrphaned bool
 			tCreatedBy, tResolvedBy      *string
 			tCreatedAt                   time.Time
 			tResolvedAt                  *time.Time
@@ -207,7 +286,7 @@ func (s *CommentService) ListThreads(ctx context.Context, docId string, includeR
 		)
 
 		err := rows.Scan(
-			&tID, &tCommentID, &tQuotedText, &tCreatedBy, &tResolvedBy, &tCreatedAt, &tResolvedAt,
+			&tID, &tCommentID, &tQuotedText, &tAnchorJSON, &tPublishedVisible, &tOrphaned, &tCreatedBy, &tResolvedBy, &tCreatedAt, &tResolvedAt,
 			&rID, &rAuthorID, &rBody, &rEditedAt, &rCreatedAt,
 		)
 		if err != nil {
@@ -215,14 +294,22 @@ func (s *CommentService) ListThreads(ctx context.Context, docId string, includeR
 		}
 
 		if _, exists := threadMap[tID]; !exists {
+			anchor := CommentAnchor{QuotedText: tQuotedText}
+			if len(tAnchorJSON) > 0 {
+				if err := json.Unmarshal(tAnchorJSON, &anchor); err != nil {
+					return nil, fmt.Errorf("unmarshal anchor: %w", err)
+				}
+			}
 			thread := &CommentThread{
-				ID:         tID,
-				DocumentID: docId,
-				CommentID:  tCommentID,
-				QuotedText: tQuotedText,
-				CreatedAt:  tCreatedAt,
-				ResolvedAt: tResolvedAt,
-				Replies:    make([]CommentReply, 0),
+				ID:               tID,
+				DocumentID:       docId,
+				CommentID:        tCommentID,
+				Anchor:           anchor,
+				PublishedVisible: tPublishedVisible,
+				Orphaned:         tOrphaned,
+				CreatedAt:        tCreatedAt,
+				ResolvedAt:       tResolvedAt,
+				Replies:          make([]CommentReply, 0),
 			}
 			if tCreatedBy != nil {
 				thread.CreatedBy = &AuthorInfo{ID: *tCreatedBy}
@@ -237,11 +324,12 @@ func (s *CommentService) ListThreads(ctx context.Context, docId string, includeR
 		// Add reply
 		if rID != nil {
 			reply := CommentReply{
-				ID:        *rID,
-				ThreadID:  tID,
-				Body:      *rBody,
-				CreatedAt: *rCreatedAt,
-				EditedAt:  rEditedAt,
+				ID:          *rID,
+				ThreadID:    tID,
+				Body:        *rBody,
+				CreatedAt:   *rCreatedAt,
+				EditedAt:    rEditedAt,
+				Attachments: []CommentAttachment{},
 			}
 			if rAuthorID != nil {
 				reply.Author = &AuthorInfo{ID: *rAuthorID}
@@ -250,9 +338,35 @@ func (s *CommentService) ListThreads(ctx context.Context, docId string, includeR
 		}
 	}
 
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("rows err: %w", err)
+	}
+
 	result := make([]CommentThread, 0, len(orderedThreads))
 	for _, id := range orderedThreads {
 		result = append(result, *threadMap[id])
+	}
+
+	replyIDs := make([]string, 0)
+	for i := range result {
+		for j := range result[i].Replies {
+			replyIDs = append(replyIDs, result[i].Replies[j].ID)
+		}
+	}
+	if len(replyIDs) > 0 {
+		attachmentsByReply, err := loadReplyAttachments(ctx, conn, replyIDs)
+		if err != nil {
+			return nil, fmt.Errorf("load reply attachments: %w", err)
+		}
+		for i := range result {
+			for j := range result[i].Replies {
+				if atts, ok := attachmentsByReply[result[i].Replies[j].ID]; ok {
+					result[i].Replies[j].Attachments = atts
+				} else {
+					result[i].Replies[j].Attachments = []CommentAttachment{}
+				}
+			}
+		}
 	}
 
 	hydrated, err := hydrateUsers(result)
@@ -280,6 +394,7 @@ func (s *CommentService) ResolveThread(ctx context.Context, threadId, userId str
 		}
 		return CommentThread{}, err
 	}
+	_ = createdBy
 
 	canResolve := false
 	if createdBy != nil && *createdBy == userId {
@@ -295,11 +410,8 @@ func (s *CommentService) ResolveThread(ctx context.Context, threadId, userId str
 		return CommentThread{}, fmt.Errorf("forbidden")
 	}
 
-	var tmp CommentThread
-	err = conn.QueryRow(ctx, RESOLVE_THREAD, userId, threadId).Scan(
-		&tmp.ID, &tmp.DocumentID, &tmp.CommentID, &tmp.QuotedText, 
-		&tmp.CreatedBy, &tmp.ResolvedBy, &tmp.ResolvedAt, &tmp.CreatedAt,
-	)
+	var updatedThreadID string
+	err = conn.QueryRow(ctx, RESOLVE_THREAD, userId, threadId).Scan(&updatedThreadID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			// might already be resolved
@@ -355,11 +467,8 @@ func (s *CommentService) UnresolveThread(ctx context.Context, threadId, userId s
 		return CommentThread{}, fmt.Errorf("forbidden")
 	}
 
-	var tmp CommentThread
-	err = conn.QueryRow(ctx, UNRESOLVE_THREAD, threadId).Scan(
-		&tmp.ID, &tmp.DocumentID, &tmp.CommentID, &tmp.QuotedText, 
-		&tmp.CreatedBy, &tmp.ResolvedBy, &tmp.ResolvedAt, &tmp.CreatedAt,
-	)
+	var updatedThreadID string
+	err = conn.QueryRow(ctx, UNRESOLVE_THREAD, threadId).Scan(&updatedThreadID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			threads, _ := s.ListThreads(ctx, docId, true)
@@ -423,7 +532,49 @@ func (s *CommentService) DeleteThread(ctx context.Context, threadId, userId stri
 	return err
 }
 
-func (s *CommentService) CreateReply(ctx context.Context, threadId, body, userId string) (CommentReply, error) {
+func (s *CommentService) OrphanThread(ctx context.Context, threadId, userId string) (CommentThread, error) {
+	connPool := core.GetPool()
+	conn, err := connPool.Acquire(ctx)
+	if err != nil {
+		return CommentThread{}, err
+	}
+	defer conn.Release()
+
+	var createdBy *string
+	var docId string
+	err = conn.QueryRow(ctx, FETCH_THREAD_BASIC, threadId).Scan(&createdBy, &docId)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return CommentThread{}, fmt.Errorf("not found")
+		}
+		return CommentThread{}, err
+	}
+
+	allowed, _ := core.CheckPermission("page", docId, "user", userId, core.PAGE_ADD_COMMENT)
+	if !allowed {
+		return CommentThread{}, fmt.Errorf("forbidden")
+	}
+
+	var updatedThreadID string
+	err = conn.QueryRow(ctx, ORPHAN_THREAD, threadId).Scan(&updatedThreadID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return CommentThread{}, fmt.Errorf("not found")
+		}
+		return CommentThread{}, err
+	}
+
+	threads, _ := s.ListThreads(ctx, docId, true)
+	for _, t := range threads {
+		if t.ID == updatedThreadID {
+			return t, nil
+		}
+	}
+
+	return CommentThread{}, fmt.Errorf("thread not found after orphaning")
+}
+
+func (s *CommentService) CreateReply(ctx context.Context, threadId, body string, attachmentIDs []string, userId string) (CommentReply, error) {
 	connPool := core.GetPool()
 	conn, err := connPool.Acquire(ctx)
 	if err != nil {
@@ -431,25 +582,47 @@ func (s *CommentService) CreateReply(ctx context.Context, threadId, body, userId
 	}
 	defer conn.Release()
 
+	var createdBy *string
 	var docId string
-	err = conn.QueryRow(ctx, FETCH_THREAD_BASIC, threadId).Scan(nil, &docId)
+	err = conn.QueryRow(ctx, FETCH_THREAD_BASIC, threadId).Scan(&createdBy, &docId)
 	if err != nil {
 		return CommentReply{}, fmt.Errorf("not found")
 	}
+	_ = createdBy
 
 	allowed, _ := core.CheckPermission("page", docId, "user", userId, core.PAGE_ADD_COMMENT)
 	if !allowed {
 		return CommentReply{}, fmt.Errorf("forbidden")
 	}
 
+	tx, err := conn.Begin(ctx)
+	if err != nil {
+		return CommentReply{}, err
+	}
+	defer tx.Rollback(ctx)
+
 	var reply CommentReply
 	reply.ThreadID = threadId
 	reply.Author = &AuthorInfo{ID: userId}
 	reply.Body = body
+	reply.Attachments = []CommentAttachment{}
 
-	err = conn.QueryRow(ctx, INSERT_REPLY, threadId, userId, body).Scan(&reply.ID, &reply.CreatedAt)
+	err = tx.QueryRow(ctx, INSERT_REPLY, threadId, userId, body).Scan(&reply.ID, &reply.CreatedAt)
 	if err != nil {
 		return CommentReply{}, err
+	}
+	if err := attachReplyAttachments(ctx, tx, reply.ID, attachmentIDs); err != nil {
+		return CommentReply{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return CommentReply{}, err
+	}
+	if len(attachmentIDs) > 0 {
+		attachmentsByReply, err := loadReplyAttachments(ctx, conn, []string{reply.ID})
+		if err != nil {
+			return CommentReply{}, err
+		}
+		reply.Attachments = attachmentsByReply[reply.ID]
 	}
 
 	// Hacky way to hydrate one reply
@@ -461,7 +634,7 @@ func (s *CommentService) CreateReply(ctx context.Context, threadId, body, userId
 	return reply, nil
 }
 
-func (s *CommentService) EditReply(ctx context.Context, replyId, body, userId string) (CommentReply, error) {
+func (s *CommentService) EditReply(ctx context.Context, replyId, body string, attachmentIDs []string, userId string) (CommentReply, error) {
 	connPool := core.GetPool()
 	conn, err := connPool.Acquire(ctx)
 	if err != nil {
@@ -485,16 +658,39 @@ func (s *CommentService) EditReply(ctx context.Context, replyId, body, userId st
 		return CommentReply{}, fmt.Errorf("forbidden")
 	}
 
+	tx, err := conn.Begin(ctx)
+	if err != nil {
+		return CommentReply{}, err
+	}
+	defer tx.Rollback(ctx)
+
 	var reply CommentReply
 	var tID string
 	var aID *string
-	err = conn.QueryRow(ctx, UPDATE_REPLY, body, replyId, userId).Scan(&reply.ID, &tID, &aID, &reply.Body, &reply.EditedAt, &reply.CreatedAt)
+	err = tx.QueryRow(ctx, UPDATE_REPLY, body, replyId, userId).Scan(&reply.ID, &tID, &aID, &reply.Body, &reply.EditedAt, &reply.CreatedAt)
 	if err != nil {
 		return CommentReply{}, err
 	}
 	reply.ThreadID = tID
+	reply.Attachments = []CommentAttachment{}
 	if aID != nil {
 		reply.Author = &AuthorInfo{ID: *aID}
+	}
+	if _, err := tx.Exec(ctx, DELETE_REPLY_ATTACHMENTS, replyId); err != nil {
+		return CommentReply{}, err
+	}
+	if err := attachReplyAttachments(ctx, tx, replyId, attachmentIDs); err != nil {
+		return CommentReply{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return CommentReply{}, err
+	}
+	if len(attachmentIDs) > 0 {
+		attachmentsByReply, err := loadReplyAttachments(ctx, conn, []string{reply.ID})
+		if err != nil {
+			return CommentReply{}, err
+		}
+		reply.Attachments = attachmentsByReply[reply.ID]
 	}
 
 	t := CommentThread{Replies: []CommentReply{reply}}

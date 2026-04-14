@@ -34,3 +34,7 @@ func getPageBreadCrumbs(pageId int64) ([]Crumb, error) {
 	}
 	return crumbs, nil
 }
+
+func GetPageBreadCrumbs(pageId int64) ([]Crumb, error) {
+	return getPageBreadCrumbs(pageId)
+}

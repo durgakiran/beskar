@@ -64,12 +64,19 @@ func createThread(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.CommentID == "" || req.Body == "" || req.QuotedText == "" {
+	if req.CommentID == "" || req.Anchor.QuotedText == "" || (req.Body == "" && len(req.AttachmentIDs) == 0) {
 		core.SendFailedReponse(w, r, http.StatusUnprocessableEntity, "Missing required fields")
 		return
 	}
 
-	thread, err := svc.CreateThread(ctx, docId, req.CommentID, req.QuotedText, req.Body, user.AId)
+	publishedVisible := false
+	if req.PublishedVisible != nil {
+		publishedVisible = *req.PublishedVisible
+	} else if req.Anchor.VersionHint == "published" {
+		publishedVisible = true
+	}
+
+	thread, err := svc.CreateThread(ctx, docId, req.CommentID, req.Anchor, publishedVisible, req.Body, req.AttachmentIDs, user.AId)
 	if err != nil {
 		core.SendFailedReponse(w, r, http.StatusInternalServerError, err.Error())
 		return
@@ -82,7 +89,7 @@ func createThread(w http.ResponseWriter, r *http.Request) {
 func resolveThread(w http.ResponseWriter, r *http.Request) {
 	threadId := chi.URLParam(r, "threadId")
 	ctx := r.Context()
-	
+
 	user, err := core.GetUserInfo(ctx)
 	if err != nil {
 		core.SendFailedReponse(w, r, http.StatusUnauthorized, "Unauthorized")
@@ -106,7 +113,7 @@ func resolveThread(w http.ResponseWriter, r *http.Request) {
 func unresolveThread(w http.ResponseWriter, r *http.Request) {
 	threadId := chi.URLParam(r, "threadId")
 	ctx := r.Context()
-	
+
 	user, err := core.GetUserInfo(ctx)
 	if err != nil {
 		core.SendFailedReponse(w, r, http.StatusUnauthorized, "Unauthorized")
@@ -148,10 +155,36 @@ func deleteThread(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// We only have threadId in SSE, so payload is { id: threadId }
-	// We don't have documentID readily unless we fetch it before deletion, which is already dropped maybe. 
+	// We don't have documentID readily unless we fetch it before deletion, which is already dropped maybe.
 	// Wait, DeleteThread fetches it inside Service. Let's fix Service to return DocumentID
 	// To save time, we can fetch it before calling delete
 	core.SendSuccessResponse(w, r, http.StatusNoContent, nil)
+}
+
+func orphanThread(w http.ResponseWriter, r *http.Request) {
+	threadId := chi.URLParam(r, "threadId")
+	ctx := r.Context()
+
+	user, err := core.GetUserInfo(ctx)
+	if err != nil {
+		core.SendFailedReponse(w, r, http.StatusUnauthorized, "Unauthorized")
+		return
+	}
+
+	thread, err := svc.OrphanThread(ctx, threadId, user.AId)
+	if err != nil {
+		switch err.Error() {
+		case "forbidden":
+			core.SendFailedReponse(w, r, http.StatusForbidden, "Forbidden")
+		case "not found":
+			core.SendFailedReponse(w, r, http.StatusNotFound, "Thread not found")
+		default:
+			core.SendFailedReponse(w, r, http.StatusInternalServerError, err.Error())
+		}
+		return
+	}
+
+	core.SendSuccessResponse(w, r, http.StatusOK, thread)
 }
 
 func createReply(w http.ResponseWriter, r *http.Request) {
@@ -171,12 +204,12 @@ func createReply(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.Body == "" {
+	if req.Body == "" && len(req.AttachmentIDs) == 0 {
 		core.SendFailedReponse(w, r, http.StatusUnprocessableEntity, "Missing required fields")
 		return
 	}
 
-	reply, err := svc.CreateReply(ctx, threadId, req.Body, user.AId)
+	reply, err := svc.CreateReply(ctx, threadId, req.Body, req.AttachmentIDs, user.AId)
 	if err != nil {
 		if err.Error() == "not found" {
 			core.SendFailedReponse(w, r, http.StatusNotFound, "Thread not found")
@@ -191,7 +224,7 @@ func createReply(w http.ResponseWriter, r *http.Request) {
 	// Fetch documentId from thread
 	// In a real scenario we'd query it or return it from the service.
 	// For now we'll just not send it via SSE if we don't have it, but wait! The client filters by DocumentID.
-	
+
 	core.SendSuccessResponse(w, r, http.StatusCreated, reply)
 }
 
@@ -212,12 +245,12 @@ func editReply(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.Body == "" {
+	if req.Body == "" && len(req.AttachmentIDs) == 0 {
 		core.SendFailedReponse(w, r, http.StatusUnprocessableEntity, "Missing required fields")
 		return
 	}
 
-	reply, err := svc.EditReply(ctx, replyId, req.Body, user.AId)
+	reply, err := svc.EditReply(ctx, replyId, req.Body, req.AttachmentIDs, user.AId)
 	if err != nil {
 		if err.Error() == "forbidden" {
 			core.SendFailedReponse(w, r, http.StatusForbidden, "Forbidden")

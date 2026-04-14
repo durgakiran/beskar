@@ -12,13 +12,18 @@ import { createPortal } from 'react-dom';
 import { Button } from '@radix-ui/themes';
 import { Editor } from '@tiptap/core';
 import { FiPaperclip, FiX } from 'react-icons/fi';
-import type { CommentAPIHandler, CommentReplyAttachment } from '../types';
+import type { AttachmentAPIHandler, CommentAPIHandler, CommentReplyAttachment } from '../types';
 import {
   findPositioningParent,
   getAnchorRectForRange,
   computePlacementInParent,
 } from '../utils/commentAnchorPositioning';
 import { extractAnchor } from '../utils/anchorResolution';
+import {
+  buildReplyAttachments,
+  readFilesFromInputEvent,
+  uploadCommentAttachments,
+} from './comment-ui';
 import './CommentInputPopover.css';
 
 const POPOVER_WIDTH_PX = 320;
@@ -27,6 +32,7 @@ const POPOVER_APPROX_HEIGHT_PX = 270;
 export interface CommentInputPopoverProps {
   editor: Editor;
   commentHandler: CommentAPIHandler;
+  attachmentHandler?: AttachmentAPIHandler;
   documentId: string;
   onClose: () => void;
   onThreadCreated?: (threadId: string) => void;
@@ -35,15 +41,18 @@ export interface CommentInputPopoverProps {
 export function CommentInputPopover({
   editor,
   commentHandler,
+  attachmentHandler,
   documentId,
   onClose,
   onThreadCreated,
 }: CommentInputPopoverProps) {
   const [body, setBody] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isUploadingAttachments, setIsUploadingAttachments] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Multiple attachments
-  const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
+  const [attachedFiles, setAttachedFiles] = useState<CommentReplyAttachment[]>([]);
+  const [uploadingFiles, setUploadingFiles] = useState<File[]>([]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -84,22 +93,32 @@ export function CommentInputPopover({
       if (!captured) return;
       const rect = getAnchorRectForRange(editor, captured.from, captured.to);
       if (!rect || (rect.width === 0 && rect.height === 0)) return;
-      setPlacement(
-        computePlacementInParent(parent, rect, {
-          elementWidth: POPOVER_WIDTH_PX,
-          elementHeight: POPOVER_APPROX_HEIGHT_PX,
-        }),
+      const elementHeight = popoverRef.current?.offsetHeight ?? POPOVER_APPROX_HEIGHT_PX;
+      const nextPlacement = computePlacementInParent(parent, rect, {
+        elementWidth: POPOVER_WIDTH_PX,
+        elementHeight,
+      });
+      setPlacement((prev) =>
+        prev.left === nextPlacement.left && prev.top === nextPlacement.top ? prev : nextPlacement,
       );
     };
 
     applyPlacement();
     window.addEventListener('resize', applyPlacement);
+    const resizeObserver =
+      typeof ResizeObserver !== 'undefined' && popoverRef.current
+        ? new ResizeObserver(() => applyPlacement())
+        : null;
+    if (resizeObserver && popoverRef.current) {
+      resizeObserver.observe(popoverRef.current);
+    }
 
     return () => {
       if (madeRelative) {
         parent.style.position = '';
       }
       window.removeEventListener('resize', applyPlacement);
+      resizeObserver?.disconnect();
     };
   }, [editor, positioningParent]);
 
@@ -111,11 +130,32 @@ export function CommentInputPopover({
 
   const handleAttachClick = () => fileInputRef.current?.click();
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files.length > 0) {
-      setAttachedFiles((prev) => [...prev, ...Array.from(e.target.files!)]);
-    }
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = readFilesFromInputEvent(e);
     e.target.value = ''; // Reset so the same file can be re-selected
+    if (files.length === 0) return;
+
+    setError(null);
+    if (files.length > 0) {
+      if (attachmentHandler) {
+        setIsUploadingAttachments(true);
+        setUploadingFiles((prev) => [...prev, ...files]);
+        try {
+          const { uploaded, failedFiles } = await uploadCommentAttachments(attachmentHandler, files);
+          if (uploaded.length > 0) {
+            setAttachedFiles((prev) => [...prev, ...uploaded]);
+          }
+          if (failedFiles.length > 0) {
+            setError(`Failed to upload: ${failedFiles.join(', ')}`);
+          }
+        } finally {
+          setUploadingFiles((prev) => prev.filter((file) => !files.includes(file)));
+          setIsUploadingAttachments(false);
+        }
+      } else {
+        setAttachedFiles((prev) => [...prev, ...buildReplyAttachments(files)]);
+      }
+    }
   };
 
   const handleRemoveFile = (index: number) => {
@@ -123,7 +163,7 @@ export function CommentInputPopover({
   };
 
   const handleSubmit = async () => {
-    if ((!body.trim() && attachedFiles.length === 0) || isSubmitting) return;
+    if ((!body.trim() && attachedFiles.length === 0) || isSubmitting || isUploadingAttachments) return;
 
     const anchor = extractAnchor(editor);
     if (!anchor) {
@@ -131,17 +171,7 @@ export function CommentInputPopover({
       return;
     }
 
-    let attachments: CommentReplyAttachment[] | undefined;
-    if (attachedFiles.length > 0) {
-      attachments = attachedFiles.map((file) => ({
-        attachmentId: `att-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-        fileName: file.name,
-        fileSize: file.size,
-        mimeType: file.type,
-        // Blob URL — downloadable this session. Replace with real upload URL in production.
-        url: URL.createObjectURL(file),
-      }));
-    }
+    const attachments = attachedFiles.length > 0 ? attachedFiles : undefined;
 
     const commentId = crypto.randomUUID();
     setIsSubmitting(true);
@@ -204,27 +234,34 @@ export function CommentInputPopover({
       />
 
       {/* Attached files preview — one pill per file */}
-      {attachedFiles.length > 0 && (
+      {(attachedFiles.length > 0 || uploadingFiles.length > 0) && (
         <div className="comment-input-attachment-row">
           {attachedFiles.map((file, i) => (
-            <span key={`${file.name}-${i}`} className="comment-input-attachment-pill">
+            <span key={`${file.attachmentId}-${i}`} className="comment-input-attachment-pill">
               <FiPaperclip size={11} />
-              {file.name}
+              {file.fileName}
               <button
                 type="button"
                 className="comment-input-attachment-remove"
                 onClick={() => handleRemoveFile(i)}
-                title={`Remove ${file.name}`}
+                title={`Remove ${file.fileName}`}
                 disabled={isSubmitting}
               >
                 <FiX size={11} />
               </button>
             </span>
           ))}
+          {uploadingFiles.map((file, i) => (
+            <span key={`uploading-${file.name}-${i}`} className="comment-input-attachment-pill">
+              <FiPaperclip size={11} />
+              {file.name}
+            </span>
+          ))}
         </div>
       )}
 
       {error && <p className="comment-input-error">{error}</p>}
+      {isUploadingAttachments && <p className="comment-input-error">Uploading attachment…</p>}
 
       {/* Hidden multi-file input */}
       <input
@@ -241,7 +278,7 @@ export function CommentInputPopover({
           type="button"
           className="comment-input-attach-btn"
           onClick={handleAttachClick}
-          disabled={isSubmitting}
+          disabled={isSubmitting || isUploadingAttachments}
           title="Attach files"
         >
           <FiPaperclip size={14} />
@@ -257,7 +294,7 @@ export function CommentInputPopover({
           color="plum"
           size="2"
           onClick={handleSubmit}
-          disabled={(!body.trim() && attachedFiles.length === 0) || isSubmitting}
+          disabled={(!body.trim() && attachedFiles.length === 0) || isSubmitting || isUploadingAttachments}
           title="Submit (Cmd+Enter)"
         >
           {isSubmitting ? 'Saving…' : 'Comment'}

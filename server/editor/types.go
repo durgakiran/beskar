@@ -99,6 +99,52 @@ type OutputDocument struct {
 	Nodes NodeData `json:"nodeData"`
 }
 
+type ViewBreadcrumb struct {
+	Id    int64   `json:"id"`
+	Title string  `json:"title"`
+	Href  *string `json:"href"`
+}
+
+type ViewSpaceSummary struct {
+	Name       string     `json:"name"`
+	ArchivedAt *time.Time `json:"archivedAt"`
+}
+
+type ViewCapabilities struct {
+	CanEdit    bool `json:"canEdit"`
+	CanDelete  bool `json:"canDelete"`
+	CanComment bool `json:"canComment"`
+	CanShare   bool `json:"canShare"`
+}
+
+type ViewMeta struct {
+	CreatedByName *string    `json:"createdByName,omitempty"`
+	UpdatedByName *string    `json:"updatedByName,omitempty"`
+	UpdatedAt     *time.Time `json:"updatedAt,omitempty"`
+	PublishedAt   *time.Time `json:"publishedAt,omitempty"`
+}
+
+type ViewAttachment struct {
+	AttachmentID string `json:"attachmentId"`
+	FileName     string `json:"fileName"`
+	FileSize     int64  `json:"fileSize"`
+	FileType     string `json:"fileType"`
+	FileURL      string `json:"fileUrl"`
+}
+
+type OutputDocumentView struct {
+	PageID       int64            `json:"pageId"`
+	SpaceID      uuid.UUID        `json:"spaceId"`
+	PageType     string           `json:"pageType"`
+	Title        string           `json:"title"`
+	Document     *OutputDocument  `json:"document"`
+	Breadcrumbs  []ViewBreadcrumb `json:"breadcrumbs"`
+	Space        ViewSpaceSummary `json:"space"`
+	Capabilities ViewCapabilities `json:"capabilities"`
+	Meta         ViewMeta         `json:"meta"`
+	Attachments  []ViewAttachment `json:"attachments"`
+}
+
 type OutputDocumentToEdit struct {
 	Document
 	Data  ContentDraft `json:"data"`

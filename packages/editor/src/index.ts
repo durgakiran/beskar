@@ -59,6 +59,7 @@ export type {
   CommentAnchor,
   CommentThread,
   CommentReply,
+  CommentReplyAttachment,
 } from './types';
 
 // Hooks

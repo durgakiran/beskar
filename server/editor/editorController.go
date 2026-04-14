@@ -61,7 +61,7 @@ func getDocumentToView(w http.ResponseWriter, r *http.Request) {
 		core.SendFailedReponse(w, r, http.StatusInternalServerError, "Unable to get document")
 		return
 	}
-	outputDocument, err := GetDocument(page, spaceId, ownerId)
+	outputDocument, err := GetDocumentView(page, spaceId, ownerId)
 	if errors.Is(err, pgx.ErrNoRows) {
 		core.SendSuccessResponse(w, r, http.StatusOK, nil)
 		return

@@ -164,6 +164,32 @@ WHERE id = $1::uuid AND deleted_at IS NULL`
 	return &rec, nil
 }
 
+// ListAttachmentsForPage returns active attachments for a page in newest-first order.
+func ListAttachmentsForPage(ctx context.Context, pageID int64) ([]AttachmentRecord, error) {
+	pool := core.GetPool()
+	const q = `SELECT id::text, page_id, storage_path, file_name, file_size, mime_type, created_by
+FROM core.attachment
+WHERE page_id = $1 AND deleted_at IS NULL
+ORDER BY created_at DESC, id DESC`
+
+	rows, err := pool.Query(ctx, q, pageID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	records, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (AttachmentRecord, error) {
+		var rec AttachmentRecord
+		err := row.Scan(&rec.ID, &rec.PageID, &rec.StoragePath, &rec.FileName, &rec.FileSize, &rec.MimeType, &rec.CreatedBy)
+		return rec, err
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return records, nil
+}
+
 // ReadAttachmentBytes loads file bytes from disk using storage_path relative to process cwd.
 func ReadAttachmentBytes(storagePath string) ([]byte, error) {
 	norm := strings.ReplaceAll(storagePath, "\\", "/")

@@ -31,6 +31,7 @@ import {
     CommentGutter,
     CommentThreadCard,
     CommentSidePanel,
+    OverlapDisambiguationPopover,
     type CommentThread,
 } from "@durgakiran/editor";
 
@@ -50,12 +51,13 @@ interface TipTapProps {
     onDocAttachmentsChange?: (attachments: AttachmentRef[]) => void;
     isInlineMessageSidePanelOpen?: boolean;
     setIsInlineMessageSidePanelOpen?: (open: boolean) => void;
+    commentPresentation?: "docked" | "bottom-sheet";
 }
 
 const MAX_DEFAULT_WIDTH = 760;
 const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
 const ATTACHMENT_ACCEPT =
-    "application/pdf,application/zip,application/x-zip-compressed,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/plain,text/csv,.pdf,.zip,.doc,.docx,.xls,.xlsx,.csv,.txt";
+    "image/*,audio/*,video/*,text/*,application/pdf,application/json,application/xml,application/zip,application/x-zip-compressed,application/x-7z-compressed,application/vnd.rar,application/gzip,application/x-tar,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation,.pdf,.json,.xml,.zip,.7z,.rar,.gz,.tar,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.csv,.txt,.md,.png,.jpg,.jpeg,.webp,.gif,.mp3,.wav,.mp4,.mov";
 
 interface UserInfo {
     email: string;
@@ -78,7 +80,8 @@ export function TipTap({
     ydoc,
     onDocAttachmentsChange,
     isInlineMessageSidePanelOpen = false,
-    setIsInlineMessageSidePanelOpen
+    setIsInlineMessageSidePanelOpen,
+    commentPresentation = "docked",
 }: TipTapProps) {
     const [editedData, setEditedData] = useState(null);
     const menuContainerRef = useRef(null);
@@ -92,11 +95,12 @@ export function TipTap({
     // ─── Inline Comments State ───
     const commentApiHandler = useMemo(() => makeCommentApiHandler(pageId), [pageId]);
     const [threads, setThreads] = useState<CommentThread[]>([]);
-    const [activeCommentIds, setActiveCommentIds] = useState<Set<string>>(new Set());
     const [showCommentPopover, setShowCommentPopover] = useState(false);
     const [commentCardOpen, setCommentCardOpen] = useState(false);
     const [cardFallbackRect, setCardFallbackRect] = useState<DOMRect | null>(null);
     const [cardActiveIndex, setCardActiveIndex] = useState<number>(0);
+    const [ambiguousThreads, setAmbiguousThreads] = useState<CommentThread[]>([]);
+    const [ambiguityRect, setAmbiguityRect] = useState<DOMRect | null>(null);
     const [showComments, setShowComments] = useState(true);
     const [resolvedCount, setResolvedCount] = useState(0);
 
@@ -206,65 +210,57 @@ export function TipTap({
         console.log("Editor ready:", editorInstance);
         setEditor(editorInstance);
 
-        // Load active comment IDs for orphan detection
-        const ids = new Set<string>();
-        editorInstance.state.doc.descendants((node) => {
-            node.marks.forEach((mark) => {
-                if (mark.type.name === 'comment' && mark.attrs.commentId) {
-                    ids.add(mark.attrs.commentId);
-                }
-            });
-        });
-        setActiveCommentIds(ids);
         reloadThreads();
     }, [reloadThreads]);
-
-    useEffect(() => {
-        if (!editor) return;
-        const updateIds = () => {
-            const ids = new Set<string>();
-            editor.state.doc.descendants((node) => {
-                node.marks.forEach((mark) => {
-                    if (mark.type.name === 'comment' && mark.attrs.commentId) {
-                        ids.add(mark.attrs.commentId);
-                    }
-                });
-            });
-            setActiveCommentIds(ids);
-        };
-        editor.on('update', updateIds);
-        return () => { editor.off('update', updateIds); };
-    }, [editor]);
-
-    // Derived threads state with orphans explicitly tracked
-    const derivedThreads = useMemo(() => {
-        return threads.map(t => ({
-            ...t,
-            orphaned: !activeCommentIds.has(t.commentId),
-        }));
-    }, [threads, activeCommentIds]);
 
     // Editor bounds click for opening comments
     useEffect(() => {
         if (!editor) return;
         const editorDom = editor.view.dom as HTMLElement;
-        const handleClick = async (e: MouseEvent) => {
-            const target = e.target as HTMLElement;
-            const span = target.closest('[data-comment-id]') as HTMLElement | null;
-            if (!span) return;
-            e.stopPropagation();
-            const commentId = span.getAttribute('data-comment-id');
-            if (!commentId) return;
-
+        const openThreadCard = async (threadId: string) => {
             const latestThreads = await reloadThreads();
-            const threadIdx = latestThreads.findIndex((t) => t.commentId === commentId);
+            const threadIdx = latestThreads.findIndex((t) => t.id === threadId);
             setCardFallbackRect(null);
             setCardActiveIndex(threadIdx >= 0 ? threadIdx : 0);
             setCommentCardOpen(true);
         };
+
+        const handleCommentClicked = (e: Event) => {
+            const customEvent = e as CustomEvent<{ commentId?: string }>;
+            const threadId = customEvent.detail?.commentId;
+            if (!threadId) return;
+            void openThreadCard(threadId);
+        };
+
+        const handleAmbiguityDetected = (e: Event) => {
+            const customEvent = e as CustomEvent<{ commentIds?: string[]; rect?: DOMRect }>;
+            const commentIds = customEvent.detail?.commentIds ?? [];
+            if (commentIds.length === 0) return;
+            const matchingThreads = threads.filter((thread) => commentIds.includes(thread.id));
+            if (matchingThreads.length === 0) return;
+            setAmbiguousThreads(matchingThreads);
+            setAmbiguityRect(customEvent.detail?.rect ?? null);
+        };
+
+        const handleClick = (e: MouseEvent) => {
+            const target = e.target as HTMLElement;
+            const span = target.closest('[data-comment-id]') as HTMLElement | null;
+            if (!span) return;
+            e.stopPropagation();
+            const threadId = span.getAttribute('data-comment-id');
+            if (!threadId) return;
+            void openThreadCard(threadId);
+        };
+
+        editorDom.addEventListener('COMMENT_CLICKED', handleCommentClicked as EventListener);
+        editorDom.addEventListener('COMMENT_AMBIGUITY_DETECTED', handleAmbiguityDetected as EventListener);
         editorDom.addEventListener('click', handleClick);
-        return () => editorDom.removeEventListener('click', handleClick);
-    }, [editor, reloadThreads]);
+        return () => {
+            editorDom.removeEventListener('COMMENT_CLICKED', handleCommentClicked as EventListener);
+            editorDom.removeEventListener('COMMENT_AMBIGUITY_DETECTED', handleAmbiguityDetected as EventListener);
+            editorDom.removeEventListener('click', handleClick);
+        };
+    }, [editor, reloadThreads, threads]);
 
     // Thread helpers
     const handleThreadUpdated = useCallback((updated: CommentThread) => {
@@ -292,7 +288,7 @@ export function TipTap({
         const thread = threads.find((t) => t.id === threadId);
         if (!thread) return;
 
-        const span = editor.view.dom.querySelector(`[data-comment-id="${thread.commentId}"]`) as HTMLElement | null;
+        const span = editor.view.dom.querySelector(`[data-comment-id="${thread.id}"]`) as HTMLElement | null;
         if (span) {
             setCardFallbackRect(null);
         } else {
@@ -393,10 +389,12 @@ export function TipTap({
             {editor && (
                 <CommentSidePanel
                     editor={editor}
-                    threads={derivedThreads}
+                    threads={threads}
                     commentHandler={commentApiHandler}
+                    attachmentHandler={attachmentHandler}
                     documentId={pageId}
                     isOpen={isInlineMessageSidePanelOpen}
+                    presentation={!editable ? commentPresentation : "docked"}
                     onClose={() => setIsInlineMessageSidePanelOpen(false)}
                     onThreadUpdated={handleThreadUpdated}
                     onThreadDeleted={handleThreadDeleted}
@@ -422,16 +420,19 @@ export function TipTap({
 
                     {showComments && (
                         <>
-                            <CommentGutter
-                                editor={editor}
-                                threads={derivedThreads}
-                                onThreadClick={handleGutterThreadClick}
-                            />
+                            {(editable || commentPresentation === "docked") ? (
+                                <CommentGutter
+                                    editor={editor}
+                                    threads={threads}
+                                    onThreadClick={handleGutterThreadClick}
+                                />
+                            ) : null}
 
                             {showCommentPopover && (
                                 <CommentInputPopover
                                     editor={editor}
                                     commentHandler={commentApiHandler}
+                                    attachmentHandler={attachmentHandler}
                                     documentId={pageId}
                                     onClose={() => setShowCommentPopover(false)}
                                     onThreadCreated={async (threadId: string) => {
@@ -445,13 +446,37 @@ export function TipTap({
                                 />
                             )}
 
-                            {commentCardOpen && derivedThreads.length > 0 && cardActiveIndex < derivedThreads.length && (
+                            {ambiguousThreads.length > 0 && ambiguityRect && (
+                                <OverlapDisambiguationPopover
+                                    editor={editor}
+                                    threads={ambiguousThreads}
+                                    anchorRect={ambiguityRect}
+                                    onClose={() => {
+                                        setAmbiguousThreads([]);
+                                        setAmbiguityRect(null);
+                                    }}
+                                    onSelect={(thread: CommentThread) => {
+                                        const idx = threads.findIndex((t) => t.id === thread.id);
+                                        if (idx >= 0) {
+                                            setCardFallbackRect(null);
+                                            setCardActiveIndex(idx);
+                                            setCommentCardOpen(true);
+                                        }
+                                        setAmbiguousThreads([]);
+                                        setAmbiguityRect(null);
+                                    }}
+                                />
+                            )}
+
+                            {commentCardOpen && threads.length > 0 && cardActiveIndex < threads.length && (
                                 <CommentThreadCard
                                     editor={editor}
-                                    threads={derivedThreads}
+                                    threads={threads}
                                     activeIndex={cardActiveIndex}
                                     fallbackAnchorRect={cardFallbackRect}
                                     commentHandler={commentApiHandler}
+                                    attachmentHandler={attachmentHandler}
+                                    presentation={!editable ? (commentPresentation === "bottom-sheet" ? "bottom-sheet" : "popover") : "popover"}
                                     onClose={() => setCommentCardOpen(false)}
                                     onNavigate={setCardActiveIndex}
                                     onThreadUpdated={handleThreadUpdated}

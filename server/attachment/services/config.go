@@ -3,21 +3,34 @@ package services
 import (
 	"os"
 	"strconv"
+	"strings"
 )
 
-// AllowedMimeTypes — client hint + server gate (extend as product needs).
+// AllowedMimeTypes — explicit application/* types that are commonly safe/useful as attachments.
 var AllowedMimeTypes = map[string]bool{
 	"application/pdf": true,
-	"application/zip": true,
-	// Some browsers / OSes
-	"application/x-zip-compressed":                                            true,
-	"application/vnd.ms-excel":                                                true,
-	"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":       true,
-	"application/msword":                                                      true,
-	"application/vnd.openxmlformats-officedocument.wordprocessingml.document": true,
-	"text/plain":       true,
-	"text/csv":         true,
 	"application/json": true,
+	"application/zip": true,
+	"application/x-zip-compressed": true,
+	"application/x-7z-compressed": true,
+	"application/vnd.rar": true,
+	"application/gzip": true,
+	"application/x-tar": true,
+	"application/msword": true,
+	"application/vnd.openxmlformats-officedocument.wordprocessingml.document": true,
+	"application/vnd.ms-excel": true,
+	"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": true,
+	"application/vnd.ms-powerpoint": true,
+	"application/vnd.openxmlformats-officedocument.presentationml.presentation": true,
+	"application/xml": true,
+}
+
+// AllowedMimePrefixes — broader safe categories we accept by default.
+var AllowedMimePrefixes = []string{
+	"text/",
+	"image/",
+	"audio/",
+	"video/",
 }
 
 // DeniedMimeTypes — executables and obvious script delivery types.
@@ -50,5 +63,13 @@ func MimeAllowed(mime string) bool {
 	if DeniedMimeTypes[mime] {
 		return false
 	}
-	return AllowedMimeTypes[mime]
+	if AllowedMimeTypes[mime] {
+		return true
+	}
+	for _, prefix := range AllowedMimePrefixes {
+		if strings.HasPrefix(mime, prefix) {
+			return true
+		}
+	}
+	return false
 }

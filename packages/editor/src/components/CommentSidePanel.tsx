@@ -6,9 +6,26 @@
  */
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { Editor } from '@tiptap/core';
-import { FiArrowLeft, FiCheck, FiCheckCircle, FiCornerDownLeft, FiEdit2, FiFile, FiMessageSquare, FiPaperclip, FiRotateCcw, FiSend, FiTrash2, FiUser, FiX } from 'react-icons/fi';
-import type { CommentAPIHandler, CommentThread, CommentReply, CommentReplyAttachment } from '../types';
+import { FiArrowLeft, FiCheckCircle, FiCornerDownLeft, FiEdit2, FiFile, FiMessageSquare, FiPaperclip, FiRotateCcw, FiSend, FiTrash2, FiX } from 'react-icons/fi';
+import type {
+  AttachmentAPIHandler,
+  CommentAPIHandler,
+  CommentThread,
+  CommentReply,
+  CommentReplyAttachment,
+} from '../types';
 import { commentDecorationKey } from '../extensions/comment-decoration';
+import {
+  buildReplyAttachments,
+  CommentAttachmentPills,
+  CommentAvatar,
+  formatCommentRelativeTime,
+  getQuotedText,
+  readFilesFromInputEvent,
+  splitOpeningReply,
+  uploadCommentAttachments,
+} from './comment-ui';
+import './CommentThreadCard.css';
 import './CommentSidePanel.css';
 
 export interface CommentSidePanelProps {
@@ -19,46 +36,10 @@ export interface CommentSidePanelProps {
   isOpen: boolean;
   presentation?: 'docked' | 'bottom-sheet';
   activeThreadId?: string | null;
+  attachmentHandler?: AttachmentAPIHandler;
   onClose: () => void;
   onThreadUpdated: (thread: CommentThread) => void;
   onThreadDeleted: (threadId: string) => void;
-}
-
-// ─── Utils ────────────────────────────────────────────────────────────────────
-
-function formatRelativeTime(isoString: string): string {
-  const diff = Date.now() - new Date(isoString).getTime();
-  const mins = Math.floor(diff / 60000);
-  const hours = Math.floor(mins / 60);
-  const days = Math.floor(hours / 24);
-  if (mins < 1) return 'just now';
-  if (mins < 60) return `${mins}m ago`;
-  if (hours < 24) return `${hours}h ago`;
-  return `${days}d ago`;
-}
-
-function getInitials(name: string | null): string {
-  if (!name) return '?';
-  return name
-    .split(' ')
-    .map((p) => p[0])
-    .join('')
-    .toUpperCase()
-    .slice(0, 2);
-}
-
-// ─── Sub-components ───────────────────────────────────────────────────────────
-
-function Avatar({ name }: { name: string | null }) {
-  return (
-    <div className="csp-avatar" title={name ?? 'Deleted user'}>
-      {name ? getInitials(name) : '👤'}
-    </div>
-  );
-}
-
-function getQuotedText(thread: CommentThread): string {
-  return thread.anchor?.quotedText || (thread as any).quotedText || 'Unknown text';
 }
 
 function getThreadPreview(thread: CommentThread): string {
@@ -67,93 +48,148 @@ function getThreadPreview(thread: CommentThread): string {
   return 'Open thread';
 }
 
-function splitOpeningReply(thread: CommentThread): {
-  opening: CommentReply | null;
-  followUps: CommentReply[];
-} {
-  const [first, ...rest] = thread.replies;
-  if (!first) return { opening: null, followUps: [] };
-  if (first.authorId === thread.createdBy) {
-    return { opening: first, followUps: rest };
-  }
-  return { opening: null, followUps: thread.replies };
-}
-
 interface ReplyItemProps {
   reply: CommentReply;
   readonlyMode?: boolean;
   onDelete: (replyId: string) => void;
-  onEdit: (replyId: string, newBody: string) => void;
+  onEdit: (replyId: string, newBody: string, attachments: CommentReplyAttachment[]) => void;
+  attachmentHandler?: AttachmentAPIHandler;
 }
 
-function ReplyItem({ reply, readonlyMode = false, onDelete, onEdit }: ReplyItemProps) {
+function ReplyItem({ reply, readonlyMode = false, onDelete, onEdit, attachmentHandler }: ReplyItemProps) {
   const [editing, setEditing] = useState(false);
   const [editBody, setEditBody] = useState(reply.body);
+  const [editAttachments, setEditAttachments] = useState<CommentReplyAttachment[]>(reply.attachments ?? []);
+  const [editPendingAttachments, setEditPendingAttachments] = useState<CommentReplyAttachment[]>([]);
+  const [editUploadingFiles, setEditUploadingFiles] = useState<File[]>([]);
+  const [editError, setEditError] = useState<string | null>(null);
+  const [isUploadingEditAttachments, setIsUploadingEditAttachments] = useState(false);
+  const editFileInputRef = useRef<HTMLInputElement>(null);
 
   const submitEdit = () => {
-    if (!editBody.trim()) return;
-    onEdit(reply.id, editBody.trim());
+    if ((!editBody.trim() && editAttachments.length === 0 && editPendingAttachments.length === 0) || isUploadingEditAttachments) return;
+    onEdit(reply.id, editBody.trim(), [...editAttachments, ...editPendingAttachments]);
     setEditing(false);
+    setEditError(null);
+    setEditPendingAttachments([]);
+  };
+  const cancelEdit = () => {
+    setEditing(false);
+    setEditBody(reply.body);
+    setEditAttachments(reply.attachments ?? []);
+    setEditPendingAttachments([]);
+    setEditUploadingFiles([]);
+    setEditError(null);
+  };
+  const startEdit = () => {
+    setEditBody(reply.body);
+    setEditAttachments(reply.attachments ?? []);
+    setEditPendingAttachments([]);
+    setEditing(true);
+  };
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = readFilesFromInputEvent(e);
+    e.target.value = '';
+    if (files.length > 0) {
+      setEditError(null);
+      if (attachmentHandler) {
+        setIsUploadingEditAttachments(true);
+        setEditUploadingFiles((prev) => [...prev, ...files]);
+        try {
+          const { uploaded, failedFiles } = await uploadCommentAttachments(attachmentHandler, files);
+          if (uploaded.length > 0) {
+            setEditPendingAttachments((prev) => [...prev, ...uploaded]);
+          }
+          if (failedFiles.length > 0) {
+            setEditError(`Failed to upload: ${failedFiles.join(', ')}`);
+          }
+        } finally {
+          setEditUploadingFiles((prev) => prev.filter((file) => !files.includes(file)));
+          setIsUploadingEditAttachments(false);
+        }
+      } else {
+        setEditPendingAttachments((prev) => [...prev, ...buildReplyAttachments(files)]);
+      }
+    }
   };
 
-  const hasAttachments = !!(reply.attachments && reply.attachments.length > 0);
-
   return (
-    <div className="csp-reply">
-      <Avatar name={reply.authorName} />
-      <div className="csp-reply-content">
-        <div className="csp-reply-header">
-          <span className="csp-author">{reply.authorName ?? '👤 Deleted User'}</span>
-          <span className="csp-ts">{formatRelativeTime(reply.createdAt)}</span>
+    <div className="ctc-reply-item">
+      <CommentAvatar name={reply.authorName} size="small" />
+      <div className="ctc-reply-body">
+        <div className="ctc-reply-header">
+          <div className="ctc-reply-meta">
+            <span className="ctc-name">{reply.authorName ?? '👤 Deleted User'}</span>
+            <span className="ctc-time">{formatCommentRelativeTime(reply.createdAt)}</span>
+          </div>
           {!readonlyMode && reply.authorId && (
-            <div className="csp-reply-actions">
-              <button className="csp-icon-btn" title="Edit" onClick={() => setEditing(true)}>
-                <FiEdit2 size={12} />
+            <div className="ctc-reply-actions">
+              <button className="ctc-tiny-btn" title="Edit" onClick={startEdit}>
+                <FiEdit2 size={13} />
               </button>
-              <button className="csp-icon-btn csp-icon-btn--danger" title="Delete" onClick={() => onDelete(reply.id)}>
-                <FiTrash2 size={12} />
+              <button className="ctc-tiny-btn ctc-tiny-btn--danger" title="Delete" onClick={() => onDelete(reply.id)}>
+                <FiTrash2 size={13} />
               </button>
             </div>
           )}
         </div>
         {editing ? (
-          <div className="csp-reply-edit">
+          <div className="ctc-edit-area">
             <textarea
-              className="csp-textarea"
+              className="ctc-reply-input-textarea"
               value={editBody}
               onChange={(e) => setEditBody(e.target.value)}
               rows={2}
               autoFocus
               onKeyDown={(e) => {
                 if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') submitEdit();
-                if (e.key === 'Escape') setEditing(false);
+                if (e.key === 'Escape') cancelEdit();
               }}
             />
-            <div className="csp-reply-edit-actions">
-              <button className="csp-btn csp-btn--ghost" onClick={() => setEditing(false)}>Cancel</button>
-              <button className="csp-btn csp-btn--primary" onClick={submitEdit}>Save</button>
+            <CommentAttachmentPills
+              attachments={editAttachments}
+              editable
+              scrollable
+              onRemoveAttachment={(attachmentId) =>
+                setEditAttachments((prev) => prev.filter((att) => att.attachmentId !== attachmentId))
+              }
+            />
+            <CommentAttachmentPills
+              attachments={editPendingAttachments}
+              editable
+              scrollable
+              onRemoveAttachment={(attachmentId) =>
+                setEditPendingAttachments((prev) => prev.filter((att) => att.attachmentId !== attachmentId))
+              }
+            />
+            <CommentAttachmentPills files={editUploadingFiles} scrollable />
+            {editError && <p className="ctc-error-text">{editError}</p>}
+            {isUploadingEditAttachments && <p className="ctc-error-text">Uploading attachment…</p>}
+            <input
+              type="file"
+              multiple
+              ref={editFileInputRef}
+              style={{ display: 'none' }}
+              onChange={handleFileChange}
+            />
+            <div className="ctc-edit-actions">
+              <button
+                type="button"
+                className="ctc-attach-btn"
+                style={{ marginRight: 'auto' }}
+                onClick={() => editFileInputRef.current?.click()}
+                disabled={isUploadingEditAttachments}
+              >
+                <FiPaperclip size={13} /> Attach
+              </button>
+              <button className="ctc-btn ctc-btn--ghost" onClick={cancelEdit}>Cancel</button>
+              <button className="ctc-btn ctc-btn--primary" onClick={submitEdit} disabled={isUploadingEditAttachments}>Save</button>
             </div>
           </div>
         ) : (
           <>
-            <p className="csp-reply-body">{reply.body}</p>
-            {hasAttachments && (
-              <div className="csp-attachments">
-                {reply.attachments!.map((att) => (
-                  <a
-                    key={att.attachmentId}
-                    href={att.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="csp-attachment-pill"
-                    title={`${att.fileName} (${(att.fileSize / 1024).toFixed(1)} KB)`}
-                  >
-                    <FiFile size={12} />
-                    <span>{att.fileName}</span>
-                  </a>
-                ))}
-              </div>
-            )}
+            <p className="ctc-reply-text">{reply.body}</p>
+            <CommentAttachmentPills attachments={reply.attachments} />
           </>
         )}
       </div>
@@ -171,7 +207,8 @@ interface ThreadCardProps {
   onDelete: (threadId: string) => void;
   onAddReply: (threadId: string, body: string, attachments?: CommentReplyAttachment[]) => void;
   onDeleteReply: (threadId: string, replyId: string) => void;
-  onEditReply: (replyId: string, newBody: string) => void;
+  onEditReply: (replyId: string, newBody: string, attachments: CommentReplyAttachment[]) => void;
+  attachmentHandler?: AttachmentAPIHandler;
 }
 
 function ThreadCard({
@@ -185,10 +222,15 @@ function ThreadCard({
   onAddReply,
   onDeleteReply,
   onEditReply,
+  attachmentHandler,
 }: ThreadCardProps) {
   const [replyBody, setReplyBody] = useState('');
   const [isSubmittingReply, setIsSubmittingReply] = useState(false);
   const [pendingAttachments, setPendingAttachments] = useState<CommentReplyAttachment[]>([]);
+  const [uploadingFiles, setUploadingFiles] = useState<File[]>([]);
+  const [replyError, setReplyError] = useState<string | null>(null);
+  const [isUploadingAttachments, setIsUploadingAttachments] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const cardRef = useRef<HTMLElement | null>(null);
 
   // Scroll into view when active
@@ -199,29 +241,49 @@ function ThreadCard({
   }, [isActive]);
 
   const submitReply = async () => {
-    if ((!replyBody.trim() && pendingAttachments.length === 0) || isSubmittingReply) return;
+    if ((!replyBody.trim() && pendingAttachments.length === 0) || isSubmittingReply || isUploadingAttachments) return;
     setIsSubmittingReply(true);
-    await onAddReply(thread.id, replyBody.trim(), pendingAttachments);
-    setReplyBody('');
-    setPendingAttachments([]);
-    setIsSubmittingReply(false);
+    setReplyError(null);
+    try {
+      await onAddReply(thread.id, replyBody.trim(), pendingAttachments);
+      setReplyBody('');
+      setPendingAttachments([]);
+    } catch {
+      setReplyError('Failed to send reply. Please try again.');
+    } finally {
+      setIsSubmittingReply(false);
+    }
   };
-
-  const handleMockAttach = () => {
-    const mockAtt: CommentReplyAttachment = {
-      attachmentId: crypto.randomUUID(),
-      fileName: 'analysis-report.pdf',
-      fileSize: 1024 * 1250,
-      mimeType: 'application/pdf',
-      url: '#',
-    };
-    setPendingAttachments((prev) => [...prev, mockAtt]);
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = readFilesFromInputEvent(e);
+    e.target.value = '';
+    if (files.length > 0) {
+      setReplyError(null);
+      if (attachmentHandler) {
+        setIsUploadingAttachments(true);
+        setUploadingFiles((prev) => [...prev, ...files]);
+        try {
+          const { uploaded, failedFiles } = await uploadCommentAttachments(attachmentHandler, files);
+          if (uploaded.length > 0) {
+            setPendingAttachments((prev) => [...prev, ...uploaded]);
+          }
+          if (failedFiles.length > 0) {
+            setReplyError(`Failed to upload: ${failedFiles.join(', ')}`);
+          }
+        } finally {
+          setUploadingFiles((prev) => prev.filter((file) => !files.includes(file)));
+          setIsUploadingAttachments(false);
+        }
+      } else {
+        setPendingAttachments((prev) => [...prev, ...buildReplyAttachments(files)]);
+      }
+    }
   };
 
   const isResolved = !!thread.resolvedAt;
   const isOrphaned = !!thread.orphaned;
   const quotedText = getQuotedText(thread);
-  const { opening } = splitOpeningReply(thread);
+  const { opening, followUps } = splitOpeningReply(thread);
   const rootBody = opening?.body?.trim() || getThreadPreview(thread);
 
   if (isReadOnly) {
@@ -235,10 +297,10 @@ function ThreadCard({
       >
         <div className="primary-comment-block">
           <div className="primary-comment-header">
-            <Avatar name={thread.createdByName} />
+            <CommentAvatar name={thread.createdByName} />
             <div className="csp-thread-meta">
               <span className="csp-author">{thread.createdByName ?? 'Deleted user'}</span>
-              <span className="csp-ts">{formatRelativeTime((opening ?? thread).createdAt)}</span>
+              <span className="csp-ts">{formatCommentRelativeTime((opening ?? thread).createdAt)}</span>
             </div>
             <div className="primary-comment-actions">
               {!isResolved && !isOrphaned ? (
@@ -300,70 +362,67 @@ function ThreadCard({
       className={`csp-thread-card ${isActive ? 'is-active' : ''} ${isResolved ? 'is-resolved' : ''} ${isOrphaned ? 'is-orphaned' : ''}`}
       data-thread-id={thread.id}
     >
-      {/* Thread header */}
-      <div className="csp-thread-header">
-        <Avatar name={thread.createdByName} />
-        <div className="csp-thread-meta">
-          <span className="csp-author">{thread.createdByName ?? '👤 Deleted User'}</span>
-          <span className="csp-ts">{formatRelativeTime(thread.createdAt)}</span>
-        </div>
-        <div className="csp-thread-actions">
-          {!isResolved && !isOrphaned && (
+      <div className="primary-comment-block">
+        <div className="primary-comment-header">
+          <CommentAvatar name={thread.createdByName} />
+          <div className="primary-comment-meta">
+            <span className="ctc-name">{thread.createdByName ?? '👤 Deleted User'}</span>
+            <span className="ctc-time">{formatCommentRelativeTime(thread.createdAt)}</span>
+          </div>
+          <div className="primary-comment-actions">
+            {!isResolved && !isOrphaned && (
+              <button
+                className="primary-comment-action-btn"
+                title="Resolve thread"
+                onClick={() => onResolve(thread.id)}
+              >
+                <FiCheckCircle size={14} />
+              </button>
+            )}
+            {isResolved && !isOrphaned && (
+              <button
+                className="primary-comment-action-btn"
+                title="Unresolve thread"
+                onClick={() => onUnresolve(thread.id)}
+              >
+                <FiRotateCcw size={14} />
+              </button>
+            )}
             <button
-              className="csp-icon-btn csp-icon-btn--resolve"
-              title="Resolve thread"
-              onClick={() => onResolve(thread.id)}
+              className="primary-comment-action-btn primary-comment-action-btn--danger"
+              title="Delete thread"
+              onClick={() => onDelete(thread.id)}
             >
-              <FiCheck size={14} />
+              <FiTrash2 size={14} />
             </button>
-          )}
-          {isResolved && !isOrphaned && (
-            <button
-              className="csp-icon-btn csp-icon-btn--unresolve"
-              title="Unresolve thread"
-              onClick={() => onUnresolve(thread.id)}
-            >
-              ↩
-            </button>
-          )}
-          <button
-            className="csp-icon-btn csp-icon-btn--danger"
-            title="Delete thread"
-            onClick={() => onDelete(thread.id)}
-          >
-            <FiTrash2 size={14} />
-          </button>
+          </div>
         </div>
+
+        {isOrphaned ? (
+          <p className="ctc-orphaned">The commented text was deleted.</p>
+        ) : (
+          <div className="primary-comment-quote">"{quotedText}"</div>
+        )}
+
+        <p className="primary-comment-body">{rootBody}</p>
       </div>
 
-      {/* Quoted text or orphaned badge */}
-      {isOrphaned ? (
-        <p className="csp-orphaned-badge">⚠ Text was deleted</p>
-      ) : (
-        <blockquote className="csp-quoted-text">
-          "{quotedText}"
-        </blockquote>
-      )}
-
-      {/* Resolved badge */}
-      {isResolved && (
-        <span className="csp-resolved-badge">✓ Resolved</span>
-      )}
-
-      {/* Replies */}
-      {thread.replies.length > 0 && (
-        <div className="csp-replies-wrap">
-          {isReadOnly && <div className="csp-section-label">Discussion</div>}
-          <div className="csp-replies">
-          {thread.replies.map((r) => (
-            <ReplyItem
-              key={r.id}
-              reply={r}
-              onDelete={(rid) => onDeleteReply(thread.id, rid)}
-              onEdit={onEditReply}
-            />
-          ))}
-        </div>
+      {followUps.length > 0 && (
+        <div className="ctc-discussion-section">
+          <div className="ctc-discussion-header">Discussion</div>
+          <div className="ctc-replies-list">
+            <div className="ctc-discussion-dot" />
+            <div className="ctc-threading-line" />
+            {followUps.map((reply) => (
+              <ReplyItem
+                key={reply.id}
+                reply={reply}
+                attachmentHandler={attachmentHandler}
+                onDelete={(rid) => onDeleteReply(thread.id, rid)}
+                onEdit={onEditReply}
+              />
+            ))}
+          </div>
         </div>
       )}
 
@@ -371,25 +430,46 @@ function ThreadCard({
       {!isResolved && (
         <div className={`csp-reply-composer ${isReadOnly ? 'is-readonly' : ''}`}>
           {isReadOnly && <div className="csp-section-label">Reply to thread</div>}
-          <div className="csp-reply-input">
-            <textarea
-              className="csp-textarea"
-              placeholder="Write a reply..."
-              value={replyBody}
-              onChange={(e) => setReplyBody(e.target.value)}
-              rows={1}
-              disabled={isSubmittingReply}
-              onKeyDown={(e) => {
-                if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') submitReply();
-              }}
+          <textarea
+            className="ctc-reply-textarea"
+            placeholder="Write a reply..."
+            value={replyBody}
+            onChange={(e) => setReplyBody(e.target.value)}
+            rows={3}
+            disabled={isSubmittingReply}
+            onKeyDown={(e) => {
+              if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') submitReply();
+            }}
+          />
+          <CommentAttachmentPills
+            attachments={pendingAttachments}
+            editable
+            scrollable
+            onRemoveAttachment={(attachmentId) =>
+              setPendingAttachments((prev) => prev.filter((att) => att.attachmentId !== attachmentId))
+            }
+          />
+          <CommentAttachmentPills files={uploadingFiles} scrollable />
+          {replyError && <p className="ctc-error-text">{replyError}</p>}
+          {isUploadingAttachments && <p className="ctc-error-text">Uploading attachment…</p>}
+          <div className="ctc-reply-composer-actions">
+            <input
+              type="file"
+              multiple
+              ref={fileInputRef}
+              style={{ display: 'none' }}
+              onChange={handleFileChange}
             />
+            <button className="ctc-attach-btn" type="button" onClick={() => fileInputRef.current?.click()} disabled={isUploadingAttachments}>
+              <FiPaperclip size={14} /> Attach
+            </button>
             <button
-              className="csp-send-btn"
-              disabled={(!replyBody.trim() && pendingAttachments.length === 0) || isSubmittingReply}
+              className="ctc-send-btn"
+              disabled={(!replyBody.trim() && pendingAttachments.length === 0) || isSubmittingReply || isUploadingAttachments}
               onClick={submitReply}
               title="Send reply (Cmd+Enter)"
             >
-              <FiSend size={14} />
+              <FiCornerDownLeft size={14} /> Reply
             </button>
           </div>
         </div>
@@ -408,7 +488,8 @@ interface ThreadDetailProps {
   onDeleteThread: (threadId: string) => void;
   onAddReply: (threadId: string, body: string, attachments?: CommentReplyAttachment[]) => void;
   onDeleteReply: (threadId: string, replyId: string) => void;
-  onEditReply: (replyId: string, newBody: string) => void;
+  onEditReply: (replyId: string, newBody: string, attachments: CommentReplyAttachment[]) => void;
+  attachmentHandler?: AttachmentAPIHandler;
 }
 
 function ThreadDetail({
@@ -422,30 +503,55 @@ function ThreadDetail({
   onAddReply,
   onDeleteReply,
   onEditReply,
+  attachmentHandler,
 }: ThreadDetailProps) {
   const [replyBody, setReplyBody] = useState('');
   const [isSubmittingReply, setIsSubmittingReply] = useState(false);
   const [pendingAttachments, setPendingAttachments] = useState<CommentReplyAttachment[]>([]);
+  const [uploadingFiles, setUploadingFiles] = useState<File[]>([]);
+  const [replyError, setReplyError] = useState<string | null>(null);
+  const [isUploadingAttachments, setIsUploadingAttachments] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const { opening, followUps } = splitOpeningReply(thread);
 
   const submitReply = async () => {
-    if ((!replyBody.trim() && pendingAttachments.length === 0) || isSubmittingReply) return;
+    if ((!replyBody.trim() && pendingAttachments.length === 0) || isSubmittingReply || isUploadingAttachments) return;
     setIsSubmittingReply(true);
-    await onAddReply(thread.id, replyBody.trim(), pendingAttachments);
-    setReplyBody('');
-    setPendingAttachments([]);
-    setIsSubmittingReply(false);
+    setReplyError(null);
+    try {
+      await onAddReply(thread.id, replyBody.trim(), pendingAttachments);
+      setReplyBody('');
+      setPendingAttachments([]);
+    } catch {
+      setReplyError('Failed to send reply. Please try again.');
+    } finally {
+      setIsSubmittingReply(false);
+    }
   };
-
-  const handleMockAttach = () => {
-    const mockAtt: CommentReplyAttachment = {
-      attachmentId: crypto.randomUUID(),
-      fileName: 'analysis-report.pdf',
-      fileSize: 1024 * 1250,
-      mimeType: 'application/pdf',
-      url: '#',
-    };
-    setPendingAttachments((prev) => [...prev, mockAtt]);
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = readFilesFromInputEvent(e);
+    e.target.value = '';
+    if (files.length > 0) {
+      setReplyError(null);
+      if (attachmentHandler) {
+        setIsUploadingAttachments(true);
+        setUploadingFiles((prev) => [...prev, ...files]);
+        try {
+          const { uploaded, failedFiles } = await uploadCommentAttachments(attachmentHandler, files);
+          if (uploaded.length > 0) {
+            setPendingAttachments((prev) => [...prev, ...uploaded]);
+          }
+          if (failedFiles.length > 0) {
+            setReplyError(`Failed to upload: ${failedFiles.join(', ')}`);
+          }
+        } finally {
+          setUploadingFiles((prev) => prev.filter((file) => !files.includes(file)));
+          setIsUploadingAttachments(false);
+        }
+      } else {
+        setPendingAttachments((prev) => [...prev, ...buildReplyAttachments(files)]);
+      }
+    }
   };
 
   const isResolved = !!thread.resolvedAt;
@@ -473,10 +579,10 @@ function ThreadDetail({
       <div className="csp-body csp-body--thread">
         <div className="primary-comment-block">
           <div className="primary-comment-header">
-            <Avatar name={thread.createdByName} />
+            <CommentAvatar name={thread.createdByName} />
             <div className="primary-comment-meta">
               <span className="csp-author">{thread.createdByName ?? 'Deleted user'}</span>
-              <span className="csp-ts">{formatRelativeTime((opening ?? thread).createdAt)}</span>
+              <span className="csp-ts">{formatCommentRelativeTime((opening ?? thread).createdAt)}</span>
             </div>
             <div className="primary-comment-actions">
               {!isResolved && (
@@ -498,28 +604,31 @@ function ThreadDetail({
           <p className="primary-comment-body">{opening?.body?.trim() || getThreadPreview(thread)}</p>
         </div>
 
-        <div className="csp-discussion-header">
-          <FiMessageSquare size={13} />
-          <span>Discussion</span>
-        </div>
-
-        <div className="csp-replies">
-          {followUps.map((reply) => (
-            <ReplyItem
-              key={reply.id}
-              reply={reply}
-              readonlyMode={!isEditable}
-              onDelete={(replyId) => onDeleteReply(thread.id, replyId)}
-              onEdit={onEditReply}
-            />
-          ))}
-        </div>
+        {followUps.length > 0 && (
+          <div className="ctc-discussion-section">
+            <div className="ctc-discussion-header">Discussion</div>
+            <div className="ctc-replies-list">
+              <div className="ctc-discussion-dot" />
+              <div className="ctc-threading-line" />
+              {followUps.map((reply) => (
+                <ReplyItem
+                  key={reply.id}
+                  reply={reply}
+                  readonlyMode={!isEditable}
+                  attachmentHandler={attachmentHandler}
+                  onDelete={(replyId) => onDeleteReply(thread.id, replyId)}
+                  onEdit={onEditReply}
+                />
+              ))}
+            </div>
+          </div>
+        )}
 
         {!isResolved && (
           <div className="csp-reply-composer">
             <div className="csp-reply-composer-label">Reply to thread</div>
             <textarea
-              className="csp-textarea"
+              className="ctc-reply-textarea"
               placeholder="Write a reply..."
               value={replyBody}
               onChange={(e) => setReplyBody(e.target.value)}
@@ -529,30 +638,31 @@ function ThreadDetail({
                 if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') submitReply();
               }}
             />
-            {pendingAttachments.length > 0 && (
-              <div className="csp-attachments" style={{ marginBottom: 8, padding: '0 4px' }}>
-                {pendingAttachments.map((att) => (
-                  <div key={att.attachmentId} className="csp-attachment-pill">
-                    <FiFile size={12} />
-                    <span>{att.fileName}</span>
-                    <button
-                      type="button"
-                      style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: '0 0 0 4px', color: 'var(--gray-9)' }}
-                      onClick={() => setPendingAttachments(prev => prev.filter(a => a.attachmentId !== att.attachmentId))}
-                    >
-                      <FiX size={10} />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-            <div className="csp-reply-composer-actions">
-              <button className="csp-attach-btn" type="button" onClick={handleMockAttach}>
+            <CommentAttachmentPills
+              attachments={pendingAttachments}
+              editable
+              scrollable
+              onRemoveAttachment={(attachmentId) =>
+                setPendingAttachments((prev) => prev.filter((att) => att.attachmentId !== attachmentId))
+              }
+            />
+            <CommentAttachmentPills files={uploadingFiles} scrollable />
+            {replyError && <p className="ctc-error-text">{replyError}</p>}
+            {isUploadingAttachments && <p className="ctc-error-text">Uploading attachment…</p>}
+            <div className="ctc-reply-composer-actions">
+              <input
+                type="file"
+                multiple
+                ref={fileInputRef}
+                style={{ display: 'none' }}
+                onChange={handleFileChange}
+              />
+              <button className="ctc-attach-btn" type="button" onClick={() => fileInputRef.current?.click()} disabled={isUploadingAttachments}>
                 <FiPaperclip size={14} /> Attach
               </button>
               <button
-                className="csp-send-btn"
-                disabled={(!replyBody.trim() && pendingAttachments.length === 0) || isSubmittingReply}
+                className="ctc-send-btn"
+                disabled={(!replyBody.trim() && pendingAttachments.length === 0) || isSubmittingReply || isUploadingAttachments}
                 onClick={submitReply}
                 title="Send (Cmd+Enter)"
               >
@@ -572,6 +682,7 @@ export function CommentSidePanel({
   editor,
   threads,
   commentHandler,
+  attachmentHandler,
   isOpen,
   presentation = 'docked',
   activeThreadId,
@@ -659,9 +770,9 @@ export function CommentSidePanel({
   };
 
   // Handle edit reply
-  const handleEditReply = async (replyId: string, newBody: string) => {
+  const handleEditReply = async (replyId: string, newBody: string, attachments: CommentReplyAttachment[]) => {
     try {
-      const updated = await commentHandler.editReply(replyId, newBody);
+      const updated = await commentHandler.editReply(replyId, newBody, attachments);
       // We need to find the thread that contains this reply to create the updated payload
       const thread = threads.find((t) => t.replies.some((r) => r.id === replyId));
       if (thread) {
@@ -706,6 +817,7 @@ export function CommentSidePanel({
           onAddReply={handleAddReply}
           onDeleteReply={handleDeleteReply}
           onEditReply={handleEditReply}
+          attachmentHandler={attachmentHandler}
         />
       </div>
     );
@@ -787,6 +899,7 @@ export function CommentSidePanel({
               onAddReply={handleAddReply}
               onDeleteReply={handleDeleteReply}
               onEditReply={handleEditReply}
+              attachmentHandler={attachmentHandler}
             />
           ))
         )}

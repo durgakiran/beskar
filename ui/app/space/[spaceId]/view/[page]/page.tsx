@@ -1,23 +1,36 @@
 "use client";
+
+import ReadOnlyContentMain, { type ReadOnlyBreadcrumb, type ReadOnlyCapabilities, type ReadOnlyMeta } from "@components/ReadOnlyContentMain";
 import ToastComponent from "@components/ui/ToastComponent";
 import { TipTap, AttachmentPanel } from "@editor";
 import type { AttachmentRef } from "@durgakiran/editor";
 import { useGet, useDelete } from "@http/hooks";
-import { Button, Spinner, Tooltip, Flex, Box, IconButton, Text, Dialog } from "@radix-ui/themes";
-import Link from "next/link";
+import { Button, Spinner, Flex, Box, Text, Dialog } from "@radix-ui/themes";
 import { useRouter } from "next/navigation";
 import WhiteboardEditor from "@components/WhiteboardEditor";
-import { use, useEffect, useRef, useState } from "react";
-import { HiHome, HiPencil, HiOutlineTrash, HiChatAlt2 } from "react-icons/hi";
+import { use, useEffect, useMemo, useRef, useState } from "react";
 
-interface BreadCrumbData {
+interface ViewSpaceState {
     name: string;
-    id: number;
-    parentId: number;
+    archivedAt?: string | null;
 }
 
-interface SpaceState {
-    archivedAt?: string | null;
+interface ViewResponseData {
+    pageId: number;
+    spaceId: string;
+    pageType: "document";
+    title: string;
+    document: any | null;
+    breadcrumbs: ReadOnlyBreadcrumb[];
+    space: ViewSpaceState;
+    capabilities: ReadOnlyCapabilities;
+    meta: ReadOnlyMeta;
+    attachments: AttachmentRef[];
+}
+
+interface PageMetadataResponse {
+    data: { type: string };
+    status: string;
 }
 
 export default function Page({ params }: { params: Promise<{ page: string; spaceId: string }> }) {
@@ -27,26 +40,31 @@ export default function Page({ params }: { params: Promise<{ page: string; space
     const [content, setContent] = useState();
     const [isSidePanelOpen, setIsSidePanelOpen] = useState(false);
     const [showDeleteDialog, setShowDeleteDialog] = useState(false);
-    const [docAttachments, setDocAttachments] = useState<AttachmentRef[]>([]);
+    const [isMobileViewport, setIsMobileViewport] = useState(false);
+    const [isTabletViewport, setIsTabletViewport] = useState(false);
     const router = useRouter();
-    const [{ isLoading, data, errors }, fetchData] = useGet<{ data: any; status: string }>(`editor/space/${spaceId}/page/${page}`);
-    const [{ isLoading: loadingBreadCrum, data: dataBreadCrum, errors: breadCrumErrors }, getBreadCrum] = useGet<{ data: BreadCrumbData[]; status: string }>(`page/${page}/breadCrumbs`);
-    const [{ isLoading: loadingDelete, data: deleteData, errors: deleteErrors }, _deletePage] = useDelete<{ rowsAffected: number }, null>(`editor/space/${spaceId}/page/${page}/delete`);
-    const [{ isLoading: loadingMetadata, data: metadata, errors: metaErrors }, getMetadata] = useGet<{ data: { type: string }, status: string }>(`editor/space/${spaceId}/page/${page}/metadata`);
-    const [{ data: spaceDetails }, fetchSpaceDetails] = useGet<{ data: SpaceState; status: string }>(`space/${spaceId}/details`);
 
-    const editPage = () => {
-        router.push(`/edit/${spaceId}/${page}`);
-    };
+    const [{ isLoading: loadingDocument, data: documentData, errors: documentErrors }, fetchDocument] = useGet<{ data: ViewResponseData | null; status: string }>(`editor/space/${spaceId}/page/${page}`);
+    const [{ isLoading: loadingDelete, data: deleteData, errors: deleteErrors }, deletePageRequest] = useDelete<{ rowsAffected: number }, null>(`editor/space/${spaceId}/page/${page}/delete`);
+    const [{ isLoading: loadingMetadata, data: metadata, errors: metaErrors }, getMetadata] = useGet<PageMetadataResponse>(`editor/space/${spaceId}/page/${page}/metadata`);
 
-    const deletePage = () => {
-        setShowDeleteDialog(true);
-    };
+    const pageType = metadata?.data?.type;
+    const viewData = documentData?.data ?? null;
+    const title = viewData?.title || viewData?.document?.title || "";
+    const attachments = viewData?.attachments ?? [];
+    const commentPresentation = isMobileViewport || isTabletViewport ? "bottom-sheet" : "docked";
 
-    const confirmDelete = () => {
-        setShowDeleteDialog(false);
-        _deletePage(null);
-    };
+    useEffect(() => {
+        const syncViewport = () => {
+            const width = window.innerWidth;
+            setIsMobileViewport(width < 768);
+            setIsTabletViewport(width >= 768 && width < 1024);
+        };
+
+        syncViewport();
+        window.addEventListener("resize", syncViewport);
+        return () => window.removeEventListener("resize", syncViewport);
+    }, []);
 
     useEffect(() => {
         workerRef.current = new Worker("/workers/editor.js", { type: "module" });
@@ -67,170 +85,146 @@ export default function Page({ params }: { params: Promise<{ page: string; space
         };
         workerRef.current.postMessage({ type: "init" });
         return () => {
-            workerRef.current.terminate();
+            workerRef.current?.terminate();
         };
     }, []);
 
     useEffect(() => {
-        getBreadCrum();
         getMetadata();
-        fetchSpaceDetails();
-    }, []);
+    }, [getMetadata]);
 
     useEffect(() => {
-        if (workerInitiated && metadata?.data?.type === "document") {
-            fetchData();
+        if (workerInitiated && pageType === "document") {
+            fetchDocument();
         }
-    }, [workerInitiated, metadata]);
+    }, [fetchDocument, pageType, workerInitiated]);
 
     useEffect(() => {
-        if (data) {
-            workerRef.current.postMessage({ type: "doc", data: data.data });
+        if (viewData?.document) {
+            workerRef.current?.postMessage({ type: "doc", data: viewData.document });
+        } else {
+            setContent(undefined);
         }
-    }, [data]);
+    }, [viewData?.document]);
 
     useEffect(() => {
         if (deleteData) {
             router.push(`/space/${spaceId}`);
         }
-    }, [deleteData]);
+    }, [deleteData, router, spaceId]);
 
-    const archived = Boolean(spaceDetails?.data?.archivedAt);
+    const onEdit = () => {
+        router.push(`/edit/${spaceId}/${page}`);
+    };
 
-    if (isLoading || loadingMetadata || status === "loading") {
+    const onDelete = () => {
+        setShowDeleteDialog(true);
+    };
+
+    const confirmDelete = () => {
+        setShowDeleteDialog(false);
+        deletePageRequest(null);
+    };
+
+    const hasMainErrors = Boolean(metaErrors || documentErrors);
+    const isDocumentLoading = pageType === "document" && (!workerInitiated || loadingDocument);
+    const showShell = pageType === "document" && !loadingMetadata && !isDocumentLoading && !hasMainErrors;
+    const readOnlyContent = useMemo(() => {
+        if (!viewData?.document || !content) return null;
+        return (
+            <TipTap
+                updateContent={(nextContent, nextTitle) => console.log(nextContent, nextTitle)}
+                title={title}
+                setEditorContext={() => { }}
+                editable={false}
+                content={content}
+                pageId={page}
+                id={Number(page)}
+                user={null}
+                isInlineMessageSidePanelOpen={isSidePanelOpen}
+                setIsInlineMessageSidePanelOpen={setIsSidePanelOpen}
+                commentPresentation={commentPresentation}
+            />
+        );
+    }, [commentPresentation, content, isSidePanelOpen, page, title, viewData?.document]);
+
+    if (loadingMetadata || isDocumentLoading) {
         return (
             <Flex align="center" justify="center" p="4">
                 <Spinner size="3" />
             </Flex>
         );
     }
+
+    if (metaErrors) {
+        return (
+            <Flex align="center" justify="center" className="min-h-[40vh] px-6">
+                <Text size="3" className="text-neutral-700">
+                    Something went wrong while loading this page.
+                </Text>
+            </Flex>
+        );
+    }
+
+    if (pageType === "whiteboard") {
+        return (
+            <Box className="h-full w-full">
+                <WhiteboardEditor slug={[spaceId, page]} readOnly={true} />
+            </Box>
+        );
+    }
+
+    if (hasMainErrors || !viewData) {
+        return (
+            <Flex align="center" justify="center" className="min-h-[40vh] px-6">
+                <Text size="3" className="text-neutral-700">
+                    Something went wrong while loading this page.
+                </Text>
+            </Flex>
+        );
+    }
+
     return (
         <>
-            <Box className="min-h-screen mx-auto bg-white">
-                {/* Header Section */}
-                <Box className="bg-white border-b border-neutral-200 sticky top-0 z-10">
-                    <Flex
-                        py="3"
-                        px="4"
-                        justify="between"
-                        align="center"
-                        className="max-w-7xl mx-auto flex-col sm:flex-row gap-3"
-                    >
-                        {/* Breadcrumbs */}
-                        <Box className="overflow-x-auto w-full sm:w-auto">
-                            {!loadingBreadCrum && dataBreadCrum && dataBreadCrum.data && dataBreadCrum.data.length ? (
-                                <Flex align="center" gap="2" className="flex-nowrap">
-                                    <Link
-                                        href={`/space/${spaceId}`}
-                                        className="flex items-center gap-1.5 px-2 py-1 rounded-sm 
-                                             hover:bg-mauve-50 transition-colors group flex-shrink-0"
-                                    >
-                                        <HiHome size={16} className="text-mauve-600 group-hover:text-primary-600" />
-                                        <Text size="2" className="text-neutral-700 group-hover:text-primary-700 font-medium">
-                                            Home
-                                        </Text>
-                                    </Link>
-                                    {dataBreadCrum.data
-                                        .sort((a: BreadCrumbData, b: BreadCrumbData) => {
-                                            return a.id > b.id ? 1 : -1;
-                                        })
-                                        .map((item: BreadCrumbData, index: number, array: BreadCrumbData[]) => {
-                                            const isLast = index === array.length - 1;
-                                            return (
-                                                <Flex key={item.id} align="center" gap="2" className="flex-shrink-0">
-                                                    <Text className="text-neutral-300">/</Text>
-                                                    <Link
-                                                        href={`/space/${spaceId}/view/${item.id}`}
-                                                        className={`px-2 py-1 rounded-sm transition-colors ${isLast
-                                                            ? 'bg-primary-50 text-primary-700 font-semibold'
-                                                            : 'hover:bg-mauve-50 text-neutral-700 hover:text-primary-700'
-                                                            }`}
-                                                    >
-                                                        <Text size="2" className="truncate max-w-[200px]">
-                                                            {item.name}
-                                                        </Text>
-                                                    </Link>
-                                                </Flex>
-                                            );
-                                        })}
-                                </Flex>
-                            ) : null}
-                        </Box>
-
-                        {/* Action Buttons */}
-                        <Flex gap="4" className="flex-shrink-0">
-                            <Tooltip content="View all inline comments">
-                                <IconButton
-                                    variant="ghost"
-                                    color="indigo"
-                                    size="2"
-                                    onClick={() => setIsSidePanelOpen(true)}
-                                    className="text-primary-600 hover:bg-primary-50 hover:text-primary-700 transition-colors p-2"
-                                >
-                                    <HiChatAlt2 size={18} />
-                                </IconButton>
-                            </Tooltip>
-                            <Tooltip content="Edit page">
-                                <IconButton
-                                    variant="ghost"
-                                    size="2"
-                                    onClick={editPage}
-                                    disabled={archived}
-                                    className="text-primary-600 hover:bg-primary-50 hover:text-primary-700 transition-colors p-2"
-                                >
-                                    <HiPencil size={18} />
-                                </IconButton>
-                            </Tooltip>
-                            <Tooltip content="Delete page">
-                                <IconButton
-                                    variant="ghost"
-                                    size="2"
-                                    onClick={deletePage}
-                                    disabled={archived || loadingDelete || deleteErrors}
-                                    className="text-error-600 hover:bg-error-50 hover:text-error-700 transition-colors p-2"
-                                >
-                                    <HiOutlineTrash size={18} />
-                                </IconButton>
-                            </Tooltip>
-                        </Flex>
-                    </Flex>
-                </Box>
-
-                {/* Content Section */}
-                {metadata?.data?.type === "whiteboard" ? (
-                    <Box className="w-full h-full">
-                        <WhiteboardEditor slug={[spaceId, page]} readOnly={true} />
-                    </Box>
-                ) : content && data?.data && (
-                    <Box className="px-4 md:px-8 lg:px-16 py-6 max-w-7xl mx-auto bg-white">
-                        <Box className="p-6 md:p-8 lg:p-12">
-                            <Box mb="8">
-                                <h1 className="text-3xl md:text-4xl font-bold text-neutral-900">
-                                    {data.data.title}
-                                </h1>
-                            </Box>
-                            <TipTap
-                                updateContent={(content, title) => console.log(content, title)}
-                                title={data.data.title}
-                                setEditorContext={() => { }}
-                                editable={false}
-                                content={content}
-                                pageId={page}
-                                id={Number(page)}
-                                user={null}
-                                onDocAttachmentsChange={setDocAttachments}
-                                isInlineMessageSidePanelOpen={isSidePanelOpen}
-                                setIsInlineMessageSidePanelOpen={setIsSidePanelOpen}
+            {showShell ? (
+                <ReadOnlyContentMain
+                    spaceId={spaceId}
+                    pageId={page}
+                    title={title}
+                    breadcrumbs={viewData.breadcrumbs}
+                    archived={Boolean(viewData.space?.archivedAt)}
+                    capabilities={viewData.capabilities}
+                    meta={viewData.meta}
+                    spaceName={viewData.space?.name ?? null}
+                    attachments={
+                        attachments.length ? (
+                            <AttachmentPanel
+                                attachments={attachments}
+                                pageId={Number(page)}
+                                variant="readonly"
+                                title="Attachments"
                             />
-                            <AttachmentPanel attachments={docAttachments} pageId={Number(page)} />
+                        ) : undefined
+                    }
+                    isCommentsOpen={isSidePanelOpen}
+                    commentPresentation={commentPresentation}
+                    onOpenComments={() => setIsSidePanelOpen((current) => !current)}
+                    onEdit={onEdit}
+                    onDelete={onDelete}
+                >
+                    {readOnlyContent ?? (
+                        <Box className="rounded-[18px] border border-[#d4d1da] bg-white px-5 py-6 text-[#605c67] shadow-[0_10px_30px_rgba(11,10,42,0.04)] md:px-8">
+                            <Text size="3">
+                                This document has no published content yet.
+                            </Text>
                         </Box>
-                    </Box>
-                )}
-            </Box>
+                    )}
+                </ReadOnlyContentMain>
+            ) : null}
+
             {(deleteErrors) && !loadingDelete && <ToastComponent icon="AlertTriangle" type="warning" toggle={true} message="Unable to delete page" />}
             {deleteData && !loadingDelete && <ToastComponent icon="Check" type="success" toggle={true} message="Page deleted successfully" />}
 
-            {/* Delete Confirmation Dialog */}
             <Dialog.Root open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
                 <Dialog.Content size="2" maxWidth="450px">
                     <Dialog.Title>Delete Page</Dialog.Title>
@@ -257,6 +251,5 @@ export default function Page({ params }: { params: Promise<{ page: string; space
                 </Dialog.Content>
             </Dialog.Root>
         </>
-
     );
 }
