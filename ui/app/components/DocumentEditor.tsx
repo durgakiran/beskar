@@ -52,6 +52,23 @@ interface EditDataDTO {
     title: string;
 }
 
+interface EditBreadcrumb {
+    id: number;
+    title: string;
+    href: string | null;
+}
+
+interface EditCapabilities {
+    canComment: boolean;
+}
+
+interface EditViewDTO {
+    capabilities: EditCapabilities;
+    space: {
+        name: string;
+    };
+}
+
 interface UpdateDocDTO {
     page: number;
 }
@@ -74,6 +91,7 @@ export default function DocumentEditor({ slug }: { slug: string[] }) {
     const [{ data: profileData, errors: profileErrors, isLoading: profileLoading }, getProfile] = useGet<Response<User>>(`profile/details`);
 
     // start of editor handling
+    const [{ data: viewData }, fetchViewData] = useGet<Response<EditViewDTO>>(`editor/space/${slug[0]}/page/${slug[1]}`);
     const [{ data: publishigData, errors: publishErrors, isLoading: publishing }, publishDraftData] = usePUT<Response<UpdateDocDTO>, IPayloadPublish>(`editor/publish`);
     const [{ errors: upadteErrors, isLoading: updating }, updateDraftData] = usePUT<Response<UpdateDocDTO>, IPayload>(`editor/update`);
     const [{ isLoading: isDocumentLoading, data: documentData, errors: documentErrors }, fetchData] = useGet<Response<EditDataDTO>>(`editor/space/${slug[0]}/page/${slug[1]}/edit`);
@@ -92,6 +110,7 @@ export default function DocumentEditor({ slug }: { slug: string[] }) {
     const [isDocumentFetched, setIsDocumentFetched] = useState<boolean>(false);
     const [docAttachments, setDocAttachments] = useState<AttachmentRef[]>([]);
     const [isSidePanelOpen, setIsSidePanelOpen] = useState(false);
+    const [activeCollaborators, setActiveCollaborators] = useState<Array<{ id: string; name: string; color?: string }>>([]);
     // end of editor handling
 
     // wasm handling
@@ -100,13 +119,10 @@ export default function DocumentEditor({ slug }: { slug: string[] }) {
     const editorContextRef = useRef<Editor>(null);
     // end of wasm handling
 
-    // to check the nunber of times component rendered
-    const rendered = useRef(0);
-    rendered.current += 1;
-
     // fetch profile data
     useEffect(() => {
         getProfile();
+        fetchViewData();
     }, []);
 
     useEffect(() => {
@@ -457,6 +473,29 @@ export default function DocumentEditor({ slug }: { slug: string[] }) {
     }, [provider, user]);
 
     useEffect(() => {
+        if (!provider) return;
+
+        const syncCollaborators = () => {
+            const states = Array.from(provider.awareness.getStates().values());
+            const nextCollaborators = states
+                .map((state) => state?.user as { id?: string; name?: string; color?: string } | undefined)
+                .filter((candidate): candidate is { id: string; name: string; color?: string } => Boolean(candidate?.id && candidate?.name));
+
+            const deduped = Array.from(
+                new Map(nextCollaborators.map((candidate) => [candidate.id, candidate])).values(),
+            );
+
+            setActiveCollaborators(deduped);
+        };
+
+        syncCollaborators();
+        provider.awareness.on("change", syncCollaborators);
+        return () => {
+            provider.awareness.off("change", syncCollaborators);
+        };
+    }, [provider]);
+
+    useEffect(() => {
         if (!titleTextProvider) return;
 
         // Create title observer
@@ -609,9 +648,11 @@ export default function DocumentEditor({ slug }: { slug: string[] }) {
         return <div>Something went wrong</div>;
     }
 
+    const canComment = viewData?.data?.capabilities?.canComment ?? true;
+    const spaceName = viewData?.data?.space?.name ?? "Space";
+
     return (
         <div style={{ minHeight: 300 }}>
-            Rendered: {rendered.current} Leader: {isLeader ? "Yes" : "No"}
             {
                 profileData && (
                     <div data-testid="editor-window">
@@ -620,7 +661,7 @@ export default function DocumentEditor({ slug }: { slug: string[] }) {
                             data-testid="sticky-header"
                             style={{
                                 position: "sticky",
-                                zIndex: 1,
+                                zIndex: 120,
                                 top: 0,
                                 marginBottom: "2rem",
                                 backgroundColor: "white",
@@ -632,8 +673,16 @@ export default function DocumentEditor({ slug }: { slug: string[] }) {
                                     isEditorReady={isEditorReady}
                                     handleClose={handleClose}
                                     handleUpdate={handleUpdate}
+                                    isUpdating={updating || publishing}
                                     isSidePanelOpen={isSidePanelOpen}
                                     setIsSidePanelOpen={setIsSidePanelOpen}
+                                    spaceId={slug[0]}
+                                    spaceName={spaceName}
+                                    pageTitle={title || "Untitled"}
+                                    collaborators={activeCollaborators}
+                                    canComment={canComment}
+                                    currentUserId={user?.id}
+                                    isLeader={isLeader}
                                 />
                             </EditorContext.Provider>
                         </div>

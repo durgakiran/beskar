@@ -1,6 +1,5 @@
 "use client";
-import { Button, IconButton, Flex, Separator } from "@radix-ui/themes";
-import { HiHome } from "react-icons/hi";
+import { Button, IconButton, Flex } from "@radix-ui/themes";
 import { LuUndo, LuRedo } from "react-icons/lu";
 import { useContext } from "react";
 import { EditorContext } from "@editor/context/editorContext";
@@ -8,7 +7,7 @@ import { ContentTypePicker } from "@editor/menus/contentTypePicker/ContentTypePi
 import FormatTypePicker from "@editor/menus/formatTypePicker/formatTypePicker";
 import ContentAlignPicker from "@editor/menus/contentAlignTypePicker/contentAlignPicker";
 
-export default function FixedMenu({ isEditorReady, handleClose, handleUpdate, isSidePanelOpen, setIsSidePanelOpen }: { isEditorReady: boolean, handleClose: () => void, handleUpdate: () => void, isSidePanelOpen: boolean, setIsSidePanelOpen: (open: boolean) => void }) {
+export default function FixedMenu({ isEditorReady, isSidePanelOpen, setIsSidePanelOpen, canComment }: { isEditorReady: boolean, isSidePanelOpen: boolean, setIsSidePanelOpen: (open: boolean) => void, canComment: boolean }) {
     const editor = useContext(EditorContext);
 
     if (!editor) {
@@ -31,15 +30,6 @@ export default function FixedMenu({ isEditorReady, handleClose, handleUpdate, is
         >
             <Flex align="center" gap="4" style={{ flex: 1 }}>
                 <Flex align="center" gap="2" pr="4" style={{ borderRight: "1px solid var(--gray-6)", height: "32px" }}>
-                    <IconButton
-                        variant="ghost"
-                        size="2"
-                        aria-label="home"
-                        onClick={() => console.log("Home clicked")}
-                        style={{ height: "32px", width: "32px" }}
-                    >
-                        <HiHome size={18} />
-                    </IconButton>
                     <IconButton
                         variant="ghost"
                         size="2"
@@ -70,13 +60,13 @@ export default function FixedMenu({ isEditorReady, handleClose, handleUpdate, is
                     <ContentAlignPicker editor={editor} />
                 </Flex>
             </Flex>
-            <Flex align="center" gap="3">
-                <Button size="2" variant="surface" onClick={() => setIsSidePanelOpen(!isSidePanelOpen)}>{isSidePanelOpen ? "Hide" : "Show"} All Comments </Button>
-                <Button size="2" onClick={handleUpdate} disabled={!isEditorReady}>Update</Button>
-                <Button size="2" variant="ghost" color="gray" onClick={handleClose}>
-                    Close
-                </Button>
-            </Flex>
+            {canComment ? (
+                <Flex align="center" gap="3">
+                    <Button size="2" variant="surface" onClick={() => setIsSidePanelOpen(!isSidePanelOpen)} disabled={!isEditorReady}>
+                        {isSidePanelOpen ? "Hide" : "Show"} All Comments
+                    </Button>
+                </Flex>
+            ) : null}
         </Flex>
     );
 }

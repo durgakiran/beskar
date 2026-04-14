@@ -58,6 +58,7 @@ const MAX_DEFAULT_WIDTH = 760;
 const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
 const ATTACHMENT_ACCEPT =
     "image/*,audio/*,video/*,text/*,application/pdf,application/json,application/xml,application/zip,application/x-zip-compressed,application/x-7z-compressed,application/vnd.rar,application/gzip,application/x-tar,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation,.pdf,.json,.xml,.zip,.7z,.rar,.gz,.tar,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.csv,.txt,.md,.png,.jpg,.jpeg,.webp,.gif,.mp3,.wav,.mp4,.mov";
+const EDITOR_PLACEHOLDER = "Start typing or enter / for commands";
 
 interface UserInfo {
     email: string;
@@ -364,7 +365,7 @@ export function TipTap({
                     onAttachmentsChange={onDocAttachmentsChange}
                     extensions={collaborationExtensions()}
                     editable={editable}
-                    placeholder="Start typing..."
+                    placeholder={EDITOR_PLACEHOLDER}
                     onUpdate={editedDataFn}
                     onReady={handleReady}
                 />
@@ -380,7 +381,7 @@ export function TipTap({
                     onAttachmentsChange={onDocAttachmentsChange}
                     extensions={[]}
                     editable={editable}
-                    placeholder="Start typing..."
+                    placeholder={EDITOR_PLACEHOLDER}
                     onUpdate={editedDataFn}
                     onReady={handleReady}
                 />

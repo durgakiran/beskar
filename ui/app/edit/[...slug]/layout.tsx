@@ -13,5 +13,11 @@ const LayoutPage = dynamic(() => import("@components/spaceLayout"), {
 });
 
 export default function Layout({ children }: { children: ReactNode }) {
-    return <LayoutPage>{children}</LayoutPage>;
+    return (
+        <LayoutPage>
+            <div className="h-full min-h-0 overflow-y-auto">
+                {children}
+            </div>
+        </LayoutPage>
+    );
 }
