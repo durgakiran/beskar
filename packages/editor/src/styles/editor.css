@@ -2927,13 +2927,16 @@ td.selectedCell {
   cursor: pointer;
   border-radius: 2px;
   transition: background 0.15s ease;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
 }
 
 .comment-highlight:hover {
   background: rgb(254 240 138);           /* yellow-200 */
 }
 
-.comment-highlight.active {
+.comment-highlight.active,
+.comment-highlight.is-active {
   background: rgb(253 230 138);           /* amber-200 */
   border-bottom-color: #eab308;           /* yellow-500 */
 }

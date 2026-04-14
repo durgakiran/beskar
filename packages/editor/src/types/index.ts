@@ -60,6 +60,14 @@ export interface AttachmentRef {
 
 // ─── Inline Comments ──────────────────────────────────────────────────────────
 
+export interface CommentReplyAttachment {
+  attachmentId: string;
+  fileName: string;
+  fileSize: number;
+  mimeType: string;
+  url: string;
+}
+
 export interface CommentReply {
   id: string;
   threadId: string;
@@ -68,6 +76,7 @@ export interface CommentReply {
   body: string;
   editedAt?: string;            // ISO timestamp
   createdAt: string;            // ISO timestamp
+  attachments?: CommentReplyAttachment[];
 }
 
 export interface CommentAnchor {
@@ -97,14 +106,31 @@ export interface CommentThread {
 
 export interface CommentAPIHandler {
   getThreads: (documentId: string) => Promise<CommentThread[]>;
-  createThread: (documentId: string, commentId: string, anchor: CommentAnchor, body: string) => Promise<CommentThread>;
+  createThread: (
+    documentId: string,
+    commentId: string,
+    anchor: CommentAnchor,
+    body: string,
+    attachments?: CommentReplyAttachment[],
+  ) => Promise<CommentThread>;
+
   resolveThread: (threadId: string) => Promise<CommentThread>;
+  orphanThread: (threadId: string) => Promise<CommentThread>;
   deleteThread: (threadId: string) => Promise<void>;
-  addReply: (threadId: string, body: string) => Promise<CommentReply>;
-  editReply: (replyId: string, body: string) => Promise<CommentReply>;
+  addReply: (threadId: string, body: string, attachments?: CommentReplyAttachment[]) => Promise<CommentReply>;
+  editReply: (replyId: string, body: string, attachments?: CommentReplyAttachment[]) => Promise<CommentReply>;
+
   deleteReply: (replyId: string) => Promise<void>;
   unresolveThread: (threadId: string) => Promise<CommentThread>;
+  /**
+   * Optional: called by the editor when the document is saved and the text
+   * underneath a highlight has changed (e.g. a character was deleted inside the
+   * highlighted span). Implementations should persist the new anchor so that
+   * resolveAnchor can find the highlight after a page reload.
+   */
+  updateThreadAnchor?: (threadId: string, anchor: CommentAnchor) => Promise<void>;
 }
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -143,4 +169,3 @@ export interface EditorContentProps {
 }
 
 export type { TiptapEditor as Editor };
-

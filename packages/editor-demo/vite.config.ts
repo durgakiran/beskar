@@ -11,9 +11,9 @@ export default defineConfig({
       'react': path.resolve(__dirname, './node_modules/react'),
       'react-dom': path.resolve(__dirname, './node_modules/react-dom'),
     },
-    dedupe: ['react', 'react-dom'],
+    dedupe: ['react', 'react-dom', '@radix-ui/themes'],
   },
   optimizeDeps: {
-    include: ['@beskar/editor'],
+    include: ['@beskar/editor', '@radix-ui/themes'],
   },
 })

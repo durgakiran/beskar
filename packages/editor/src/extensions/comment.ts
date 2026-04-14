@@ -7,6 +7,7 @@ export interface CommentOptions {
   onPrevCommentShortcut?: () => void;
 }
 
+
 declare module '@tiptap/core' {
   interface Commands<ReturnType> {
     comment: {
@@ -27,9 +28,13 @@ export const CommentMark = Mark.create<CommentOptions>({
 
   addOptions() {
     return {
-      HTMLAttributes: {
-        class: 'comment-highlight',
-      },
+      // Note: CommentMark renders as a plain span with NO visual styling.
+      // The CommentDecoration plugin (anchor-based) is the sole source of
+      // highlight rendering. Keeping this mark as a no-op span preserves
+      // backward-compat for documents that were saved before the anchor
+      // migration — the mark data is still round-tripped through Yjs but
+      // produces no visible highlights. All visual output comes from decorations.
+      HTMLAttributes: {},
       onAddCommentShortcut: undefined,
       onNextCommentShortcut: undefined,
       onPrevCommentShortcut: undefined,
@@ -113,4 +118,5 @@ export const CommentMark = Mark.create<CommentOptions>({
       },
     };
   },
+
 });

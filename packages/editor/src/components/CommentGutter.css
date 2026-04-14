@@ -9,49 +9,46 @@
 
 .comment-gutter-pill {
   position: absolute;
-  left: 0;
   transform: translateY(-50%);
   pointer-events: auto;
   display: inline-flex;
   align-items: center;
-  gap: var(--space-1, 4px);
-  background: var(--accent-a3, #cc00cc14);
-  border: 1px solid var(--accent-a7, #9900a852);
-  border-radius: var(--radius-full, 9999px);
-  padding: 2px var(--space-2, 8px);
-  font-size: var(--font-size-1, 12px);
-  font-family: var(--default-font-family, ui-sans-serif, system-ui, sans-serif);
-  font-weight: var(--font-weight-medium, 500);
+  gap: 6px;
+  background: white;
+  border: 1px solid var(--accent-6);
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 13px;
+  font-family: inherit;
+  font-weight: 500;
   cursor: pointer;
   white-space: nowrap;
   line-height: 1.5;
-  color: var(--accent-12, #53195d);
-  box-shadow: 0 1px 3px var(--gray-a4, #20003618);
-  transition:
-    background 0.15s ease,
-    border-color 0.15s ease,
-    box-shadow 0.15s ease,
-    transform 0.15s ease;
+  color: var(--accent-11);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.04);
+  transition: all 0.15s ease;
 }
 
 .comment-gutter-pill-icon {
-  font-size: 1em;
-  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent-11);
 }
 
 .comment-gutter-pill-count {
   font-variant-numeric: tabular-nums;
-  color: var(--accent-11, #953ea3);
+  color: var(--accent-11);
 }
 
 .comment-gutter-pill:hover {
-  background: var(--accent-4, #f7def8);
-  border-color: var(--accent-9, #ab4aba);
-  box-shadow: 0 2px 8px var(--accent-a5, #b700bd2e);
-  transform: translateY(-50%) scale(1.04);
+  background: var(--accent-2);
+  border-color: var(--accent-7);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+  transform: translateY(-50%) scale(1.02);
 }
 
 .comment-gutter-pill:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 2px var(--gray-1, #fdfcfd), 0 0 0 4px var(--accent-a8, #9000a56e);
+  box-shadow: 0 0 0 2px white, 0 0 0 4px var(--accent-8);
 }

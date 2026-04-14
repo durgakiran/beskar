@@ -141,9 +141,16 @@ export const BlockId = Extension.create<BlockIdOptions>({
                   return;
                 }
 
-                // Check if node is inside a table or list (but not if it IS a table or list)
-                const isInTable = node.type.name !== 'table' && isInsideTable(view.state.doc, pos);
-                const isInList = node.type.name !== 'bulletList' && node.type.name !== 'orderedList' && node.type.name !== 'taskList' && isInsideList(view.state.doc, pos);
+                // Check if node is inside a table or list (but not if it IS a table or list).
+                // IMPORTANT: textblock nodes (paragraph, heading, codeBlock, noteBlock, …) are
+                // ALWAYS allowed to have their own blockId, even when nested inside a list or
+                // table. This is the foundation of unambiguous comment anchoring — each textblock
+                // carries a unique ID, so resolveAnchor never needs to disambiguate between
+                // multiple list items or table cells. Non-textblock container nodes (e.g. a
+                // nested bulletList inside a listItem) still obey the old stripping rule.
+                const isTextblockNode = node.isTextblock;
+                const isInTable = !isTextblockNode && node.type.name !== 'table' && isInsideTable(view.state.doc, pos);
+                const isInList = !isTextblockNode && node.type.name !== 'bulletList' && node.type.name !== 'orderedList' && node.type.name !== 'taskList' && isInsideList(view.state.doc, pos);
 
                 // If node is inside a table/list and has a blockId, remove it
                 if ((isInTable || isInList) && node.attrs.blockId) {
@@ -202,9 +209,11 @@ export const BlockId = Extension.create<BlockIdOptions>({
               return;
             }
 
-            // Check if node is inside a table or list (but not if it IS a table or list)
-            const isInTable = nodeType !== 'table' && isInsideTable(newState.doc, pos);
-            const isInList = nodeType !== 'bulletList' && nodeType !== 'orderedList' && nodeType !== 'taskList' && isInsideList(newState.doc, pos);
+            // Check if node is inside a table or list (but not if it IS a table or list).
+            // Textblock nodes always get their own blockId — see view.update comment above.
+            const isTextblockNode = node.isTextblock;
+            const isInTable = !isTextblockNode && nodeType !== 'table' && isInsideTable(newState.doc, pos);
+            const isInList = !isTextblockNode && nodeType !== 'bulletList' && nodeType !== 'orderedList' && nodeType !== 'taskList' && isInsideList(newState.doc, pos);
 
             // If node is inside a table/list and has a blockId, remove it
             if ((isInTable || isInList) && node.attrs.blockId) {

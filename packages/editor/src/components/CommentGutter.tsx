@@ -10,8 +10,8 @@ import { createPortal } from 'react-dom';
 import { Editor } from '@tiptap/core';
 import type { CommentThread } from '../types';
 import { findPositioningParent, COMMENT_ANCHOR_GAP_PX } from '../utils/commentAnchorPositioning';
-import { resolveAnchor } from '../utils/anchorResolution';
 import { commentDecorationKey } from '../extensions/comment-decoration';
+import { FiMessageSquare } from 'react-icons/fi';
 import './CommentGutter.css';
 
 export interface CommentGutterProps {
@@ -59,11 +59,25 @@ export function CommentGutter({ editor, threads, onThreadClick }: CommentGutterP
     const newPositions: PillPosition[] = [];
     const activeThreads = threads.filter((t) => !t.resolvedAt && !t.orphaned);
 
+    // Read the current decoration set from the plugin — it holds mapped positions,
+    // which are the source of truth after DecorationSet.map() updates.
+    // Single scan builds a threadId→from map so we avoid N separate find() calls.
+    const pluginState = commentDecorationKey.getState(state);
+    const threadFromPos = new Map<string, number>();
+    if (pluginState) {
+      pluginState.decorations
+        .find(0, state.doc.content.size)
+        .forEach((deco: any) => {
+          const id: string | undefined = deco.spec?.['data-comment-id'];
+          if (id && !threadFromPos.has(id)) threadFromPos.set(id, deco.from);
+        });
+    }
+
     activeThreads.forEach((thread) => {
-      const range = resolveAnchor(state.doc, thread.anchor);
-      if (range) {
+      const from = threadFromPos.get(thread.id);
+      if (from !== undefined) {
         try {
-          const coords = view.coordsAtPos(range.from);
+          const coords = view.coordsAtPos(from);
           const y = coords.top - pmRect.top;
           newPositions.push({
             threadId: thread.id,
@@ -71,10 +85,19 @@ export function CommentGutter({ editor, threads, onThreadClick }: CommentGutterP
             count: thread.replies.length,
           });
         } catch {
-          // pos out of range
+          // pos out of range — decoration may be collapsed (all text deleted)
         }
       }
     });
+
+    // Prevent pills from overlapping by staggering them vertically
+    newPositions.sort((a, b) => a.y - b.y);
+    const PILL_SPACING = 30; // Approx height + gap
+    for (let i = 1; i < newPositions.length; i++) {
+      if (newPositions[i].y < newPositions[i - 1].y + PILL_SPACING) {
+        newPositions[i].y = newPositions[i - 1].y + PILL_SPACING;
+      }
+    }
 
     setLayout({ frame, positions: newPositions });
   }, [editor, threads, positioningParent]);
@@ -153,7 +176,7 @@ export function CommentGutter({ editor, threads, onThreadClick }: CommentGutterP
           title="View comment"
         >
           <span className="comment-gutter-pill-icon" aria-hidden>
-            💬
+            <FiMessageSquare size={14} />
           </span>
           {p.count > 0 ? <span className="comment-gutter-pill-count">{p.count}</span> : null}
         </button>

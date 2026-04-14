@@ -64,3 +64,76 @@
   flex-wrap: wrap;
   gap: var(--space-2, 8px);
 }
+
+/* Attach button — sits at the far left of the actions bar */
+.comment-input-attach-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  height: 30px;
+  padding: 0 10px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--gray-11, #605c67);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  margin-right: auto; /* pushes Cancel + Comment to the right */
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.comment-input-attach-btn:hover:not(:disabled) {
+  background: var(--gray-4, #ece8ee);
+  color: var(--gray-12, #211f26);
+}
+
+.comment-input-attach-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Attached-file preview pill */
+.comment-input-attachment-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.comment-input-attachment-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  background: var(--gray-3, #f0eef4);
+  border: 1px solid var(--gray-6, #c4c0cc);
+  border-radius: 6px;
+  font-size: 11px;
+  color: var(--gray-11, #605c67);
+  max-width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.comment-input-attachment-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--gray-10, #807c88);
+  cursor: pointer;
+  border-radius: 3px;
+  flex-shrink: 0;
+  transition: background 0.1s ease;
+}
+
+.comment-input-attachment-remove:hover {
+  background: var(--gray-5, #dbd7e0);
+  color: var(--gray-12, #211f26);
+}
+

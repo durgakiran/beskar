@@ -56,6 +56,7 @@ export type {
   AttachmentUploadOptions,
   AttachmentRef,
   CommentAPIHandler,
+  CommentAnchor,
   CommentThread,
   CommentReply,
 } from './types';
@@ -68,6 +69,8 @@ export { getExtensions, CustomAttributes, CommentMark } from './extensions';
 
 // Utilities
 export { useDebounce as useDebounceUtil } from './utils/debounce';
+export { resolveAnchor, extractAnchor } from './utils/anchorResolution';
+export { commentDecorationKey } from './extensions/comment-decoration';
 
 // Re-export common TipTap exports that users might need
 export { EditorContent } from '@tiptap/react';

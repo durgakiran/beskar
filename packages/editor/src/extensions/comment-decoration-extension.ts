@@ -5,6 +5,6 @@ export const CommentDecoration = Extension.create({
   name: 'commentDecoration',
 
   addProseMirrorPlugins() {
-    return [commentDecorationPlugin()];
+    return [commentDecorationPlugin(this.editor.options.editable === true)];
   },
 });

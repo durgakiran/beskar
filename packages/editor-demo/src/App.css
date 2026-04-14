@@ -162,3 +162,9 @@ body {
     padding: 1rem;
   }
 }
+
+/* Hide comments when toggled off */
+.comments-hidden .comment-highlight {
+  background-color: transparent !important;
+  border-bottom: none !important;
+}

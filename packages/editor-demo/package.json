@@ -7,7 +7,11 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "clean": "rm -rf node_modules dist dist-ssr .vite",
+    "reinstall": "npx npm run clean && npx npm install",
+    "sync-editor": "npm run build --prefix ../editor",
+    "fresh": "npx npm run sync-editor && npx npm run clean && npx npm install && npx npm run dev"
   },
   "dependencies": {
     "@beskar/editor": "file:../editor",

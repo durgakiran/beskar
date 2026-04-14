@@ -11,7 +11,7 @@ export interface CommentDecorationState {
   activeThreadId: string | null;
 }
 
-export function commentDecorationPlugin() {
+export function commentDecorationPlugin(editable: boolean) {
   return new Plugin<CommentDecorationState>({
     key: commentDecorationKey,
     state: {
@@ -23,26 +23,58 @@ export function commentDecorationPlugin() {
         };
       },
       apply(tr, value, oldState, newState) {
-        // Handle meta updates (setting threads)
+        // Handle meta updates (setting threads / changing active thread)
         const meta = tr.getMeta(commentDecorationKey);
         if (meta) {
           const nextThreads = meta.threads ?? value.threads;
           const nextActiveId = meta.activeThreadId ?? value.activeThreadId;
-          
+
+          // CRITICAL: Preserve mapped positions for existing threads.
+          //
+          // resolveAnchor matches the ORIGINAL quotedText. If the user edited text
+          // inside a highlight since the decoration was first placed, quotedText no
+          // longer matches the current document content. Re-resolving from anchor would
+          // fail → existing comments disappear when a new comment is added.
+          //
+          // Instead we read the current (position-mapped) DecorationSet and build a
+          // threadId → {from, to} map. Existing threads reuse those positions;
+          // brand-new threads (not yet in the set) are resolved via resolveAnchor.
+          const existingPositions = new Map<string, { from: number; to: number }>();
+          value.decorations.find(0, newState.doc.content.size).forEach((deco: any) => {
+            const id: string | undefined = deco.spec?.['data-comment-id'];
+            if (id && !existingPositions.has(id)) {
+              existingPositions.set(id, { from: deco.from, to: deco.to });
+            }
+          });
+
           return {
             threads: nextThreads,
             activeThreadId: nextActiveId,
-            decorations: createDecorationSet(newState.doc, nextThreads, nextActiveId),
+            decorations: createDecorationSet(
+              newState.doc, nextThreads, nextActiveId, editable, existingPositions,
+            ),
           };
         }
 
-        // Handle document changes (map decorations)
+        // Handle document changes: map decoration positions through this transaction.
+        //
+        // We deliberately use DecorationSet.map() here instead of calling
+        // createDecorationSet(). The old approach re-ran resolveAnchor on every
+        // keystroke and failed as soon as a single character was deleted from the
+        // highlighted text (quotedText no longer matches → resolveAnchor returns null
+        // → highlight disappears).
+        //
+        // DecorationSet.map() uses ProseMirror's StepMap to slide decoration
+        // boundaries as the document changes, so:
+        //   • Typing inside a highlight extends the highlighted span.
+        //   • Deleting inside a highlight shrinks it.
+        //   • Deleting ALL highlighted text collapses from === to (zero-width)
+        //     and ProseMirror automatically removes the decoration from the set.
+        //     The orphan detection in App.tsx picks this up on the next transaction.
         if (tr.docChanged) {
-          // Instead of pure mapping, we re-resolve anchors to handle text shifts better
-          // than standard decoration mapping, especially with our cascade strategy.
           return {
             ...value,
-            decorations: createDecorationSet(newState.doc, value.threads, value.activeThreadId),
+            decorations: value.decorations.map(tr.mapping, tr.doc),
           };
         }
 
@@ -109,7 +141,15 @@ export function commentDecorationPlugin() {
 }
 
 
-function createDecorationSet(doc: any, threads: CommentThread[], activeThreadId: string | null): DecorationSet {
+function createDecorationSet(
+  doc: any,
+  threads: CommentThread[],
+  activeThreadId: string | null,
+  editable: boolean,
+  // Mapped positions from the current DecorationSet — preferred over resolveAnchor
+  // for existing threads so edits inside highlights don't break the decoration.
+  existingPositions: Map<string, { from: number; to: number }> = new Map(),
+): DecorationSet {
   const decorations: { from: number; to: number; id: string; deco: Decoration }[] = [];
 
   // Limit processing to prevent runaway recursion if document state is pathological
@@ -118,22 +158,48 @@ function createDecorationSet(doc: any, threads: CommentThread[], activeThreadId:
 
   threadsToProcess.forEach((thread) => {
     // Hidden threads or resolved threads that are not active should not be rendered
+    if (!editable && thread.publishedVisible !== true) return;
     if (thread.orphaned || (thread.resolvedAt && thread.id !== activeThreadId)) return;
 
-    const range = resolveAnchor(doc, thread.anchor);
-    if (range && range.from < range.to) {
-      const isActive = thread.id === activeThreadId;
-      decorations.push({
-        from: range.from,
-        to: range.to,
-        id: thread.id,
-        deco: Decoration.inline(range.from, range.to, {
+    const isActive = thread.id === activeThreadId;
+    const existing = existingPositions.get(thread.id);
+
+    let from: number;
+    let to: number;
+
+    if (existing && existing.from < existing.to) {
+      // Reuse the position already tracked by DecorationSet.map().
+      // This is accurate even after the user edits text inside the highlight —
+      // the anchor's quotedText may no longer match but the mapped position is correct.
+      from = existing.from;
+      to = existing.to;
+    } else {
+      // Brand-new thread (or collapsed decoration) — resolve from anchor text.
+      const range = resolveAnchor(doc, thread.anchor);
+      if (!range || range.from >= range.to) return;
+      from = range.from;
+      to = range.to;
+    }
+
+    decorations.push({
+      from,
+      to,
+      id: thread.id,
+      deco: Decoration.inline(
+        from,
+        to,
+        {
+          // attrs — rendered as DOM attributes on the highlight span
           class: `comment-highlight ${isActive ? 'is-active' : ''}`,
           'data-comment-id': thread.id,
-          style: 'background-color: rgba(253, 224, 71, 0.4); cursor: pointer; border-bottom: 2px solid #fbbf24;',
-        }),
-      });
-    }
+        },
+        {
+          // spec — metadata that travels through DecorationSet.map() and is
+          // accessible via deco.spec in DecorationSet.find() predicates.
+          'data-comment-id': thread.id,
+        },
+      ),
+    });
   });
 
   // CRITICAL: Stable sort by document order.
@@ -147,7 +213,7 @@ function createDecorationSet(doc: any, threads: CommentThread[], activeThreadId:
   });
 
   return DecorationSet.create(
-    doc, 
+    doc,
     decorations.map(d => d.deco)
   );
 }
