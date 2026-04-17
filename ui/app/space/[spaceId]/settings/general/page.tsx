@@ -116,7 +116,7 @@ export default function Page({ params }: { params: Promise<{ spaceId: string }> 
                             <p className="max-w-3xl text-sm leading-6 text-neutral-600">
                                 {archived
                                     ? "Archived spaces remain visible until an admin restores them. Unarchive to re-enable edits and creation."
-                                    : "Archived spaces remain visible to all existing members, but documents, whiteboards, and settings become read-only until an admin unarchives the space."}
+                                    : "Archived spaces remain visible to all existing members, but documents and settings become read-only until an admin unarchives the space."}
                             </p>
                         </div>
                         <Button

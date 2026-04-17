@@ -6,7 +6,7 @@
       "id": "bi8Au",
       "x": 1320,
       "y": -2694,
-      "name": "Frame",
+      "name": "APP home",
       "width": 1200,
       "fill": "$color.bg.canvas",
       "layout": "vertical",
@@ -25,7 +25,7 @@
           },
           "padding": [
             18,
-            48
+            40
           ],
           "justifyContent": "space_between",
           "alignItems": "center",
@@ -88,7 +88,7 @@
                   "name": "brand",
                   "fill": "$color.text.default",
                   "content": "Tededox",
-                  "fontFamily": "Geist, Inter, system-ui, sans-serif",
+                  "fontFamily": "Geist",
                   "fontSize": 22,
                   "fontWeight": "700"
                 }
@@ -96,50 +96,100 @@
             },
             {
               "type": "frame",
-              "id": "1qXIu",
-              "name": "nav",
-              "gap": 22,
-              "alignItems": "center",
+              "id": "xXZGT",
+              "name": "newNav",
+              "fill": "#fbfafc",
+              "cornerRadius": 999,
+              "stroke": {
+                "thickness": 1,
+                "fill": "#e3e1e7"
+              },
+              "gap": 8,
+              "padding": [
+                6,
+                8
+              ],
               "children": [
                 {
-                  "type": "text",
-                  "id": "ziHJJ",
-                  "name": "nav1",
-                  "fill": "$color.text.subtle",
-                  "content": "Product",
-                  "fontFamily": "Geist, Inter, system-ui, sans-serif",
-                  "fontSize": 14,
-                  "fontWeight": "500"
+                  "type": "frame",
+                  "id": "1fezS",
+                  "fill": "#e8dfed",
+                  "cornerRadius": 999,
+                  "padding": [
+                    8,
+                    14
+                  ],
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "R41SM",
+                      "fill": "#6b4c7a",
+                      "content": "Product",
+                      "fontFamily": "Geist",
+                      "fontSize": 14,
+                      "fontWeight": "600"
+                    }
+                  ]
                 },
                 {
-                  "type": "text",
-                  "id": "ioB4L",
-                  "name": "nav2",
-                  "fill": "$color.text.subtle",
-                  "content": "Features",
-                  "fontFamily": "Geist, Inter, system-ui, sans-serif",
-                  "fontSize": 14,
-                  "fontWeight": "500"
+                  "type": "frame",
+                  "id": "5JmMI",
+                  "cornerRadius": 999,
+                  "padding": [
+                    8,
+                    14
+                  ],
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "3Dk3P",
+                      "fill": "#605c67",
+                      "content": "Features",
+                      "fontFamily": "Geist",
+                      "fontSize": 14,
+                      "fontWeight": "500"
+                    }
+                  ]
                 },
                 {
-                  "type": "text",
-                  "id": "8qcaN",
-                  "name": "nav3",
-                  "fill": "$color.text.subtle",
-                  "content": "Pricing",
-                  "fontFamily": "Geist, Inter, system-ui, sans-serif",
-                  "fontSize": 14,
-                  "fontWeight": "500"
+                  "type": "frame",
+                  "id": "m4h2t",
+                  "cornerRadius": 999,
+                  "padding": [
+                    8,
+                    14
+                  ],
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "OUnxr",
+                      "fill": "#605c67",
+                      "content": "Get Started",
+                      "fontFamily": "Geist",
+                      "fontSize": 14,
+                      "fontWeight": "500"
+                    }
+                  ]
                 },
                 {
-                  "type": "text",
-                  "id": "qQ8Bi",
-                  "name": "nav4",
-                  "fill": "$color.text.subtle",
-                  "content": "Resources",
-                  "fontFamily": "Geist, Inter, system-ui, sans-serif",
-                  "fontSize": 14,
-                  "fontWeight": "500"
+                  "type": "frame",
+                  "id": "EMBNH",
+                  "cornerRadius": 999,
+                  "padding": [
+                    8,
+                    14
+                  ],
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "DGA7Q",
+                      "fill": "#605c67",
+                      "content": "About",
+                      "fontFamily": "Geist",
+                      "fontSize": 14,
+                      "fontWeight": "500"
+                    }
+                  ]
                 }
               ]
             },
@@ -147,16 +197,16 @@
               "type": "frame",
               "id": "v3AeS",
               "name": "ctaArea",
-              "gap": 12,
+              "gap": 14,
               "alignItems": "center",
               "children": [
                 {
                   "type": "text",
                   "id": "82omf",
                   "name": "login",
-                  "fill": "$color.text.subtle",
+                  "fill": "#605c67",
                   "content": "Log in",
-                  "fontFamily": "Geist, Inter, system-ui, sans-serif",
+                  "fontFamily": "Geist",
                   "fontSize": 14,
                   "fontWeight": "500"
                 },
@@ -164,7 +214,7 @@
                   "type": "frame",
                   "id": "OBX0c",
                   "name": "signup",
-                  "fill": "$color.brand.primary",
+                  "fill": "#6b4c7a",
                   "cornerRadius": 8,
                   "padding": [
                     10,
@@ -179,7 +229,7 @@
                       "name": "signupT",
                       "fill": "$color.text.inverse",
                       "content": "Get Started Free",
-                      "fontFamily": "Geist, Inter, system-ui, sans-serif",
+                      "fontFamily": "Geist",
                       "fontSize": 15,
                       "fontWeight": "600"
                     }
@@ -215,7 +265,7 @@
               "content": "Think together.\nShip together.",
               "lineHeight": 1.05,
               "textAlign": "center",
-              "fontFamily": "Geist, Inter, system-ui, sans-serif",
+              "fontFamily": "Geist",
               "fontSize": 62,
               "fontWeight": "700"
             },
@@ -226,10 +276,10 @@
               "fill": "$color.text.subtle",
               "textGrowth": "fixed-width",
               "width": 760,
-              "content": "The all-in-one workspace where teams write docs and diagram on infinite whiteboards — with real-time collaboration and fine-grained access control built in.",
+              "content": "Tededox gives teams one calm workspace for specs, notes, and decisions.",
               "lineHeight": 1.6,
               "textAlign": "center",
-              "fontFamily": "Geist, Inter, system-ui, sans-serif",
+              "fontFamily": "Geist",
               "fontSize": 20,
               "fontWeight": "normal"
             },
@@ -260,7 +310,7 @@
                       "name": "pBtnT",
                       "fill": "$color.text.inverse",
                       "content": "Start for Free",
-                      "fontFamily": "Geist, Inter, system-ui, sans-serif",
+                      "fontFamily": "Geist",
                       "fontSize": 17,
                       "fontWeight": "600"
                     }
@@ -290,7 +340,7 @@
                       "name": "sBtnT",
                       "fill": "$color.text.subtle",
                       "content": "Watch Demo",
-                      "fontFamily": "Geist, Inter, system-ui, sans-serif",
+                      "fontFamily": "Geist",
                       "fontSize": 17,
                       "fontWeight": "600"
                     }
@@ -304,17 +354,1164 @@
               "name": "Hero Visual",
               "width": 1040,
               "height": 560,
-              "fill": {
-                "type": "image",
-                "enabled": true,
-                "url": "./images/generated-1774973698284.png",
-                "mode": "fill"
-              },
-              "cornerRadius": 12,
+              "fill": "#fbfafc",
               "stroke": {
-                "thickness": 1,
-                "fill": "$color.border.subtle"
-              }
+                "thickness": 0,
+                "fill": "#00000000"
+              },
+              "effect": {
+                "type": "shadow",
+                "shadowType": "outer",
+                "color": "#00000000"
+              },
+              "layout": "none",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "nQRqJ",
+                  "x": 0,
+                  "y": 0,
+                  "name": "heroScreen",
+                  "clip": true,
+                  "width": 1040,
+                  "height": 560,
+                  "fill": "$color.bg.canvas",
+                  "cornerRadius": 12,
+                  "stroke": {
+                    "thickness": 1,
+                    "fill": "#e3e1e7"
+                  },
+                  "effect": {
+                    "type": "shadow",
+                    "shadowType": "outer",
+                    "color": "#221f2612",
+                    "offset": {
+                      "x": 0,
+                      "y": 16
+                    },
+                    "blur": 28
+                  },
+                  "layout": "vertical",
+                  "children": [
+                    {
+                      "id": "JgI0Q",
+                      "type": "ref",
+                      "ref": "ntTGm",
+                      "width": "fill_container",
+                      "name": "top",
+                      "height": "fit_content",
+                      "descendants": {
+                        "vYPE4": {
+                          "width": "fit_content",
+                          "height": "fit_content",
+                          "x": 20,
+                          "y": 14
+                        },
+                        "cxtat": {
+                          "x": 46,
+                          "y": 3
+                        },
+                        "2wMpM": {
+                          "width": "fit_content",
+                          "height": "fit_content",
+                          "x": 783,
+                          "y": 14
+                        },
+                        "5gwDh": {
+                          "y": 8.5
+                        },
+                        "jpjWg": {
+                          "x": 73,
+                          "y": 8.5
+                        },
+                        "fCFRO": {
+                          "width": "fit_content",
+                          "height": "fit_content",
+                          "x": 151,
+                          "y": 5
+                        },
+                        "9dBaL": {
+                          "x": 6,
+                          "y": 6
+                        },
+                        "D9wX5": {
+                          "width": "fit_content",
+                          "height": "fit_content",
+                          "x": 203
+                        },
+                        "MtLbd": {
+                          "x": 11,
+                          "y": 7
+                        }
+                      }
+                    },
+                    {
+                      "type": "frame",
+                      "id": "nv7Bu",
+                      "width": "fill_container",
+                      "height": "fill_container",
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "GchLq",
+                          "name": "Sidebar",
+                          "width": 300,
+                          "height": "fill_container",
+                          "fill": "$color.bg.surface",
+                          "stroke": {
+                            "thickness": {
+                              "right": 1
+                            },
+                            "fill": "$color.border.default"
+                          },
+                          "layout": "vertical",
+                          "gap": 14,
+                          "padding": 20,
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "uOf9U",
+                              "name": "menu",
+                              "width": "fill_container",
+                              "layout": "vertical",
+                              "gap": 6,
+                              "children": [
+                                {
+                                  "type": "frame",
+                                  "id": "26uRw",
+                                  "name": "overview",
+                                  "width": "fill_container",
+                                  "fill": "$color.bg.selected",
+                                  "cornerRadius": 8,
+                                  "gap": 10,
+                                  "padding": [
+                                    9,
+                                    12
+                                  ],
+                                  "alignItems": "center",
+                                  "children": [
+                                    {
+                                      "type": "icon_font",
+                                      "id": "unt1T",
+                                      "name": "overIcon",
+                                      "width": 14,
+                                      "height": 14,
+                                      "iconFontName": "home",
+                                      "iconFontFamily": "feather",
+                                      "fill": "$color.icon.default"
+                                    },
+                                    {
+                                      "type": "text",
+                                      "id": "qMyDM",
+                                      "name": "overTxt",
+                                      "fill": "$color.brand.primary",
+                                      "content": "Overview",
+                                      "fontFamily": "Geist, Inter, system-ui, sans-serif",
+                                      "fontSize": 14,
+                                      "fontWeight": "500"
+                                    }
+                                  ]
+                                },
+                                {
+                                  "type": "frame",
+                                  "id": "cZKKS",
+                                  "name": "settings",
+                                  "width": "fill_container",
+                                  "fill": "$color.bg.surface",
+                                  "cornerRadius": 6,
+                                  "gap": 10,
+                                  "padding": [
+                                    9,
+                                    12
+                                  ],
+                                  "alignItems": "center",
+                                  "children": [
+                                    {
+                                      "type": "icon_font",
+                                      "id": "6jD4S",
+                                      "name": "setIcon",
+                                      "width": 14,
+                                      "height": 14,
+                                      "iconFontName": "settings",
+                                      "iconFontFamily": "feather",
+                                      "fill": "$color.icon.default"
+                                    },
+                                    {
+                                      "type": "text",
+                                      "id": "AHmuN",
+                                      "name": "setTxt",
+                                      "fill": "$color.text.subtle",
+                                      "content": "Settings",
+                                      "fontFamily": "Geist, Inter, system-ui, sans-serif",
+                                      "fontSize": 14,
+                                      "fontWeight": "500"
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "Yp8ya",
+                              "name": "pagesHead",
+                              "width": "fill_container",
+                              "stroke": {
+                                "thickness": {
+                                  "top": 1,
+                                  "bottom": 1
+                                },
+                                "fill": "$color.border.default"
+                              },
+                              "padding": [
+                                8,
+                                4
+                              ],
+                              "justifyContent": "space_between",
+                              "alignItems": "center",
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "zS9tP",
+                                  "name": "pagesTitle",
+                                  "fill": "$color.text.muted",
+                                  "content": "PAGES",
+                                  "fontFamily": "Geist, Inter, system-ui, sans-serif",
+                                  "fontSize": 12,
+                                  "fontWeight": "600"
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "som9l",
+                                  "name": "pagesAdd",
+                                  "fill": "$color.brand.primary",
+                                  "content": "+",
+                                  "fontFamily": "Geist, Inter, system-ui, sans-serif",
+                                  "fontSize": 18,
+                                  "fontWeight": "700"
+                                }
+                              ]
+                            },
+                            {
+                              "id": "n0KJn",
+                              "type": "ref",
+                              "ref": "2BEtM",
+                              "width": "fill_container",
+                              "name": "newTreeMain",
+                              "height": "fit_content",
+                              "x": 20,
+                              "y": 169,
+                              "descendants": {
+                                "6xuxv": {
+                                  "width": "fill_container",
+                                  "height": "fit_content"
+                                },
+                                "wkTpy": {
+                                  "width": "fit_content",
+                                  "height": "fit_content",
+                                  "x": 10,
+                                  "y": 8
+                                },
+                                "t5iqu": {
+                                  "y": 3
+                                },
+                                "bT6Yg": {
+                                  "x": 20,
+                                  "y": 2.5
+                                },
+                                "uKYuB": {
+                                  "x": 41
+                                },
+                                "oPG35": {
+                                  "x": 232,
+                                  "y": 8
+                                },
+                                "HvAcl": {
+                                  "x": 3,
+                                  "y": 3
+                                },
+                                "FDZYo": {
+                                  "height": "fit_content"
+                                },
+                                "VPsr1": {
+                                  "width": "fill_container",
+                                  "height": "fit_content"
+                                },
+                                "AxlkM": {
+                                  "width": "fit_content",
+                                  "height": "fit_content",
+                                  "x": 10,
+                                  "y": 8
+                                },
+                                "BbGjP": {
+                                  "x": 20,
+                                  "y": 3
+                                },
+                                "aA0iM": {
+                                  "x": 40,
+                                  "y": 2.5
+                                },
+                                "92Gza": {
+                                  "x": 61
+                                },
+                                "2CXfx": {
+                                  "x": 232,
+                                  "y": 8
+                                },
+                                "OSHHy": {
+                                  "x": 3,
+                                  "y": 3
+                                },
+                                "kODOz": {
+                                  "width": "fill_container",
+                                  "height": "fit_content",
+                                  "y": 40
+                                },
+                                "PXRWx": {
+                                  "width": "fit_content",
+                                  "height": "fit_content",
+                                  "x": 10,
+                                  "y": 8
+                                },
+                                "vtecQ": {
+                                  "y": 3
+                                },
+                                "FdH5u": {
+                                  "x": 20,
+                                  "y": 2.5
+                                },
+                                "DFxbs": {
+                                  "x": 41
+                                },
+                                "dRQmB": {
+                                  "x": 232,
+                                  "y": 8
+                                },
+                                "Y9f7Y": {
+                                  "x": 3,
+                                  "y": 3
+                                },
+                                "Yq1ZX": {
+                                  "width": "fill_container",
+                                  "height": "fit_content",
+                                  "y": 80
+                                },
+                                "Ogmnl": {
+                                  "width": "fit_content",
+                                  "height": "fit_content",
+                                  "x": 10,
+                                  "y": 8
+                                },
+                                "LVH6E": {
+                                  "y": 3
+                                },
+                                "bigED": {
+                                  "x": 20,
+                                  "y": 2.5
+                                },
+                                "A2UNw": {
+                                  "x": 41
+                                },
+                                "KDEwr": {
+                                  "x": 232,
+                                  "y": 8
+                                },
+                                "McA5V": {
+                                  "x": 3,
+                                  "y": 3
+                                },
+                                "ZbAMr": {
+                                  "width": "fill_container",
+                                  "height": "fit_content",
+                                  "y": 120
+                                },
+                                "TnJKN": {
+                                  "width": "fit_content",
+                                  "height": "fit_content",
+                                  "x": 10,
+                                  "y": 8
+                                },
+                                "qtwX4": {
+                                  "y": 3
+                                },
+                                "Rn8tq": {
+                                  "x": 20,
+                                  "y": 2.5
+                                },
+                                "iHKTm": {
+                                  "x": 41
+                                },
+                                "PMyRG": {
+                                  "x": 232,
+                                  "y": 8
+                                },
+                                "IQORj": {
+                                  "x": 3,
+                                  "y": 3
+                                }
+                              }
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "nt5PT",
+                          "width": "fill_container",
+                          "height": "fill_container",
+                          "layout": "vertical",
+                          "gap": 28,
+                          "padding": [
+                            30,
+                            48,
+                            40,
+                            48
+                          ],
+                          "children": [
+                            {
+                              "type": "frame",
+                              "id": "cBIQ6",
+                              "name": "initialHead",
+                              "width": "fill_container",
+                              "layout": "vertical",
+                              "gap": 12,
+                              "children": [
+                                {
+                                  "type": "frame",
+                                  "id": "kuz78",
+                                  "width": "fill_container",
+                                  "justifyContent": "space_between",
+                                  "alignItems": "center",
+                                  "children": [
+                                    {
+                                      "type": "frame",
+                                      "id": "38hs3",
+                                      "gap": 8,
+                                      "alignItems": "center",
+                                      "children": [
+                                        {
+                                          "type": "icon_font",
+                                          "id": "yT2aZ",
+                                          "width": 16,
+                                          "height": 16,
+                                          "iconFontName": "file-text",
+                                          "iconFontFamily": "feather",
+                                          "fill": "$color.icon.default"
+                                        },
+                                        {
+                                          "type": "frame",
+                                          "id": "KeXCf",
+                                          "gap": 8,
+                                          "alignItems": "center",
+                                          "children": [
+                                            {
+                                              "type": "text",
+                                              "id": "vt8go",
+                                              "fill": "$color.text.muted",
+                                              "content": "Product Design",
+                                              "fontFamily": "Geist, Inter, system-ui, sans-serif",
+                                              "fontSize": 13,
+                                              "fontWeight": "500"
+                                            },
+                                            {
+                                              "type": "text",
+                                              "id": "ei3hn",
+                                              "fill": "$color.text.muted",
+                                              "content": "/",
+                                              "fontFamily": "Geist, Inter, system-ui, sans-serif",
+                                              "fontSize": 13,
+                                              "fontWeight": "500"
+                                            },
+                                            {
+                                              "type": "text",
+                                              "id": "9A53U",
+                                              "fill": "$color.text.default",
+                                              "content": "Roadmap",
+                                              "fontFamily": "Geist, Inter, system-ui, sans-serif",
+                                              "fontSize": 13,
+                                              "fontWeight": "600"
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "type": "frame",
+                                      "id": "2EQfw",
+                                      "gap": 10,
+                                      "alignItems": "center",
+                                      "children": [
+                                        {
+                                          "type": "frame",
+                                          "id": "qjbse",
+                                          "fill": "$color.gray.2",
+                                          "cornerRadius": 8,
+                                          "gap": 8,
+                                          "padding": [
+                                            8,
+                                            14
+                                          ],
+                                          "alignItems": "center",
+                                          "children": [
+                                            {
+                                              "type": "icon_font",
+                                              "id": "dIHXI",
+                                              "width": 14,
+                                              "height": 14,
+                                              "iconFontName": "share-2",
+                                              "iconFontFamily": "feather",
+                                              "fill": "$color.icon.default"
+                                            },
+                                            {
+                                              "type": "text",
+                                              "id": "yF9bt",
+                                              "fill": "$color.text.subtle",
+                                              "content": "Share",
+                                              "fontFamily": "Geist, Inter, system-ui, sans-serif",
+                                              "fontSize": 13,
+                                              "fontWeight": "500"
+                                            }
+                                          ]
+                                        },
+                                        {
+                                          "type": "frame",
+                                          "id": "tcAph",
+                                          "fill": "$color.gray.2",
+                                          "cornerRadius": 8,
+                                          "gap": 8,
+                                          "padding": [
+                                            8,
+                                            14
+                                          ],
+                                          "alignItems": "center",
+                                          "children": [
+                                            {
+                                              "type": "icon_font",
+                                              "id": "AuBbO",
+                                              "width": 14,
+                                              "height": 14,
+                                              "iconFontName": "edit-3",
+                                              "iconFontFamily": "feather",
+                                              "fill": "$color.icon.default"
+                                            },
+                                            {
+                                              "type": "text",
+                                              "id": "ZkdA4",
+                                              "fill": "$color.text.subtle",
+                                              "content": "Edit",
+                                              "fontFamily": "Geist, Inter, system-ui, sans-serif",
+                                              "fontSize": 13,
+                                              "fontWeight": "500"
+                                            }
+                                          ]
+                                        },
+                                        {
+                                          "type": "frame",
+                                          "id": "VQZOd",
+                                          "width": 34,
+                                          "height": 34,
+                                          "fill": "$color.gray.2",
+                                          "cornerRadius": 999,
+                                          "justifyContent": "center",
+                                          "alignItems": "center",
+                                          "children": [
+                                            {
+                                              "type": "icon_font",
+                                              "id": "m4w8E",
+                                              "width": 14,
+                                              "height": 14,
+                                              "iconFontName": "more-horizontal",
+                                              "iconFontFamily": "feather",
+                                              "fill": "$color.icon.default"
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "type": "frame",
+                                  "id": "4Hcfm",
+                                  "gap": 12,
+                                  "alignItems": "center",
+                                  "children": [
+                                    {
+                                      "type": "text",
+                                      "id": "wfIbW",
+                                      "fill": "$color.text.default",
+                                      "content": "Q2 Planning",
+                                      "lineHeight": 1.25,
+                                      "fontFamily": "Geist, Inter, system-ui, sans-serif",
+                                      "fontSize": 30,
+                                      "fontWeight": "600",
+                                      "letterSpacing": -0.01
+                                    }
+                                  ]
+                                },
+                                {
+                                  "type": "frame",
+                                  "id": "y7o9R",
+                                  "gap": 10,
+                                  "alignItems": "center",
+                                  "children": [
+                                    {
+                                      "type": "frame",
+                                      "id": "vGc36",
+                                      "fill": "$color.bg.selected",
+                                      "cornerRadius": 999,
+                                      "stroke": {
+                                        "thickness": 1,
+                                        "fill": "$color.border.selected"
+                                      },
+                                      "padding": [
+                                        4,
+                                        10
+                                      ],
+                                      "children": [
+                                        {
+                                          "type": "text",
+                                          "id": "twCoA",
+                                          "fill": "$color.accent.11",
+                                          "content": "Draft",
+                                          "fontFamily": "Geist, Inter, system-ui, sans-serif",
+                                          "fontSize": 12,
+                                          "fontWeight": "600"
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "type": "text",
+                                      "id": "zCKAp",
+                                      "name": "metaSepLead",
+                                      "fill": "#898492",
+                                      "content": "·",
+                                      "fontFamily": "Geist, Inter, system-ui, sans-serif",
+                                      "fontSize": 12,
+                                      "fontWeight": "500"
+                                    },
+                                    {
+                                      "type": "frame",
+                                      "id": "GbFbv",
+                                      "gap": 8,
+                                      "alignItems": "center",
+                                      "children": [
+                                        {
+                                          "type": "text",
+                                          "id": "aF3uC",
+                                          "fill": "$color.text.muted",
+                                          "content": "Created by",
+                                          "fontFamily": "Geist, Inter, system-ui, sans-serif",
+                                          "fontSize": 12,
+                                          "fontWeight": "500"
+                                        },
+                                        {
+                                          "type": "text",
+                                          "id": "Bq3A0",
+                                          "fill": "$color.brand.primary",
+                                          "content": "Diana Miller",
+                                          "fontFamily": "Geist, Inter, system-ui, sans-serif",
+                                          "fontSize": 12,
+                                          "fontWeight": "500"
+                                        },
+                                        {
+                                          "type": "text",
+                                          "id": "rSm9N",
+                                          "fill": "$color.text.muted",
+                                          "content": "·",
+                                          "fontFamily": "Geist, Inter, system-ui, sans-serif",
+                                          "fontSize": 12,
+                                          "fontWeight": "500"
+                                        },
+                                        {
+                                          "type": "text",
+                                          "id": "LSOkG",
+                                          "fill": "$color.text.muted",
+                                          "content": "Updated by",
+                                          "fontFamily": "Geist, Inter, system-ui, sans-serif",
+                                          "fontSize": 12,
+                                          "fontWeight": "500"
+                                        },
+                                        {
+                                          "type": "text",
+                                          "id": "rAwHo",
+                                          "fill": "$color.brand.primary",
+                                          "content": "Sara Ahmed",
+                                          "fontFamily": "Geist, Inter, system-ui, sans-serif",
+                                          "fontSize": 12,
+                                          "fontWeight": "500"
+                                        },
+                                        {
+                                          "type": "text",
+                                          "id": "e8kdI",
+                                          "name": "metaSepTime",
+                                          "fill": "#898492",
+                                          "content": "·",
+                                          "fontFamily": "Geist, Inter, system-ui, sans-serif",
+                                          "fontSize": 12,
+                                          "fontWeight": "500"
+                                        },
+                                        {
+                                          "type": "text",
+                                          "id": "NHg8B",
+                                          "fill": "$color.text.muted",
+                                          "content": "2h ago",
+                                          "fontFamily": "Geist, Inter, system-ui, sans-serif",
+                                          "fontSize": 12,
+                                          "fontWeight": "500"
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "9y5ug",
+                              "width": 704,
+                              "layout": "vertical",
+                              "gap": 20,
+                              "children": [
+                                {
+                                  "type": "text",
+                                  "id": "xrYfT",
+                                  "fill": "$color.text.subtle",
+                                  "textGrowth": "fixed-width",
+                                  "width": 704,
+                                  "content": "This page outlines the priorities, milestones, and operating principles for the Q2 planning cycle across roadmap work, design reviews, and sprint execution.",
+                                  "lineHeight": 1.65,
+                                  "fontFamily": "Geist, Inter, system-ui, sans-serif",
+                                  "fontSize": 18,
+                                  "fontWeight": "normal"
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "YZ2RT",
+                                  "fill": "$color.text.default",
+                                  "content": "Objectives",
+                                  "lineHeight": 1.25,
+                                  "fontFamily": "Geist, Inter, system-ui, sans-serif",
+                                  "fontSize": 20,
+                                  "fontWeight": "600",
+                                  "letterSpacing": -0.01
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "h5EYn",
+                                  "fill": "$color.text.default",
+                                  "textGrowth": "fixed-width",
+                                  "width": 704,
+                                  "content": "We are focusing on three outcomes this quarter: improving planning visibility, reducing friction between design and delivery, and making roadmap decisions easier to communicate across teams.",
+                                  "lineHeight": 1.65,
+                                  "fontFamily": "Geist, Inter, system-ui, sans-serif",
+                                  "fontSize": 16,
+                                  "fontWeight": "normal"
+                                },
+                                {
+                                  "type": "frame",
+                                  "id": "hLzoX",
+                                  "layout": "vertical",
+                                  "gap": 10,
+                                  "children": [
+                                    {
+                                      "type": "frame",
+                                      "id": "mflwN",
+                                      "gap": 10,
+                                      "children": [
+                                        {
+                                          "type": "ellipse",
+                                          "id": "mzIBK",
+                                          "fill": "$color.text.default",
+                                          "width": 6,
+                                          "height": 6
+                                        },
+                                        {
+                                          "type": "text",
+                                          "id": "onueJ",
+                                          "fill": "$color.text.default",
+                                          "textGrowth": "fixed-width",
+                                          "width": 664,
+                                          "content": "Align sprint planning milestones with roadmap checkpoints.",
+                                          "lineHeight": 1.65,
+                                          "fontFamily": "Geist, Inter, system-ui, sans-serif",
+                                          "fontSize": 16,
+                                          "fontWeight": "normal"
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "type": "frame",
+                                      "id": "qzUIf",
+                                      "gap": 10,
+                                      "children": [
+                                        {
+                                          "type": "ellipse",
+                                          "id": "hm8Uc",
+                                          "fill": "$color.text.default",
+                                          "width": 6,
+                                          "height": 6
+                                        },
+                                        {
+                                          "type": "text",
+                                          "id": "2XBI1",
+                                          "fill": "$color.text.default",
+                                          "textGrowth": "fixed-width",
+                                          "width": 664,
+                                          "content": "Keep design review decisions documented in one shared planning page.",
+                                          "lineHeight": 1.65,
+                                          "fontFamily": "Geist, Inter, system-ui, sans-serif",
+                                          "fontSize": 16,
+                                          "fontWeight": "normal"
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "type": "frame",
+                                      "id": "NYh5t",
+                                      "gap": 10,
+                                      "children": [
+                                        {
+                                          "type": "ellipse",
+                                          "id": "pGOS0",
+                                          "fill": "$color.text.default",
+                                          "width": 6,
+                                          "height": 6
+                                        },
+                                        {
+                                          "type": "text",
+                                          "id": "4hvng",
+                                          "fill": "$color.text.default",
+                                          "textGrowth": "fixed-width",
+                                          "width": 664,
+                                          "content": "Make ownership and timing visible for every high-priority initiative.",
+                                          "lineHeight": 1.65,
+                                          "fontFamily": "Geist, Inter, system-ui, sans-serif",
+                                          "fontSize": 16,
+                                          "fontWeight": "normal"
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "type": "frame",
+                                  "id": "9RuCl",
+                                  "width": 704,
+                                  "fill": "$color.accent.3",
+                                  "cornerRadius": 12,
+                                  "stroke": {
+                                    "thickness": 1,
+                                    "fill": "$color.border.selected"
+                                  },
+                                  "layout": "vertical",
+                                  "gap": 8,
+                                  "padding": 16,
+                                  "children": [
+                                    {
+                                      "type": "text",
+                                      "id": "NCJzx",
+                                      "fill": "$color.text.default",
+                                      "content": "Planning note",
+                                      "fontFamily": "Geist, Inter, system-ui, sans-serif",
+                                      "fontSize": 14,
+                                      "fontWeight": "600"
+                                    },
+                                    {
+                                      "type": "text",
+                                      "id": "Rtq4A",
+                                      "fill": "$color.text.subtle",
+                                      "textGrowth": "fixed-width",
+                                      "width": 672,
+                                      "content": "This page is read only for now. Editing controls, comments, and block actions are intentionally hidden in this view.",
+                                      "lineHeight": 1.5,
+                                      "fontFamily": "Geist, Inter, system-ui, sans-serif",
+                                      "fontSize": 14,
+                                      "fontWeight": "500"
+                                    }
+                                  ]
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "SZFlu",
+                                  "fill": "$color.text.default",
+                                  "content": "Timeline",
+                                  "lineHeight": 1.25,
+                                  "fontFamily": "Geist, Inter, system-ui, sans-serif",
+                                  "fontSize": 20,
+                                  "fontWeight": "600",
+                                  "letterSpacing": -0.01
+                                },
+                                {
+                                  "type": "frame",
+                                  "id": "zvIa6",
+                                  "width": 704,
+                                  "stroke": {
+                                    "thickness": {
+                                      "left": 3
+                                    },
+                                    "fill": "$color.border.strong"
+                                  },
+                                  "padding": [
+                                    0,
+                                    0,
+                                    0,
+                                    18
+                                  ],
+                                  "children": [
+                                    {
+                                      "type": "text",
+                                      "id": "Tj5q7",
+                                      "fill": "$color.text.subtle",
+                                      "textGrowth": "fixed-width",
+                                      "width": 664,
+                                      "content": "Successful planning should reduce ambiguity before work starts, not merely document it after decisions have already been made.",
+                                      "lineHeight": 1.65,
+                                      "fontFamily": "Geist, Inter, system-ui, sans-serif",
+                                      "fontSize": 16,
+                                      "fontWeight": "normal"
+                                    }
+                                  ]
+                                },
+                                {
+                                  "type": "frame",
+                                  "id": "5XYQV",
+                                  "width": 704,
+                                  "fill": "$color.gray.2",
+                                  "cornerRadius": 12,
+                                  "stroke": {
+                                    "thickness": 1,
+                                    "fill": "$color.border.default"
+                                  },
+                                  "layout": "vertical",
+                                  "gap": 8,
+                                  "padding": 16,
+                                  "children": [
+                                    {
+                                      "type": "text",
+                                      "id": "x4dDa",
+                                      "fill": "$color.text.muted",
+                                      "content": "Example checklist logic",
+                                      "lineHeight": 1.6,
+                                      "fontFamily": "JetBrains Mono, monospace",
+                                      "fontSize": 14,
+                                      "fontWeight": "500"
+                                    },
+                                    {
+                                      "type": "text",
+                                      "id": "cTZO6",
+                                      "fill": "$color.text.default",
+                                      "textGrowth": "fixed-width",
+                                      "width": 672,
+                                      "content": "if milestone.isBlocked:\n  escalate(owner)\nelse:\n  schedule(review)\n",
+                                      "lineHeight": 1.6,
+                                      "fontFamily": "JetBrains Mono, monospace",
+                                      "fontSize": 14,
+                                      "fontWeight": "normal"
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "ZSuzI",
+                              "layoutPosition": "absolute",
+                              "x": 128,
+                              "y": 138,
+                              "name": "createdByHover",
+                              "enabled": false,
+                              "width": 220,
+                              "fill": "$color.bg.surface",
+                              "cornerRadius": 12,
+                              "stroke": {
+                                "thickness": 1,
+                                "fill": "$color.border.default"
+                              },
+                              "layout": "vertical",
+                              "gap": 10,
+                              "padding": 14,
+                              "children": [
+                                {
+                                  "type": "frame",
+                                  "id": "NAaJn",
+                                  "gap": 10,
+                                  "alignItems": "center",
+                                  "children": [
+                                    {
+                                      "type": "ellipse",
+                                      "id": "v7Kgm",
+                                      "fill": "$color.accent.4",
+                                      "width": 32,
+                                      "height": 32
+                                    },
+                                    {
+                                      "type": "frame",
+                                      "id": "2LsFZ",
+                                      "layout": "vertical",
+                                      "gap": 2,
+                                      "children": [
+                                        {
+                                          "type": "text",
+                                          "id": "qgR1M",
+                                          "fill": "$color.text.default",
+                                          "content": "Diana Miller",
+                                          "fontFamily": "Geist, Inter, system-ui, sans-serif",
+                                          "fontSize": 14,
+                                          "fontWeight": "600"
+                                        },
+                                        {
+                                          "type": "text",
+                                          "id": "m0ImM",
+                                          "fill": "$color.text.subtle",
+                                          "content": "diana@tededox.com",
+                                          "fontFamily": "Geist, Inter, system-ui, sans-serif",
+                                          "fontSize": 12,
+                                          "fontWeight": "500"
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "9SEJY",
+                                  "fill": "$color.text.muted",
+                                  "content": "Product Designer",
+                                  "fontFamily": "Geist, Inter, system-ui, sans-serif",
+                                  "fontSize": 12,
+                                  "fontWeight": "500"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "tionY",
+                              "layoutPosition": "absolute",
+                              "x": 390,
+                              "y": 138,
+                              "name": "updatedByHover",
+                              "enabled": false,
+                              "width": 220,
+                              "fill": "$color.bg.surface",
+                              "cornerRadius": 12,
+                              "stroke": {
+                                "thickness": 1,
+                                "fill": "$color.border.default"
+                              },
+                              "layout": "vertical",
+                              "gap": 10,
+                              "padding": 14,
+                              "children": [
+                                {
+                                  "type": "frame",
+                                  "id": "66M5F",
+                                  "gap": 10,
+                                  "alignItems": "center",
+                                  "children": [
+                                    {
+                                      "type": "ellipse",
+                                      "id": "1ld2u",
+                                      "fill": "$color.accent.4",
+                                      "width": 32,
+                                      "height": 32
+                                    },
+                                    {
+                                      "type": "frame",
+                                      "id": "UyBQz",
+                                      "layout": "vertical",
+                                      "gap": 2,
+                                      "children": [
+                                        {
+                                          "type": "text",
+                                          "id": "r4AtA",
+                                          "fill": "$color.text.default",
+                                          "content": "Sara Ahmed",
+                                          "fontFamily": "Geist, Inter, system-ui, sans-serif",
+                                          "fontSize": 14,
+                                          "fontWeight": "600"
+                                        },
+                                        {
+                                          "type": "text",
+                                          "id": "WCxqD",
+                                          "fill": "$color.text.subtle",
+                                          "content": "sara@tededox.com",
+                                          "fontFamily": "Geist, Inter, system-ui, sans-serif",
+                                          "fontSize": 12,
+                                          "fontWeight": "500"
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "type": "text",
+                                  "id": "lK1E4",
+                                  "fill": "$color.text.muted",
+                                  "content": "Product Lead",
+                                  "fontFamily": "Geist, Inter, system-ui, sans-serif",
+                                  "fontSize": 12,
+                                  "fontWeight": "500"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "frame",
+                              "id": "NdIaL",
+                              "layoutPosition": "absolute",
+                              "x": 856,
+                              "y": 76,
+                              "name": "moreMenu",
+                              "enabled": false,
+                              "width": 180,
+                              "fill": "$color.bg.surface",
+                              "cornerRadius": 12,
+                              "stroke": {
+                                "thickness": 1,
+                                "fill": "$color.border.default"
+                              },
+                              "layout": "vertical",
+                              "padding": 8,
+                              "children": [
+                                {
+                                  "type": "frame",
+                                  "id": "jQUKf",
+                                  "width": "fill_container",
+                                  "cornerRadius": 8,
+                                  "gap": 10,
+                                  "padding": [
+                                    10,
+                                    12
+                                  ],
+                                  "alignItems": "center",
+                                  "children": [
+                                    {
+                                      "type": "icon_font",
+                                      "id": "jYCML",
+                                      "width": 14,
+                                      "height": 14,
+                                      "iconFontName": "trash-2",
+                                      "iconFontFamily": "feather",
+                                      "fill": "$color.danger.text"
+                                    },
+                                    {
+                                      "type": "text",
+                                      "id": "Jz7ft",
+                                      "fill": "$color.danger.text",
+                                      "content": "Delete page",
+                                      "fontFamily": "Geist, Inter, system-ui, sans-serif",
+                                      "fontSize": 13,
+                                      "fontWeight": "600"
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
             }
           ]
         },
@@ -346,7 +1543,7 @@
                   "name": "ftTag",
                   "fill": "$color.brand.primary",
                   "content": "CORE FEATURES",
-                  "fontFamily": "Geist, Inter, system-ui, sans-serif",
+                  "fontFamily": "Geist",
                   "fontSize": 12,
                   "fontWeight": "700",
                   "letterSpacing": 1.2
@@ -358,10 +1555,10 @@
                   "fill": "$color.text.default",
                   "textGrowth": "fixed-width",
                   "width": 760,
-                  "content": "Everything your team needs, one workspace",
+                  "content": "Start with docs. Build a shared source of truth",
                   "lineHeight": 1.15,
                   "textAlign": "center",
-                  "fontFamily": "Geist, Inter, system-ui, sans-serif",
+                  "fontFamily": "Geist",
                   "fontSize": 40,
                   "fontWeight": "700"
                 },
@@ -372,10 +1569,10 @@
                   "fill": "$color.text.subtle",
                   "textGrowth": "fixed-width",
                   "width": 700,
-                  "content": "Docs, whiteboards, and granular permissions in one plum-themed collaboration hub.",
+                  "content": "Capture knowledge in structured pages, collaborate with context, and control who can access what.",
                   "lineHeight": 1.6,
                   "textAlign": "center",
-                  "fontFamily": "Geist, Inter, system-ui, sans-serif",
+                  "fontFamily": "Geist",
                   "fontSize": 18,
                   "fontWeight": "normal"
                 }
@@ -408,8 +1605,8 @@
                       "id": "Q3VM9",
                       "name": "c1t",
                       "fill": "$color.text.default",
-                      "content": "Smart Docs",
-                      "fontFamily": "Geist, Inter, system-ui, sans-serif",
+                      "content": "Structured Docs",
+                      "fontFamily": "Geist",
                       "fontSize": 22,
                       "fontWeight": "700"
                     },
@@ -420,9 +1617,9 @@
                       "fill": "$color.text.subtle",
                       "textGrowth": "fixed-width",
                       "width": "fill_container",
-                      "content": "Write, structure, and share living docs with live collaboration and comments.",
+                      "content": "Create clean pages for product specs, meeting notes, plans, and decisions your team can revisit anytime.",
                       "lineHeight": 1.6,
-                      "fontFamily": "Geist, Inter, system-ui, sans-serif",
+                      "fontFamily": "Geist",
                       "fontSize": 16,
                       "fontWeight": "normal"
                     }
@@ -430,39 +1627,67 @@
                 },
                 {
                   "type": "frame",
-                  "id": "czmYD",
-                  "name": "card2",
+                  "id": "htn07",
+                  "name": "newCard",
                   "width": "fill_container",
-                  "fill": "$color.bg.surface",
+                  "fill": "#f8f7f9",
                   "cornerRadius": 8,
                   "stroke": {
                     "thickness": 1,
-                    "fill": "$color.border.default"
+                    "fill": "#d4d1da"
                   },
                   "layout": "vertical",
                   "gap": 14,
                   "padding": 24,
                   "children": [
                     {
-                      "type": "text",
-                      "id": "6JcGo",
-                      "name": "c2t",
-                      "fill": "$color.text.default",
-                      "content": "Visual Whiteboards",
-                      "fontFamily": "Geist, Inter, system-ui, sans-serif",
-                      "fontSize": 22,
-                      "fontWeight": "700"
+                      "type": "frame",
+                      "id": "UgCY8",
+                      "width": "fill_container",
+                      "justifyContent": "space_between",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "le5y3",
+                          "fill": "#221f26",
+                          "content": "Whiteboarding",
+                          "fontFamily": "Geist",
+                          "fontSize": 22,
+                          "fontWeight": "700"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "DDvZC",
+                          "fill": "#e8dfed",
+                          "cornerRadius": 999,
+                          "padding": [
+                            6,
+                            12
+                          ],
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "X1lVx",
+                              "fill": "#6b4c7a",
+                              "content": "Coming soon",
+                              "fontFamily": "Geist",
+                              "fontSize": 12,
+                              "fontWeight": "600"
+                            }
+                          ]
+                        }
+                      ]
                     },
                     {
                       "type": "text",
-                      "id": "mQEV8",
-                      "name": "c2d",
-                      "fill": "$color.text.subtle",
+                      "id": "iuDDm",
+                      "fill": "#605c67",
                       "textGrowth": "fixed-width",
                       "width": "fill_container",
-                      "content": "Map systems, flows, and ideas on an infinite canvas with team cursors in real time.",
+                      "content": "Map flows, systems, and ideas on an infinite canvas connected to the rest of your workspace.",
                       "lineHeight": 1.6,
-                      "fontFamily": "Geist, Inter, system-ui, sans-serif",
+                      "fontFamily": "Geist",
                       "fontSize": 16,
                       "fontWeight": "normal"
                     }
@@ -488,8 +1713,8 @@
                       "id": "NSVQN",
                       "name": "c3t",
                       "fill": "$color.text.default",
-                      "content": "Fine-Grained Access",
-                      "fontFamily": "Geist, Inter, system-ui, sans-serif",
+                      "content": "Access You Control",
+                      "fontFamily": "Geist",
                       "fontSize": 22,
                       "fontWeight": "700"
                     },
@@ -500,9 +1725,9 @@
                       "fill": "$color.text.subtle",
                       "textGrowth": "fixed-width",
                       "width": "fill_container",
-                      "content": "Control who can view, edit, and share at the workspace, page, and board level.",
+                      "content": "Set clear permissions at the workspace and page level so the right people can view, edit, and share content.",
                       "lineHeight": 1.6,
-                      "fontFamily": "Geist, Inter, system-ui, sans-serif",
+                      "fontFamily": "Geist",
                       "fontSize": 16,
                       "fontWeight": "normal"
                     }
@@ -533,10 +1758,10 @@
               "fill": "$color.text.default",
               "textGrowth": "fixed-width",
               "width": 760,
-              "content": "Ready to bring your team together?",
+              "content": "Bring your team’s docs into one place",
               "lineHeight": 1.15,
               "textAlign": "center",
-              "fontFamily": "Geist, Inter, system-ui, sans-serif",
+              "fontFamily": "Geist",
               "fontSize": 42,
               "fontWeight": "700"
             },
@@ -547,10 +1772,10 @@
               "fill": "$color.text.subtle",
               "textGrowth": "fixed-width",
               "width": 620,
-              "content": "Built for teams getting started. Free for teams up to 10 members.",
+              "content": "Start with the documents your team already relies on, then organize them in a workspace built to scale.",
               "lineHeight": 1.6,
               "textAlign": "center",
-              "fontFamily": "Geist, Inter, system-ui, sans-serif",
+              "fontFamily": "Geist",
               "fontSize": 18,
               "fontWeight": "normal"
             },
@@ -573,7 +1798,7 @@
                   "name": "finalBtnT",
                   "fill": "$color.text.inverse",
                   "content": "Get Started Free",
-                  "fontFamily": "Geist, Inter, system-ui, sans-serif",
+                  "fontFamily": "Geist",
                   "fontSize": 16,
                   "fontWeight": "600"
                 }
@@ -606,7 +1831,7 @@
               "name": "footTop",
               "fill": "$color.text.default",
               "content": "Tededox",
-              "fontFamily": "Geist, Inter, system-ui, sans-serif",
+              "fontFamily": "Geist",
               "fontSize": 22,
               "fontWeight": "700"
             },
@@ -617,9 +1842,9 @@
               "fill": "$color.text.subtle",
               "textGrowth": "fixed-width",
               "width": 420,
-              "content": "The all-in-one workspace for collaborative docs and engineering whiteboards.",
+              "content": "A calm home for collaborative docs with thoughtful permissions built in.",
               "lineHeight": 1.6,
-              "fontFamily": "Geist, Inter, system-ui, sans-serif",
+              "fontFamily": "Geist",
               "fontSize": 14,
               "fontWeight": "normal"
             },
@@ -629,7 +1854,7 @@
               "name": "footCopy",
               "fill": "$color.text.muted",
               "content": "© 2026 Tededox, Inc. All rights reserved.",
-              "fontFamily": "Geist, Inter, system-ui, sans-serif",
+              "fontFamily": "Geist",
               "fontSize": 13,
               "fontWeight": "normal"
             }
@@ -33492,7 +34717,7 @@
       "type": "frame",
       "id": "EditPg001",
       "x": 1320,
-      "y": 8222,
+      "y": 12259,
       "name": "Content Page · Editing",
       "width": 1200,
       "height": 980,
@@ -53371,6 +54596,707 @@
           ]
         }
       ]
+    },
+    {
+      "type": "frame",
+      "id": "DVe6f",
+      "x": 2640,
+      "y": 12259,
+      "name": "Content Page · Editing · Mobile",
+      "width": 390,
+      "height": 844,
+      "fill": "$color.bg.canvas",
+      "layout": "vertical",
+      "children": [
+        {
+          "type": "frame",
+          "id": "0dPEJ",
+          "name": "top",
+          "width": "fill_container",
+          "fill": "$color.bg.surface",
+          "stroke": {
+            "thickness": {
+              "bottom": 1
+            },
+            "fill": "$color.border.default"
+          },
+          "padding": [
+            14,
+            16
+          ],
+          "justifyContent": "space_between",
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "frame",
+              "id": "qrHBe",
+              "name": "Mobile Brand Group",
+              "gap": 8,
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "ktD5X",
+                  "name": "logoIcon",
+                  "width": 28,
+                  "height": 28,
+                  "fill": "$color.brand.primary",
+                  "cornerRadius": 8,
+                  "layout": "none",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "CSbEp",
+                      "x": 8,
+                      "y": 6,
+                      "name": "logoTopBar",
+                      "width": 12,
+                      "height": 4,
+                      "fill": "$color.text.inverse",
+                      "cornerRadius": 999
+                    },
+                    {
+                      "type": "frame",
+                      "id": "IBOV8",
+                      "x": 9,
+                      "y": 9,
+                      "name": "logoStem",
+                      "width": 4,
+                      "height": 12,
+                      "fill": "$color.text.inverse",
+                      "cornerRadius": 999
+                    },
+                    {
+                      "type": "frame",
+                      "id": "M47M0",
+                      "x": 17,
+                      "y": 17,
+                      "name": "logoNode",
+                      "width": 6,
+                      "height": 6,
+                      "fill": "$color.bg.selected",
+                      "cornerRadius": 999
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "id": "2jVi0",
+                  "name": "mobileBrand",
+                  "fill": "$color.text.default",
+                  "content": "Tededox",
+                  "fontFamily": "Geist, Inter, system-ui, sans-serif",
+                  "fontSize": 20,
+                  "fontWeight": "700"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "QgTJV",
+              "name": "Mobile Actions",
+              "gap": 12,
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "icon_font",
+                  "id": "GhXAq",
+                  "name": "mobileMenu",
+                  "width": 16,
+                  "height": 16,
+                  "iconFontName": "menu",
+                  "iconFontFamily": "feather",
+                  "fill": "$color.icon.muted"
+                },
+                {
+                  "type": "frame",
+                  "id": "Wdzr5",
+                  "name": "mobileNotif",
+                  "width": 28,
+                  "height": 28,
+                  "fill": "$color.bg.neutral",
+                  "cornerRadius": 999,
+                  "justifyContent": "center",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon_font",
+                      "id": "ztioV",
+                      "width": 14,
+                      "height": 14,
+                      "iconFontName": "bell",
+                      "iconFontFamily": "feather",
+                      "fill": "$color.icon.muted"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "bU6N6",
+                  "name": "mobileAvatar",
+                  "width": 28,
+                  "height": 28,
+                  "fill": "$color.bg.selected",
+                  "cornerRadius": 999,
+                  "justifyContent": "center",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "8FL0F",
+                      "fill": "$color.brand.primary",
+                      "content": "D",
+                      "fontFamily": "Geist, Inter, system-ui, sans-serif",
+                      "fontSize": 12,
+                      "fontWeight": "600"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "U56lC",
+          "name": "mobileMain",
+          "width": "fill_container",
+          "height": "fill_container",
+          "layout": "vertical",
+          "gap": "$space.14",
+          "padding": "$space.16",
+          "children": [
+            {
+              "type": "frame",
+              "id": "WdzVB",
+              "width": "fill_container",
+              "padding": [
+                "$space.2",
+                0,
+                "$space.4",
+                0
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "cpl7i",
+                  "fill": "$color.text.muted",
+                  "content": "Product Design / Roadmap",
+                  "fontFamily": "Geist, Inter, system-ui, sans-serif",
+                  "fontSize": "$font.size.12",
+                  "fontWeight": "$font.weight.medium"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "id": "nYnuD",
+              "x": 14,
+              "y": 53,
+              "enabled": false,
+              "fill": "$color.text.muted",
+              "content": "Product Design / Roadmap",
+              "fontFamily": "$font.family.primary",
+              "fontSize": "$font.size.13",
+              "fontWeight": "$font.weight.medium"
+            },
+            {
+              "type": "frame",
+              "id": "mDXu5",
+              "width": "fill_container",
+              "layout": "vertical",
+              "gap": "$space.10",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "oOoX3",
+                  "name": "avatarStack",
+                  "gap": -6,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "pTzEE",
+                      "name": "leaderAvatar",
+                      "width": 28,
+                      "height": 28,
+                      "fill": "$color.accent.9",
+                      "cornerRadius": "$radius.pill",
+                      "stroke": {
+                        "thickness": 2,
+                        "fill": "$color.bg.surface"
+                      },
+                      "layout": "none",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "RCx90",
+                          "x": 0,
+                          "y": 0,
+                          "name": "leadInitial",
+                          "fill": "$color.text.inverse",
+                          "content": "D",
+                          "fontFamily": "Geist, Inter, system-ui, sans-serif",
+                          "fontSize": 12,
+                          "fontWeight": "700"
+                        },
+                        {
+                          "type": "frame",
+                          "id": "TY0s8",
+                          "layoutPosition": "absolute",
+                          "x": 16,
+                          "y": 16,
+                          "name": "leaderBadge",
+                          "width": 12,
+                          "height": 12,
+                          "fill": "$color.brand.primary",
+                          "cornerRadius": "$radius.pill",
+                          "stroke": {
+                            "thickness": 1,
+                            "fill": "$color.bg.surface"
+                          },
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon_font",
+                              "id": "hQ55E",
+                              "name": "leadStar",
+                              "width": 8,
+                              "height": 8,
+                              "iconFontName": "star",
+                              "iconFontFamily": "feather",
+                              "fill": "$color.text.inverse"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "nHRSO",
+                      "name": "editorAvatar",
+                      "width": 28,
+                      "height": 28,
+                      "fill": "$color.accent.3",
+                      "cornerRadius": "$radius.pill",
+                      "stroke": {
+                        "thickness": 2,
+                        "fill": "$color.bg.surface"
+                      },
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "Ijp8U",
+                          "fill": "$color.accent.11",
+                          "content": "S",
+                          "fontFamily": "Geist, Inter, system-ui, sans-serif",
+                          "fontSize": 12,
+                          "fontWeight": "700"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "Y0aW1",
+                      "name": "reviewerAvatar",
+                      "width": 28,
+                      "height": 28,
+                      "fill": "$color.gray.4",
+                      "cornerRadius": "$radius.pill",
+                      "stroke": {
+                        "thickness": 2,
+                        "fill": "$color.bg.surface"
+                      },
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "vPMTL",
+                          "fill": "$color.gray.11",
+                          "content": "A",
+                          "fontFamily": "Geist, Inter, system-ui, sans-serif",
+                          "fontSize": 12,
+                          "fontWeight": "700"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "id": "Q7BcX",
+                  "fill": "$color.text.default",
+                  "textGrowth": "fixed-width",
+                  "width": "fill_container",
+                  "content": "Q2 Planning",
+                  "lineHeight": 1.15,
+                  "fontFamily": "$font.family.primary",
+                  "fontSize": 14,
+                  "fontWeight": "$font.weight.bold"
+                },
+                {
+                  "type": "frame",
+                  "id": "f8k7s",
+                  "name": "metaRow",
+                  "width": "fill_container",
+                  "gap": "$space.6",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "BPFoh",
+                      "name": "draft",
+                      "fill": "$color.accent.3",
+                      "cornerRadius": "$radius.pill",
+                      "padding": [
+                        "$space.2",
+                        "$space.8"
+                      ],
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "0pcWC",
+                          "fill": "$color.brand.primary",
+                          "content": "Draft",
+                          "fontFamily": "Geist, Inter, system-ui, sans-serif",
+                          "fontSize": 14,
+                          "fontWeight": "$font.weight.medium"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "bBIa9",
+                      "fill": "$color.text.muted",
+                      "content": "Diana Miller",
+                      "fontFamily": "Geist, Inter, system-ui, sans-serif",
+                      "fontSize": 14,
+                      "fontWeight": "$font.weight.medium"
+                    },
+                    {
+                      "type": "text",
+                      "id": "pTmZH",
+                      "fill": "$color.text.muted",
+                      "content": "·",
+                      "fontFamily": "Geist, Inter, system-ui, sans-serif",
+                      "fontSize": 14,
+                      "fontWeight": "$font.weight.medium"
+                    },
+                    {
+                      "type": "text",
+                      "id": "Mw74z",
+                      "fill": "$color.text.muted",
+                      "content": "Updated 2h ago",
+                      "fontFamily": "Geist, Inter, system-ui, sans-serif",
+                      "fontSize": 14,
+                      "fontWeight": "$font.weight.medium"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "id": "p3W1G",
+              "fill": "$color.text.subtle",
+              "textGrowth": "fixed-width",
+              "width": "fill_container",
+              "content": "This page outlines the priorities, milestones, and operating principles for the Q2 planning cycle across roadmap work, design reviews, and sprint execution.",
+              "lineHeight": 1.7,
+              "fontFamily": "$font.family.primary",
+              "fontSize": "$font.size.14",
+              "fontWeight": "$font.weight.normal"
+            },
+            {
+              "type": "frame",
+              "id": "SM6o0",
+              "width": "fill_container",
+              "fill": "$color.accent.3",
+              "stroke": {
+                "thickness": 1,
+                "fill": "$color.border.default"
+              },
+              "layout": "vertical",
+              "gap": "$space.8",
+              "padding": "$space.14",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "s6CZ8",
+                  "fill": "$color.text.default",
+                  "content": "Editing mode",
+                  "fontFamily": "$font.family.primary",
+                  "fontSize": "$font.size.12",
+                  "fontWeight": "$font.weight.semibold"
+                },
+                {
+                  "type": "text",
+                  "id": "7AONW",
+                  "fill": "$color.text.subtle",
+                  "textGrowth": "fixed-width",
+                  "width": "fill_container",
+                  "content": "This page is editable. Use the floating deck to share the page or open comments without losing your place in the draft.",
+                  "lineHeight": 1.5,
+                  "fontFamily": "$font.family.primary",
+                  "fontSize": "$font.size.12",
+                  "fontWeight": "$font.weight.normal"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "C5jcE",
+              "width": "fill_container",
+              "layout": "vertical",
+              "gap": "$space.12",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "LV3ZL",
+                  "fill": "$color.text.default",
+                  "content": "Timeline",
+                  "fontFamily": "$font.family.primary",
+                  "fontSize": "$font.size.18",
+                  "fontWeight": "$font.weight.semibold"
+                },
+                {
+                  "type": "frame",
+                  "id": "StWCS",
+                  "width": "fill_container",
+                  "gap": "$space.10",
+                  "children": [
+                    {
+                      "type": "ellipse",
+                      "id": "W0MLO",
+                      "fill": "$color.text.default",
+                      "width": 6,
+                      "height": 6
+                    },
+                    {
+                      "type": "text",
+                      "id": "8wCB5",
+                      "fill": "$color.text.default",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "Align sprint planning milestones with roadmap checkpoints.",
+                      "lineHeight": 1.55,
+                      "fontFamily": "$font.family.primary",
+                      "fontSize": "$font.size.13",
+                      "fontWeight": "$font.weight.normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "Evnm2",
+                  "width": "fill_container",
+                  "gap": "$space.10",
+                  "children": [
+                    {
+                      "type": "ellipse",
+                      "id": "oHSdD",
+                      "fill": "$color.text.default",
+                      "width": 6,
+                      "height": 6
+                    },
+                    {
+                      "type": "text",
+                      "id": "BKsin",
+                      "fill": "$color.text.default",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "Keep design review decisions documented in one shared planning page.",
+                      "lineHeight": 1.55,
+                      "fontFamily": "$font.family.primary",
+                      "fontSize": "$font.size.13",
+                      "fontWeight": "$font.weight.normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "70PRH",
+                  "width": "fill_container",
+                  "gap": "$space.10",
+                  "children": [
+                    {
+                      "type": "ellipse",
+                      "id": "Xl0Pw",
+                      "fill": "$color.text.default",
+                      "width": 6,
+                      "height": 6
+                    },
+                    {
+                      "type": "text",
+                      "id": "4tMut",
+                      "fill": "$color.text.default",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "Make ownership and timing visible for every high-priority initiative.",
+                      "lineHeight": 1.55,
+                      "fontFamily": "$font.family.primary",
+                      "fontSize": "$font.size.13",
+                      "fontWeight": "$font.weight.normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "pSDxX",
+                  "width": "fill_container",
+                  "fill": "$color.gray.2",
+                  "stroke": {
+                    "thickness": 1,
+                    "fill": "$color.border.default"
+                  },
+                  "layout": "vertical",
+                  "gap": "$space.8",
+                  "padding": "$space.12",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "JQZEB",
+                      "fill": "$color.text.muted",
+                      "content": "Example checklist logic",
+                      "fontFamily": "$font.family.mono",
+                      "fontSize": "$font.size.12",
+                      "fontWeight": "$font.weight.medium"
+                    },
+                    {
+                      "type": "text",
+                      "id": "O38MR",
+                      "fill": "$color.text.default",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "if milestone.isBlocked:\n  escalate(owner)\nelse:\n  schedule(review)",
+                      "lineHeight": 1.55,
+                      "fontFamily": "$font.family.mono",
+                      "fontSize": "$font.size.12",
+                      "fontWeight": "$font.weight.normal"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "wwSsd",
+          "layoutPosition": "absolute",
+          "x": 332,
+          "y": 574,
+          "name": "actionDock",
+          "fill": "$color.bg.surface",
+          "cornerRadius": 16,
+          "stroke": {
+            "thickness": 1,
+            "fill": "$color.border.default"
+          },
+          "effect": {
+            "type": "shadow",
+            "shadowType": "outer",
+            "color": "#10042f14",
+            "offset": {
+              "x": 0,
+              "y": 3
+            },
+            "blur": 10
+          },
+          "layout": "vertical",
+          "gap": 4,
+          "padding": 4,
+          "children": [
+            {
+              "type": "frame",
+              "id": "jvZ1M",
+              "name": "shareBtn",
+              "width": 32,
+              "height": 32,
+              "fill": "$color.gray.2",
+              "cornerRadius": 10,
+              "stroke": {
+                "thickness": 0,
+                "fill": "$color.border.default"
+              },
+              "justifyContent": "center",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "icon_font",
+                  "id": "nmygm",
+                  "width": 14,
+                  "height": 14,
+                  "iconFontName": "share-2",
+                  "iconFontFamily": "feather",
+                  "fill": "$color.icon.default"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "OndlH",
+              "name": "commentBtn",
+              "width": 32,
+              "height": 32,
+              "fill": "$color.gray.2",
+              "cornerRadius": 10,
+              "stroke": {
+                "thickness": 0,
+                "fill": "$color.border.default"
+              },
+              "layout": "none",
+              "children": [
+                {
+                  "type": "icon_font",
+                  "id": "ErRbV",
+                  "x": 9,
+                  "y": 9,
+                  "width": 14,
+                  "height": 14,
+                  "iconFontName": "message-circle",
+                  "iconFontFamily": "feather",
+                  "fill": "$color.icon.default"
+                },
+                {
+                  "type": "frame",
+                  "id": "aNFje",
+                  "layoutPosition": "absolute",
+                  "x": 18,
+                  "y": 0,
+                  "name": "commentBadge",
+                  "width": 14,
+                  "height": 14,
+                  "fill": "$color.bg.surface",
+                  "cornerRadius": "$radius.pill",
+                  "stroke": {
+                    "thickness": 1,
+                    "fill": "$color.border.default"
+                  },
+                  "justifyContent": "center",
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "HLoq2",
+                      "fill": "$color.text.default",
+                      "content": "3",
+                      "fontFamily": "$font.family.primary",
+                      "fontSize": 12,
+                      "fontWeight": "$font.weight.semibold"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
     }
   ],
   "themes": {
@@ -54759,5 +56685,22 @@
         }
       ]
     }
-  }
+  },
+  "fonts": [
+    {
+      "name": "Geist",
+      "url": "Geist-VariableFont_wght.ttf",
+      "weight": [
+        100,
+        900
+      ],
+      "axes": [
+        {
+          "tag": "wght",
+          "start": 100,
+          "end": 900
+        }
+      ]
+    }
+  ]
 }

@@ -11,6 +11,7 @@ import { Buffer } from "buffer";
 import "@durgakiran/whiteboard/styles.css";
 import { useRouter } from "next/navigation";
 import { HiHome } from "react-icons/hi";
+import { getSignalingUrl } from "app/core/signaling";
 
 export default function WhiteboardEditor({ slug, readOnly = false }: { slug: string[]; readOnly?: boolean }) {
     const spaceId = slug[0];
@@ -46,7 +47,7 @@ export default function WhiteboardEditor({ slug, readOnly = false }: { slug: str
     useEffect(() => {
         if (readOnly) return; // no collaboration in view mode
         const _provider = new WebrtcProvider(pageId + "-space-" + spaceId, yDoc, {
-            signaling: [process.env.NEXT_PUBLIC_SIGNALING_URL || 'wss://app.durgakiran.com/ws'],
+            signaling: [getSignalingUrl()],
             filterBcConns: false
         });
         setProvider(_provider);

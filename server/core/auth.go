@@ -45,7 +45,7 @@ func (t *tokenType) authenticate() error {
 		Transport: tr,
 	}
 	ctx := oidc.ClientContext(context.Background(), client)
-	provider, err := oidc.NewProvider(ctx, os.Getenv("ISSUER_URL"))
+	provider, err := oidc.NewProvider(ctx, IssuerBaseURL())
 	if err != nil {
 		Logger.Error("authorisation failed while getting the provider: " + err.Error())
 		return errors.New(err.Error())
@@ -96,7 +96,7 @@ var authN *authentication.Authenticator[*openid.UserInfoContext[*zoidc.IDTokenCl
 var authNLock = &sync.Mutex{}
 
 func ZitadelAuthenticator() *authentication.Authenticator[*openid.UserInfoContext[*zoidc.IDTokenClaims, *zoidc.UserInfo]] {
-	issuerURL := os.Getenv("ISSUER_URL")
+	issuerURL := IssuerHost()
 	clientID := os.Getenv("CLIENT_ID")
 	serverURL := os.Getenv("SERVER_URL")
 	if authN == nil {

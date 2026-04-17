@@ -37,6 +37,8 @@ DB_PORT=${DB_PORT:-5432}
 DB_ROOT=${DB_ROOT:-postgres}
 DB_ROOT_USER=${DB_ROOT_USER:-admin}
 DB_ROOT_PASS=${DB_ROOT_PASS:-password}
+DB_APP_NAME=${DB_APP_NAME:-beskar}
+DB_AUTH_NAME=${DB_AUTH_NAME:-auth}
 DB_BESKAR_ADMIN_USER=${DB_BESKAR_ADMIN_USER:-beskar_admin} # run liquibase migrations with this user
 DB_BESKAR_ADMIN_USER_PWD=${DB_BESKAR_ADMIN_USER_PWD:-beskar_admin_pwd}
 DB_BESKAR_APP_USER=${DB_BESKAR_APP_USER:-app_user}
@@ -61,6 +63,8 @@ function copy_data_to_liquibaes_prop_file() {
     sed -i "s/@DB_ROOT@/$DB_ROOT/" $1/liquibase-temp.properties
     sed -i "s/@DB_ROOT_USER@/$DB_ROOT_USER/" $1/liquibase-temp.properties
     sed -i "s/@DB_ROOT_PASS@/$DB_ROOT_PASS/" $1/liquibase-temp.properties
+    sed -i "s/@DB_APP_NAME@/$DB_APP_NAME/" $1/liquibase-temp.properties
+    sed -i "s/@DB_AUTH_NAME@/$DB_AUTH_NAME/" $1/liquibase-temp.properties
     sed -i "s/@DB_BESKAR_ADMIN_USER@/$DB_BESKAR_ADMIN_USER/" $1/liquibase-temp.properties
     sed -i "s/@DB_BESKAR_ADMIN_USER_PWD@/$DB_BESKAR_ADMIN_USER_PWD/" $1/liquibase-temp.properties
     sed -i "s/@DB_BESKAR_APP_USER@/$DB_BESKAR_APP_USER/" $1/liquibase-temp.properties

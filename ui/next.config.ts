@@ -1,6 +1,7 @@
 import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
+  output: 'standalone',
   webpack(config) {
     // The editor package is mounted via a Docker volume at /opt/packages/editor
     // and installed as a symlink in node_modules. Without this flag webpack

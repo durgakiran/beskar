@@ -7,7 +7,6 @@ import type { AttachmentRef } from "@durgakiran/editor";
 import { useGet, useDelete } from "@http/hooks";
 import { Button, Spinner, Flex, Box, Text, Dialog } from "@radix-ui/themes";
 import { useRouter } from "next/navigation";
-import WhiteboardEditor from "@components/WhiteboardEditor";
 import { use, useEffect, useMemo, useRef, useState } from "react";
 
 interface ViewSpaceState {
@@ -168,9 +167,11 @@ export default function Page({ params }: { params: Promise<{ page: string; space
 
     if (pageType === "whiteboard") {
         return (
-            <Box className="h-full w-full">
-                <WhiteboardEditor slug={[spaceId, page]} readOnly={true} />
-            </Box>
+            <Flex align="center" justify="center" className="min-h-[40vh] px-6">
+                <Text size="3" className="text-neutral-700">
+                    Whiteboards are temporarily unavailable.
+                </Text>
+            </Flex>
         );
     }
 

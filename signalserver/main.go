@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
+	"strings"
 	"sync"
 
 	"github.com/gorilla/websocket"
@@ -236,7 +238,7 @@ func authMiddleware(next http.HandlerFunc) http.HandlerFunc {
 func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	// to prevent cross-origin requests
 	upgrader.CheckOrigin = func(r *http.Request) bool {
-		return true // TODO: Implement proper CORS checking
+		return isAllowedOrigin(r.Header.Get("Origin"))
 	}
 
 	conn, err := upgrader.Upgrade(w, r, nil)
@@ -251,6 +253,62 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	}
 	go client.writePump()
 	go client.readPump(hub)
+}
+
+func allowedOrigins() []string {
+	raw := os.Getenv("CORS_ALLOWED_ORIGINS")
+	if raw == "" {
+		return []string{"http://localhost:3000", "http://localhost:8085"}
+	}
+
+	parts := strings.Split(raw, ",")
+	origins := make([]string, 0, len(parts))
+	for _, part := range parts {
+		trimmed := strings.TrimSpace(part)
+		if trimmed == "" {
+			continue
+		}
+		origins = append(origins, trimmed)
+	}
+
+	if len(origins) == 0 {
+		return []string{"http://localhost:3000", "http://localhost:8085"}
+	}
+
+	return origins
+}
+
+func isAllowedOrigin(origin string) bool {
+	if origin == "" {
+		return false
+	}
+
+	requestOrigin, err := url.Parse(origin)
+	if err != nil {
+		return false
+	}
+
+	for _, candidate := range allowedOrigins() {
+		if origin == candidate {
+			return true
+		}
+
+		if strings.Contains(candidate, "*.") {
+			patternOrigin, err := url.Parse(candidate)
+			if err != nil || patternOrigin.Scheme != requestOrigin.Scheme {
+				continue
+			}
+
+			prefix := "*."
+			suffix := strings.TrimPrefix(patternOrigin.Hostname(), prefix)
+			host := requestOrigin.Hostname()
+			if suffix != "" && strings.HasSuffix(host, "."+suffix) {
+				return true
+			}
+		}
+	}
+
+	return false
 }
 
 func setupRoutes() {

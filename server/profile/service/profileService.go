@@ -2,9 +2,7 @@ package profile
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
-	"os"
 
 	"github.com/durgakiran/beskar/core"
 )
@@ -12,7 +10,7 @@ import (
 const profileEndpoint = "/protocol/openid-connect/userinfo"
 
 func GetProfileData(token string) (core.UserInfoOut, error) {
-	var realmUrl = fmt.Sprintf("https://%s", os.Getenv("ISSUER_URL"))
+	var realmUrl = core.IssuerBaseURL()
 	req, err := http.NewRequest(http.MethodGet, realmUrl+profileEndpoint, nil)
 	if err != nil {
 		return core.UserInfoOut{}, err

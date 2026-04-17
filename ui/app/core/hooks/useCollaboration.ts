@@ -1,6 +1,7 @@
 import { HocuspocusProvider } from "@hocuspocus/provider";
 import { useMemo } from "react";
 import * as Y from "yjs";
+import { getCollaborationUrl } from "app/core/signaling";
 
 export default function useCollaboration(document: string): HocuspocusProvider {
     const yDoc = useMemo(() => {
@@ -10,7 +11,7 @@ export default function useCollaboration(document: string): HocuspocusProvider {
     const provider = useMemo(() => {
         return new HocuspocusProvider({
             document: yDoc,
-            url: "wss://app.durgakiran.com/collab",
+            url: getCollaborationUrl(),
             name: document,
         })
     }, [yDoc]);

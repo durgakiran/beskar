@@ -1,6 +1,6 @@
 "use client";
 import { MouseEvent, useCallback, useEffect, useState } from "react";
-import { Dialog, Button, TextField, Flex, Text, Select } from "@radix-ui/themes";
+import { Dialog, Button, TextField, Flex, Text } from "@radix-ui/themes";
 import { Response, usePost } from "@http/hooks";
 
 interface IAddPage {
@@ -25,13 +25,11 @@ interface PageResponse {
 
 export default function AddPage({ isOpen, setIsOpen, spaceId, parentId, editPage, disabled = false, disabledMessage = "This space is archived and read-only." }: IAddPage) {
     const [name, setName] = useState("");
-    const [pageType, setPageType] = useState<"document" | "whiteboard">("document");
     const [pendingCreate, setPendingCreate] = useState(false);
     
     const [{ data: docData, isLoading: docLoading, errors: docErrors }, createDoc] = usePost<Response<PageResponse>, Page>(`editor/space/${spaceId}/page/create`);
-    const [{ data: wbData, isLoading: wbLoading, errors: wbErrors }, createWb] = usePost<Response<PageResponse>, Page>(`editor/space/${spaceId}/whiteboard/create`);
 
-    const loading = docLoading || wbLoading;
+    const loading = docLoading;
     const added = pendingCreate && !loading;
 
     const handleInput = useCallback((value: string) => {
@@ -44,11 +42,7 @@ export default function AddPage({ isOpen, setIsOpen, spaceId, parentId, editPage
             return;
         }
         setPendingCreate(true);
-        if (pageType === "document") {
-            createDoc({ title: name, spaceId, parentId });
-        } else {
-            createWb({ title: name, spaceId, parentId });
-        }
+        createDoc({ title: name, spaceId, parentId });
     };
 
     useEffect(() => {
@@ -58,22 +52,18 @@ export default function AddPage({ isOpen, setIsOpen, spaceId, parentId, editPage
         if (docData?.data?.page) {
             setPendingCreate(false);
             editPage(docData.data.page);
-        } else if (wbData?.data?.page) {
-            setPendingCreate(false);
-            editPage(wbData.data.page);
         }
-    }, [docData, wbData, editPage, pendingCreate]);
+    }, [docData, editPage, pendingCreate]);
 
     useEffect(() => {
-        if (!loading && pendingCreate && (docErrors || wbErrors)) {
+        if (!loading && pendingCreate && docErrors) {
             setPendingCreate(false);
         }
-    }, [docErrors, wbErrors, loading, pendingCreate]);
+    }, [docErrors, loading, pendingCreate]);
 
     useEffect(() => {
         if (!isOpen) {
             setName("");
-            setPageType("document");
             setPendingCreate(false);
         }
     }, [isOpen]);
@@ -83,7 +73,7 @@ export default function AddPage({ isOpen, setIsOpen, spaceId, parentId, editPage
             <Dialog.Content maxWidth="520px">
                 <Dialog.Title size="6">Create new page</Dialog.Title>
                 <Dialog.Description size="2" color="gray" mb="4">
-                    Choose the page type and title. This page will be added under the current location.
+                    Add a title for the new document. It will be created under the current location.
                 </Dialog.Description>
                 <Flex direction="column" gap="4">
                     {disabled ? (
@@ -93,19 +83,7 @@ export default function AddPage({ isOpen, setIsOpen, spaceId, parentId, editPage
                     ) : null}
                     <label>
                         <Text as="div" size="2" mb="1" weight="bold">
-                            Page Type
-                        </Text>
-                        <Select.Root value={pageType} onValueChange={(val: "document" | "whiteboard") => setPageType(val)}>
-                            <Select.Trigger className="w-full" />
-                            <Select.Content>
-                                <Select.Item value="document">Document</Select.Item>
-                                <Select.Item value="whiteboard">Whiteboard</Select.Item>
-                            </Select.Content>
-                        </Select.Root>
-                    </label>
-                    <label>
-                        <Text as="div" size="2" mb="1" weight="bold">
-                            Page Title
+                            Document Title
                         </Text>
                         <TextField.Root
                             value={name}

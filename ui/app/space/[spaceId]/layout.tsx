@@ -48,8 +48,9 @@ export default function Layout({ children, params }: { children: React.ReactNode
 
     useEffect(() => {
         if (data?.data) {
+            const documentPages = data.data.filter((page) => page.type !== "whiteboard");
             const pageMap = new Map<number, PageTreeNode[]>();
-            const allNodes: PageTreeNode[] = data.data.map(p => ({
+            const allNodes: PageTreeNode[] = documentPages.map(p => ({
                 id: p.pageId.toString(),
                 title: p.title || "Untitled",
                 href: `/space/${spaceId}/view/${p.pageId}`,
@@ -58,7 +59,7 @@ export default function Layout({ children, params }: { children: React.ReactNode
             }));
 
             allNodes.forEach(node => {
-                const parentId = data.data.find(p => p.pageId.toString() === node.id)?.parentId || 0;
+                const parentId = documentPages.find(p => p.pageId.toString() === node.id)?.parentId || 0;
                 if (parentId > 0) {
                     if (!pageMap.has(parentId)) pageMap.set(parentId, []);
                     pageMap.get(parentId)!.push(node);
@@ -66,7 +67,7 @@ export default function Layout({ children, params }: { children: React.ReactNode
             });
 
             const rootNodes = allNodes.filter(node => {
-                const parentId = data.data.find(p => p.pageId.toString() === node.id)?.parentId || 0;
+                const parentId = documentPages.find(p => p.pageId.toString() === node.id)?.parentId || 0;
                 if (parentId <= 0) {
                     node.children = pageMap.get(parseInt(node.id)) || [];
                     return true;
@@ -119,7 +120,7 @@ export default function Layout({ children, params }: { children: React.ReactNode
     };
 
     const handlePageSelect = (id: string) => {
-        const node = data?.data.find(p => p.pageId.toString() === id);
+        const node = data?.data.find(p => p.pageId.toString() === id && p.type !== "whiteboard");
         if (node) {
             router.push(`/space/${spaceId}/view/${id}`);
         }

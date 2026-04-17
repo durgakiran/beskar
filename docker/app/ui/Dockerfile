@@ -4,4 +4,4 @@ WORKDIR /app
 
 RUN echo $(ls -lah)
 
-CMD npm i && npm run build && npm run start
+CMD npx npm i && npm run build && npm run start

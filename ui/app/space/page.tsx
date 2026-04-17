@@ -15,7 +15,6 @@ interface SpaceListItem {
     createdBy: string;
     memberCount: number;
     docCount: number;
-    whiteboardCount: number;
     userRole: "owner" | "admin" | "editor" | "commenter" | "viewer";
 }
 
@@ -30,7 +29,7 @@ type ToastState = {
 } | null;
 
 const PAGE_TITLE = "Spaces";
-const PAGE_SUBTITLE = "Select a space to open documents, whiteboards, and settings.";
+const PAGE_SUBTITLE = "Select a space to open documents and settings.";
 
 function pluralize(count: number, singular: string, plural = `${singular}s`) {
     return `${count} ${count === 1 ? singular : plural}`;
@@ -201,10 +200,7 @@ export default function Page() {
                                 title={space.name}
                                 description={space.description || "Describe the purpose of this space."}
                                 badge={pluralize(space.memberCount, "member")}
-                                badges={[
-                                    pluralize(space.docCount, "doc"),
-                                    pluralize(space.whiteboardCount, "whiteboard"),
-                                ]}
+                                badges={[pluralize(space.docCount, "doc")]}
                                 meta={`${formatRole(space.userRole)} • Updated ${formatRelative(space.dateUpdated)}`}
                                 leadingLabel={space.name.charAt(0).toUpperCase()}
                                 href={`/space/${space.id}`}
@@ -220,7 +216,7 @@ export default function Page() {
                         </div>
                         <h2 className="text-xl font-semibold text-neutral-900">No spaces yet</h2>
                         <p className="mt-2 max-w-[420px] text-sm leading-6 text-neutral-800">
-                            Create your first space to organize documents, whiteboards, and team collaboration in one place.
+                            Create your first space to organize documents and team collaboration in one place.
                         </p>
                         <Button
                             type="button"
@@ -248,7 +244,7 @@ export default function Page() {
                 label="Space name"
                 placeholder="Product Design"
                 descriptionLabel="Description"
-                descriptionPlaceholder="Roadmaps, sprint docs, and planning boards for product delivery."
+                descriptionPlaceholder="Roadmaps, sprint docs, and planning notes for product delivery."
                 submitLabel="Create space"
                 errorMessage={createErrorMessage}
             />

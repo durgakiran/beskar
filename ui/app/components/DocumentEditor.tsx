@@ -15,6 +15,7 @@ import { usePUT } from "app/core/http/hooks/usePut";
 import { useRouter } from "next/navigation";
 import { WebrtcProvider } from "y-webrtc";
 import { prosemirrorJSONToYDoc } from "@tiptap/y-tiptap";
+import { getSignalingUrl } from "app/core/signaling";
 
 interface User {
     name: string;
@@ -388,7 +389,7 @@ export default function DocumentEditor({ slug }: { slug: string[] }) {
 
     useEffect(() => {
         const _provider = new WebrtcProvider(slug[1] + "-space-" + slug[0], ydoc, {
-            signaling: [process.env.NEXT_PUBLIC_SIGNALING_URL || 'wss://app.durgakiran.com/ws'],
+            signaling: [getSignalingUrl()],
             filterBcConns: false
         });
         setProvider(_provider);

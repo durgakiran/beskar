@@ -64,7 +64,7 @@ export default function MenuBar() {
     return (
         <Topbar
             className="fixed inset-x-0 top-0 z-50"
-            brand="Tededox"
+            brand="Teddox"
             brandHref="/"
             navItems={[
                 { id: "spaces", label: "Spaces", href: "/space", active: pathname?.startsWith("/space") },

@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -127,7 +126,7 @@ type ZitaUser struct {
 }
 
 func SearchUsersByIds(userIds []string) (UserSearchResponse, error) {
-	var providerURL = fmt.Sprintf("https://%s", os.Getenv("ISSUER_URL"))
+	var providerURL = normalizeExternalURL(os.Getenv("ISSUER_URL"))
 	filter := Filter{
 		InUserIdsQuery: &InUserIdsQUeryFilter{
 			UserIds: userIds,
@@ -148,7 +147,7 @@ func SearchUsersByIds(userIds []string) (UserSearchResponse, error) {
 }
 
 func SearchUserByEmail(search string, limit uint32, offset uint64) (UserSearchResponse, error) {
-	var providerURL = fmt.Sprintf("https://%s", os.Getenv("ISSUER_URL"))
+	var providerURL = normalizeExternalURL(os.Getenv("ISSUER_URL"))
 	filter := Filter{
 		InUserEmailsQuery: &InUserEmailsQuery{
 			UserEmails: []string{strings.TrimSpace(strings.ToLower(search))},
@@ -173,7 +172,7 @@ func SearchUsers(search string, limit uint32, offset uint64) (UserSearchResponse
 	if search == "" {
 		return UserSearchResponse{}, errors.New("missing search input")
 	}
-	var providerURL = fmt.Sprintf("https://%s", os.Getenv("ISSUER_URL"))
+	var providerURL = normalizeExternalURL(os.Getenv("ISSUER_URL"))
 	method := "TEXT_QUERY_METHOD_CONTAINS_IGNORE_CASE"
 	orFilters := []Filter{
 		{

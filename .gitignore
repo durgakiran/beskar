@@ -16,6 +16,7 @@ uploads
 liquibasebin
 keycloakbin
 images
+server/public/attachments
 .env
 zappy
 *.pyc
@@ -30,9 +31,11 @@ redis-logs
 .npmrc
 # packages/whiteboard
 packages/whiteboard-demo
-packages/editor-demo
+# packages/editor-demo
 packages/rtc-collaboration
 packages/rtc-collaboration-demo
 signalserver/signalserver
 server/server
-new-features
+# new-features
+docker/.generated
+docker/env/*.env

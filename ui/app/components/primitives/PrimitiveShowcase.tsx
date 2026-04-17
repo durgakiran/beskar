@@ -25,21 +25,21 @@ const pageTreeData: PageTreeNode[] = [
         href: "#",
         children: [
             { id: "q2-plan", title: "Q2 Plan", type: "document", href: "#" },
-            { id: "sprint-board", title: "Sprint Board", type: "whiteboard", href: "#" },
+            { id: "launch-plan", title: "Launch Plan", type: "document", href: "#" },
         ],
     },
-    { id: "retro-board", title: "Retro Board", type: "whiteboard", href: "#" },
+    { id: "retrospective", title: "Retrospective", type: "document", href: "#" },
 ];
 
 const users: UserRowData[] = [
-    { id: "1", name: "Asha Reddy", email: "asha@tededox.dev", role: "owner" },
-    { id: "2", name: "Jordan Kim", email: "jordan@tededox.dev", role: "editor" },
-    { id: "3", name: "Sam Patel", email: "sam@tededox.dev", role: "viewer" },
+    { id: "1", name: "Asha Reddy", email: "asha@teddox.dev", role: "owner" },
+    { id: "2", name: "Jordan Kim", email: "jordan@teddox.dev", role: "editor" },
+    { id: "3", name: "Sam Patel", email: "sam@teddox.dev", role: "viewer" },
 ];
 
 export function PrimitiveShowcase() {
     const [expandedIds, setExpandedIds] = useState<string[]>(["roadmap"]);
-    const [activeId, setActiveId] = useState<string>("sprint-board");
+    const [activeId, setActiveId] = useState<string>("launch-plan");
     const [modalOpen, setModalOpen] = useState<boolean>(false);
     const [spaceName, setSpaceName] = useState<string>("");
     const [noticeVisible, setNoticeVisible] = useState<boolean>(true);
@@ -63,7 +63,7 @@ export function PrimitiveShowcase() {
             <div className="mx-auto max-w-7xl space-y-8">
                 <div className="space-y-2">
                     <Text size="6" weight="bold" className="text-neutral-900">
-                        TedEDox Primitives
+                        Teddox Primitives
                     </Text>
                     <Text size="3" className="text-neutral-600">
                         Internal reference surface for `.pen` primitive parity.
@@ -72,14 +72,14 @@ export function PrimitiveShowcase() {
 
                 <section className="overflow-hidden border border-neutral-200 bg-white">
                     <Topbar
-                        brand="Tededox"
+                        brand="Teddox"
                         navItems={[
                             { id: "spaces", label: "Spaces", href: "#", active: true },
                             { id: "contact", label: "Contact", href: "#" },
                         ]}
                         user={{
                             name: "Diana Miller",
-                            email: "diana@tededox.dev",
+                            email: "diana@teddox.dev",
                             initials: "D",
                         }}
                         userMenuItems={[
@@ -115,7 +115,7 @@ export function PrimitiveShowcase() {
                         <div className="rounded-xl border border-neutral-200 bg-white p-6">
                             <SpacesHeader
                                 title="Spaces"
-                                subtitle="Select a space to open documents, whiteboards, and settings."
+                                subtitle="Select a space to open documents and settings."
                                 actionLabel="Create New Space"
                                 onAction={() => setModalOpen(true)}
                             />
@@ -124,9 +124,9 @@ export function PrimitiveShowcase() {
                         <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
                             <SpaceCard
                                 title="Product Design"
-                                description="Roadmap, sprint docs, and planning boards for product delivery."
+                                description="Roadmap, sprint docs, and planning notes for product delivery."
                                 badge="24 members"
-                                badges={["12 docs", "5 whiteboards"]}
+                                badges={["12 docs"]}
                                 meta="Owner • Updated 2h ago"
                                 leadingLabel="P"
                                 href="#"
@@ -135,7 +135,7 @@ export function PrimitiveShowcase() {
                                 title="Growth Team"
                                 description="Campaign planning, launch notes, and analytics experiments."
                                 badge="18 members"
-                                badges={["8 docs", "3 whiteboards"]}
+                                badges={["8 docs"]}
                                 meta="Admin • Updated yesterday"
                                 leadingLabel="G"
                                 href="#"
@@ -144,7 +144,7 @@ export function PrimitiveShowcase() {
                                 title="Customer Ops"
                                 description="Support playbooks, escalation notes, and weekly reporting."
                                 badge="12 members"
-                                badges={["9 docs", "2 whiteboards"]}
+                                badges={["9 docs"]}
                                 meta="Editor • Updated 4h ago"
                                 leadingLabel="C"
                                 onClick={() => undefined}

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -32,7 +33,7 @@ func logger() *zap.Logger {
 func addCorsMiddleWare(r *chi.Mux) {
 	r.Use(cors.Handler(
 		cors.Options{
-			AllowedOrigins: []string{"https://*.durgakiran.com", "http://app.tededox.com", "http://localhost:3000", "http://localhost:8085"},
+			AllowedOrigins: core.AllowedOriginsFromEnv(),
 			// AllowOriginFunc:  func(r *http.Request, origin string) bool { return true },
 			AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 			AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
@@ -74,7 +75,7 @@ func main() {
 	core.InitializeSlogLogger()
 	const port = ":9095"
 	err := godotenv.Load()
-	if err != nil {
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		logger().Error(err.Error())
 	}
 

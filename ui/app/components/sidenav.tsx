@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import AddPage from "./addPage";
 import { Box, Flex, Text, IconButton, Spinner } from "@radix-ui/themes";
-import { HiHome, HiOutlinePlusSm, HiOutlineChevronDown, HiOutlineChevronRight, HiCog, HiOutlinePresentationChartBar, HiOutlineDocumentText } from "react-icons/hi";
+import { HiHome, HiOutlinePlusSm, HiOutlineChevronDown, HiOutlineChevronRight, HiCog, HiOutlineDocumentText } from "react-icons/hi";
 import Link from "next/link";
 import { Response, useGet } from "@http/hooks";
 interface Docs {
@@ -59,7 +59,7 @@ function SideNavItem({ pages, spaceId, openAddPage }: { pages: Array<IPages>; sp
                                 <li key={i}>
                                     <div className="flex flex-row items-center gap-1 py-1.5 px-2 rounded-sm hover:bg-mauve-50 transition-colors group">
                                         <div className="flex-shrink-0 flex items-center justify-center w-5 h-5 text-neutral-400">
-                                            {page.type === "whiteboard" ? <HiOutlinePresentationChartBar size={16} /> : <HiOutlineDocumentText size={16} />}
+                                            <HiOutlineDocumentText size={16} />
                                         </div>
                                         <Link
                                             className="text-sm text-neutral-700 hover:text-primary-600 flex-1 truncate transition-colors"
@@ -108,9 +108,10 @@ export default function SideNav(param: Props) {
 
     useEffect(() => {
         if (data && data.data) {
+            const documentPages = data.data.filter((page) => page.type !== "whiteboard");
             const pagemap = new Map<number, Array<IPages>>();
             const pages: Array<IPages> = [];
-            data.data
+            documentPages
                 .map((page): IPages => {
                     return {
                         id: page.pageId,

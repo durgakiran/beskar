@@ -4,7 +4,6 @@ import { use } from "react";
 import { Response, useGet } from "@http/hooks";
 import { Spinner, Flex } from "@radix-ui/themes";
 import DocumentEditor from "@components/DocumentEditor";
-import WhiteboardEditor from "@components/WhiteboardEditor";
 import { useEffect } from "react";
 
 export default function Page({ params }: { params: Promise<{ slug: string[] }> }) {
@@ -29,7 +28,7 @@ export default function Page({ params }: { params: Promise<{ slug: string[] }> }
     }
 
     if (metaData.data.type === "whiteboard") {
-        return <WhiteboardEditor slug={slug} />;
+        return <div className="px-8 py-6 text-sm text-neutral-700">Whiteboards are temporarily unavailable.</div>;
     }
 
     return <DocumentEditor slug={slug} />;

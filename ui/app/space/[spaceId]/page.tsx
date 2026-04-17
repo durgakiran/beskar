@@ -14,7 +14,6 @@ interface SpaceDetails {
     name: string;
     description?: string;
     docCount?: number;
-    whiteboardCount?: number;
     memberCount?: number;
     userRole?: string;
     archivedAt?: string | null;
@@ -72,7 +71,7 @@ export default function Page({ params }: { params: Promise<{ spaceId: string }> 
     }, [data]);
 
     const space = data?.data;
-    const pages = pagesData?.data || [];
+    const pages = (pagesData?.data || []).filter((page) => page.type !== "whiteboard");
     const isArchived = Boolean(space?.archivedAt);
 
     // Transform pages for mobile PageTree
@@ -193,11 +192,6 @@ export default function Page({ params }: { params: Promise<{ spaceId: string }> 
                     <SpaceSummaryStat
                         label="Documents"
                         value={space?.docCount ?? 0}
-                        className="flex-row justify-between items-center md:flex-col md:items-start md:justify-start"
-                    />
-                    <SpaceSummaryStat
-                        label="Whiteboards"
-                        value={space?.whiteboardCount ?? 0}
                         className="flex-row justify-between items-center md:flex-col md:items-start md:justify-start"
                     />
                     <SpaceSummaryStat

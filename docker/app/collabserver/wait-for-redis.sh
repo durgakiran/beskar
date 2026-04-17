@@ -4,7 +4,7 @@
 set -e
 
 # Default Redis configuration
-REDIS_HOST=${REDIS_HOST:-tededox-redis}
+REDIS_HOST=${REDIS_HOST:-teddox-redis}
 REDIS_PORT=${REDIS_PORT:-6379}
 REDIS_PASSWORD=${REDIS_PASSWORD:-redis_secure_password}
 
