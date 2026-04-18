@@ -1,6 +1,7 @@
 FROM golang:1.23.3-alpine AS builder
 
 WORKDIR /src/server
+ENV GODEBUG=netdns=go
 
 COPY server/go.mod server/go.sum ./
 RUN go mod download

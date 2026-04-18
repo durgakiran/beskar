@@ -1,6 +1,7 @@
 FROM node:22-alpine AS deps
 
 WORKDIR /app
+ENV NODE_OPTIONS=--dns-result-order=ipv4first
 
 ARG NPM_TOKEN
 

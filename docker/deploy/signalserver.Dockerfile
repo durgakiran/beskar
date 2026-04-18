@@ -1,6 +1,7 @@
 FROM golang:1.23.3-alpine AS builder
 
 WORKDIR /src/signalserver
+ENV GODEBUG=netdns=go
 
 COPY signalserver/go.mod signalserver/go.sum ./
 RUN go mod download
