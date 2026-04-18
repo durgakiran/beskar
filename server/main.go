@@ -10,8 +10,8 @@ import (
 
 	attachment "github.com/durgakiran/beskar/attachment/controller"
 	auth "github.com/durgakiran/beskar/auth"
-	"github.com/durgakiran/beskar/core"
 	"github.com/durgakiran/beskar/comment"
+	"github.com/durgakiran/beskar/core"
 	editor "github.com/durgakiran/beskar/editor"
 	"github.com/durgakiran/beskar/invite"
 	media "github.com/durgakiran/beskar/media/controller"
@@ -48,7 +48,7 @@ func CookieLogger(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Log each cookie in the request
 		for _, cookie := range r.Cookies() {
-			fmt.Println("Cookie Name: %s, Value: %s\n", cookie.Name, cookie.Value)
+			fmt.Printf("Cookie Name: %s, Value: %s\n", cookie.Name, cookie.Value)
 		}
 
 		// Call the next handler in the chain
@@ -61,7 +61,7 @@ func QueryParamLogger(next http.Handler) http.Handler {
 		// Log each query parameter in the request
 		for key, values := range r.URL.Query() {
 			for _, value := range values {
-				fmt.Println(fmt.Sprintf("Query Parameter: %s = %s\n", key, value))
+				fmt.Printf("Query Parameter: %s = %s\n", key, value)
 			}
 		}
 

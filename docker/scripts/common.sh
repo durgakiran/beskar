@@ -78,6 +78,8 @@ load_env_file() {
     : "${DOCKER_NETWORK_NAME:=beskar-network}"
     : "${PROXY_HTTP_PORT:=80}"
     : "${PROXY_HTTPS_PORT:=443}"
+    : "${PROXY_DOMAIN_ALIASES_ENABLED:=true}"
+    : "${ORIGIN_CERT_TRUST_INJECTION_ENABLED:=true}"
 
     : "${DB_HOST:=postgres}"
     : "${DB_PORT:=5432}"
@@ -132,11 +134,55 @@ load_env_file() {
     : "${ZITADEL_EXTERNALSECURE:=${TLS_ENABLED}}"
     : "${INSECURE_SKIP_VERIFY:=false}"
     : "${CORS_ALLOWED_ORIGINS:=${PUBLIC_BASE_URL}}"
+    : "${UPLOAD_STORAGE_DIR:=public}"
+
+    PROXY_DOMAIN_ALIASES_ENABLED="$(normalize_bool "$PROXY_DOMAIN_ALIASES_ENABLED")"
+    ORIGIN_CERT_TRUST_INJECTION_ENABLED="$(normalize_bool "$ORIGIN_CERT_TRUST_INJECTION_ENABLED")"
+
+    if [[ "$PROXY_DOMAIN_ALIASES_ENABLED" == "true" ]]; then
+        PROXY_NETWORKS_BLOCK=$(cat <<EOF
+    networks:
+      app_net:
+        aliases:
+          - ${APP_DOMAIN}
+          - ${AUTH_DOMAIN}
+          - ${LANDING_DOMAIN}
+EOF
+)
+    else
+        PROXY_NETWORKS_BLOCK=$(cat <<'EOF'
+    networks:
+      - app_net
+EOF
+)
+    fi
+
+    if [[ "$ORIGIN_CERT_TRUST_INJECTION_ENABLED" == "true" ]]; then
+        UI_ORIGIN_CA_ENV_BLOCK='      NODE_EXTRA_CA_CERTS: /etc/ssl/certs/beskar-cert.pem'
+        SERVER_ORIGIN_CA_ENV_BLOCK='      SSL_CERT_FILE: /etc/ssl/certs/beskar-cert.pem'
+        UI_ORIGIN_CA_VOLUMES_BLOCK=$(cat <<'EOF'
+    volumes:
+      - {{TLS_CERT_PATH}}:/etc/ssl/certs/beskar-cert.pem:ro
+EOF
+)
+        SERVER_ORIGIN_CA_VOLUMES_BLOCK=$(cat <<'EOF'
+    volumes:
+      - {{TLS_CERT_PATH}}:/etc/ssl/certs/beskar-cert.pem:ro
+EOF
+)
+    else
+        UI_ORIGIN_CA_ENV_BLOCK=''
+        SERVER_ORIGIN_CA_ENV_BLOCK=''
+        UI_ORIGIN_CA_VOLUMES_BLOCK=''
+        SERVER_ORIGIN_CA_VOLUMES_BLOCK=''
+    fi
 
     export COMPOSE_PROJECT_NAME
     export DOCKER_NETWORK_NAME
     export PROXY_HTTP_PORT
     export PROXY_HTTPS_PORT
+    export PROXY_DOMAIN_ALIASES_ENABLED
+    export ORIGIN_CERT_TRUST_INJECTION_ENABLED
     export PUBLIC_BASE_URL
     export AUTH_PUBLIC_URL
     export LANDING_PUBLIC_URL
@@ -151,6 +197,7 @@ load_env_file() {
     export BESKAR_SERVER_URL
     export CORS_ALLOWED_ORIGINS
     export INSECURE_SKIP_VERIFY
+    export UPLOAD_STORAGE_DIR
     export DB_HOST
     export DB_PORT
     export POSTGRES_DATA_MOUNT
@@ -164,6 +211,11 @@ load_env_file() {
     export ZITADEL_ISSUER_URL
     export ZITADEL_EXTERNALDOMAIN
     export ZITADEL_EXTERNALSECURE
+    export PROXY_NETWORKS_BLOCK
+    export UI_ORIGIN_CA_ENV_BLOCK
+    export UI_ORIGIN_CA_VOLUMES_BLOCK
+    export SERVER_ORIGIN_CA_ENV_BLOCK
+    export SERVER_ORIGIN_CA_VOLUMES_BLOCK
 }
 
 render_template() {

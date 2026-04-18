@@ -185,11 +185,13 @@ services:
       SERVER_PAT: ${ZITADEL_USER_PAT}
       KEY: ${ZITADEL_CLIENT_SECRET}
       SERVER_URL: ${BESKAR_SERVER}
+      UPLOAD_STORAGE_DIR: ${UPLOAD_STORAGE_DIR:-public}
     ports:
       - "9095:9095"
       - "40000:40000"
     volumes:
       - /Users/kiran/projects/beskar/server/:/app
+      - /Users/kiran/projects/server/uploads:/Users/kiran/projects/server/uploads
       - ./nginx/certs/_wildcard.durgakiran.com.pem:/etc/ssl/certs/_wildcard.durgakiran.com.pem:ro
     healthcheck:
       test: ["CMD-SHELL", "curl -XGET --output /dev/null --silent --head --fail http://localhost:9095/ || exit 1"]

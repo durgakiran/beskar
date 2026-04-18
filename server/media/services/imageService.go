@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/fs"
 	"math/rand"
 	"mime/multipart"
 	"os"
@@ -38,7 +37,7 @@ func (i *Image) createFileName() error {
 	if len(ext) < 0 {
 		return errors.New("Unable to identify file extension")
 	}
-	if !(ext != ".png" || ext != ".jpg" || ext != ".jpeg") {
+	if ext != ".png" && ext != ".jpg" && ext != ".jpeg" {
 		return errors.New(fmt.Sprintf("Not a compatible file extension: %v", ext))
 	}
 	randomIdentifier := generateRandomIdentifier()
@@ -47,16 +46,13 @@ func (i *Image) createFileName() error {
 	return nil
 }
 
-func (i *Image) createPath() {
-	err := os.Mkdir("public", fs.ModePerm)
+func (i *Image) createPath() error {
+	err := os.MkdirAll(core.ImageStorageDir(), 0o755)
 	if err != nil {
-		core.Logger.Error("Failed to create public directory")
+		core.Logger.Error("Failed to create images directory: " + err.Error())
+		return errors.New("Failed to create images directory")
 	}
-	os.Mkdir("public/images", fs.ModePerm)
-	if err != nil {
-		core.Logger.Error("Failed to create images directory")
-	}
-
+	return nil
 }
 
 func (i *Image) SaveImage() error {
@@ -64,8 +60,11 @@ func (i *Image) SaveImage() error {
 	if err != nil {
 		return err
 	}
-	i.createPath()
-	file, err := os.Create("public/images/" + i.Name)
+	err = i.createPath()
+	if err != nil {
+		return err
+	}
+	file, err := os.Create(filepath.Join(core.ImageStorageDir(), i.Name))
 	if err != nil {
 		core.Logger.Error("Failed to create file")
 		return errors.New("Failed to create file")
@@ -79,7 +78,15 @@ func (i *Image) SaveImage() error {
 }
 
 func GetImage(id string) ([]byte, error) {
-	data, err := os.ReadFile("public/images/" + id)
+	data, err := os.ReadFile(filepath.Join(core.ImageStorageDir(), id))
+	if err == nil {
+		return data, nil
+	}
+	if !errors.Is(err, os.ErrNotExist) || core.UploadStorageDir() == "public" {
+		return nil, err
+	}
+
+	data, err = os.ReadFile(filepath.Join("public", "images", id))
 	if err != nil {
 		return nil, err
 	}

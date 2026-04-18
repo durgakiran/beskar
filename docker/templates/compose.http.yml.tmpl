@@ -173,6 +173,7 @@ services:
       SERVER_URL: {{BESKAR_SERVER_URL}}
       INSECURE_SKIP_VERIFY: "{{INSECURE_SKIP_VERIFY}}"
       CORS_ALLOWED_ORIGINS: {{CORS_ALLOWED_ORIGINS}}
+      UPLOAD_STORAGE_DIR: {{UPLOAD_STORAGE_DIR}}
     depends_on:
       postgres:
         condition: service_healthy
@@ -223,12 +224,7 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
-    networks:
-      app_net:
-        aliases:
-          - {{APP_DOMAIN}}
-          - {{AUTH_DOMAIN}}
-          - {{LANDING_DOMAIN}}
+{{PROXY_NETWORKS_BLOCK}}
 
 networks:
   app_net:

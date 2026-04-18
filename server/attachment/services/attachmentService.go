@@ -10,7 +10,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -20,8 +19,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
-
-const attachmentsSubdir = "public/attachments"
 
 // AttachmentRecord is a row from core.attachment (active rows have deleted_at NULL).
 type AttachmentRecord struct {
@@ -35,7 +32,7 @@ type AttachmentRecord struct {
 }
 
 func ensureAttachmentsDir() error {
-	return os.MkdirAll(attachmentsSubdir, 0o755)
+	return os.MkdirAll(core.AttachmentStorageDir(), 0o755)
 }
 
 // SanitizeDisplayName strips path segments and control characters for DB / Content-Disposition.
@@ -95,14 +92,16 @@ func SaveAttachment(ctx context.Context, pageID int64, createdBy, originalFilena
 
 	display := SanitizeDisplayName(originalFilename)
 	onDisk := diskFileName(originalFilename)
-	relPath := filepath.Join(attachmentsSubdir, onDisk)
-	relPath = strings.ReplaceAll(relPath, "\\", "/")
+	relPath := core.AttachmentStoragePath(onDisk)
 
 	if err := ensureAttachmentsDir(); err != nil {
 		return nil, err
 	}
 
-	fullPath := relPath
+	fullPath, err := core.ResolveUploadPath(relPath)
+	if err != nil {
+		return nil, err
+	}
 	f, err := os.Create(fullPath)
 	if err != nil {
 		core.Logger.Error("attachment: create file: " + err.Error())
@@ -192,12 +191,27 @@ ORDER BY created_at DESC, id DESC`
 
 // ReadAttachmentBytes loads file bytes from disk using storage_path relative to process cwd.
 func ReadAttachmentBytes(storagePath string) ([]byte, error) {
-	norm := strings.ReplaceAll(storagePath, "\\", "/")
-	if norm == "" || strings.Contains(norm, "..") {
-		return nil, fs.ErrNotExist
+	relPath, err := core.NormalizeAttachmentStoragePath(storagePath)
+	if err != nil {
+		return nil, err
 	}
-	if !strings.HasPrefix(norm, "public/attachments/") {
-		return nil, fs.ErrNotExist
+
+	fullPath, err := core.ResolveUploadPath(relPath)
+	if err != nil {
+		return nil, err
 	}
-	return os.ReadFile(filepath.FromSlash(norm))
+	data, err := os.ReadFile(fullPath)
+	if err == nil {
+		return data, nil
+	}
+
+	if !errors.Is(err, os.ErrNotExist) || core.UploadStorageDir() == "public" {
+		return nil, err
+	}
+
+	legacyPath, legacyErr := core.ResolveLegacyPublicUploadPath(relPath)
+	if legacyErr != nil {
+		return nil, legacyErr
+	}
+	return os.ReadFile(legacyPath)
 }
