@@ -11,6 +11,17 @@ RUN test -n "$NPM_TOKEN"
 RUN printf "registry=https://registry.npmjs.org/\n@durgakiran:registry=https://npm.pkg.github.com\n//npm.pkg.github.com/:_authToken=%s\n" "$NPM_TOKEN" > .npmrc
 RUN npm ci
 
+FROM golang:1.23.3-alpine AS wasm-builder
+
+WORKDIR /src/jbi
+ENV GODEBUG=netdns=go
+
+COPY jbi/go.mod jbi/go.sum ./
+RUN go mod download
+
+COPY jbi ./
+RUN GOOS=js GOARCH=wasm go build -o /out/jbi.wasm .
+
 FROM node:22-alpine AS builder
 
 WORKDIR /app
@@ -37,7 +48,10 @@ ENV NEXT_PUBLIC_SIGNALING_URL=$NEXT_PUBLIC_SIGNALING_URL
 ENV NEXT_PUBLIC_HASURA_PROJECT_ENDPOINT=$NEXT_PUBLIC_HASURA_PROJECT_ENDPOINT
 
 COPY --from=deps /app/node_modules ./node_modules
+RUN mkdir -p /app/public
 COPY ui ./
+COPY --from=wasm-builder /out/jbi.wasm ./public/jbi.wasm
+RUN npm run build:workers
 RUN npm run build
 
 FROM node:22-alpine AS runner
