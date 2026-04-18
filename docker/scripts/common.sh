@@ -88,6 +88,8 @@ load_env_file() {
     : "${DB_APP_NAME:=beskar}"
     : "${DB_AUTH_NAME:=auth}"
     : "${DB_ZITADEL_NAME:=zitadel}"
+    : "${ZITADEL_IMAGE:=ghcr.io/zitadel/zitadel:v4.13.0}"
+    : "${ZITADEL_LOGIN_V2_REQUIRED:=false}"
     : "${REDIS_HOST:=redis}"
     : "${REDIS_PORT:=6379}"
     : "${PERMIFY_ENDPOINT:=guard:3478}"
@@ -205,6 +207,8 @@ EOF
     export DB_APP_NAME
     export DB_AUTH_NAME
     export DB_ZITADEL_NAME
+    export ZITADEL_IMAGE
+    export ZITADEL_LOGIN_V2_REQUIRED
     export REDIS_HOST
     export REDIS_PORT
     export PERMIFY_ENDPOINT

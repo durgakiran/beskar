@@ -62,7 +62,7 @@ services:
       - custom_local_network
   zitadel:
     restart: always
-    image: ghcr.io/zitadel/zitadel:latest
+    image: ${ZITADEL_IMAGE:-ghcr.io/zitadel/zitadel:v4.13.0}
     command: 'start-from-init --masterkey "bJEJYXs8PAyWgY0mdF3SWcEhn99Kkqp5" --tlsMode external'
     environment:
       ZITADEL_EXTERNALDOMAIN: id.durgakiran.com
@@ -79,6 +79,7 @@ services:
       ZITADEL_DATABASE_POSTGRES_ADMIN_PASSWORD: password
       ZITADEL_DATABASE_POSTGRES_ADMIN_SSL_MODE: disable
       ZITADEL_EXTERNALSECURE: true
+      ZITADEL_DEFAULTINSTANCE_FEATURES_LOGINV2_REQUIRED: ${ZITADEL_LOGIN_V2_REQUIRED:-false}
     ports:
       - 8084:8080
     volumes:
