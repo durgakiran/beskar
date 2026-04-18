@@ -1,5 +1,7 @@
 FROM postgres:16.2
 
+ARG LIQUIBASE_VERSION=4.27.0
+
 RUN apt-get update && apt-get install -y \
     wget \
     jq \
@@ -13,7 +15,11 @@ WORKDIR /app
 
 COPY db /app/db
 COPY docker/database/db-init.sh /app/docker/database/db-init.sh
-COPY docker/database/liquibasebin /app/docker/database/liquibasebin
+
+RUN mkdir -p /app/docker/database/liquibasebin \
+    && curl -fsSL "https://github.com/liquibase/liquibase/releases/download/v${LIQUIBASE_VERSION}/liquibase-${LIQUIBASE_VERSION}.zip" -o /tmp/liquibase.zip \
+    && unzip /tmp/liquibase.zip -d /app/docker/database/liquibasebin \
+    && rm -f /tmp/liquibase.zip
 
 RUN chmod +x /app/docker/database/db-init.sh
 
