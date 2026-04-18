@@ -2,7 +2,7 @@
 
 import { Response, useGet, usePut } from "@http/hooks";
 import { Spinner, Flex } from "@radix-ui/themes";
-import { use, useEffect, useState } from "react";
+import { use, useEffect, useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
 import { SpaceSummaryStat, StatusNotice, PageTree, PageTreeNode, InlineEditable } from "@components/primitives";
 import { FiHome, FiSettings, FiPlus } from "react-icons/fi";
@@ -71,28 +71,48 @@ export default function Page({ params }: { params: Promise<{ spaceId: string }> 
     }, [data]);
 
     const space = data?.data;
-    const pages = (pagesData?.data || []).filter((page) => page.type !== "whiteboard");
+    const pages = useMemo(
+        () => (pagesData?.data || []).filter((page) => page.type !== "whiteboard"),
+        [pagesData?.data],
+    );
     const isArchived = Boolean(space?.archivedAt);
 
-    // Transform pages for mobile PageTree
-    const [treeNodes, setTreeNodes] = useState<PageTreeNode[]>([]);
-    useEffect(() => {
-        if (pages.length > 0) {
-            const allNodes: PageTreeNode[] = pages.map(p => ({
-                id: p.pageId.toString(),
-                title: p.title || "Untitled",
-                href: `/space/${spaceId}/view/${p.pageId}`,
-                type: p.type || "document",
-                children: []
-            }));
-            // Simplified root-only for mobile inline summary? 
-            // Or full tree? Let's do full tree for consistency as requested.
-            const rootNodes = allNodes.filter(node => {
-                const parentId = pages.find(p => p.pageId.toString() === node.id)?.parentId || 0;
-                return parentId <= 0;
-            });
-            setTreeNodes(rootNodes);
+    const treeNodes = useMemo<PageTreeNode[]>(() => {
+        if (pages.length === 0) {
+            return [];
         }
+
+        const nodesById = new Map<string, PageTreeNode>();
+        const roots: PageTreeNode[] = [];
+
+        pages.forEach((page) => {
+            nodesById.set(page.pageId.toString(), {
+                id: page.pageId.toString(),
+                title: page.title || "Untitled",
+                href: `/space/${spaceId}/view/${page.pageId}`,
+                type: page.type || "document",
+                children: [],
+            });
+        });
+
+        pages.forEach((page) => {
+            const node = nodesById.get(page.pageId.toString());
+            if (!node) {
+                return;
+            }
+
+            if (page.parentId > 0) {
+                const parent = nodesById.get(page.parentId.toString());
+                if (parent) {
+                    parent.children = [...(parent.children || []), node];
+                    return;
+                }
+            }
+
+            roots.push(node);
+        });
+
+        return roots;
     }, [pages, spaceId]);
 
     if (errors) {

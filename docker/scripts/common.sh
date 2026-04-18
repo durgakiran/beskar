@@ -130,6 +130,7 @@ load_env_file() {
     : "${ZITADEL_ISSUER_URL:=${AUTH_PUBLIC_URL}}"
     : "${ZITADEL_EXTERNALDOMAIN:=${AUTH_DOMAIN}}"
     : "${ZITADEL_EXTERNALSECURE:=${TLS_ENABLED}}"
+    : "${INSECURE_SKIP_VERIFY:=false}"
     : "${CORS_ALLOWED_ORIGINS:=${PUBLIC_BASE_URL}}"
 
     export COMPOSE_PROJECT_NAME
@@ -149,6 +150,7 @@ load_env_file() {
     export NEXT_PUBLIC_HASURA_PROJECT_ENDPOINT
     export BESKAR_SERVER_URL
     export CORS_ALLOWED_ORIGINS
+    export INSECURE_SKIP_VERIFY
     export DB_HOST
     export DB_PORT
     export POSTGRES_DATA_MOUNT

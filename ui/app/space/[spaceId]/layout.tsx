@@ -148,7 +148,7 @@ export default function Layout({ children, params }: { children: React.ReactNode
             {/* Sidebar */}
             <aside 
                 className={cn(
-                    "flex flex-col border-r border-neutral-200 bg-white transition-[width] duration-75 ease-linear",
+                    "relative z-20 flex flex-shrink-0 flex-col border-r border-neutral-200 bg-white transition-[width] duration-75 ease-linear",
                     "hidden md:flex"
                 )}
                 style={{ width: sidebarWidth }}
@@ -231,7 +231,7 @@ export default function Layout({ children, params }: { children: React.ReactNode
             </div>
 
             {/* Main Content Area */}
-            <main className="flex-1 overflow-y-auto bg-[var(--background)]">
+            <main className="relative z-0 min-w-0 flex-1 overflow-y-auto bg-[var(--background)]">
                 {children}
             </main>
 

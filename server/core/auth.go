@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -37,8 +38,13 @@ type DefaultRole struct {
 }
 
 func (t *tokenType) authenticate() error {
+	insecureSkipVerify, err := strconv.ParseBool(strings.TrimSpace(os.Getenv("INSECURE_SKIP_VERIFY")))
+	if err != nil {
+		insecureSkipVerify = false
+	}
+
 	tr := &http.Transport{
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: insecureSkipVerify},
 	}
 	client := &http.Client{
 		Timeout:   time.Duration(6000) * time.Second,
