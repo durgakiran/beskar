@@ -67,6 +67,20 @@ docker compose -f docker/app/app.yml --env-file docker/app/.env -p beskar-app bu
 docker compose -f docker/app/app.yml --env-file docker/app/.env -p beskar-app up -d server
 ```
 
+If you want a clean restart for any one development service so it picks up updated code, env, and image layers, use:
+
+```bash
+docker compose -f docker/app/app.yml --env-file docker/app/.env -p beskar-app build <service-name>
+docker compose -f docker/app/app.yml --env-file docker/app/.env -p beskar-app up -d --force-recreate --no-deps <service-name>
+```
+
+Example for the development `server` service:
+
+```bash
+docker compose -f docker/app/app.yml --env-file docker/app/.env -p beskar-app build server
+docker compose -f docker/app/app.yml --env-file docker/app/.env -p beskar-app up -d --force-recreate --no-deps server
+```
+
 ### Stop Development Stack
 
 Stop the app stack:
@@ -145,6 +159,62 @@ What this does:
 - Starts `postgres` and `redis`
 - Runs the `db-init` job
 - Starts `guard`, `zitadel`, `server`, `signalserver`, `ui`, `launchsite`, and `proxy`
+
+### Clean Restart One Production Service
+
+If you changed code, Dockerfile, or env for one production service, first re-render the generated compose file, then rebuild and recreate only that service:
+
+```bash
+./docker/scripts/render-configs.sh --env docker/env/<environment>.env
+docker compose -f docker/.generated/compose.yml -p <compose-project-name> build <service-name>
+docker compose -f docker/.generated/compose.yml -p <compose-project-name> up -d --force-recreate --no-deps <service-name>
+```
+
+Use the `COMPOSE_PROJECT_NAME` value from `docker/env/<environment>.env` as `<compose-project-name>`.
+
+Example for the production `server` service:
+
+```bash
+./docker/scripts/render-configs.sh --env docker/env/prod.env
+docker compose -f docker/.generated/compose.yml -p beskar-prod build server
+docker compose -f docker/.generated/compose.yml -p beskar-prod up -d --force-recreate --no-deps server
+```
+
+Use `--build` on the `up` command instead of a separate `build` only if you prefer a one-liner:
+
+```bash
+./docker/scripts/render-configs.sh --env docker/env/prod.env
+docker compose -f docker/.generated/compose.yml -p beskar-prod up -d --build --force-recreate --no-deps server
+```
+
+### Apply the Permify Schema
+
+Beskar expects the Permify schema to exist. If the app starts but authorization checks fail because the schema is missing, apply it with this request after the stack is up.
+
+From the deployment host:
+
+```bash
+curl -X POST http://localhost:3476/v1/tenants/t1/schemas/write \
+  -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer <permify-secret>' \
+  --data-raw '{
+    "schema": "entity user {}\nentity tenant {\n    relation space @space\n}\nentity space {\n    relation owner @user\n    relation admin @user\n    relation editor @user\n    relation commentor @user\n    relation viewer @user\n\n    permission delete = owner\n    permission edit = owner or admin\n    permission edit_page = owner or admin or editor\n    permission view = owner or admin or editor or commentor or viewer\n    permission invite_admin = owner\n    permission invite_member = owner or admin\n    permission add_comment = owner or admin or editor or commentor\n    permission manage_members = owner or admin\n    permission transfer_owner = owner\n    permission archive = owner or admin\n}\nentity page {\n    relation owner @space#owner @space#admin @space#editor\n    relation parent @page\n    relation space @space\n\n    permission edit = space.edit or space.editor\n    permission view = space.view\n    permission delete = owner or space.owner\n    permission add_comment = space.add_comment\n}\n"
+  }'
+```
+
+Replace `<permify-secret>` with the value of `PERMIFY_SECRET` from `docker/env/<environment>.env`.
+
+If you want to avoid typing the secret inline:
+
+```bash
+source docker/env/<environment>.env
+curl -X POST http://localhost:3476/v1/tenants/t1/schemas/write \
+  -H 'Content-Type: application/json' \
+  -H "Authorization: Bearer $PERMIFY_SECRET" \
+  --data-raw '{
+    "schema": "entity user {}\nentity tenant {\n    relation space @space\n}\nentity space {\n    relation owner @user\n    relation admin @user\n    relation editor @user\n    relation commentor @user\n    relation viewer @user\n\n    permission delete = owner\n    permission edit = owner or admin\n    permission edit_page = owner or admin or editor\n    permission view = owner or admin or editor or commentor or viewer\n    permission invite_admin = owner\n    permission invite_member = owner or admin\n    permission add_comment = owner or admin or editor or commentor\n    permission manage_members = owner or admin\n    permission transfer_owner = owner\n    permission archive = owner or admin\n}\nentity page {\n    relation owner @space#owner @space#admin @space#editor\n    relation parent @page\n    relation space @space\n\n    permission edit = space.edit or space.editor\n    permission view = space.view\n    permission delete = owner or space.owner\n    permission add_comment = space.add_comment\n}\n"
+  }'
+```
 
 ### Stop the Production Stack
 

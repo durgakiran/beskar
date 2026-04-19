@@ -103,7 +103,7 @@ func main() {
 	r.Use(middleware.Recoverer)
 	// r.Use(CookieLogger)
 	// r.Use(QueryParamLogger)
-	r.Mount("/auth/", core.ZitadelAuthenticator())
+	r.Mount("/auth/", core.ZitadelAuthRouter())
 	r.Mount("/api/v1", auth.Router())
 	r.Mount("/api/v1/media", mw.CheckAuthentication()(media.Router()))
 	r.Mount("/api/v1/attachments", mw.CheckAuthentication()(attachment.Router()))

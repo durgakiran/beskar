@@ -13,7 +13,10 @@ import (
 	"time"
 
 	"github.com/coreos/go-oidc/v3/oidc"
+	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/render"
+	"github.com/zitadel/oidc/v3/pkg/client/rp"
+	httphelper "github.com/zitadel/oidc/v3/pkg/http"
 	zoidc "github.com/zitadel/oidc/v3/pkg/oidc"
 	"github.com/zitadel/zitadel-go/v3/pkg/authentication"
 	openid "github.com/zitadel/zitadel-go/v3/pkg/authentication/oidc"
@@ -101,10 +104,33 @@ func AuthMiddleWare(next http.Handler) http.Handler {
 var authN *authentication.Authenticator[*openid.UserInfoContext[*zoidc.IDTokenClaims, *zoidc.UserInfo]]
 var authNLock = &sync.Mutex{}
 
+const zitadelOrgScopePrefix = "urn:zitadel:iam:org:id:"
+
+func zitadelAuthScopes() []string {
+	scopes := []string{zoidc.ScopeOpenID, zoidc.ScopeProfile, zoidc.ScopeEmail}
+	orgID := strings.TrimSpace(os.Getenv("ZITADEL_REGISTRATION_ORG_ID"))
+	if orgID == "" {
+		return scopes
+	}
+	return append(scopes, fmt.Sprintf("%s%s", zitadelOrgScopePrefix, orgID))
+}
+
+func zitadelRedirectURI() string {
+	return fmt.Sprintf("%s/auth/callback", os.Getenv("SERVER_URL"))
+}
+
+func zitadelClientAuthentication() openid.ClientAuthentication {
+	key := os.Getenv("KEY")
+	return openid.PKCEAuthentication(
+		os.Getenv("CLIENT_ID"),
+		zitadelRedirectURI(),
+		zitadelAuthScopes(),
+		httphelper.NewCookieHandler([]byte(key), []byte(key)),
+	)
+}
+
 func ZitadelAuthenticator() *authentication.Authenticator[*openid.UserInfoContext[*zoidc.IDTokenClaims, *zoidc.UserInfo]] {
 	issuerURL := IssuerHost()
-	clientID := os.Getenv("CLIENT_ID")
-	serverURL := os.Getenv("SERVER_URL")
 	if authN == nil {
 		authNLock.Lock()
 		defer authNLock.Unlock()
@@ -113,7 +139,7 @@ func ZitadelAuthenticator() *authentication.Authenticator[*openid.UserInfoContex
 				context.Background(),
 				zitadel.New(issuerURL),
 				os.Getenv("KEY"),
-				openid.DefaultAuthentication(clientID, fmt.Sprintf("%s/auth/callback", serverURL), os.Getenv("KEY")),
+				openid.WithCodeFlow[*openid.UserInfoContext[*zoidc.IDTokenClaims, *zoidc.UserInfo], *zoidc.IDTokenClaims, *zoidc.UserInfo](zitadelClientAuthentication()),
 				authentication.WithLogger[*openid.UserInfoContext[*zoidc.IDTokenClaims, *zoidc.UserInfo]](SlogLogger),
 				authentication.WithExternalSecure[*openid.UserInfoContext[*zoidc.IDTokenClaims, *zoidc.UserInfo]](true),
 			)
@@ -126,6 +152,32 @@ func ZitadelAuthenticator() *authentication.Authenticator[*openid.UserInfoContex
 		}
 	}
 	return authN
+}
+
+func ZitadelRegisterHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		stateParam, err := (&authentication.State{RequestedURI: ""}).Encrypt(os.Getenv("KEY"))
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		relyingParty, err := zitadelClientAuthentication()(r.Context(), zitadel.New(IssuerHost()).Origin())
+		if err != nil {
+			Logger.Error("registration failed while creating relying party: " + err.Error())
+			http.Error(w, "failed to initialize registration", http.StatusInternalServerError)
+			return
+		}
+
+		rp.AuthURLHandler(func() string { return stateParam }, relyingParty, rp.WithPromptURLParam("create"))(w, r)
+	}
+}
+
+func ZitadelAuthRouter() http.Handler {
+	r := chi.NewRouter()
+	r.Get("/register", ZitadelRegisterHandler())
+	r.Handle("/*", ZitadelAuthenticator())
+	return r
 }
 
 func ZitadelMiddleware() *authentication.Interceptor[*openid.UserInfoContext[*zoidc.IDTokenClaims, *zoidc.UserInfo]] {
