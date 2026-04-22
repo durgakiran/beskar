@@ -58,6 +58,65 @@ export interface AttachmentRef {
   fileUrl: string;
 }
 
+// ─── Internal Resource Embeds ────────────────────────────────────────────────
+
+export type InternalResourceType = 'document' | 'whiteboard';
+
+export interface InternalResourceResult {
+  resourceId: string;
+  resourceType: InternalResourceType;
+  title: string;
+  icon?: string;
+  lastEditedAt?: string;
+}
+
+export interface InternalResourceMetadata extends InternalResourceResult {
+  excerpt?: string;
+  thumbnailUrl?: string;
+  updatedByName?: string;
+  updatedByAvatarUrl?: string;
+}
+
+export interface InternalResourceHandler {
+  appBaseUrl: string;
+  searchResources: (
+    query: string,
+    resourceType: InternalResourceType,
+  ) => Promise<InternalResourceResult[]>;
+  getResourceMetadata: (
+    resourceId: string,
+    resourceType: InternalResourceType,
+  ) => Promise<InternalResourceMetadata | null>;
+  navigateToResource: (
+    resourceId: string,
+    resourceType: InternalResourceType,
+  ) => void;
+}
+
+// ─── Child Pages List ────────────────────────────────────────────────────────
+
+export interface ChildPageResult {
+  pageId: string;
+  title: string;
+  /** Zero-based depth relative to the current page. Omit or use 0 for immediate children. */
+  depth?: number;
+  lastEditedAt?: string;
+  updatedByName?: string;
+  children?: ChildPageResult[];
+}
+
+export interface ChildPagesHandler {
+  /**
+   * The consuming app should bind current page context into this handler.
+   * The editor intentionally does not know page IDs or auth tokens.
+   */
+  /** Preferred: return all descendant pages in display order, with depth populated. */
+  getPageHierarchy?: () => Promise<ChildPageResult[]>;
+  /** Backward-compatible fallback for consumers that only expose immediate children. */
+  getChildPages?: () => Promise<ChildPageResult[]>;
+  navigateToChildPage: (pageId: string) => void;
+}
+
 // ─── Inline Comments ──────────────────────────────────────────────────────────
 
 export interface CommentReplyAttachment {
@@ -160,6 +219,8 @@ export interface EditorProps {
   allowedMimeAccept?: string;
   /** Called whenever the set of successfully uploaded attachments in the document changes. */
   onAttachmentsChange?: (attachments: AttachmentRef[]) => void;
+  internalResourceHandler?: InternalResourceHandler;
+  childPagesHandler?: ChildPagesHandler;
   commentHandler?: CommentAPIHandler;
 }
 

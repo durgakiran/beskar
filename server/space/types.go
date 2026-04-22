@@ -46,6 +46,13 @@ type PageList struct {
 	Type     string    `json:"type" db:"type"`
 }
 
+type PageDescendant struct {
+	PageId   int64            `json:"pageId"`
+	Title    string           `json:"title"`
+	Type     string           `json:"type"`
+	Children []PageDescendant `json:"children"`
+}
+
 type User struct {
 	Id       uuid.UUID  `json:"id" db:"id"`
 	Name     string     `json:"name" db:"name"`

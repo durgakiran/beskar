@@ -8,10 +8,12 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/zitadel/zitadel-go/v3/pkg/authentication"
 )
 
 const (
@@ -112,7 +114,51 @@ type User struct {
 }
 
 type Details struct {
-	TotalResult string `json:"totalResult"`
+	TotalResult       int64           `json:"totalResult"`
+	ProcessedSequence int64           `json:"processedSequence"`
+	Timestamp         string          `json:"timestamp"`
+	Raw               json.RawMessage `json:"-"`
+}
+
+func (d *Details) UnmarshalJSON(data []byte) error {
+	d.Raw = append(d.Raw[:0], data...)
+	if len(data) == 0 || string(data) == "null" {
+		return nil
+	}
+	if data[0] == '[' {
+		return nil
+	}
+	var payload struct {
+		TotalResult       detailsInt `json:"totalResult"`
+		ProcessedSequence detailsInt `json:"processedSequence"`
+		Timestamp         string     `json:"timestamp"`
+	}
+	if err := json.Unmarshal(data, &payload); err != nil {
+		return err
+	}
+	d.TotalResult = int64(payload.TotalResult)
+	d.ProcessedSequence = int64(payload.ProcessedSequence)
+	d.Timestamp = payload.Timestamp
+	return nil
+}
+
+type detailsInt int64
+
+func (d *detailsInt) UnmarshalJSON(data []byte) error {
+	value := strings.TrimSpace(string(data))
+	if value == "" || value == "null" {
+		return nil
+	}
+	value = strings.Trim(value, `"`)
+	if value == "" {
+		return nil
+	}
+	parsed, err := strconv.ParseInt(value, 10, 64)
+	if err != nil {
+		return err
+	}
+	*d = detailsInt(parsed)
+	return nil
 }
 
 type UserSearchResponse struct {
@@ -257,12 +303,45 @@ func runUserSearch(providerURL string, query UserSearchQuery) (UserSearchRespons
 		Logger.Error(err.Error())
 		return UserSearchResponse{}, err
 	}
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		err = parseZitadelError(resp.StatusCode, data)
+		Logger.Error(err.Error())
+		return UserSearchResponse{}, err
+	}
+	if err = detectZitadelError(data); err != nil {
+		Logger.Error(err.Error())
+		return UserSearchResponse{}, err
+	}
 	err = json.Unmarshal(data, &users)
 	if err != nil {
 		Logger.Error(err.Error())
 		return UserSearchResponse{}, err
 	}
 	return users, nil
+}
+
+func parseZitadelError(statusCode int, data []byte) error {
+	if err := detectZitadelError(data); err != nil {
+		return err
+	}
+	return errors.New("zitadel user search failed with status " + strconv.Itoa(statusCode))
+}
+
+func detectZitadelError(data []byte) error {
+	var payload struct {
+		Code    json.RawMessage `json:"code"`
+		Message string          `json:"message"`
+	}
+	if err := json.Unmarshal(data, &payload); err != nil {
+		return nil
+	}
+	if len(payload.Code) == 0 {
+		return nil
+	}
+	if payload.Message == "" {
+		return errors.New("zitadel user search failed")
+	}
+	return errors.New(payload.Message)
 }
 
 func GetBeskarUser(zitadelId string) (string, error) {
@@ -298,6 +377,9 @@ func GetBeskarUser(zitadelId string) (string, error) {
 
 func GetUserInfo(ctx context.Context) (UserInfo, error) {
 	var user UserInfo
+	if !authentication.IsAuthenticated(ctx) {
+		return user, errors.New("not authenticated")
+	}
 	mw := ZitadelMiddleware()
 	authContex := mw.Context(ctx)
 	data, err := json.MarshalIndent(authContex.UserInfo, "", "	")

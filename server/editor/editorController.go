@@ -344,6 +344,57 @@ func getPageMetadataHandler(w http.ResponseWriter, r *http.Request) {
 	core.SendSuccessResponse(w, r, http.StatusOK, metadata)
 }
 
+func getPageInlineLinkMetadataHandler(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	user, err := core.GetUserInfo(ctx)
+	if err != nil || user.Id == "" {
+		core.SendFailedReponse(w, r, http.StatusForbidden, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNAUTHORIZED])
+		return
+	}
+
+	ownerId := uuid.MustParse(user.AId)
+	spaceId := uuid.MustParse(chi.URLParam(r, "spaceId"))
+	pageIdStr := chi.URLParam(r, "pageId")
+
+	if !core.ValidateUserPagePermission(pageIdStr, ownerId, "view") {
+		core.SendFailedReponse(w, r, http.StatusForbidden, "Invalid space permissions")
+		return
+	}
+
+	pageId, err := strconv.ParseInt(pageIdStr, 10, 64)
+	if err != nil {
+		core.SendFailedReponse(w, r, http.StatusBadRequest, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_INVALID_INPUT])
+		return
+	}
+
+	var metadata PageInlineLinkMetadata
+	err = core.GetPool().QueryRow(ctx, getPageInlineLinkMetadata, pageId, spaceId).Scan(
+		&metadata.PageId,
+		&metadata.Type,
+		&metadata.SpaceId,
+		&metadata.Title,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			core.SendFailedReponse(w, r, http.StatusNotFound, "Page not found")
+			return
+		}
+		logger().Error(fmt.Sprintf("getPageInlineLinkMetadataHandler: %s", err.Error()))
+		core.SendFailedReponse(w, r, http.StatusInternalServerError, "Unable to get page inline link metadata")
+		return
+	}
+
+	if metadata.Type != "document" {
+		core.SendFailedReponse(w, r, http.StatusBadRequest, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_INVALID_INPUT])
+		return
+	}
+	if metadata.Title == "" {
+		metadata.Title = "Untitled"
+	}
+
+	core.SendSuccessResponse(w, r, http.StatusOK, metadata)
+}
+
 func Router() *chi.Mux {
 	r := chi.NewRouter()
 	r.Use(core.Authenticated)
@@ -352,6 +403,7 @@ func Router() *chi.Mux {
 	r.Get("/space/{spaceId}/page/{pageId}", getDocumentToView)
 	r.Get("/space/{spaceId}/page/{pageId}/edit", getDocumentToEdit)
 	r.Get("/space/{spaceId}/page/{pageId}/metadata", getPageMetadataHandler)
+	r.Get("/space/{spaceId}/page/{pageId}/inline-link", getPageInlineLinkMetadataHandler)
 	r.Delete("/space/{spaceId}/page/{pageId}/delete", deleteDocument)
 	r.Post("/space/{spaceId}/page/create", saveDoc)
 

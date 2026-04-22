@@ -1,7 +1,6 @@
 import { get, post } from './call';
+import { getApiV1Base } from './apiBase';
 import type { CommentAPIHandler, CommentThread, CommentReply, CommentReplyAttachment } from '@durgakiran/editor';
-
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL || '';
 
 const mapBackendAttachment = (a: any): CommentReplyAttachment => ({
   attachmentId: a.id,
@@ -32,17 +31,19 @@ const mapBackendThread = (t: any): CommentThread => ({
  * DELETE requests to allow cookie-based auth integration.
  */
 export function makeCommentApiHandler(documentId: string): CommentAPIHandler {
+  const apiV1 = getApiV1Base();
+
   return {
     getThreads: async (docIdToFetch) => {
       const target = docIdToFetch || documentId;
       if (!target) return [];
-      const response = await get(`${BASE_URL}/api/v1/comment/documents/${target}/threads`);
+      const response = await get(`${apiV1}/comment/documents/${target}/threads`);
       return (response.data.data as any[]).map(mapBackendThread);
     },
 
     createThread: async (docId, commentId, anchor, body, attachments) => {
       const response = await post(
-        `${BASE_URL}/api/v1/comment/documents/${docId}/threads`,
+        `${apiV1}/comment/documents/${docId}/threads`,
         {
           commentId,
           anchor,
@@ -62,7 +63,7 @@ export function makeCommentApiHandler(documentId: string): CommentAPIHandler {
       // We can pass { method: "PATCH" } via axiosConfig? Wait, axios.post always does POST.
       // So let's use standard fetch here as well, since axios.post forces the POST method!
       // Actually, since we need PATCH, and call.ts lacks a `patch` export, let's use fetch.
-      const res = await fetch(`${BASE_URL}/api/v1/comment/threads/${threadId}/resolve`, {
+      const res = await fetch(`${apiV1}/comment/threads/${threadId}/resolve`, {
         method: "PATCH",
         headers: {
             "Content-Type": "application/json",
@@ -76,7 +77,7 @@ export function makeCommentApiHandler(documentId: string): CommentAPIHandler {
     },
 
     unresolveThread: async (threadId) => {
-      const res = await fetch(`${BASE_URL}/api/v1/comment/threads/${threadId}/unresolve`, {
+      const res = await fetch(`${apiV1}/comment/threads/${threadId}/unresolve`, {
         method: "PATCH",
         headers: {
             "Content-Type": "application/json",
@@ -90,7 +91,7 @@ export function makeCommentApiHandler(documentId: string): CommentAPIHandler {
     },
 
     orphanThread: async (threadId) => {
-      const res = await fetch(`${BASE_URL}/api/v1/comment/threads/${threadId}/orphan`, {
+      const res = await fetch(`${apiV1}/comment/threads/${threadId}/orphan`, {
         method: "PATCH",
         headers: {
             "Content-Type": "application/json",
@@ -104,7 +105,7 @@ export function makeCommentApiHandler(documentId: string): CommentAPIHandler {
     },
 
     deleteThread: async (threadId) => {
-      const res = await fetch(`${BASE_URL}/api/v1/comment/threads/${threadId}`, {
+      const res = await fetch(`${apiV1}/comment/threads/${threadId}`, {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
         credentials: "include", // Relies on session cookies for auth
@@ -114,7 +115,7 @@ export function makeCommentApiHandler(documentId: string): CommentAPIHandler {
 
     addReply: async (threadId, body, attachments) => {
       const response = await post(
-        `${BASE_URL}/api/v1/comment/threads/${threadId}/replies`,
+        `${apiV1}/comment/threads/${threadId}/replies`,
         { body, attachmentIds: (attachments || []).map((a) => a.attachmentId) },
         {}
       );
@@ -122,7 +123,7 @@ export function makeCommentApiHandler(documentId: string): CommentAPIHandler {
     },
 
     editReply: async (replyId, body, attachments) => {
-      const res = await fetch(`${BASE_URL}/api/v1/comment/replies/${replyId}`, {
+      const res = await fetch(`${apiV1}/comment/replies/${replyId}`, {
         method: "PATCH",
         headers: {
             "Content-Type": "application/json",
@@ -137,7 +138,7 @@ export function makeCommentApiHandler(documentId: string): CommentAPIHandler {
     },
 
     deleteReply: async (replyId) => {
-      const res = await fetch(`${BASE_URL}/api/v1/comment/replies/${replyId}`, {
+      const res = await fetch(`${apiV1}/comment/replies/${replyId}`, {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
         credentials: "include", // Relies on session cookies for auth

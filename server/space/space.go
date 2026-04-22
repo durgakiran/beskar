@@ -3,6 +3,7 @@ package space
 import (
 	"io"
 	"net/http"
+	"strconv"
 
 	"github.com/durgakiran/beskar/core"
 	"github.com/go-chi/chi/v5"
@@ -84,6 +85,41 @@ func getPageList(w http.ResponseWriter, r *http.Request) {
 	data, err := getDocumentList(spaceID, userID)
 	if err != nil {
 		core.SendFailedReponse(w, r, http.StatusInternalServerError, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNSPECIFIED])
+		return
+	}
+	core.SendSuccessResponse(w, r, http.StatusOK, data)
+}
+
+func getPageDescendantsController(w http.ResponseWriter, r *http.Request) {
+	_, userID, ok := currentUser(r)
+	if !ok {
+		core.SendFailedReponse(w, r, http.StatusForbidden, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNAUTHORIZED])
+		return
+	}
+
+	spaceID, err := uuid.Parse(chi.URLParam(r, "spaceId"))
+	if err != nil {
+		core.SendFailedReponse(w, r, http.StatusBadRequest, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_INVALID_INPUT])
+		return
+	}
+	if !core.ValidateUserSpacePermissions(spaceID, userID, core.SPACE_VIEW) {
+		core.SendFailedReponse(w, r, http.StatusForbidden, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNAUTHORIZED])
+		return
+	}
+
+	pageID, err := strconv.ParseInt(chi.URLParam(r, "pageId"), 10, 64)
+	if err != nil || pageID <= 0 {
+		core.SendFailedReponse(w, r, http.StatusBadRequest, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_INVALID_INPUT])
+		return
+	}
+
+	data, err := getPageDescendants(spaceID, userID, pageID)
+	if err != nil {
+		if err.Error() == core.ErrorCode_name[core.ErrorCode_ERROR_CODE_NO_DATA] {
+			core.SendFailedReponse(w, r, http.StatusNotFound, err.Error())
+			return
+		}
+		core.SendFailedReponse(w, r, http.StatusInternalServerError, err.Error())
 		return
 	}
 	core.SendSuccessResponse(w, r, http.StatusOK, data)
@@ -372,6 +408,7 @@ func Router() *chi.Mux {
 	r.Get("/list", getSpaces)
 	r.Post("/create", createSpace)
 	r.Get("/{spaceId}/page/list", getPageList)
+	r.Get("/{spaceId}/page/{pageId}/descendants", getPageDescendantsController)
 	r.Get("/{spaceId}/users", listUsers)
 	r.Get("/{spaceId}/details", getSpaceDetailsController)
 	r.Get("/{spaceId}/settings", getSpaceSettingsController)

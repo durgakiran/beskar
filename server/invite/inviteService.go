@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/durgakiran/beskar/core"
 	"github.com/google/uuid"
@@ -128,7 +129,7 @@ func (i Invite) removeInvitation() error {
 	return nil
 }
 
-func (i Invite) invite() (string, error) {
+func (i *Invite) invite() (string, error) {
 	token := i.token()
 	if token == "" {
 		logger().Error("unable to create token")
@@ -139,7 +140,7 @@ func (i Invite) invite() (string, error) {
 		logger().Error(err.Error())
 	}
 	for _, user := range users.Result {
-		if user.Human.Email.Email == i.Email {
+		if strings.EqualFold(user.Human.Email.Email, i.Email) {
 			id, err := core.GetBeskarUser(user.UserId)
 			if err != nil {
 				logger().Error(err.Error())

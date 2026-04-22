@@ -13,6 +13,7 @@
     <include file="updates/attachments.xml" />
     <!-- <include file="updates/auth.xml" /> -->
     <include file="updates/notifications.xml" />
+    <include file="updates/email_notifications.xml" />
     <include file="updates/user.xml" />
     <include file="updates/comments.xml" />
 

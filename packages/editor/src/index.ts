@@ -40,6 +40,11 @@ export * from './components/image';
 // Attachment inline chip
 export { AttachmentInline } from './nodes/AttachmentInline';
 export { StatusBadge } from './nodes/StatusBadge';
+export { DateInline } from './nodes/DateInline';
+export { EmbedBlock } from './nodes/EmbedBlock';
+export { InternalDocInline } from './nodes/InternalDocInline';
+export { InternalLinkBlock } from './nodes/InternalLinkBlock';
+export { ChildPagesList } from './nodes/ChildPagesList';
 export type { StatusBadgeColor } from './nodes/statusBadgeConstants';
 
 // Types
@@ -55,6 +60,12 @@ export type {
   AttachmentUploadResult,
   AttachmentUploadOptions,
   AttachmentRef,
+  ChildPageResult,
+  ChildPagesHandler,
+  InternalResourceHandler,
+  InternalResourceMetadata,
+  InternalResourceResult,
+  InternalResourceType,
   CommentAPIHandler,
   CommentAnchor,
   CommentThread,

@@ -179,3 +179,10 @@ type PageMetadata struct {
 	Type    string    `json:"type" db:"type"`
 	SpaceId uuid.UUID `json:"spaceId" db:"spaceId"`
 }
+
+type PageInlineLinkMetadata struct {
+	PageId  int64     `json:"pageId" db:"id"`
+	Type    string    `json:"type" db:"type"`
+	SpaceId uuid.UUID `json:"spaceId" db:"spaceId"`
+	Title   string    `json:"title" db:"title"`
+}

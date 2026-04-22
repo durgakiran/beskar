@@ -68,7 +68,17 @@ const (
                         WHERE d.page_id = $1 AND p.space_id = $2 ORDER BY d.version DESC LIMIT 1`
 
 	// Page metadata (type lookup)
-	getPageMetadata = `SELECT p.id, p.type, p.space_id AS spaceId FROM core.page p WHERE p.id = $1 AND p.space_id = $2`
+	getPageMetadata           = `SELECT p.id, p.type, p.space_id AS spaceId FROM core.page p WHERE p.id = $1 AND p.space_id = $2`
+	getPageInlineLinkMetadata = `SELECT
+									p.id,
+									COALESCE(p.type, 'document') AS type,
+									p.space_id AS spaceId,
+									d.title
+								FROM core.page p
+								LEFT JOIN core.page_doc_map d ON p.id = d.page_id
+								WHERE p.id = $1 AND p.space_id = $2
+								ORDER BY d.version DESC
+								LIMIT 1`
 
 	getViewSpaceSummary = `SELECT s.name, s.archived_at
 FROM core.space s

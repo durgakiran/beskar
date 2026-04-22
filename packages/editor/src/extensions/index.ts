@@ -10,7 +10,14 @@ import { Typography } from '@tiptap/extension-typography';
 import { TaskList, TaskItem } from '@tiptap/extension-list';
 import { ListItem } from '@tiptap/extension-list-item';
 import { Extension, type Extensions } from '@tiptap/core';
-import type { AttachmentAPIHandler, AttachmentRef, CollaborationConfig, ImageAPIHandler } from '../types';
+import type {
+  AttachmentAPIHandler,
+  AttachmentRef,
+  ChildPagesHandler,
+  CollaborationConfig,
+  ImageAPIHandler,
+  InternalResourceHandler,
+} from '../types';
 import { CustomAttributes } from './custom-attributes';
 import { ImagePasteDrop } from './image-paste-drop';
 import { AttachmentPasteDrop } from './attachment-paste-drop';
@@ -38,6 +45,11 @@ import { ImageBlock } from '../nodes/ImageBlock';
 import { ImageInline } from '../nodes/ImageInline';
 import { AttachmentInline } from '../nodes/AttachmentInline';
 import { StatusBadge } from '../nodes/StatusBadge';
+import { DateInline } from '../nodes/DateInline';
+import { EmbedBlock } from '../nodes/EmbedBlock';
+import { InternalDocInline } from '../nodes/InternalDocInline';
+import { InternalLinkBlock } from '../nodes/InternalLinkBlock';
+import { ChildPagesList } from '../nodes/ChildPagesList';
 import { MathBlock } from '../nodes/MathBlock';
 import { TableOfContents } from '../nodes/TableOfContents';
 import { InlineMath } from './math-inline';
@@ -58,6 +70,11 @@ export { ImageBlock } from '../nodes/ImageBlock';
 export { ImageInline } from '../nodes/ImageInline';
 export { AttachmentInline } from '../nodes/AttachmentInline';
 export { StatusBadge } from '../nodes/StatusBadge';
+export { DateInline } from '../nodes/DateInline';
+export { EmbedBlock } from '../nodes/EmbedBlock';
+export { InternalDocInline } from '../nodes/InternalDocInline';
+export { InternalLinkBlock } from '../nodes/InternalLinkBlock';
+export { ChildPagesList } from '../nodes/ChildPagesList';
 export * from '../components/image/utils';
 export { SlashCommand } from './slash-command';
 export { ImagePasteDrop, getImagePasteStorage, insertImageAt } from './image-paste-drop';
@@ -121,6 +138,8 @@ export interface GetExtensionsOptions {
   onAttachmentRejected?: (reason: 'too_large', file: File) => void;
   allowedMimeAccept?: string;
   onAttachmentsChange?: (attachments: AttachmentRef[]) => void;
+  internalResourceHandler?: InternalResourceHandler;
+  childPagesHandler?: ChildPagesHandler;
   onAddCommentShortcut?: () => void;
   onNextCommentShortcut?: () => void;
   onPrevCommentShortcut?: () => void;
@@ -145,6 +164,8 @@ export function getExtensions(options: GetExtensionsOptions = {}): Extensions {
     onAttachmentRejected,
     allowedMimeAccept = '*',
     onAttachmentsChange,
+    internalResourceHandler,
+    childPagesHandler,
     onAddCommentShortcut,
     onNextCommentShortcut,
     onPrevCommentShortcut,
@@ -217,6 +238,11 @@ export function getExtensions(options: GetExtensionsOptions = {}): Extensions {
     ImageInline, // Inline image that flows within text (like Confluence)
     AttachmentInline, // Non-image file attachments as inline chips
     StatusBadge, // Inline status pill (e.g. IN PROGRESS, DONE)
+    DateInline, // Inline date pill with popover editing
+    InternalDocInline.configure({ resourceHandler: internalResourceHandler }), // Inline chip for pasted Beskar document links
+    EmbedBlock, // External iframe embeds from supported providers
+    InternalLinkBlock.configure({ resourceHandler: internalResourceHandler }), // Beskar resource preview cards
+    ChildPagesList.configure({ childPagesHandler }), // Current page child list
     MathBlock, // Custom math block for LaTeX formulas
     TableOfContents, // Auto-generated table of contents
     InlineMath, // Inline math formulas within text

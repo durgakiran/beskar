@@ -39,3 +39,4 @@ server/server
 # new-features
 docker/.generated
 docker/env/*.env
+.playwright-cli

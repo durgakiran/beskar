@@ -2,6 +2,7 @@ import type { Editor } from '@tiptap/core';
 import { getAttachmentPasteStorage } from '../attachment-paste-drop';
 import { insertAttachmentsAt } from '../attachment-upload';
 import { getImagePasteStorage, insertImageAt } from '../image-paste-drop';
+import { getTodayDateValue } from '../../nodes/dateInlineUtils';
 
 export interface Command {
   name: string;
@@ -170,6 +171,18 @@ export const GROUPS: Group[] = [
         blockOnly: true,
         action: (editor) => {
           editor.chain().focus().setTableOfContents().run();
+        },
+      },
+      {
+        name: 'childPagesList',
+        label: 'Child Pages',
+        icon: '▦',
+        description: 'List child pages for this page',
+        aliases: ['children', 'subpages', 'child', 'pages'],
+        blockOnly: true,
+        shouldBeHidden: (editor) => !editor.isEditable || !(editor.storage as any).childPagesList?.childPagesHandler,
+        action: (editor) => {
+          editor.chain().focus().setChildPagesList().run();
         },
       },
       {
@@ -342,6 +355,23 @@ export const GROUPS: Group[] = [
             .run();
         },
       },
+      {
+        name: 'date',
+        label: 'Date',
+        icon: '📅',
+        description: 'Insert an inline date',
+        aliases: ['calendar', 'day', 'deadline', 'due'],
+        action: (editor) => {
+          editor
+            .chain()
+            .focus()
+            .insertContent({
+              type: 'dateInline',
+              attrs: { value: getTodayDateValue() },
+            })
+            .run();
+        },
+      },
     ],
   },
   {
@@ -412,6 +442,28 @@ export const GROUPS: Group[] = [
           requestAnimationFrame(() => {
             input.click();
           });
+        },
+      },
+      {
+        name: 'embed',
+        label: 'Embed',
+        icon: '⊞',
+        description: 'Embed Figma, Miro, Loom, Airtable, and more',
+        aliases: ['figma', 'miro', 'loom', 'airtable', 'framer', 'iframe', 'link'],
+        blockOnly: true,
+        action: (editor) => {
+          editor.chain().focus().setEmbedBlock().run();
+        },
+      },
+      {
+        name: 'embedVideo',
+        label: 'Embed Video',
+        icon: '▶',
+        description: 'Embed a YouTube, Vimeo, or Loom video',
+        aliases: ['youtube', 'vimeo', 'video', 'movie'],
+        blockOnly: true,
+        action: (editor) => {
+          editor.chain().focus().setEmbedBlock().run();
         },
       },
     ],

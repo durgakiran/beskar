@@ -104,6 +104,14 @@ func createInvitation(w http.ResponseWriter, r *http.Request) {
 		core.SendFailedReponse(w, r, 0, err.Error())
 		return
 	}
+	if err := invite.enqueueSpaceInviteCreatedEmail(ctx, token, user); err != nil {
+		logger().Error("failed to enqueue space invite email",
+			zap.String("entity", invite.Entity),
+			zap.String("entity_id", invite.EntityId),
+			zap.String("email", invite.Email),
+			zap.Error(err),
+		)
+	}
 	sendSuccessResponse(w, r, http.StatusOK, token)
 }
 

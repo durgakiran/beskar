@@ -271,6 +271,56 @@ func getDocumentList(spaceId uuid.UUID, userId uuid.UUID) ([]PageList, error) {
 	return pageList, nil
 }
 
+func getPageDescendants(spaceId uuid.UUID, userId uuid.UUID, pageId int64) ([]PageDescendant, error) {
+	pages, err := getDocumentList(spaceId, userId)
+	if err != nil {
+		return nil, err
+	}
+
+	pageExists := false
+	childrenByParent := make(map[int64][]PageList)
+	for _, page := range pages {
+		if page.PageId == pageId {
+			pageExists = true
+		}
+		if page.Type == "whiteboard" {
+			continue
+		}
+		childrenByParent[page.ParentId] = append(childrenByParent[page.ParentId], page)
+	}
+
+	if !pageExists {
+		return nil, errors.New(core.ErrorCode_name[core.ErrorCode_ERROR_CODE_NO_DATA])
+	}
+
+	visited := make(map[int64]bool)
+	var buildTree func(parentId int64) []PageDescendant
+	buildTree = func(parentId int64) []PageDescendant {
+		children := childrenByParent[parentId]
+		result := make([]PageDescendant, 0, len(children))
+		for _, child := range children {
+			if visited[child.PageId] {
+				continue
+			}
+			visited[child.PageId] = true
+			title := strings.TrimSpace(child.Title)
+			if title == "" {
+				title = "Untitled"
+			}
+			result = append(result, PageDescendant{
+				PageId:   child.PageId,
+				Title:    title,
+				Type:     child.Type,
+				Children: buildTree(child.PageId),
+			})
+		}
+		return result
+	}
+
+	visited[pageId] = true
+	return buildTree(pageId), nil
+}
+
 func getSpaceUsers(spaceId uuid.UUID) ([]User, error) {
 	tuples, err := core.GetSubjectsAssociatedWithEntity("space", spaceId.String())
 	if err != nil {

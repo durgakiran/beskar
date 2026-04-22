@@ -41,6 +41,8 @@ export function Editor({
   onAttachmentRejected,
   allowedMimeAccept,
   onAttachmentsChange,
+  internalResourceHandler,
+  childPagesHandler,
   commentHandler,
 }: EditorProps) {
   const [content, setContent] = useState<any>(null);
@@ -79,6 +81,8 @@ export function Editor({
         onAttachmentRejected,
         allowedMimeAccept,
         onAttachmentsChange,
+        internalResourceHandler,
+        childPagesHandler,
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [
@@ -96,6 +100,8 @@ export function Editor({
       onAttachmentRejected,
       allowedMimeAccept,
       onAttachmentsChange,
+      internalResourceHandler,
+      childPagesHandler,
       commentHandler,
     ],
   );

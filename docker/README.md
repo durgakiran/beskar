@@ -130,6 +130,27 @@ Optional but important:
 
 - Set `UPLOAD_STORAGE_DIR` if uploads should not be stored under the default `public` path inside the server container
 
+### Configure Email Notifications
+
+The email notification engine is disabled by default. To enable queued email delivery for a deployment, set:
+
+```env
+EMAIL_NOTIFICATIONS_ENABLED=true
+EMAIL_WORKER_ENABLED=true
+EMAIL_PROVIDER=smtp
+EMAIL_FROM_ADDRESS=no-reply@example.com
+EMAIL_FROM_NAME=Beskar
+EMAIL_APP_BASE_URL=https://app.example.com
+SMTP_HOST=smtp.example.com
+SMTP_PORT=587
+SMTP_USERNAME=replace-with-smtp-username
+SMTP_PASSWORD=replace-with-smtp-password
+SMTP_USE_TLS=true
+SMTP_TIMEOUT_SECONDS=10
+```
+
+Operational email debug routes stay disabled unless both `EMAIL_ADMIN_ENABLED=true` and `EMAIL_ADMIN_TOKEN` are set. Requests must be authenticated and include `X-Email-Admin-Token: <token>`.
+
 ### Validate the Production Config
 
 Render the generated files:

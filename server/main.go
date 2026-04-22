@@ -15,6 +15,7 @@ import (
 	editor "github.com/durgakiran/beskar/editor"
 	"github.com/durgakiran/beskar/invite"
 	media "github.com/durgakiran/beskar/media/controller"
+	"github.com/durgakiran/beskar/notification"
 	page "github.com/durgakiran/beskar/page"
 	profile "github.com/durgakiran/beskar/profile/controller"
 	space "github.com/durgakiran/beskar/space"
@@ -94,6 +95,11 @@ func main() {
 	}
 	connection.Release()
 
+	notificationConfig := notification.LoadConfig()
+	if notificationConfig.WorkerEnabled {
+		go notification.NewWorker(notificationConfig).Start(context.Background())
+	}
+
 	r := chi.NewRouter()
 	addCorsMiddleWare(r)
 	mw := core.ZitadelMiddleware()
@@ -114,6 +120,9 @@ func main() {
 	r.Mount("/api/v1/page", mw.CheckAuthentication()(page.Router()))
 	r.Mount("/api/v1/comment", mw.CheckAuthentication()(comment.Router()))
 	r.Mount("/api/v1/user", user.Router())
+	if notificationConfig.AdminEnabled && notificationConfig.AdminToken != "" {
+		r.Mount("/api/v1/admin/email", mw.CheckAuthentication()(notification.NewAdminController(notificationConfig).Router()))
+	}
 
 	logger().Info(fmt.Sprintf("Serving on port: %s", port))
 	err = http.ListenAndServe(port, r)

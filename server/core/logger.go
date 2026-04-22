@@ -1,6 +1,7 @@
 package core
 
 import (
+	"io"
 	"os"
 
 	"go.uber.org/zap"
@@ -8,8 +9,8 @@ import (
 	"golang.org/x/exp/slog"
 )
 
-var Logger *zap.Logger
-var SlogLogger *slog.Logger
+var Logger = zap.NewNop()
+var SlogLogger = slog.New(slog.NewTextHandler(io.Discard, nil))
 
 func InitializeLogger() {
 	config := zap.NewDevelopmentEncoderConfig()

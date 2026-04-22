@@ -1,26 +1,5 @@
 import { post } from "./call";
-
-/** Base URL including `/api/v1` (e.g. `http://localhost:8082/api/v1`). */
-export function getApiV1Base(): string {
-    const explicit = process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "");
-    if (explicit) {
-        return explicit.endsWith("/api/v1") ? explicit : `${explicit}/api/v1`;
-    }
-    const img = (process.env.NEXT_PUBLIC_IMAGE_SERVER_URL || "").replace(/\/$/, "");
-    if (!img) {
-        return "";
-    }
-    if (img.endsWith("/api/v1")) {
-        return img;
-    }
-    return `${img}/api/v1`;
-}
-
-/** Origin only (no `/api/v1`), for joining server-relative paths like `/api/v1/attachments/...`. */
-export function getApiOrigin(): string {
-    const base = getApiV1Base();
-    return base.replace(/\/api\/v1\/?$/, "");
-}
+import { getApiOrigin, getApiV1Base } from "./apiBase";
 
 export interface AttachmentUploadResponse {
     attachmentId: string;
@@ -31,7 +10,7 @@ export interface AttachmentUploadResponse {
 }
 
 function toAbsoluteAttachmentUrl(serverRelativePath: string): string {
-    const origin = getApiOrigin();
+    const origin = getApiOrigin({ fallbackBase: process.env.NEXT_PUBLIC_IMAGE_SERVER_URL });
     if (!origin) {
         return serverRelativePath;
     }
@@ -51,10 +30,7 @@ export async function uploadAttachmentData(
     pageId: number,
     options?: { signal?: AbortSignal },
 ): Promise<AttachmentUploadResponse> {
-    const apiV1 = getApiV1Base();
-    if (!apiV1) {
-        throw new Error("NEXT_PUBLIC_IMAGE_SERVER_URL or NEXT_PUBLIC_API_BASE_URL is not set");
-    }
+    const apiV1 = getApiV1Base({ fallbackBase: process.env.NEXT_PUBLIC_IMAGE_SERVER_URL });
     const url = `${apiV1}/attachments/upload`;
     const formData = new FormData();
     formData.append("file", file);

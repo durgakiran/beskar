@@ -1,7 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { CommentThread, CommentReply } from '@durgakiran/editor';
-
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL || '';
+import { getApiV1Base } from '../http/apiBase';
 
 export type CommentEventsData = {
   type: string;
@@ -17,7 +15,7 @@ export function useCommentEvents(pageId: string) {
 
     // We can use standard native EventSource because we have withCredentials set
     // which automatically passes the Zitadel session cookie for authentication!
-    const sse = new EventSource(`${BASE_URL}/api/v1/comment/documents/${pageId}/events`, {
+    const sse = new EventSource(`${getApiV1Base()}/comment/documents/${pageId}/events`, {
       withCredentials: true,
     });
 
