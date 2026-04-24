@@ -20,7 +20,7 @@
     "license": "ISC",
     "dependencies": {
         "@apollo/client": "^3.8.8",
-        "@durgakiran/editor": "0.1.6",
+        "@durgakiran/editor": "0.1.7",
         "@durgakiran/whiteboard": "0.1.0",
         "@floating-ui/react": "^0.26.16",
         "@hocuspocus/provider": "^3.0.8-rc.0",

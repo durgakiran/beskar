@@ -720,6 +720,7 @@ export default function DocumentEditor({ slug }: { slug: string[] }) {
                                     setEditorContext={(editorContext: Editor) => setEditorContext(editorContext)}
                                     content={""}
                                     pageId={slug[1]}
+                                    spaceId={slug[0]}
                                     editable={true}
                                     id={pageIdNum}
                                     user={user}

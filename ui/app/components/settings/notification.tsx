@@ -1,7 +1,8 @@
 "use client";
 
 import ModifiedIcon from "@components/modifiedIcon";
-import { Response, useGet } from "@http/hooks";
+import { formatInviteRole, formatInviteTime } from "@components/invite/formatters";
+import { useInviteDecision } from "@components/invite/useInviteDecision";
 import { Avatar, Button, Dialog, Flex, Text } from "@radix-ui/themes";
 import { useEffect, useMemo, useState } from "react";
 
@@ -22,93 +23,37 @@ interface NotificationItemProps {
     onResolved: (token: string, action: "accepted" | "declined") => void;
 }
 
-function formatInviteTime(value?: string) {
-    if (!value) {
-        return "Pending";
-    }
-
-    const createdAt = new Date(value);
-    if (Number.isNaN(createdAt.getTime())) {
-        return "Pending";
-    }
-
-    const diffMs = Date.now() - createdAt.getTime();
-    const diffMinutes = Math.max(1, Math.floor(diffMs / 60000));
-    if (diffMinutes < 60) {
-        return `${diffMinutes}m`;
-    }
-
-    const diffHours = Math.floor(diffMinutes / 60);
-    if (diffHours < 24) {
-        return `${diffHours}h`;
-    }
-
-    const diffDays = Math.floor(diffHours / 24);
-    if (diffDays < 7) {
-        return `${diffDays}d`;
-    }
-
-    return createdAt.toLocaleDateString("en-GB", {
-        day: "2-digit",
-        month: "short",
-        year: "numeric",
-    });
-}
-
-function normalizeRole(role: string) {
-    if (role === "commentor") {
-        return "commenter";
-    }
-    return role;
-}
-
 export default function Notification({ invite, compact = false, onResolved }: NotificationItemProps) {
-    const [{ isLoading: isAccepting, data: acceptData, errors: acceptErrors, response: acceptResponse }, acceptInvitation] =
-        useGet<Response<any>>("invite/user/accept");
-    const [{ isLoading: isRejecting, data: rejectData, errors: rejectErrors, response: rejectResponse }, rejectInvitation] =
-        useGet<Response<any>>("invite/user/reject");
+    const { isLoading, data: decisionData, errors: decisionErrors, response: decisionResponse, pendingDecision, submitDecision } = useInviteDecision();
     const [showDeclineDialog, setShowDeclineDialog] = useState(false);
-    const [resolvedAction, setResolvedAction] = useState<"accepted" | "declined" | null>(null);
 
     const roleLabel = useMemo(() => {
-        const role = normalizeRole(invite.role);
-        return role.charAt(0).toUpperCase() + role.slice(1);
+        return formatInviteRole(invite.role);
     }, [invite.role]);
 
     useEffect(() => {
-        if (resolvedAction !== "accepted") {
+        if (decisionResponse !== 200 || !decisionData || !pendingDecision) {
             return;
         }
-        if (acceptResponse === 200 && acceptData) {
+        if (pendingDecision === "accept") {
             onResolved(invite.token, "accepted");
-            setResolvedAction(null);
-        } else if (acceptErrors) {
-            setResolvedAction(null);
-        }
-    }, [acceptData, acceptErrors, acceptResponse, invite.token, onResolved, resolvedAction]);
-
-    useEffect(() => {
-        if (resolvedAction !== "declined") {
-            return;
-        }
-        if (rejectResponse === 200 && rejectData) {
+        } else {
             onResolved(invite.token, "declined");
-            setResolvedAction(null);
             setShowDeclineDialog(false);
-        } else if (rejectErrors) {
-            setResolvedAction(null);
         }
-    }, [invite.token, onResolved, rejectData, rejectErrors, rejectResponse, resolvedAction]);
+    }, [decisionData, decisionResponse, invite.token, onResolved, pendingDecision]);
 
     const acceptInvite = () => {
-        setResolvedAction("accepted");
-        acceptInvitation({ token: invite.token });
+        submitDecision(invite.token, "accept");
     };
 
     const declineInvite = () => {
-        setResolvedAction("declined");
-        rejectInvitation({ token: invite.token });
+        submitDecision(invite.token, "reject");
     };
+
+    const isAccepting = isLoading && pendingDecision === "accept";
+    const isRejecting = isLoading && pendingDecision === "reject";
+    const inviteTime = formatInviteTime(invite.createdAt).replace(" ago", "");
 
     return (
         <>
@@ -133,7 +78,7 @@ export default function Notification({ invite, compact = false, onResolved }: No
                             </div>
                         </div>
                         <Text as="span" size="1" weight="medium" className="shrink-0 !text-[#898492]">
-                            {formatInviteTime(invite.createdAt)}
+                            {inviteTime}
                         </Text>
                     </div>
 
@@ -170,6 +115,11 @@ export default function Notification({ invite, compact = false, onResolved }: No
                             </Button>
                         </Flex>
                     </div>
+                    {decisionErrors && (
+                        <Text as="p" size="2" className="!text-[#b42318]">
+                            Could not update this invite. Try again.
+                        </Text>
+                    )}
                 </div>
             </div>
 

@@ -1,8 +1,10 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { useGetCall } from "@http";
+import { Response, useGet } from "@http/hooks";
+import { Icon } from "@components/ui/Icon";
 import { Topbar, TopbarMenuItem, TopbarUser } from "@components/primitives";
 
 interface UserInfo {
@@ -10,6 +12,14 @@ interface UserInfo {
     id: string;
     name: string;
     username: string;
+}
+
+interface Invite {
+    token: string;
+}
+
+interface Notifications {
+    invites: Invite[];
 }
 
 const USER_URI = process.env.NEXT_PUBLIC_USER_SERVER_URL;
@@ -33,6 +43,30 @@ export default function MenuBar() {
     const router = useRouter();
     const pathname = usePathname();
     const [, res] = useGetCall<UserInfo>(USER_URI + "/profile/details");
+    const [{ data: notificationsData }, fetchNotifications] = useGet<Response<Notifications>>("invite/user/invites");
+    const [notificationCountOffset, setNotificationCountOffset] = useState(0);
+
+    useEffect(() => {
+        fetchNotifications();
+    }, [fetchNotifications, pathname]);
+
+    useEffect(() => {
+        const handleNotificationsChanged = () => {
+            setNotificationCountOffset((count) => count - 1);
+            fetchNotifications();
+        };
+
+        window.addEventListener("beskar:notifications-changed", handleNotificationsChanged);
+        return () => {
+            window.removeEventListener("beskar:notifications-changed", handleNotificationsChanged);
+        };
+    }, [fetchNotifications]);
+
+    useEffect(() => {
+        setNotificationCountOffset(0);
+    }, [notificationsData?.data?.invites?.length]);
+
+    const notificationCount = Math.max(0, (notificationsData?.data?.invites?.length ?? 0) + notificationCountOffset);
 
     const user: TopbarUser = useMemo(
         () => ({
@@ -74,6 +108,16 @@ export default function MenuBar() {
             userMenuItems={userMenuItems}
             notificationOpen={pathname === "/user/notifications"}
             onNotificationsClick={() => router.push("/user/notifications")}
+            notificationSlot={
+                <span className="relative inline-flex h-4 w-4 items-center justify-center">
+                    <Icon name="Bell" className="h-4 w-4" strokeWidth={2} />
+                    {notificationCount > 0 && (
+                        <span className="absolute -right-2.5 -top-2 flex h-4 min-w-4 items-center justify-center rounded-full bg-[#b42318] px-1 text-[10px] font-bold leading-none text-white ring-2 ring-white">
+                            {notificationCount > 99 ? "99+" : notificationCount}
+                        </span>
+                    )}
+                </span>
+            }
         />
     );
 }

@@ -1,5 +1,6 @@
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { buildAuthLoginUrl, CURRENT_PATH_HEADER } from "../core/auth/returnTo";
 const USER_URI = process.env.NEXT_PUBLIC_USER_SERVER_URL;
 
 const get = async (cookies: { name: string; value: string }[]) => {
@@ -27,10 +28,11 @@ const get = async (cookies: { name: string; value: string }[]) => {
 
 export default async function Home() {
     const cookieStore = await cookies();
+    const headerStore = await headers();
     const res = await get(cookieStore.getAll());
 
     if (res.response !== 200) {
-        redirect("/auth/login");
+        redirect(buildAuthLoginUrl(headerStore.get(CURRENT_PATH_HEADER)));
     }
 
     if (res.response === 200) {

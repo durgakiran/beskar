@@ -17,6 +17,12 @@ import {
     type ImageAPIHandler,
     type AttachmentAPIHandler,
     type AttachmentRef,
+    type ExternalLinkHandler,
+    type ExternalLinkMetadata,
+    type InternalResourceHandler,
+    type InternalResourceMetadata,
+    type InternalResourceResult,
+    type InternalResourceType,
     TiptapEditor,
     TextFormattingMenu,
     CodeBlockFloatingMenu,
@@ -40,6 +46,7 @@ interface TipTapProps {
     user: UserInfo;
     content: Object;
     pageId: string;
+    spaceId: string;
     /** Numeric page id for attachment upload API (`pageId` form field). */
     id: number;
     editable?: boolean;
@@ -73,6 +80,7 @@ export function TipTap({
     user,
     content,
     pageId,
+    spaceId,
     id,
     editable = true,
     title,
@@ -179,6 +187,133 @@ export function TipTap({
         }),
         [id],
     );
+
+    const internalResourceHandler: InternalResourceHandler | undefined = useMemo(() => {
+        if (!spaceId) return undefined;
+
+        const baseUrl = process.env.NEXT_PUBLIC_USER_SERVER_URL?.replace(/\/+$/, "") || "";
+        const appBaseUrl =
+            typeof window !== "undefined" ? window.location.origin : "";
+
+        const fetchJson = async <T,>(path: string): Promise<T> => {
+            const response = await fetch(`${baseUrl}/${path}`, {
+                credentials: "include",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+            });
+
+            if (!response.ok) {
+                const error: Error & { status?: number } = new Error(`Request failed: ${response.status}`);
+                error.status = response.status;
+                throw error;
+            }
+
+            return response.json() as Promise<T>;
+        };
+
+        const listPages = async (): Promise<Array<{
+            pageId: number;
+            title: string;
+            parentId: number;
+            type: "document" | "whiteboard";
+        }>> => {
+            const response = await fetchJson<{ data?: Array<{
+                pageId: number;
+                title: string;
+                parentId: number;
+                type: "document" | "whiteboard";
+            }> }>(`space/${spaceId}/page/list`);
+            return Array.isArray(response.data) ? response.data : [];
+        };
+
+        return {
+            appBaseUrl,
+            async searchResources(query: string, resourceType: InternalResourceType): Promise<InternalResourceResult[]> {
+                const pages = await listPages();
+                const normalizedQuery = query.trim().toLowerCase();
+
+                return pages
+                    .filter((page) => page.type === resourceType)
+                    .filter((page) => {
+                        if (!normalizedQuery) return true;
+                        return (page.title || "").toLowerCase().includes(normalizedQuery);
+                    })
+                    .slice(0, 20)
+                    .map((page) => ({
+                        resourceId: String(page.pageId),
+                        resourceType: page.type,
+                        title: page.title || "Untitled",
+                        icon: page.type === "whiteboard" ? "▧" : "📄",
+                    }));
+            },
+            async getResourceMetadata(resourceId: string, resourceType: InternalResourceType): Promise<InternalResourceMetadata | null> {
+                if (resourceType === "document") {
+                    const response = await fetchJson<{ data?: {
+                        pageId: number;
+                        type: string;
+                        title: string;
+                    } }>(`editor/space/${spaceId}/page/${resourceId}/inline-link`);
+                    const metadata = response.data;
+                    if (!metadata) return null;
+
+                    return {
+                        resourceId: String(metadata.pageId),
+                        resourceType: "document",
+                        title: metadata.title || "Untitled",
+                        icon: "📄",
+                    };
+                }
+
+                const pages = await listPages();
+                const page = pages.find((candidate) => String(candidate.pageId) === String(resourceId) && candidate.type === resourceType);
+                if (!page) return null;
+
+                return {
+                    resourceId: String(page.pageId),
+                    resourceType: page.type,
+                    title: page.title || "Untitled",
+                    icon: page.type === "whiteboard" ? "▧" : "📄",
+                };
+            },
+            navigateToResource(resourceId: string, _resourceType: InternalResourceType) {
+                if (typeof window === "undefined") return;
+                window.location.href = `/space/${spaceId}/view/${resourceId}`;
+            },
+        };
+    }, [spaceId]);
+
+    const externalLinkHandler: ExternalLinkHandler | undefined = useMemo(() => {
+        if (!spaceId) return undefined;
+
+        const baseUrl = process.env.NEXT_PUBLIC_USER_SERVER_URL?.replace(/\/+$/, "") || "";
+
+        const fetchJson = async <T,>(path: string): Promise<T> => {
+            const response = await fetch(`${baseUrl}/${path}`, {
+                credentials: "include",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+            });
+
+            if (!response.ok) {
+                const error: Error & { status?: number } = new Error(`Request failed: ${response.status}`);
+                error.status = response.status;
+                throw error;
+            }
+
+            return response.json() as Promise<T>;
+        };
+
+        return {
+            async getLinkMetadata(url: string): Promise<ExternalLinkMetadata | null> {
+                const response = await fetchJson<{ data?: ExternalLinkMetadata }>(
+                    `editor/external-link/metadata?url=${encodeURIComponent(url)}`,
+                );
+                return response.data || null;
+            },
+        };
+    }, [spaceId]);
 
     const collaborationExtensions = () => {
         return [
@@ -358,6 +493,8 @@ export function TipTap({
                     initialContent={content}
                     imageHandler={imageHandler}
                     attachmentHandler={attachmentHandler}
+                    internalResourceHandler={internalResourceHandler}
+                    externalLinkHandler={externalLinkHandler}
                     commentHandler={commentApiHandler}
                     maxAttachmentBytes={MAX_ATTACHMENT_BYTES}
                     onAttachmentRejected={handleAttachmentRejected}
@@ -374,6 +511,8 @@ export function TipTap({
                     initialContent={content}
                     imageHandler={imageHandler}
                     attachmentHandler={attachmentHandler}
+                    internalResourceHandler={internalResourceHandler}
+                    externalLinkHandler={externalLinkHandler}
                     commentHandler={commentApiHandler}
                     maxAttachmentBytes={MAX_ATTACHMENT_BYTES}
                     onAttachmentRejected={handleAttachmentRejected}

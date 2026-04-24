@@ -138,6 +138,7 @@ export default function Page({ params }: { params: Promise<{ page: string; space
                 editable={false}
                 content={content}
                 pageId={page}
+                spaceId={spaceId}
                 id={Number(page)}
                 user={null}
                 isInlineMessageSidePanelOpen={isSidePanelOpen}

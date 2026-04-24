@@ -9,21 +9,27 @@ const EMPTY_HEADERS: Record<string, any> = {};
  * @param headers
  * @returns isLoading, Data type and any errors
  */
-export function usePost<T, P>(path: string, headers: Record<string, any> = {}): [{ isLoading: boolean; data: T; errors: any }, mutateData: (payLoad: P) => void] {
+export function usePost<T, P>(path: string, headers: Record<string, any> = {}): [{ isLoading: boolean; data: T; errors: any; response: number }, mutateData: (payLoad: P) => void] {
     const [isDataFetching, setIsDataFetching] = useState<boolean>(false);
     const [data, setData] = useState<T>();
     const [errors, setErrors] = useState<any>();
+    const [response, setResponse] = useState<number>();
     const requestHeaders = headers ?? EMPTY_HEADERS;
     const headersKey = JSON.stringify(requestHeaders);
 
     const mutateData = useCallback((payLoad: P) => {
         setIsDataFetching(true);
+        setData(undefined);
+        setErrors(undefined);
+        setResponse(undefined);
         fetch(USER_URI + "/" + path, {
             method: "POST",
             body: JSON.stringify(payLoad),
+            credentials: "include",
             headers: { "Content-Type": "application/json", ...requestHeaders },
         })
             .then((res) => {
+                setResponse(res.status);
                 if (res.ok) {
                     res.clone()
                         .json()
@@ -54,5 +60,5 @@ export function usePost<T, P>(path: string, headers: Record<string, any> = {}): 
             });
     }, [headersKey, path]);
 
-    return [{ isLoading: isDataFetching, data, errors }, mutateData];
+    return [{ isLoading: isDataFetching, data, errors, response }, mutateData];
 }

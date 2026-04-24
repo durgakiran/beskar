@@ -1,5 +1,5 @@
 {
-  "version": "2.10",
+  "version": "2.11",
   "children": [
     {
       "type": "frame",
@@ -87,7 +87,7 @@
                   "id": "ABR1w",
                   "name": "brand",
                   "fill": "$color.text.default",
-                  "content": "Tededox",
+                  "content": "Teddox",
                   "fontFamily": "Geist",
                   "fontSize": 22,
                   "fontWeight": "700"
@@ -40115,72 +40115,6 @@
     },
     {
       "type": "frame",
-      "id": "Fw5jy",
-      "x": 1967,
-      "y": -2897,
-      "name": "logoArea",
-      "gap": 10,
-      "alignItems": "center",
-      "children": [
-        {
-          "type": "frame",
-          "id": "jvh4J",
-          "name": "logoIcon",
-          "width": 36,
-          "height": 36,
-          "fill": "$color.brand.primary",
-          "cornerRadius": 8,
-          "layout": "none",
-          "children": [
-            {
-              "type": "frame",
-              "id": "PFkDI",
-              "x": 10,
-              "y": 8,
-              "name": "logoTopBar",
-              "width": 15,
-              "height": 5,
-              "fill": "$color.text.inverse",
-              "cornerRadius": 999
-            },
-            {
-              "type": "frame",
-              "id": "hSfM6",
-              "x": 11,
-              "y": 12,
-              "name": "logoStem",
-              "width": 5,
-              "height": 15,
-              "fill": "$color.text.inverse",
-              "cornerRadius": 999
-            },
-            {
-              "type": "frame",
-              "id": "udH8f",
-              "x": 23,
-              "y": 23,
-              "name": "logoNode",
-              "width": 7,
-              "height": 7,
-              "fill": "$color.bg.selected",
-              "cornerRadius": 999
-            }
-          ]
-        },
-        {
-          "type": "text",
-          "id": "9ApQd",
-          "name": "brand",
-          "fill": "$color.text.default",
-          "content": "Tededox",
-          "fontFamily": "Geist, Inter, system-ui, sans-serif",
-          "fontSize": 22,
-          "fontWeight": "700"
-        }
-      ]
-    },
-    {
-      "type": "frame",
       "id": "f2QYU",
       "x": 1653,
       "y": -2897,
@@ -55288,6 +55222,2433 @@
                       "content": "3",
                       "fontFamily": "$font.family.primary",
                       "fontSize": 12,
+                      "fontWeight": "$font.weight.semibold"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "rectangle",
+      "id": "e2ReW",
+      "x": 1915,
+      "y": -2950,
+      "fill": "#CCCCCC",
+      "width": 251,
+      "height": 94
+    },
+    {
+      "type": "frame",
+      "id": "IBoAT",
+      "x": 1978,
+      "y": -2921,
+      "name": "logoArea",
+      "gap": 10,
+      "alignItems": "center",
+      "children": [
+        {
+          "type": "frame",
+          "id": "oW8CM",
+          "name": "logoIcon",
+          "width": 36,
+          "height": 36,
+          "fill": "$color.brand.primary",
+          "cornerRadius": 8,
+          "layout": "none",
+          "children": [
+            {
+              "type": "frame",
+              "id": "GKYzP",
+              "x": 10,
+              "y": 8,
+              "name": "logoTopBar",
+              "width": 15,
+              "height": 5,
+              "fill": "$color.text.inverse",
+              "cornerRadius": 999
+            },
+            {
+              "type": "frame",
+              "id": "TsUdU",
+              "x": 11,
+              "y": 12,
+              "name": "logoStem",
+              "width": 5,
+              "height": 15,
+              "fill": "$color.text.inverse",
+              "cornerRadius": 999
+            },
+            {
+              "type": "frame",
+              "id": "RwOkd",
+              "x": 23,
+              "y": 23,
+              "name": "logoNode",
+              "width": 7,
+              "height": 7,
+              "fill": "$color.bg.selected",
+              "cornerRadius": 999
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "id": "UFvhi",
+          "name": "brand",
+          "fill": "$color.text.default",
+          "content": "Teddox",
+          "fontFamily": "Geist",
+          "fontSize": 22,
+          "fontWeight": "700"
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "inviteFlowPending",
+      "x": 1320,
+      "y": 13479,
+      "name": "Invite Flow · Pending Decision",
+      "width": 1200,
+      "height": 760,
+      "fill": "$color.bg.canvas",
+      "layout": "vertical",
+      "children": [
+        {
+          "type": "frame",
+          "id": "inviteHeaderPending",
+          "name": "Header",
+          "width": "fill_container",
+          "fill": "$color.bg.surface",
+          "stroke": {
+            "thickness": {
+              "bottom": 1
+            },
+            "fill": "$color.border.default"
+          },
+          "padding": [
+            18,
+            40
+          ],
+          "justifyContent": "space_between",
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "frame",
+              "id": "inviteLogoPending",
+              "name": "logoArea",
+              "gap": 10,
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "inviteLogoIconPending",
+                  "name": "logoIcon",
+                  "width": 36,
+                  "height": 36,
+                  "fill": "$color.brand.primary",
+                  "cornerRadius": 8,
+                  "layout": "none",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "inviteLogoTopBarPending",
+                      "x": 10,
+                      "y": 8,
+                      "width": 15,
+                      "height": 5,
+                      "fill": "$color.text.inverse",
+                      "cornerRadius": 999
+                    },
+                    {
+                      "type": "frame",
+                      "id": "inviteLogoStemPending",
+                      "x": 11,
+                      "y": 12,
+                      "width": 5,
+                      "height": 15,
+                      "fill": "$color.text.inverse",
+                      "cornerRadius": 999
+                    },
+                    {
+                      "type": "frame",
+                      "id": "inviteLogoNodePending",
+                      "x": 23,
+                      "y": 23,
+                      "width": 7,
+                      "height": 7,
+                      "fill": "$color.bg.selected",
+                      "cornerRadius": 999
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "id": "inviteBrandPending",
+                  "fill": "$color.text.default",
+                  "content": "Teddox",
+                  "fontFamily": "$font.family.primary",
+                  "fontSize": 22,
+                  "fontWeight": "$font.weight.bold"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "inviteNotifPillPending",
+              "fill": "$color.gray.2",
+              "cornerRadius": 8,
+              "stroke": {
+                "thickness": 1,
+                "fill": "$color.border.default"
+              },
+              "gap": 8,
+              "padding": [
+                9,
+                14
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "icon_font",
+                  "id": "inviteBellPending",
+                  "width": 15,
+                  "height": 15,
+                  "iconFontName": "bell",
+                  "iconFontFamily": "feather",
+                  "fill": "$color.icon.default"
+                },
+                {
+                  "type": "text",
+                  "id": "inviteNotifTextPending",
+                  "fill": "$color.text.subtle",
+                  "content": "Notifications",
+                  "fontFamily": "$font.family.primary",
+                  "fontSize": 14,
+                  "fontWeight": "$font.weight.semibold"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "invitePendingBody",
+          "width": "fill_container",
+          "gap": 24,
+          "padding": [
+            48,
+            72
+          ],
+          "children": [
+            {
+              "type": "frame",
+              "id": "invitePendingCard",
+              "width": 704,
+              "fill": "$color.bg.surface",
+              "cornerRadius": 12,
+              "stroke": {
+                "thickness": 1,
+                "fill": "$color.border.default"
+              },
+              "layout": "vertical",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "invitePendingCardHead",
+                  "width": "fill_container",
+                  "stroke": {
+                    "thickness": {
+                      "bottom": 1
+                    },
+                    "fill": "$color.border.default"
+                  },
+                  "layout": "vertical",
+                  "gap": 12,
+                  "padding": [
+                    28,
+                    30
+                  ],
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "invitePendingEyebrow",
+                      "fill": "$color.text.muted",
+                      "content": "ACTION REQUIRED",
+                      "fontFamily": "$font.family.primary",
+                      "fontSize": 12,
+                      "fontWeight": "$font.weight.semibold"
+                    },
+                    {
+                      "type": "text",
+                      "id": "invitePendingTitle",
+                      "fill": "$color.text.default",
+                      "content": "Diana Miller invited you to join\nProduct Design",
+                      "lineHeight": 1.2,
+                      "fontFamily": "$font.family.primary",
+                      "fontSize": 30,
+                      "fontWeight": "$font.weight.bold"
+                    },
+                    {
+                      "type": "text",
+                      "id": "invitePendingSub",
+                      "fill": "$color.text.subtle",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "Review the invite details before choosing. Opening this page does not change invite status.",
+                      "lineHeight": 1.5,
+                      "fontFamily": "$font.family.primary",
+                      "fontSize": 15,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "invitePendingCardContent",
+                  "width": "fill_container",
+                  "layout": "vertical",
+                  "gap": 20,
+                  "padding": [
+                    24,
+                    30
+                  ],
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "invitePendingInfo",
+                      "width": "fill_container",
+                      "fill": "$color.bg.selected",
+                      "cornerRadius": 8,
+                      "stroke": {
+                        "thickness": 1,
+                        "fill": "$color.border.selected"
+                      },
+                      "gap": 12,
+                      "padding": [
+                        16,
+                        18
+                      ],
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "invitePendingInfoIcon",
+                          "width": 36,
+                          "height": 36,
+                          "fill": "$color.accent.4",
+                          "cornerRadius": 8,
+                          "justifyContent": "center",
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "icon_font",
+                              "id": "invitePendingUsersIcon",
+                              "width": 16,
+                              "height": 16,
+                              "iconFontName": "users",
+                              "iconFontFamily": "feather",
+                              "fill": "$color.brand.primary"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "invitePendingInfoText",
+                          "width": 540,
+                          "layout": "vertical",
+                          "gap": 4,
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "invitePendingRoleLine",
+                              "fill": "$color.text.default",
+                              "content": "Access level: Editor",
+                              "fontFamily": "$font.family.primary",
+                              "fontSize": 14,
+                              "fontWeight": "$font.weight.semibold"
+                            },
+                            {
+                              "type": "text",
+                              "id": "invitePendingInfoCopy",
+                              "fill": "$color.text.subtle",
+                              "textGrowth": "fixed-width",
+                              "width": "fill_container",
+                              "content": "Accepting adds this space to your workspace list. Declining removes it from pending notifications.",
+                              "lineHeight": 1.45,
+                              "fontFamily": "$font.family.primary",
+                              "fontSize": 14,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "invitePendingButtons",
+                      "width": "fill_container",
+                      "gap": 12,
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "inviteRejectBtn",
+                          "fill": "$color.bg.surface",
+                          "cornerRadius": 8,
+                          "stroke": {
+                            "thickness": 1,
+                            "fill": "$color.border.default"
+                          },
+                          "padding": [
+                            12,
+                            18
+                          ],
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "inviteRejectLabel",
+                              "fill": "$color.text.subtle",
+                              "content": "Decline",
+                              "fontFamily": "$font.family.primary",
+                              "fontSize": 15,
+                              "fontWeight": "$font.weight.semibold"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "inviteAcceptBtn",
+                          "fill": "$color.brand.primary",
+                          "cornerRadius": 8,
+                          "padding": [
+                            12,
+                            18
+                          ],
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "inviteAcceptLabel",
+                              "fill": "$color.text.inverse",
+                              "content": "Accept invite",
+                              "fontFamily": "$font.family.primary",
+                              "fontSize": 15,
+                              "fontWeight": "$font.weight.semibold"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "invitePendingDetails",
+              "width": 320,
+              "fill": "$color.bg.surface",
+              "cornerRadius": 12,
+              "stroke": {
+                "thickness": 1,
+                "fill": "$color.border.default"
+              },
+              "layout": "vertical",
+              "gap": 18,
+              "padding": 20,
+              "children": [
+                {
+                  "type": "text",
+                  "id": "inviteDetailsEyebrow",
+                  "fill": "$color.text.muted",
+                  "content": "INVITE DETAILS",
+                  "fontFamily": "$font.family.primary",
+                  "fontSize": 12,
+                  "fontWeight": "$font.weight.semibold"
+                },
+                {
+                  "type": "frame",
+                  "id": "inviteSenderRow",
+                  "gap": 12,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "inviteSenderAvatar",
+                      "width": 36,
+                      "height": 36,
+                      "fill": "$color.accent.4",
+                      "cornerRadius": 999,
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "inviteSenderInitial",
+                          "fill": "$color.brand.primary",
+                          "content": "D",
+                          "fontFamily": "$font.family.primary",
+                          "fontSize": 15,
+                          "fontWeight": "$font.weight.bold"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "inviteSenderText",
+                      "layout": "vertical",
+                      "gap": 2,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "inviteSenderName",
+                          "fill": "$color.text.default",
+                          "content": "Diana Miller",
+                          "fontFamily": "$font.family.primary",
+                          "fontSize": 14,
+                          "fontWeight": "$font.weight.semibold"
+                        },
+                        {
+                          "type": "text",
+                          "id": "inviteSenderCaption",
+                          "fill": "$color.text.subtle",
+                          "content": "Sent this invitation",
+                          "fontFamily": "$font.family.primary",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "inviteDetailsDivider",
+                  "width": "fill_container",
+                  "height": 1,
+                  "fill": "$color.border.default"
+                },
+                {
+                  "type": "frame",
+                  "id": "inviteDetailsRows",
+                  "width": "fill_container",
+                  "layout": "vertical",
+                  "gap": 14,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "gDMIb",
+                      "name": "spaceRowNew",
+                      "width": "fill_container",
+                      "justifyContent": "space_between",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "uyTaa",
+                          "name": "spaceRowLabel",
+                          "fill": "#898492",
+                          "content": "Space",
+                          "fontFamily": "Geist, Inter, system-ui, sans-serif",
+                          "fontSize": 13,
+                          "fontWeight": "500"
+                        },
+                        {
+                          "type": "text",
+                          "id": "FuiRZ",
+                          "name": "spaceRowValue",
+                          "fill": "#221f26",
+                          "content": "Product Design",
+                          "fontFamily": "Geist, Inter, system-ui, sans-serif",
+                          "fontSize": 14,
+                          "fontWeight": "600"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "IDwHh",
+                      "name": "roleRowNew",
+                      "width": "fill_container",
+                      "justifyContent": "space_between",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "DitmY",
+                          "name": "roleRowLabel",
+                          "fill": "#898492",
+                          "content": "Role",
+                          "fontFamily": "Geist, Inter, system-ui, sans-serif",
+                          "fontSize": 13,
+                          "fontWeight": "500"
+                        },
+                        {
+                          "type": "text",
+                          "id": "htpn8",
+                          "name": "roleRowValue",
+                          "fill": "#221f26",
+                          "content": "Editor",
+                          "fontFamily": "Geist, Inter, system-ui, sans-serif",
+                          "fontSize": 14,
+                          "fontWeight": "600"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "QfdhO",
+                      "name": "createdRowNew",
+                      "width": "fill_container",
+                      "justifyContent": "space_between",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "ys5TW",
+                          "name": "createdRowLabel",
+                          "fill": "#898492",
+                          "content": "Created",
+                          "fontFamily": "Geist, Inter, system-ui, sans-serif",
+                          "fontSize": 13,
+                          "fontWeight": "500"
+                        },
+                        {
+                          "type": "text",
+                          "id": "6mHqP",
+                          "name": "createdRowValue",
+                          "fill": "#221f26",
+                          "content": "45m ago",
+                          "fontFamily": "Geist, Inter, system-ui, sans-serif",
+                          "fontSize": 14,
+                          "fontWeight": "600"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "inviteFlowDecline",
+      "x": 2640,
+      "y": 13479,
+      "name": "Invite Flow · Decline Confirmation",
+      "width": 1200,
+      "height": 760,
+      "fill": "$color.bg.canvas",
+      "layout": "vertical",
+      "children": [
+        {
+          "type": "frame",
+          "id": "Q1bbd",
+          "width": "fill_container",
+          "layout": "vertical",
+          "gap": 24,
+          "padding": [
+            72,
+            248
+          ],
+          "children": [
+            {
+              "type": "frame",
+              "id": "inviteDeclineCard",
+              "width": 704,
+              "fill": "$color.bg.surface",
+              "cornerRadius": 12,
+              "stroke": {
+                "thickness": 1,
+                "fill": "$color.border.default"
+              },
+              "layout": "vertical",
+              "gap": 20,
+              "padding": [
+                30,
+                32
+              ],
+              "children": [
+                {
+                  "type": "text",
+                  "id": "inviteDeclineEyebrow",
+                  "fill": "$color.text.muted",
+                  "content": "CONFIRM DECLINE",
+                  "fontFamily": "$font.family.primary",
+                  "fontSize": 12,
+                  "fontWeight": "$font.weight.semibold"
+                },
+                {
+                  "type": "text",
+                  "id": "inviteDeclineScreenTitle",
+                  "fill": "$color.text.default",
+                  "content": "Decline invitation to Product Design?",
+                  "lineHeight": 1.2,
+                  "fontFamily": "$font.family.primary",
+                  "fontSize": 34,
+                  "fontWeight": "$font.weight.bold"
+                },
+                {
+                  "type": "frame",
+                  "id": "inviteDeclineWarning",
+                  "width": "fill_container",
+                  "fill": "$color.accent.3",
+                  "cornerRadius": 8,
+                  "stroke": {
+                    "thickness": 1,
+                    "fill": "$color.border.selected"
+                  },
+                  "gap": 12,
+                  "padding": [
+                    14,
+                    16
+                  ],
+                  "children": [
+                    {
+                      "type": "icon_font",
+                      "id": "inviteDeclineWarnIcon",
+                      "width": 16,
+                      "height": 16,
+                      "iconFontName": "alert-triangle",
+                      "iconFontFamily": "feather",
+                      "fill": "$color.brand.primary"
+                    },
+                    {
+                      "type": "text",
+                      "id": "inviteDeclineWarnText",
+                      "fill": "$color.text.default",
+                      "content": "Declining is final for this invite. Diana can invite you again later.",
+                      "fontFamily": "$font.family.primary",
+                      "fontSize": 14,
+                      "fontWeight": "$font.weight.medium"
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "id": "inviteDeclineCopy",
+                  "fill": "$color.text.subtle",
+                  "textGrowth": "fixed-width",
+                  "width": "fill_container",
+                  "content": "Declining removes this invite from your notifications. You will not gain access to the Product Design space.",
+                  "lineHeight": 1.5,
+                  "fontFamily": "$font.family.primary",
+                  "fontSize": 16,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "frame",
+                  "id": "inviteDeclineActions",
+                  "width": "fill_container",
+                  "gap": 12,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "inviteDeclineCancelBtn",
+                      "fill": "$color.bg.surface",
+                      "cornerRadius": 8,
+                      "stroke": {
+                        "thickness": 1,
+                        "fill": "$color.border.default"
+                      },
+                      "padding": [
+                        11,
+                        16
+                      ],
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "inviteDeclineCancelLabel",
+                          "fill": "$color.text.subtle",
+                          "content": "Cancel",
+                          "fontFamily": "$font.family.primary",
+                          "fontSize": 15,
+                          "fontWeight": "$font.weight.semibold"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "inviteDeclineAcceptBtn",
+                      "fill": "#f8f7f9",
+                      "cornerRadius": 8,
+                      "stroke": {
+                        "thickness": 1,
+                        "fill": "#d4d1da"
+                      },
+                      "padding": [
+                        12,
+                        18
+                      ],
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "inviteDeclineAcceptLabel",
+                          "fill": "#605c67",
+                          "content": "Accept instead",
+                          "fontFamily": "$font.family.primary",
+                          "fontSize": 15,
+                          "fontWeight": "$font.weight.semibold"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "inviteDeclinePrimaryBtn",
+                      "fill": "#b42318",
+                      "cornerRadius": 8,
+                      "padding": [
+                        12,
+                        18
+                      ],
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "inviteDeclinePrimaryLabel",
+                          "fill": "#ffffff",
+                          "content": "Confirm decline",
+                          "fontFamily": "$font.family.primary",
+                          "fontSize": 15,
+                          "fontWeight": "$font.weight.semibold"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "inviteFlowAccepted",
+      "x": 5280,
+      "y": 13479,
+      "name": "Invite Flow · Accepted Result",
+      "width": 1200,
+      "height": 640,
+      "fill": "$color.bg.canvas",
+      "layout": "vertical",
+      "padding": [
+        96,
+        248
+      ],
+      "children": [
+        {
+          "type": "frame",
+          "id": "inviteAcceptedCard",
+          "width": 704,
+          "fill": "$color.bg.surface",
+          "cornerRadius": 12,
+          "stroke": {
+            "thickness": 1,
+            "fill": "$color.border.default"
+          },
+          "layout": "vertical",
+          "gap": 18,
+          "padding": [
+            34,
+            36
+          ],
+          "children": [
+            {
+              "type": "frame",
+              "id": "inviteAcceptedIconWrap",
+              "width": 44,
+              "height": 44,
+              "fill": "$color.success.background",
+              "cornerRadius": 8,
+              "justifyContent": "center",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "icon_font",
+                  "id": "inviteAcceptedIcon",
+                  "width": 20,
+                  "height": 20,
+                  "iconFontName": "check-circle",
+                  "iconFontFamily": "feather",
+                  "fill": "$color.success.text"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "id": "inviteAcceptedEyebrow",
+              "fill": "$color.text.muted",
+              "content": "INVITATION ACCEPTED",
+              "fontFamily": "$font.family.primary",
+              "fontSize": 12,
+              "fontWeight": "$font.weight.semibold"
+            },
+            {
+              "type": "text",
+              "id": "inviteAcceptedTitle",
+              "fill": "$color.text.default",
+              "content": "Invitation accepted",
+              "lineHeight": 1.2,
+              "fontFamily": "$font.family.primary",
+              "fontSize": 34,
+              "fontWeight": "$font.weight.bold"
+            },
+            {
+              "type": "text",
+              "id": "inviteAcceptedCopy",
+              "fill": "$color.text.subtle",
+              "textGrowth": "fixed-width",
+              "width": "fill_container",
+              "content": "Product Design is now available from your workspace list.",
+              "lineHeight": 1.5,
+              "fontFamily": "$font.family.primary",
+              "fontSize": 16,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "frame",
+              "id": "inviteAcceptedActions",
+              "gap": 12,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "inviteOpenSpaceBtn",
+                  "fill": "$color.brand.primary",
+                  "cornerRadius": 8,
+                  "padding": [
+                    12,
+                    18
+                  ],
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "inviteOpenSpaceLabel",
+                      "fill": "$color.text.inverse",
+                      "content": "Open space",
+                      "fontFamily": "$font.family.primary",
+                      "fontSize": 15,
+                      "fontWeight": "$font.weight.semibold"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "inviteAcceptedNotifBtn",
+                  "fill": "$color.bg.surface",
+                  "cornerRadius": 8,
+                  "stroke": {
+                    "thickness": 1,
+                    "fill": "$color.border.default"
+                  },
+                  "padding": [
+                    11,
+                    16
+                  ],
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "inviteAcceptedNotifLabel",
+                      "fill": "$color.text.subtle",
+                      "content": "Back to notifications",
+                      "fontFamily": "$font.family.primary",
+                      "fontSize": 15,
+                      "fontWeight": "$font.weight.semibold"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "inviteFlowWrongAccount",
+      "x": 3960,
+      "y": 13479,
+      "name": "Invite Flow · Wrong Account",
+      "width": 1200,
+      "height": 640,
+      "fill": "$color.bg.canvas",
+      "layout": "vertical",
+      "padding": [
+        96,
+        248
+      ],
+      "children": [
+        {
+          "type": "frame",
+          "id": "inviteWrongCard",
+          "width": 704,
+          "fill": "$color.bg.surface",
+          "cornerRadius": 12,
+          "stroke": {
+            "thickness": 1,
+            "fill": "$color.border.default"
+          },
+          "layout": "vertical",
+          "gap": 18,
+          "padding": [
+            34,
+            36
+          ],
+          "children": [
+            {
+              "type": "frame",
+              "id": "inviteWrongIconWrap",
+              "width": 44,
+              "height": 44,
+              "fill": "$color.accent.3",
+              "cornerRadius": 8,
+              "justifyContent": "center",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "icon_font",
+                  "id": "inviteWrongIcon",
+                  "width": 20,
+                  "height": 20,
+                  "iconFontName": "user-x",
+                  "iconFontFamily": "feather",
+                  "fill": "$color.brand.primary"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "id": "inviteWrongEyebrow",
+              "fill": "$color.text.muted",
+              "content": "ACCOUNT CHECK",
+              "fontFamily": "$font.family.primary",
+              "fontSize": 12,
+              "fontWeight": "$font.weight.semibold"
+            },
+            {
+              "type": "text",
+              "id": "inviteWrongTitle",
+              "fill": "$color.text.default",
+              "content": "This invite belongs to another account",
+              "lineHeight": 1.2,
+              "fontFamily": "$font.family.primary",
+              "fontSize": 34,
+              "fontWeight": "$font.weight.bold"
+            },
+            {
+              "type": "text",
+              "id": "inviteWrongCopy",
+              "fill": "$color.text.subtle",
+              "textGrowth": "fixed-width",
+              "width": "fill_container",
+              "content": "Sign out, then sign in with the email address that received this invitation.",
+              "lineHeight": 1.5,
+              "fontFamily": "$font.family.primary",
+              "fontSize": 16,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "frame",
+              "id": "inviteWrongActions",
+              "gap": 12,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "inviteSwitchAccountBtn",
+                  "fill": "$color.brand.primary",
+                  "cornerRadius": 8,
+                  "padding": [
+                    12,
+                    18
+                  ],
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "inviteSwitchAccountLabel",
+                      "fill": "$color.text.inverse",
+                      "content": "Switch account",
+                      "fontFamily": "$font.family.primary",
+                      "fontSize": 15,
+                      "fontWeight": "$font.weight.semibold"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "inviteWrongNotifBtn",
+                  "fill": "$color.bg.surface",
+                  "cornerRadius": 8,
+                  "stroke": {
+                    "thickness": 1,
+                    "fill": "$color.border.default"
+                  },
+                  "padding": [
+                    11,
+                    16
+                  ],
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "inviteWrongNotifLabel",
+                      "fill": "$color.text.subtle",
+                      "content": "Open notifications",
+                      "fontFamily": "$font.family.primary",
+                      "fontSize": 15,
+                      "fontWeight": "$font.weight.semibold"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "inviteFlowMobilePending",
+      "x": 6600,
+      "y": 13479,
+      "name": "Invite Flow · Pending Decision · Mobile",
+      "width": 390,
+      "height": 844,
+      "fill": "$color.bg.canvas",
+      "layout": "vertical",
+      "children": [
+        {
+          "type": "frame",
+          "id": "inviteMobileTop",
+          "width": "fill_container",
+          "fill": "$color.bg.surface",
+          "stroke": {
+            "thickness": {
+              "bottom": 1
+            },
+            "fill": "$color.border.default"
+          },
+          "padding": [
+            14,
+            18
+          ],
+          "justifyContent": "space_between",
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "text",
+              "id": "inviteMobileBrand",
+              "fill": "$color.text.default",
+              "content": "Teddox",
+              "fontFamily": "$font.family.primary",
+              "fontSize": 20,
+              "fontWeight": "$font.weight.bold"
+            },
+            {
+              "type": "frame",
+              "id": "inviteMobileAvatar",
+              "width": 32,
+              "height": 32,
+              "fill": "$color.bg.selected",
+              "cornerRadius": 999,
+              "justifyContent": "center",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "inviteMobileAvatarText",
+                  "fill": "$color.brand.primary",
+                  "content": "K",
+                  "fontFamily": "$font.family.primary",
+                  "fontSize": 14,
+                  "fontWeight": "$font.weight.bold"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "inviteMobileBody",
+          "width": "fill_container",
+          "layout": "vertical",
+          "gap": 12,
+          "padding": 16,
+          "children": [
+            {
+              "type": "frame",
+              "id": "inviteMobileCard",
+              "width": 358,
+              "fill": "$color.bg.surface",
+              "cornerRadius": 12,
+              "stroke": {
+                "thickness": 1,
+                "fill": "$color.border.default"
+              },
+              "layout": "vertical",
+              "gap": 14,
+              "padding": [
+                18,
+                16
+              ],
+              "children": [
+                {
+                  "type": "text",
+                  "id": "inviteMobileEyebrow",
+                  "fill": "$color.text.muted",
+                  "content": "ACTION REQUIRED",
+                  "fontFamily": "$font.family.primary",
+                  "fontSize": 12,
+                  "fontWeight": "$font.weight.semibold"
+                },
+                {
+                  "type": "text",
+                  "id": "inviteMobileTitle",
+                  "fill": "$color.text.default",
+                  "content": "Diana Miller invited you\nto join Product Design",
+                  "lineHeight": 1.18,
+                  "fontFamily": "$font.family.primary",
+                  "fontSize": 24,
+                  "fontWeight": "$font.weight.bold"
+                },
+                {
+                  "type": "text",
+                  "id": "inviteMobileCopy",
+                  "fill": "$color.text.subtle",
+                  "textGrowth": "fixed-width",
+                  "width": "fill_container",
+                  "content": "No action is taken until you confirm.",
+                  "lineHeight": 1.45,
+                  "fontFamily": "$font.family.primary",
+                  "fontSize": 15,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "frame",
+                  "id": "inviteMobileRole",
+                  "fill": "$color.bg.selected",
+                  "cornerRadius": 999,
+                  "stroke": {
+                    "thickness": 1,
+                    "fill": "$color.border.selected"
+                  },
+                  "padding": [
+                    7,
+                    12
+                  ],
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "inviteMobileRoleText",
+                      "fill": "$color.brand.primary",
+                      "content": "Editor access",
+                      "fontFamily": "$font.family.primary",
+                      "fontSize": 13,
+                      "fontWeight": "$font.weight.semibold"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "inviteMobileActions",
+                  "width": 326,
+                  "layout": "vertical",
+                  "gap": 10,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "inviteMobileAcceptBtn",
+                      "width": 326,
+                      "fill": "$color.brand.primary",
+                      "cornerRadius": 8,
+                      "padding": [
+                        13,
+                        18
+                      ],
+                      "justifyContent": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "inviteMobileAcceptLabel",
+                          "fill": "$color.text.inverse",
+                          "content": "Accept invite",
+                          "fontFamily": "$font.family.primary",
+                          "fontSize": 15,
+                          "fontWeight": "$font.weight.semibold"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "inviteMobileDeclineBtn",
+                      "width": 326,
+                      "fill": "$color.bg.surface",
+                      "cornerRadius": 8,
+                      "stroke": {
+                        "thickness": 1,
+                        "fill": "$color.border.default"
+                      },
+                      "padding": [
+                        12,
+                        18
+                      ],
+                      "justifyContent": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "inviteMobileDeclineLabel",
+                          "fill": "$color.text.subtle",
+                          "content": "Decline",
+                          "fontFamily": "$font.family.primary",
+                          "fontSize": 15,
+                          "fontWeight": "$font.weight.semibold"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "inviteMobileDetails",
+              "width": 358,
+              "fill": "$color.bg.surface",
+              "cornerRadius": 12,
+              "stroke": {
+                "thickness": 1,
+                "fill": "$color.border.default"
+              },
+              "layout": "vertical",
+              "gap": 12,
+              "padding": 18,
+              "children": [
+                {
+                  "type": "text",
+                  "id": "inviteMobileDetailsTitle",
+                  "fill": "$color.text.muted",
+                  "content": "INVITE DETAILS",
+                  "fontFamily": "$font.family.primary",
+                  "fontSize": 12,
+                  "fontWeight": "$font.weight.semibold"
+                },
+                {
+                  "type": "frame",
+                  "id": "Wn14M",
+                  "name": "mobileDetailsRows",
+                  "width": "fill_container",
+                  "layout": "vertical",
+                  "gap": 10,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "acU9Z",
+                      "name": "mobileSenderRow",
+                      "width": "fill_container",
+                      "justifyContent": "space_between",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "UqoOF",
+                          "name": "mobileSenderLabel",
+                          "fill": "#898492",
+                          "content": "Sender",
+                          "fontFamily": "Geist, Inter, system-ui, sans-serif",
+                          "fontSize": 13,
+                          "fontWeight": "500"
+                        },
+                        {
+                          "type": "text",
+                          "id": "Vz5w8",
+                          "name": "mobileSenderValue",
+                          "fill": "#221f26",
+                          "content": "Diana Miller",
+                          "fontFamily": "Geist, Inter, system-ui, sans-serif",
+                          "fontSize": 14,
+                          "fontWeight": "600"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "sUGJp",
+                      "name": "mobileSpaceRow",
+                      "width": "fill_container",
+                      "justifyContent": "space_between",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "PidtP",
+                          "name": "mobileSpaceLabel",
+                          "fill": "#898492",
+                          "content": "Space",
+                          "fontFamily": "Geist, Inter, system-ui, sans-serif",
+                          "fontSize": 13,
+                          "fontWeight": "500"
+                        },
+                        {
+                          "type": "text",
+                          "id": "F9IqX",
+                          "name": "mobileSpaceValue",
+                          "fill": "#221f26",
+                          "content": "Product Design",
+                          "fontFamily": "Geist, Inter, system-ui, sans-serif",
+                          "fontSize": 14,
+                          "fontWeight": "600"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "0tJeF",
+                      "name": "mobileRoleRow",
+                      "width": "fill_container",
+                      "justifyContent": "space_between",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "rooSg",
+                          "name": "mobileRoleLabel",
+                          "fill": "#898492",
+                          "content": "Role",
+                          "fontFamily": "Geist, Inter, system-ui, sans-serif",
+                          "fontSize": 13,
+                          "fontWeight": "500"
+                        },
+                        {
+                          "type": "text",
+                          "id": "AuYyX",
+                          "name": "mobileRoleValue",
+                          "fill": "#221f26",
+                          "content": "Editor",
+                          "fontFamily": "Geist, Inter, system-ui, sans-serif",
+                          "fontSize": 14,
+                          "fontWeight": "600"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "yJfnm",
+                      "name": "mobileCreatedRow",
+                      "width": "fill_container",
+                      "justifyContent": "space_between",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "VQ31L",
+                          "name": "mobileCreatedLabel",
+                          "fill": "#898492",
+                          "content": "Created",
+                          "fontFamily": "Geist, Inter, system-ui, sans-serif",
+                          "fontSize": 13,
+                          "fontWeight": "500"
+                        },
+                        {
+                          "type": "text",
+                          "id": "KP8hf",
+                          "name": "mobileCreatedValue",
+                          "fill": "#221f26",
+                          "content": "45m ago",
+                          "fontFamily": "Geist, Inter, system-ui, sans-serif",
+                          "fontSize": 14,
+                          "fontWeight": "600"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "zydcY",
+      "x": 1320,
+      "y": 14443,
+      "name": "Invite Flow · Rejected Result",
+      "width": 1200,
+      "height": 640,
+      "fill": "$color.bg.canvas",
+      "layout": "vertical",
+      "padding": [
+        96,
+        248
+      ],
+      "children": [
+        {
+          "type": "frame",
+          "id": "ehgE8",
+          "width": 704,
+          "fill": "$color.bg.surface",
+          "cornerRadius": 12,
+          "stroke": {
+            "thickness": 1,
+            "fill": "$color.border.default"
+          },
+          "layout": "vertical",
+          "gap": 18,
+          "padding": [
+            34,
+            36
+          ],
+          "children": [
+            {
+              "type": "frame",
+              "id": "CZ9KV",
+              "width": 44,
+              "height": 44,
+              "fill": "#fef3f2",
+              "cornerRadius": 8,
+              "justifyContent": "center",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "icon_font",
+                  "id": "rGJ7y",
+                  "width": 20,
+                  "height": 20,
+                  "iconFontName": "x-circle",
+                  "iconFontFamily": "feather",
+                  "fill": "#b42318"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "id": "rS1F0",
+              "fill": "$color.text.muted",
+              "content": "INVITATION DECLINED",
+              "fontFamily": "$font.family.primary",
+              "fontSize": 12,
+              "fontWeight": "$font.weight.semibold"
+            },
+            {
+              "type": "text",
+              "id": "YNACH",
+              "fill": "$color.text.default",
+              "content": "Invitation declined",
+              "lineHeight": 1.2,
+              "fontFamily": "$font.family.primary",
+              "fontSize": 34,
+              "fontWeight": "$font.weight.bold"
+            },
+            {
+              "type": "text",
+              "id": "QvRXi",
+              "fill": "$color.text.subtle",
+              "textGrowth": "fixed-width",
+              "width": "fill_container",
+              "content": "The invite was removed from notifications. Diana can invite you again later.",
+              "lineHeight": 1.5,
+              "fontFamily": "$font.family.primary",
+              "fontSize": 16,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "frame",
+              "id": "OAVRy",
+              "gap": 12,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "qzLhT",
+                  "fill": "$color.brand.primary",
+                  "cornerRadius": 8,
+                  "padding": [
+                    12,
+                    18
+                  ],
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "drv3D",
+                      "fill": "$color.text.inverse",
+                      "content": "Back to notifications",
+                      "fontFamily": "$font.family.primary",
+                      "fontSize": 15,
+                      "fontWeight": "$font.weight.semibold"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "DdCyN",
+                  "fill": "$color.bg.surface",
+                  "cornerRadius": 8,
+                  "stroke": {
+                    "thickness": 1,
+                    "fill": "$color.border.default"
+                  },
+                  "padding": [
+                    11,
+                    16
+                  ],
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "eciZa",
+                      "fill": "$color.text.subtle",
+                      "content": "Open workspace",
+                      "fontFamily": "$font.family.primary",
+                      "fontSize": 15,
+                      "fontWeight": "$font.weight.semibold"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "oY7vN",
+      "x": 2640,
+      "y": 14443,
+      "name": "Invite Flow · Already Accepted",
+      "width": 1200,
+      "height": 640,
+      "fill": "$color.bg.canvas",
+      "layout": "vertical",
+      "padding": [
+        96,
+        248
+      ],
+      "children": [
+        {
+          "type": "frame",
+          "id": "BznpU",
+          "width": 704,
+          "fill": "$color.bg.surface",
+          "cornerRadius": 12,
+          "stroke": {
+            "thickness": 1,
+            "fill": "$color.border.default"
+          },
+          "layout": "vertical",
+          "gap": 18,
+          "padding": [
+            34,
+            36
+          ],
+          "children": [
+            {
+              "type": "frame",
+              "id": "KWx96",
+              "width": 44,
+              "height": 44,
+              "fill": "$color.success.background",
+              "cornerRadius": 8,
+              "justifyContent": "center",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "icon_font",
+                  "id": "14D9w",
+                  "width": 20,
+                  "height": 20,
+                  "iconFontName": "check-circle",
+                  "iconFontFamily": "feather",
+                  "fill": "$color.success.text"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "id": "DOTFp",
+              "fill": "$color.text.muted",
+              "content": "ALREADY ACCEPTED",
+              "fontFamily": "$font.family.primary",
+              "fontSize": 12,
+              "fontWeight": "$font.weight.semibold"
+            },
+            {
+              "type": "text",
+              "id": "5R8zx",
+              "fill": "$color.text.default",
+              "content": "You already accepted this invitation",
+              "lineHeight": 1.2,
+              "fontFamily": "$font.family.primary",
+              "fontSize": 34,
+              "fontWeight": "$font.weight.bold"
+            },
+            {
+              "type": "text",
+              "id": "t4V6O",
+              "fill": "$color.text.subtle",
+              "textGrowth": "fixed-width",
+              "width": "fill_container",
+              "content": "Product Design is already available from your workspace list.",
+              "lineHeight": 1.5,
+              "fontFamily": "$font.family.primary",
+              "fontSize": 16,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "frame",
+              "id": "rm8h5",
+              "gap": 12,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "dGaHO",
+                  "fill": "$color.brand.primary",
+                  "cornerRadius": 8,
+                  "padding": [
+                    12,
+                    18
+                  ],
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "h3AkK",
+                      "fill": "$color.text.inverse",
+                      "content": "Open space",
+                      "fontFamily": "$font.family.primary",
+                      "fontSize": 15,
+                      "fontWeight": "$font.weight.semibold"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "FZhSn",
+                  "fill": "$color.bg.surface",
+                  "cornerRadius": 8,
+                  "stroke": {
+                    "thickness": 1,
+                    "fill": "$color.border.default"
+                  },
+                  "padding": [
+                    11,
+                    16
+                  ],
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "TCfGU",
+                      "fill": "$color.text.subtle",
+                      "content": "Back to notifications",
+                      "fontFamily": "$font.family.primary",
+                      "fontSize": 15,
+                      "fontWeight": "$font.weight.semibold"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "QBjvX",
+      "x": 3960,
+      "y": 14443,
+      "name": "Invite Flow · Already Rejected",
+      "width": 1200,
+      "height": 640,
+      "fill": "$color.bg.canvas",
+      "layout": "vertical",
+      "padding": [
+        96,
+        248
+      ],
+      "children": [
+        {
+          "type": "frame",
+          "id": "FM913",
+          "width": 704,
+          "fill": "$color.bg.surface",
+          "cornerRadius": 12,
+          "stroke": {
+            "thickness": 1,
+            "fill": "$color.border.default"
+          },
+          "layout": "vertical",
+          "gap": 18,
+          "padding": [
+            34,
+            36
+          ],
+          "children": [
+            {
+              "type": "frame",
+              "id": "qfizz",
+              "width": 44,
+              "height": 44,
+              "fill": "#fef3f2",
+              "cornerRadius": 8,
+              "justifyContent": "center",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "icon_font",
+                  "id": "kRLCF",
+                  "width": 20,
+                  "height": 20,
+                  "iconFontName": "x-circle",
+                  "iconFontFamily": "feather",
+                  "fill": "#b42318"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "id": "DfzM9",
+              "fill": "$color.text.muted",
+              "content": "ALREADY DECLINED",
+              "fontFamily": "$font.family.primary",
+              "fontSize": 12,
+              "fontWeight": "$font.weight.semibold"
+            },
+            {
+              "type": "text",
+              "id": "kflsI",
+              "fill": "$color.text.default",
+              "content": "You already declined this invitation",
+              "lineHeight": 1.2,
+              "fontFamily": "$font.family.primary",
+              "fontSize": 34,
+              "fontWeight": "$font.weight.bold"
+            },
+            {
+              "type": "text",
+              "id": "ayb4u",
+              "fill": "$color.text.subtle",
+              "textGrowth": "fixed-width",
+              "width": "fill_container",
+              "content": "This invite is no longer pending. Ask Diana to send another invite if you need access.",
+              "lineHeight": 1.5,
+              "fontFamily": "$font.family.primary",
+              "fontSize": 16,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "frame",
+              "id": "Eh2TX",
+              "gap": 12,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "MFb07",
+                  "fill": "$color.brand.primary",
+                  "cornerRadius": 8,
+                  "padding": [
+                    12,
+                    18
+                  ],
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "VONAA",
+                      "fill": "$color.text.inverse",
+                      "content": "Back to notifications",
+                      "fontFamily": "$font.family.primary",
+                      "fontSize": 15,
+                      "fontWeight": "$font.weight.semibold"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "K3C70",
+                  "fill": "$color.bg.surface",
+                  "cornerRadius": 8,
+                  "stroke": {
+                    "thickness": 1,
+                    "fill": "$color.border.default"
+                  },
+                  "padding": [
+                    11,
+                    16
+                  ],
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "KClND",
+                      "fill": "$color.text.subtle",
+                      "content": "Open workspace",
+                      "fontFamily": "$font.family.primary",
+                      "fontSize": 15,
+                      "fontWeight": "$font.weight.semibold"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "olSY5",
+      "x": 5280,
+      "y": 14443,
+      "name": "Invite Flow · Invalid Link",
+      "width": 1200,
+      "height": 640,
+      "fill": "$color.bg.canvas",
+      "layout": "vertical",
+      "padding": [
+        96,
+        248
+      ],
+      "children": [
+        {
+          "type": "frame",
+          "id": "cRUKY",
+          "width": 704,
+          "fill": "$color.bg.surface",
+          "cornerRadius": 12,
+          "stroke": {
+            "thickness": 1,
+            "fill": "$color.border.default"
+          },
+          "layout": "vertical",
+          "gap": 18,
+          "padding": [
+            34,
+            36
+          ],
+          "children": [
+            {
+              "type": "frame",
+              "id": "Hs65h",
+              "width": 44,
+              "height": 44,
+              "fill": "#fef3f2",
+              "cornerRadius": 8,
+              "justifyContent": "center",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "icon_font",
+                  "id": "uMwZE",
+                  "width": 20,
+                  "height": 20,
+                  "iconFontName": "link-2-off",
+                  "iconFontFamily": "feather",
+                  "fill": "#b42318"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "id": "naceW",
+              "fill": "$color.text.muted",
+              "content": "INVITE LINK",
+              "fontFamily": "$font.family.primary",
+              "fontSize": 12,
+              "fontWeight": "$font.weight.semibold"
+            },
+            {
+              "type": "text",
+              "id": "m6pAF",
+              "fill": "$color.text.default",
+              "content": "This invitation link is invalid",
+              "lineHeight": 1.2,
+              "fontFamily": "$font.family.primary",
+              "fontSize": 34,
+              "fontWeight": "$font.weight.bold"
+            },
+            {
+              "type": "text",
+              "id": "VDUQS",
+              "fill": "$color.text.subtle",
+              "textGrowth": "fixed-width",
+              "width": "fill_container",
+              "content": "The link may be missing a token, expired, or no longer available.",
+              "lineHeight": 1.5,
+              "fontFamily": "$font.family.primary",
+              "fontSize": 16,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "frame",
+              "id": "5HCOr",
+              "gap": 12,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "cKLkT",
+                  "fill": "$color.brand.primary",
+                  "cornerRadius": 8,
+                  "padding": [
+                    12,
+                    18
+                  ],
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "aHtMR",
+                      "fill": "$color.text.inverse",
+                      "content": "Back to notifications",
+                      "fontFamily": "$font.family.primary",
+                      "fontSize": 15,
+                      "fontWeight": "$font.weight.semibold"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "082Ja",
+                  "fill": "$color.bg.surface",
+                  "cornerRadius": 8,
+                  "stroke": {
+                    "thickness": 1,
+                    "fill": "$color.border.default"
+                  },
+                  "padding": [
+                    11,
+                    16
+                  ],
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "liYZ3",
+                      "fill": "$color.text.subtle",
+                      "content": "Open workspace",
+                      "fontFamily": "$font.family.primary",
+                      "fontSize": 15,
+                      "fontWeight": "$font.weight.semibold"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "lUJCS",
+      "x": 1320,
+      "y": 15203,
+      "name": "Invite Flow · Loading Details",
+      "width": 1200,
+      "height": 640,
+      "fill": "$color.bg.canvas",
+      "layout": "vertical",
+      "padding": [
+        96,
+        248
+      ],
+      "children": [
+        {
+          "type": "frame",
+          "id": "rKnUC",
+          "width": 704,
+          "fill": "$color.bg.surface",
+          "cornerRadius": 12,
+          "stroke": {
+            "thickness": 1,
+            "fill": "$color.border.default"
+          },
+          "layout": "vertical",
+          "gap": 18,
+          "padding": [
+            34,
+            36
+          ],
+          "children": [
+            {
+              "type": "frame",
+              "id": "fX8cu",
+              "width": 44,
+              "height": 44,
+              "fill": "#e8dfed",
+              "cornerRadius": 8,
+              "justifyContent": "center",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "icon_font",
+                  "id": "epqbV",
+                  "width": 20,
+                  "height": 20,
+                  "iconFontName": "loader",
+                  "iconFontFamily": "feather",
+                  "fill": "#6b4c7a"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "id": "ksexS",
+              "fill": "$color.text.muted",
+              "content": "LOADING INVITE",
+              "fontFamily": "$font.family.primary",
+              "fontSize": 12,
+              "fontWeight": "$font.weight.semibold"
+            },
+            {
+              "type": "text",
+              "id": "LmVbL",
+              "fill": "$color.text.default",
+              "content": "Loading invitation details",
+              "lineHeight": 1.2,
+              "fontFamily": "$font.family.primary",
+              "fontSize": 34,
+              "fontWeight": "$font.weight.bold"
+            },
+            {
+              "type": "text",
+              "id": "A6twD",
+              "fill": "$color.text.subtle",
+              "textGrowth": "fixed-width",
+              "width": "fill_container",
+              "content": "Checking the invite and your account before any action is taken.",
+              "lineHeight": 1.5,
+              "fontFamily": "$font.family.primary",
+              "fontSize": 16,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "frame",
+              "id": "46wYH",
+              "gap": 12,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "39WUM",
+                  "fill": "#cac6d1",
+                  "cornerRadius": 8,
+                  "padding": [
+                    12,
+                    18
+                  ],
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "7Yv2u",
+                      "fill": "$color.text.inverse",
+                      "content": "Loading...",
+                      "fontFamily": "$font.family.primary",
+                      "fontSize": 15,
+                      "fontWeight": "$font.weight.semibold"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "RM5R1",
+                  "fill": "$color.bg.surface",
+                  "cornerRadius": 8,
+                  "stroke": {
+                    "thickness": 1,
+                    "fill": "$color.border.default"
+                  },
+                  "padding": [
+                    11,
+                    16
+                  ],
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "VDLHE",
+                      "fill": "$color.text.subtle",
+                      "content": "Back to notifications",
+                      "fontFamily": "$font.family.primary",
+                      "fontSize": 15,
+                      "fontWeight": "$font.weight.semibold"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "rUhXl",
+      "x": 2640,
+      "y": 15203,
+      "name": "Invite Flow · Decision Error",
+      "width": 1200,
+      "height": 640,
+      "fill": "$color.bg.canvas",
+      "layout": "vertical",
+      "padding": [
+        96,
+        248
+      ],
+      "children": [
+        {
+          "type": "frame",
+          "id": "Ij5fy",
+          "width": 704,
+          "fill": "$color.bg.surface",
+          "cornerRadius": 12,
+          "stroke": {
+            "thickness": 1,
+            "fill": "$color.border.default"
+          },
+          "layout": "vertical",
+          "gap": 18,
+          "padding": [
+            34,
+            36
+          ],
+          "children": [
+            {
+              "type": "frame",
+              "id": "tBBCK",
+              "width": 44,
+              "height": 44,
+              "fill": "#fef3f2",
+              "cornerRadius": 8,
+              "justifyContent": "center",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "icon_font",
+                  "id": "EcDvN",
+                  "width": 20,
+                  "height": 20,
+                  "iconFontName": "alert-triangle",
+                  "iconFontFamily": "feather",
+                  "fill": "#b42318"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "id": "M1cjR",
+              "fill": "$color.text.muted",
+              "content": "ACTION FAILED",
+              "fontFamily": "$font.family.primary",
+              "fontSize": 12,
+              "fontWeight": "$font.weight.semibold"
+            },
+            {
+              "type": "text",
+              "id": "puKeX",
+              "fill": "$color.text.default",
+              "content": "Could not update invitation",
+              "lineHeight": 1.2,
+              "fontFamily": "$font.family.primary",
+              "fontSize": 34,
+              "fontWeight": "$font.weight.bold"
+            },
+            {
+              "type": "text",
+              "id": "qdp1n",
+              "fill": "$color.text.subtle",
+              "textGrowth": "fixed-width",
+              "width": "fill_container",
+              "content": "The invite could not be updated. Check your connection and try again.",
+              "lineHeight": 1.5,
+              "fontFamily": "$font.family.primary",
+              "fontSize": 16,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "frame",
+              "id": "Wg0Rl",
+              "gap": 12,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "9o2OC",
+                  "fill": "$color.brand.primary",
+                  "cornerRadius": 8,
+                  "padding": [
+                    12,
+                    18
+                  ],
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "q6Qfd",
+                      "fill": "$color.text.inverse",
+                      "content": "Try again",
+                      "fontFamily": "$font.family.primary",
+                      "fontSize": 15,
+                      "fontWeight": "$font.weight.semibold"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "0eLq5",
+                  "fill": "$color.bg.surface",
+                  "cornerRadius": 8,
+                  "stroke": {
+                    "thickness": 1,
+                    "fill": "$color.border.default"
+                  },
+                  "padding": [
+                    11,
+                    16
+                  ],
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "jFx5s",
+                      "fill": "$color.text.subtle",
+                      "content": "Back to notifications",
+                      "fontFamily": "$font.family.primary",
+                      "fontSize": 15,
+                      "fontWeight": "$font.weight.semibold"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "wgqjs",
+      "x": 3960,
+      "y": 15203,
+      "name": "Invite Flow · Decision Submitting",
+      "width": 1200,
+      "height": 640,
+      "fill": "$color.bg.canvas",
+      "layout": "vertical",
+      "padding": [
+        96,
+        248
+      ],
+      "children": [
+        {
+          "type": "frame",
+          "id": "Y5lhU",
+          "width": 704,
+          "fill": "$color.bg.surface",
+          "cornerRadius": 12,
+          "stroke": {
+            "thickness": 1,
+            "fill": "$color.border.default"
+          },
+          "layout": "vertical",
+          "gap": 18,
+          "padding": [
+            34,
+            36
+          ],
+          "children": [
+            {
+              "type": "frame",
+              "id": "MDaZk",
+              "width": 44,
+              "height": 44,
+              "fill": "#e8dfed",
+              "cornerRadius": 8,
+              "justifyContent": "center",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "icon_font",
+                  "id": "6r20Q",
+                  "width": 20,
+                  "height": 20,
+                  "iconFontName": "loader",
+                  "iconFontFamily": "feather",
+                  "fill": "#6b4c7a"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "id": "XbjhR",
+              "fill": "$color.text.muted",
+              "content": "UPDATING INVITE",
+              "fontFamily": "$font.family.primary",
+              "fontSize": 12,
+              "fontWeight": "$font.weight.semibold"
+            },
+            {
+              "type": "text",
+              "id": "x2QMK",
+              "fill": "$color.text.default",
+              "content": "Accepting invitation",
+              "lineHeight": 1.2,
+              "fontFamily": "$font.family.primary",
+              "fontSize": 34,
+              "fontWeight": "$font.weight.bold"
+            },
+            {
+              "type": "text",
+              "id": "YY1K3",
+              "fill": "$color.text.subtle",
+              "textGrowth": "fixed-width",
+              "width": "fill_container",
+              "content": "Keep this page open while Beskar updates your access to Product Design.",
+              "lineHeight": 1.5,
+              "fontFamily": "$font.family.primary",
+              "fontSize": 16,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "frame",
+              "id": "DWJv4",
+              "gap": 12,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "HZJOj",
+                  "fill": "#cac6d1",
+                  "cornerRadius": 8,
+                  "padding": [
+                    12,
+                    18
+                  ],
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "6afUa",
+                      "fill": "$color.text.inverse",
+                      "content": "Accepting...",
+                      "fontFamily": "$font.family.primary",
+                      "fontSize": 15,
+                      "fontWeight": "$font.weight.semibold"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "LrnLM",
+                  "fill": "$color.bg.surface",
+                  "cornerRadius": 8,
+                  "stroke": {
+                    "thickness": 1,
+                    "fill": "$color.border.default"
+                  },
+                  "padding": [
+                    11,
+                    16
+                  ],
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "2XKrG",
+                      "fill": "$color.text.subtle",
+                      "content": "Back to notifications",
+                      "fontFamily": "$font.family.primary",
+                      "fontSize": 15,
                       "fontWeight": "$font.weight.semibold"
                     }
                   ]

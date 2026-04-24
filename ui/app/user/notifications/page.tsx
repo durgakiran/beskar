@@ -24,12 +24,16 @@ export default function Page() {
     const [{ data, errors, isLoading, response }, fetchData] = useGet<Response<Notifications>>(`invite/user/invites`);
     const [selectedFilter, setSelectedFilter] = useState<"all" | "unread" | "action">("unread");
     const [toast, setToast] = useState<{ type: "success" | "warning"; message: string } | null>(null);
+    const [resolvedInviteTokens, setResolvedInviteTokens] = useState<string[]>([]);
 
     useEffect(() => {
         fetchData();
     }, [fetchData]);
 
-    const invites = data?.data?.invites ?? [];
+    const invites = useMemo(() => {
+        const resolved = new Set(resolvedInviteTokens);
+        return (data?.data?.invites ?? []).filter((invite) => !resolved.has(invite.token));
+    }, [data?.data?.invites, resolvedInviteTokens]);
 
     const filteredInvites = useMemo(() => {
         switch (selectedFilter) {
@@ -41,11 +45,13 @@ export default function Page() {
         }
     }, [invites, selectedFilter]);
 
-    const onInviteResolved = (_token: string, action: "accepted" | "declined") => {
+    const onInviteResolved = (token: string, action: "accepted" | "declined") => {
+        setResolvedInviteTokens((tokens) => tokens.includes(token) ? tokens : [...tokens, token]);
         setToast({
             type: "success",
             message: action === "accepted" ? "Invitation accepted." : "Invitation declined.",
         });
+        window.dispatchEvent(new CustomEvent("beskar:notifications-changed"));
         fetchData();
     };
 

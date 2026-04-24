@@ -76,6 +76,7 @@ export default function Page({ params }: { params: Promise<PageParams> }) {
                     content={content}
                     title={""}
                     pageId="14"
+                    spaceId={spaceId}
                     id={14}
                     editable={false}
                     updateContent={(content, title) => console.log(content, title)}
