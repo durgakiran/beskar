@@ -107,6 +107,7 @@ services:
     build:
       context: ../..
       dockerfile: docker/deploy/ui.Dockerfile
+      target: {{UI_DOCKER_BUILD_TARGET}}
       args:
         NPM_TOKEN: {{NPM_TOKEN}}
         NEXTAUTH_URL: {{NEXTAUTH_URL}}

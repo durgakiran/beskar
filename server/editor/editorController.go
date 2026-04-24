@@ -404,6 +404,7 @@ func Router() *chi.Mux {
 	r.Get("/space/{spaceId}/page/{pageId}/edit", getDocumentToEdit)
 	r.Get("/space/{spaceId}/page/{pageId}/metadata", getPageMetadataHandler)
 	r.Get("/space/{spaceId}/page/{pageId}/inline-link", getPageInlineLinkMetadataHandler)
+	r.Get("/external-link/metadata", getExternalLinkMetadataHandler)
 	r.Delete("/space/{spaceId}/page/{pageId}/delete", deleteDocument)
 	r.Post("/space/{spaceId}/page/create", saveDoc)
 

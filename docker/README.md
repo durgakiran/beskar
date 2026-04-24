@@ -129,6 +129,7 @@ You must set the values for:
 Optional but important:
 
 - Set `UPLOAD_STORAGE_DIR` if uploads should not be stored under the default `public` path inside the server container
+- Set `UI_USE_LOCAL_EDITOR_DIST=true` only when you want the deployment-style UI image to test local `packages/editor/dist` output instead of the published `@durgakiran/editor` package
 
 ### Configure Email Notifications
 
@@ -163,6 +164,12 @@ Validate the generated compose config:
 
 ```bash
 ./docker/scripts/validate-config.sh --env docker/env/<environment>.env
+```
+
+If `UI_USE_LOCAL_EDITOR_DIST=true`, build the editor package first so the deploy UI image can overlay the local artifacts:
+
+```bash
+npm --prefix packages/editor run build
 ```
 
 ### Start the Production Stack

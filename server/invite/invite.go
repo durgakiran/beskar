@@ -1,6 +1,8 @@
 package invite
 
 import (
+	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 
@@ -27,6 +29,21 @@ func sendFailedReponse(w http.ResponseWriter, r *http.Request, code int, message
 func sendSuccessResponse(w http.ResponseWriter, r *http.Request, code int, data interface{}) {
 	render.Status(r, code)
 	render.Render(w, r, core.NewSucessResponse(core.SUCCESS, data))
+}
+
+func sendInviteActionError(w http.ResponseWriter, r *http.Request, err error) {
+	switch {
+	case errors.Is(err, errInviteNotFound):
+		sendFailedReponse(w, r, http.StatusNotFound, "Invitation not found")
+	case errors.Is(err, errInviteWrongAccount):
+		sendFailedReponse(w, r, http.StatusForbidden, "This invitation was sent to a different email address")
+	case errors.Is(err, errInviteInvalidDecision):
+		sendFailedReponse(w, r, http.StatusBadRequest, "Decision must be accept or reject")
+	case err.Error() == core.ErrorCode_name[core.ErrorCode_ERROR_CODE_PERMISSION_SERVER_ISSUE]:
+		sendFailedReponse(w, r, http.StatusBadGateway, err.Error())
+	default:
+		sendFailedReponse(w, r, http.StatusInternalServerError, err.Error())
+	}
 }
 
 func acceptInvitation(w http.ResponseWriter, r *http.Request) {
@@ -141,6 +158,54 @@ func rejectInvitation(w http.ResponseWriter, r *http.Request) {
 	sendSuccessResponse(w, r, http.StatusOK, "")
 }
 
+func inviteDetails(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	user, err := core.GetUserInfo(ctx)
+	if err != nil || user.Id == "" {
+		core.SendFailedReponse(w, r, http.StatusForbidden, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNAUTHORIZED])
+		return
+	}
+
+	token := r.URL.Query().Get("token")
+	if token == "" {
+		sendFailedReponse(w, r, http.StatusBadRequest, "Invite token is required")
+		return
+	}
+
+	details, err := getInviteDetailsForUser(user.Email, token)
+	if err != nil {
+		sendInviteActionError(w, r, err)
+		return
+	}
+	sendSuccessResponse(w, r, http.StatusOK, details)
+}
+
+func decideInvitation(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	user, err := core.GetUserInfo(ctx)
+	if err != nil || user.Id == "" {
+		core.SendFailedReponse(w, r, http.StatusForbidden, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNAUTHORIZED])
+		return
+	}
+
+	var req InviteDecisionRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		sendFailedReponse(w, r, http.StatusBadRequest, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_INVALID_INPUT])
+		return
+	}
+	if req.Token == "" {
+		sendFailedReponse(w, r, http.StatusBadRequest, "Invite token is required")
+		return
+	}
+
+	result, err := processInviteDecision(user.AId, user.Email, req.Token, req.Decision)
+	if err != nil {
+		sendInviteActionError(w, r, err)
+		return
+	}
+	sendSuccessResponse(w, r, http.StatusOK, result)
+}
+
 func removeInvitation(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	user, err := core.GetUserInfo(ctx)
@@ -245,6 +310,8 @@ func Router() *chi.Mux {
 	r.Post("/user/create", createInvitation)
 	r.Get("/user/accept", acceptInvitation)
 	r.Get("/user/reject", rejectInvitation)
+	r.Get("/user/details", inviteDetails)
+	r.Post("/user/decision", decideInvitation)
 	r.Delete("/user/remove", removeInvitation)
 	r.Get("/space/{spaceId}/list", listSpaceInvites)
 	r.Get("/user/invites", listUserInvites)

@@ -186,3 +186,9 @@ type PageInlineLinkMetadata struct {
 	SpaceId uuid.UUID `json:"spaceId" db:"spaceId"`
 	Title   string    `json:"title" db:"title"`
 }
+
+type ExternalLinkMetadata struct {
+	URL      string `json:"url"`
+	Title    string `json:"title"`
+	SiteName string `json:"siteName,omitempty"`
+}

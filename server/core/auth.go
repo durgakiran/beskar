@@ -173,9 +173,38 @@ func ZitadelRegisterHandler() http.HandlerFunc {
 	}
 }
 
+func sanitizeAuthReturnTo(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" || strings.ContainsAny(value, "\\\r\n\t") {
+		return "/"
+	}
+	if !strings.HasPrefix(value, "/") || strings.HasPrefix(value, "//") {
+		return "/"
+	}
+
+	path := value
+	if idx := strings.IndexAny(path, "?#"); idx >= 0 {
+		path = path[:idx]
+	}
+	lowerPath := strings.ToLower(path)
+	if lowerPath == "/auth" || strings.HasPrefix(lowerPath, "/auth/") {
+		return "/"
+	}
+
+	return value
+}
+
+func ZitadelLoginHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		returnTo := sanitizeAuthReturnTo(r.URL.Query().Get("returnTo"))
+		ZitadelAuthenticator().Authenticate(w, r, returnTo)
+	}
+}
+
 func ZitadelAuthRouter() http.Handler {
 	r := chi.NewRouter()
 	r.Get("/register", ZitadelRegisterHandler())
+	r.Get("/login", ZitadelLoginHandler())
 	r.Handle("/*", ZitadelAuthenticator())
 	return r
 }

@@ -3,6 +3,7 @@ package invite
 import (
 	"context"
 	"crypto/md5"
+	"database/sql"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -13,6 +14,74 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+var (
+	errInviteNotFound        = errors.New("invite not found")
+	errInviteWrongAccount    = errors.New("invite belongs to another account")
+	errInviteInvalidDecision = errors.New("invalid invite decision")
+)
+
+func normalizeInviteStatus(status sql.NullString) *string {
+	if !status.Valid {
+		return nil
+	}
+	value := strings.ToLower(strings.TrimSpace(status.String))
+	if value == "" {
+		return nil
+	}
+	return &value
+}
+
+func inviteDecisionToStatus(decision string) (string, error) {
+	switch strings.ToLower(strings.TrimSpace(decision)) {
+	case "accept":
+		return STATUS_ACCEPTED, nil
+	case "reject":
+		return STATUS_REJECTED, nil
+	default:
+		return "", errInviteInvalidDecision
+	}
+}
+
+func lookupSenderName(senderID uuid.UUID) string {
+	zIds, err := core.GetZitaIds([]string{senderID.String()})
+	if err != nil || len(zIds) == 0 {
+		return "Someone"
+	}
+
+	userDetails, err := core.SearchUsersByIds([]string{zIds[0].Id})
+	if err != nil {
+		return "Someone"
+	}
+	for _, user := range userDetails.Result {
+		if user.UserId == zIds[0].Id {
+			name := strings.TrimSpace(user.Human.Profile.DisplayName)
+			if name != "" {
+				return name
+			}
+			email := strings.TrimSpace(user.Human.Email.Email)
+			if email != "" {
+				return email
+			}
+		}
+	}
+	return "Someone"
+}
+
+func inviteDetailsResponse(invite InviteDetailsDBO) InviteDetailsResponse {
+	return InviteDetailsResponse{
+		Entity:     invite.Entity,
+		EntityId:   invite.EntityId,
+		SenderId:   invite.SenderId,
+		SenderName: lookupSenderName(invite.SenderId),
+		Name:       invite.Name,
+		Role:       invite.Role,
+		Token:      invite.Token,
+		Status:     normalizeInviteStatus(invite.Status),
+		CreatedAt:  invite.CreatedAt,
+		UpdatedAt:  invite.UpdatedAt,
+	}
+}
 
 func (invite InviteDBO) _removeInvitation(userId string, token string, conn *pgxpool.Conn) error {
 	rows, err := conn.Query(context.Background(), GET_TOKEN_STATUS_BY_SENDER, invite.SenderId, token)
@@ -108,6 +177,76 @@ func processInvitation(userId string, emailId string, token string, decision str
 		}
 	}
 	return errors.New(core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNSPECIFIED])
+}
+
+func getInviteDetailsForUser(email string, token string) (InviteDetailsResponse, error) {
+	token = strings.TrimSpace(token)
+	if token == "" {
+		return InviteDetailsResponse{}, errInviteNotFound
+	}
+	if strings.TrimSpace(email) == "" {
+		return InviteDetailsResponse{}, errInviteWrongAccount
+	}
+
+	connPool := core.GetPool()
+	ctx := context.Background()
+	conn, err := connPool.Acquire(ctx)
+	if err != nil {
+		logger().Error(err.Error())
+		return InviteDetailsResponse{}, errors.New(core.ErrorCode_name[core.ErrorCode_ERROR_CODE_CONNECTION_ISSUE])
+	}
+	defer conn.Release()
+
+	rows, err := conn.Query(ctx, GET_INVITE_DETAILS_BY_TOKEN_QUERY, token)
+	if err != nil {
+		logger().Error(err.Error())
+		return InviteDetailsResponse{}, errors.New(core.ErrorCode_name[core.ErrorCode_ERROR_WHILE_FETCHING_ROWS])
+	}
+	defer rows.Close()
+
+	invite, err := pgx.CollectExactlyOneRow(rows, pgx.RowToStructByNameLax[InviteDetailsDBO])
+	if errors.Is(err, pgx.ErrNoRows) {
+		return InviteDetailsResponse{}, errInviteNotFound
+	}
+	if err != nil {
+		logger().Error(err.Error())
+		return InviteDetailsResponse{}, errors.New(core.ErrorCode_name[core.ErrorCode_ERROR_WHILE_READING_ROWS])
+	}
+	if !strings.EqualFold(invite.Email, email) {
+		return InviteDetailsResponse{}, errInviteWrongAccount
+	}
+
+	return inviteDetailsResponse(invite), nil
+}
+
+func processInviteDecision(userId string, emailId string, token string, decision string) (InviteDecisionResponse, error) {
+	status, err := inviteDecisionToStatus(decision)
+	if err != nil {
+		return InviteDecisionResponse{}, err
+	}
+
+	details, err := getInviteDetailsForUser(emailId, token)
+	if err != nil {
+		return InviteDecisionResponse{}, err
+	}
+	if details.Status != nil {
+		return InviteDecisionResponse{
+			Status:   *details.Status,
+			Entity:   details.Entity,
+			EntityId: details.EntityId,
+		}, nil
+	}
+
+	if err := processInvitation(userId, emailId, token, status); err != nil {
+		return InviteDecisionResponse{}, err
+	}
+
+	responseStatus := strings.ToLower(status)
+	return InviteDecisionResponse{
+		Status:   responseStatus,
+		Entity:   details.Entity,
+		EntityId: details.EntityId,
+	}, nil
 }
 
 func (i Invite) removeInvitation() error {

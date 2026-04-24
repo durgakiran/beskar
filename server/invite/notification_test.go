@@ -39,10 +39,10 @@ func TestBuildSpaceInviteCreatedEmailRequestForUnknownRecipient(t *testing.T) {
 	if req.Recipient.Email != "invitee@example.com" {
 		t.Fatalf("unexpected recipient email: %q", req.Recipient.Email)
 	}
-	if req.TemplateData["accept_url"] != "https://app.example.com/api/v1/invite/user/accept?token=abc123" {
+	if req.TemplateData["accept_url"] != "https://app.example.com/invite/action?token=abc123&decision=accept" {
 		t.Fatalf("unexpected accept url: %q", req.TemplateData["accept_url"])
 	}
-	if req.TemplateData["reject_url"] != "https://app.example.com/api/v1/invite/user/reject?token=abc123" {
+	if req.TemplateData["reject_url"] != "https://app.example.com/invite/action?token=abc123&decision=reject" {
 		t.Fatalf("unexpected reject url: %q", req.TemplateData["reject_url"])
 	}
 }
@@ -78,10 +78,17 @@ func TestBuildSpaceInviteCreatedEmailRequestForKnownRecipient(t *testing.T) {
 	}
 }
 
-func TestBuildInviteActionURLFallsBackToRelativeAPIPath(t *testing.T) {
-	got := buildInviteActionURL("/", spaceInviteAcceptPath, "abc 123")
-	want := "/api/v1/invite/user/accept?token=abc+123"
+func TestBuildInviteActionURLFallsBackToRelativeAppPath(t *testing.T) {
+	got := buildInviteActionURL("/", "abc 123", "accept")
+	want := "/invite/action?token=abc+123&decision=accept"
 	if got != want {
 		t.Fatalf("unexpected url: got %q want %q", got, want)
+	}
+}
+
+func TestBuildInviteActionURLRejectsUnknownDecision(t *testing.T) {
+	got := buildInviteActionURL("https://app.example.com", "abc123", "maybe")
+	if got != "" {
+		t.Fatalf("expected empty url for unknown decision, got %q", got)
 	}
 }

@@ -13,8 +13,7 @@ import (
 
 const (
 	spaceInviteEmailCategory = "space_invite"
-	spaceInviteAcceptPath    = "/api/v1/invite/user/accept"
-	spaceInviteRejectPath    = "/api/v1/invite/user/reject"
+	spaceInviteActionPath    = "/invite/action"
 )
 
 func (i Invite) enqueueSpaceInviteCreatedEmail(ctx context.Context, token string, sender core.UserInfo) error {
@@ -81,21 +80,26 @@ func buildSpaceInviteCreatedEmailRequest(config notification.Config, i Invite, t
 			"space_name":  spaceName,
 			"sender_name": senderName,
 			"role":        i.Role,
-			"accept_url":  buildInviteActionURL(appURL, spaceInviteAcceptPath, token),
-			"reject_url":  buildInviteActionURL(appURL, spaceInviteRejectPath, token),
+			"accept_url":  buildInviteActionURL(appURL, token, "accept"),
+			"reject_url":  buildInviteActionURL(appURL, token, "reject"),
 			"app_url":     appURL,
 		},
 		Priority: notification.PriorityNormal,
 	}, nil
 }
 
-func buildInviteActionURL(appBaseURL string, path string, token string) string {
-	base := strings.TrimRight(strings.TrimSpace(appBaseURL), "/")
-	query := "token=" + url.QueryEscape(token)
-	if base == "" || base == "/" {
-		return path + "?" + query
+func buildInviteActionURL(appBaseURL string, token string, decision string) string {
+	decision = strings.TrimSpace(strings.ToLower(decision))
+	if decision != "accept" && decision != "reject" {
+		return ""
 	}
-	return base + path + "?" + query
+
+	base := strings.TrimRight(strings.TrimSpace(appBaseURL), "/")
+	query := "token=" + url.QueryEscape(token) + "&decision=" + url.QueryEscape(decision)
+	if base == "" || base == "/" {
+		return spaceInviteActionPath + "?" + query
+	}
+	return base + spaceInviteActionPath + "?" + query
 }
 
 func getSpaceNameForInviteEmail(ctx context.Context, spaceID string) (string, error) {

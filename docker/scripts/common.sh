@@ -80,6 +80,7 @@ load_env_file() {
     : "${PROXY_HTTPS_PORT:=443}"
     : "${PROXY_DOMAIN_ALIASES_ENABLED:=true}"
     : "${ORIGIN_CERT_TRUST_INJECTION_ENABLED:=true}"
+    : "${UI_USE_LOCAL_EDITOR_DIST:=false}"
 
     : "${DB_HOST:=postgres}"
     : "${DB_PORT:=5432}"
@@ -160,6 +161,18 @@ load_env_file() {
 
     PROXY_DOMAIN_ALIASES_ENABLED="$(normalize_bool "$PROXY_DOMAIN_ALIASES_ENABLED")"
     ORIGIN_CERT_TRUST_INJECTION_ENABLED="$(normalize_bool "$ORIGIN_CERT_TRUST_INJECTION_ENABLED")"
+    UI_USE_LOCAL_EDITOR_DIST="$(normalize_bool "$UI_USE_LOCAL_EDITOR_DIST")"
+
+    if [[ "$UI_USE_LOCAL_EDITOR_DIST" == "true" ]]; then
+        UI_DOCKER_BUILD_TARGET="runner-local-editor"
+        if [[ ! -f "$ROOT_DIR/packages/editor/dist/index.js" ]]; then
+            echo "UI_USE_LOCAL_EDITOR_DIST=true requires built editor files at $ROOT_DIR/packages/editor/dist" >&2
+            echo "Run: npm --prefix packages/editor run build" >&2
+            exit 1
+        fi
+    else
+        UI_DOCKER_BUILD_TARGET="runner"
+    fi
 
     if [[ "$PROXY_DOMAIN_ALIASES_ENABLED" == "true" ]]; then
         PROXY_NETWORKS_BLOCK=$(cat <<EOF
@@ -205,6 +218,8 @@ EOF
     export PROXY_HTTPS_PORT
     export PROXY_DOMAIN_ALIASES_ENABLED
     export ORIGIN_CERT_TRUST_INJECTION_ENABLED
+    export UI_USE_LOCAL_EDITOR_DIST
+    export UI_DOCKER_BUILD_TARGET
     export PUBLIC_BASE_URL
     export AUTH_PUBLIC_URL
     export LANDING_PUBLIC_URL

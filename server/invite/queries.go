@@ -2,15 +2,32 @@ package invite
 
 const (
 	CREATE_INVITE                             = "INSERT INTO notifications.invites( sender_id, token, user_id, entity, entity_id, email_id, role, created_at, updated_at ) VALUES ( $1, $2, $3, $4, $5, $6, $7, now(), now() )"
-	GET_TOKEN_STATUS                          = "SELECT status, sender_id, entity, entity_id, role  FROM notifications.invites WHERE email_id = $1 AND token = $2"
+	GET_TOKEN_STATUS                          = "SELECT status, sender_id, entity, entity_id, role  FROM notifications.invites WHERE lower(email_id) = lower($1) AND token = $2 ORDER BY created_at DESC LIMIT 1"
 	GET_TOKEN_STATUS_BY_SENDER                = "SELECT status, entity, user_id, entity_id  FROM notifications.invites WHERE sender_id = $1 AND token = $2"
-	UPDATE_INVITE                             = "UPDATE notifications.invites SET status = $1, updated_at = now() WHERE token = $2 and email_id = $3"
+	UPDATE_INVITE                             = "UPDATE notifications.invites SET status = $1, updated_at = now() WHERE token = $2 and lower(email_id) = lower($3) AND status IS NULL"
 	UPDATE_INVITE_BY_SENDER                   = "UPDATE notifications.invites SET status = $1, updated_at = now() WHERE token = $2 and sender_id = $3"
 	GET_INVITES_QUERY                         = "SELECT sender_id, entity, entity_id, email_id, role, status, created_at, updated_at FROM notifications.invites WHERE entity_id = $1 AND status IS NULL ORDER BY created_at DESC"
 	REMOVE_INVITATION                         = "DELETE FROM notifications.invites WHERE sender_id = $1 AND email_id = $2 AND entity_id = $3 AND role = $4"
 	CHECK_PENDING_INVITE_EXISTS_QUERY         = "SELECT 1 FROM notifications.invites WHERE entity = $1 AND entity_id = $2 AND email_id = $3 AND status IS NULL LIMIT 1"
 	CHECK_PENDING_INVITE_EXISTS_BY_USER_QUERY = "SELECT 1 FROM notifications.invites WHERE entity = $1 AND entity_id = $2 AND user_id = $3 AND status IS NULL LIMIT 1"
-	GET_INVITES_OF_USER_QUERY                 = `SELECT 
+	GET_INVITE_DETAILS_BY_TOKEN_QUERY         = `SELECT
+										i.sender_id AS sender_id,
+										i.entity AS entity,
+										i.entity_id AS entity_id,
+										i.email_id AS email_id,
+										i.role AS role,
+										i.status AS status,
+										i.token AS token,
+										COALESCE(s.name, '') AS name,
+										i.created_at AS created_at,
+										i.updated_at AS updated_at
+									FROM
+										notifications.invites i LEFT JOIN core.space s ON (i.entity = 'space' AND i.entity_id = s.id::varchar)
+									WHERE
+										i.token = $1
+									ORDER BY i.created_at DESC
+									LIMIT 1`
+	GET_INVITES_OF_USER_QUERY = `SELECT 
 										i.sender_id AS sender_id, 
 										i.entity AS entity, 
 										i.entity_id AS entity_id, 
@@ -18,12 +35,12 @@ const (
 										i.role AS role, 
 										i.status AS status,
 										i.token AS token,
-										s.name AS name,
+										COALESCE(s.name, '') AS name,
 										i.created_at AS created_at,
 										i.updated_at AS updated_at
 									FROM 
 										notifications.invites i LEFT JOIN core.space s ON (i.entity = 'space' AND i.entity_id = s.id::varchar)
 									WHERE 
-										i.email_id = $1 AND i.status IS NULL
+										lower(i.email_id) = lower($1) AND i.status IS NULL
 									ORDER BY i.created_at DESC`
 )

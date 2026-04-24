@@ -46,6 +46,43 @@ type InviteDBOV5 struct {
 	SenderName string `json:"senderName"`
 }
 
+type InviteDetailsDBO struct {
+	Entity    string         `db:"entity"`
+	EntityId  string         `db:"entity_id"`
+	SenderId  uuid.UUID      `db:"sender_id"`
+	Status    sql.NullString `db:"status"`
+	Email     string         `db:"email_id"`
+	Role      string         `db:"role"`
+	Token     string         `db:"token"`
+	Name      string         `db:"name"`
+	CreatedAt *time.Time     `db:"created_at"`
+	UpdatedAt *time.Time     `db:"updated_at"`
+}
+
+type InviteDetailsResponse struct {
+	Entity     string     `json:"entity"`
+	EntityId   string     `json:"entityId"`
+	SenderId   uuid.UUID  `json:"senderId"`
+	SenderName string     `json:"senderName"`
+	Name       string     `json:"name"`
+	Role       string     `json:"role"`
+	Token      string     `json:"token"`
+	Status     *string    `json:"status"`
+	CreatedAt  *time.Time `json:"createdAt,omitempty"`
+	UpdatedAt  *time.Time `json:"updatedAt,omitempty"`
+}
+
+type InviteDecisionRequest struct {
+	Token    string `json:"token"`
+	Decision string `json:"decision"`
+}
+
+type InviteDecisionResponse struct {
+	Status   string `json:"status"`
+	Entity   string `json:"entity"`
+	EntityId string `json:"entityId"`
+}
+
 type User struct {
 	UserId string `json:"userId"`
 	Name   string `json:"name"`
