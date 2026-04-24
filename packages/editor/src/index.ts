@@ -42,6 +42,8 @@ export { AttachmentInline } from './nodes/AttachmentInline';
 export { StatusBadge } from './nodes/StatusBadge';
 export { DateInline } from './nodes/DateInline';
 export { EmbedBlock } from './nodes/EmbedBlock';
+export { EmbedInline } from './nodes/EmbedInline';
+export { ExternalLinkInline } from './nodes/ExternalLinkInline';
 export { InternalDocInline } from './nodes/InternalDocInline';
 export { InternalLinkBlock } from './nodes/InternalLinkBlock';
 export { ChildPagesList } from './nodes/ChildPagesList';
@@ -66,6 +68,8 @@ export type {
   InternalResourceMetadata,
   InternalResourceResult,
   InternalResourceType,
+  ExternalLinkHandler,
+  ExternalLinkMetadata,
   CommentAPIHandler,
   CommentAnchor,
   CommentThread,

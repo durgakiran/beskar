@@ -15,6 +15,7 @@ import {
   FiAlignRight,
   FiEdit2,
   FiExternalLink,
+  FiMinimize2,
   FiTrash2,
 } from 'react-icons/fi';
 import {
@@ -36,6 +37,7 @@ export function EmbedBlockView({ node, updateAttributes, selected, editor, getPo
     src: string;
     embedUrl: string;
     provider: string;
+    title: string;
     align: 'left' | 'center' | 'right';
     height: number;
     error: string;
@@ -118,6 +120,7 @@ export function EmbedBlockView({ node, updateAttributes, selected, editor, getPo
       src: inputValue.trim(),
       embedUrl: result.embedUrl,
       provider: result.provider,
+      title: '',
       error: '',
       height: height || DEFAULT_EMBED_HEIGHT,
     });
@@ -136,6 +139,31 @@ export function EmbedBlockView({ node, updateAttributes, selected, editor, getPo
     if (!src) return;
     window.open(src, '_blank', 'noopener,noreferrer');
   }, [src]);
+
+  const convertToInline = useCallback(() => {
+    if (typeof getPos !== 'function') return;
+    const pos = getPos();
+    if (pos === undefined || pos < 0) return;
+
+    const inlineNodeType = editor.state.schema.nodes.embedInline;
+    const paragraphNodeType = editor.state.schema.nodes.paragraph;
+    if (!inlineNodeType || !paragraphNodeType) return;
+
+    const inlineNode = inlineNodeType.create({
+      src,
+      embedUrl,
+      provider,
+      title: node.attrs.title || '',
+      error,
+    });
+
+    const paragraphNode = paragraphNodeType.create(null, inlineNode);
+    editor.chain().focus().command(({ tr, dispatch }) => {
+      tr.replaceWith(pos, pos + node.nodeSize, paragraphNode);
+      dispatch?.(tr.scrollIntoView());
+      return true;
+    }).run();
+  }, [editor, embedUrl, error, getPos, node.attrs.title, node.nodeSize, provider, src]);
 
   const handleResizeStart = useCallback(
     (event: React.PointerEvent<HTMLDivElement>) => {
@@ -183,6 +211,10 @@ export function EmbedBlockView({ node, updateAttributes, selected, editor, getPo
           <Toolbar.Button className="editor-floating-toolbar-button" onClick={() => setIsEditing(true)} aria-label="Change embed URL">
             <FiEdit2 size={16} />
             <span>Change</span>
+          </Toolbar.Button>
+          <Toolbar.Button className="editor-floating-toolbar-button" onClick={convertToInline} aria-label="Display as inline embed">
+            <FiMinimize2 size={16} />
+            <span>Inline</span>
           </Toolbar.Button>
           <Toolbar.Button className="editor-floating-toolbar-button" onClick={openInNewTab} aria-label="Open embed in new tab">
             <FiExternalLink size={16} />

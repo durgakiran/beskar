@@ -12,6 +12,7 @@ export interface EmbedBlockAttributes {
   src: string;
   embedUrl: string;
   provider: string;
+  title: string;
   align: 'left' | 'center' | 'right';
   height: number;
   error: string;
@@ -21,13 +22,64 @@ const DEFAULT_EMBED_ATTRS: EmbedBlockAttributes = {
   src: '',
   embedUrl: '',
   provider: '',
+  title: '',
   align: 'center',
   height: 480,
   error: '',
 };
 
+function createEmbedBlockNode(editor: { schema: any }, rawUrl: string) {
+  const result = getEmbedUrlAndProvider(rawUrl);
+  if (!result) return null;
+
+  return editor.schema.nodes.embedBlock.create({
+    ...DEFAULT_EMBED_ATTRS,
+    src: rawUrl.trim(),
+    embedUrl: result.embedUrl,
+    provider: result.provider,
+  });
+}
+
+function replaceSelectionWithEmbedBlock(view: any, node: any): boolean {
+  const { state, dispatch } = view;
+  const { selection } = state;
+  const { $from, $to } = selection;
+
+  let transaction = state.tr;
+
+  // Replace the containing text block rather than trying to inject a block node
+  // at an inline cursor position. This covers empty paragraphs and splitting an
+  // existing text block around the pasted URL.
+  if ($from.sameParent($to) && $from.depth > 0 && $from.parent.isTextblock) {
+    const block = $from.parent;
+    const beforeContent = block.content.cut(0, $from.parentOffset);
+    const afterContent = block.content.cut($to.parentOffset);
+    const replacementNodes = [];
+
+    if (beforeContent.size > 0) {
+      replacementNodes.push(block.type.create(block.attrs, beforeContent, block.marks));
+    }
+
+    replacementNodes.push(node);
+
+    if (afterContent.size > 0) {
+      replacementNodes.push(block.type.create(block.attrs, afterContent, block.marks));
+    }
+
+    transaction = transaction.replaceWith($from.before(), $to.after(), replacementNodes);
+  } else {
+    transaction = transaction.replaceSelectionWith(node);
+  }
+
+  if (!transaction.docChanged) return false;
+
+  dispatch(transaction.scrollIntoView());
+  return true;
+}
+
 export const EmbedBlock = Node.create({
   name: 'embedBlock',
+  priority: 1000,
   group: 'block',
   atom: true,
   draggable: true,
@@ -49,6 +101,11 @@ export const EmbedBlock = Node.create({
         default: DEFAULT_EMBED_ATTRS.provider,
         parseHTML: (element) => element.getAttribute('data-provider') || '',
         renderHTML: (attributes) => ({ 'data-provider': attributes.provider }),
+      },
+      title: {
+        default: DEFAULT_EMBED_ATTRS.title,
+        parseHTML: (element) => element.getAttribute('data-title') || '',
+        renderHTML: (attributes) => (attributes.title ? { 'data-title': attributes.title } : {}),
       },
       align: {
         default: DEFAULT_EMBED_ATTRS.align,
@@ -86,6 +143,7 @@ export const EmbedBlock = Node.create({
         'data-src': node.attrs.src,
         'data-embed-url': node.attrs.embedUrl,
         'data-provider': node.attrs.provider,
+        'data-title': node.attrs.title,
         'data-align': node.attrs.align,
         'data-height': node.attrs.height,
         class: `embed-block-wrapper align-${node.attrs.align}`,
@@ -135,35 +193,24 @@ export const EmbedBlock = Node.create({
   },
 
   addProseMirrorPlugins() {
-    const { isEditable } = this.editor;
-
     const plugins: Plugin[] = [
       new Plugin({
         props: {
           handlePaste: (view, event) => {
-            if (!isEditable) return false;
+            if (!this.editor.isEditable) return false;
             const text = event.clipboardData?.getData('text/plain') ?? '';
             if (!isSinglePlainUrl(text)) return false;
 
-            const result = getEmbedUrlAndProvider(text);
-            if (!result) return false;
+            const node = createEmbedBlockNode(view.state, text);
+            if (!node) return false;
 
-            const { state, dispatch } = view;
-            const node = state.schema.nodes.embedBlock.create({
-              ...DEFAULT_EMBED_ATTRS,
-              src: text.trim(),
-              embedUrl: result.embedUrl,
-              provider: result.provider,
-            });
-
-            dispatch(state.tr.replaceSelectionWith(node).scrollIntoView());
-            return true;
+            return replaceSelectionWithEmbedBlock(view, node);
           },
         },
       }),
     ];
 
-    if (!isEditable) {
+    if (!this.editor.isEditable) {
       return plugins;
     }
 

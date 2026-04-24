@@ -93,6 +93,18 @@ export interface InternalResourceHandler {
   ) => void;
 }
 
+// ─── External Link Inline Chips ──────────────────────────────────────────────
+
+export interface ExternalLinkMetadata {
+  url: string;
+  title: string;
+  siteName?: string;
+}
+
+export interface ExternalLinkHandler {
+  getLinkMetadata: (url: string) => Promise<ExternalLinkMetadata | null>;
+}
+
 // ─── Child Pages List ────────────────────────────────────────────────────────
 
 export interface ChildPageResult {
@@ -220,6 +232,7 @@ export interface EditorProps {
   /** Called whenever the set of successfully uploaded attachments in the document changes. */
   onAttachmentsChange?: (attachments: AttachmentRef[]) => void;
   internalResourceHandler?: InternalResourceHandler;
+  externalLinkHandler?: ExternalLinkHandler;
   childPagesHandler?: ChildPagesHandler;
   commentHandler?: CommentAPIHandler;
 }

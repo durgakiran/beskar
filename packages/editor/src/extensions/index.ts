@@ -15,6 +15,7 @@ import type {
   AttachmentRef,
   ChildPagesHandler,
   CollaborationConfig,
+  ExternalLinkHandler,
   ImageAPIHandler,
   InternalResourceHandler,
 } from '../types';
@@ -47,6 +48,8 @@ import { AttachmentInline } from '../nodes/AttachmentInline';
 import { StatusBadge } from '../nodes/StatusBadge';
 import { DateInline } from '../nodes/DateInline';
 import { EmbedBlock } from '../nodes/EmbedBlock';
+import { EmbedInline } from '../nodes/EmbedInline';
+import { ExternalLinkInline } from '../nodes/ExternalLinkInline';
 import { InternalDocInline } from '../nodes/InternalDocInline';
 import { InternalLinkBlock } from '../nodes/InternalLinkBlock';
 import { ChildPagesList } from '../nodes/ChildPagesList';
@@ -72,6 +75,8 @@ export { AttachmentInline } from '../nodes/AttachmentInline';
 export { StatusBadge } from '../nodes/StatusBadge';
 export { DateInline } from '../nodes/DateInline';
 export { EmbedBlock } from '../nodes/EmbedBlock';
+export { EmbedInline } from '../nodes/EmbedInline';
+export { ExternalLinkInline } from '../nodes/ExternalLinkInline';
 export { InternalDocInline } from '../nodes/InternalDocInline';
 export { InternalLinkBlock } from '../nodes/InternalLinkBlock';
 export { ChildPagesList } from '../nodes/ChildPagesList';
@@ -139,6 +144,7 @@ export interface GetExtensionsOptions {
   allowedMimeAccept?: string;
   onAttachmentsChange?: (attachments: AttachmentRef[]) => void;
   internalResourceHandler?: InternalResourceHandler;
+  externalLinkHandler?: ExternalLinkHandler;
   childPagesHandler?: ChildPagesHandler;
   onAddCommentShortcut?: () => void;
   onNextCommentShortcut?: () => void;
@@ -165,6 +171,7 @@ export function getExtensions(options: GetExtensionsOptions = {}): Extensions {
     allowedMimeAccept = '*',
     onAttachmentsChange,
     internalResourceHandler,
+    externalLinkHandler,
     childPagesHandler,
     onAddCommentShortcut,
     onNextCommentShortcut,
@@ -206,6 +213,10 @@ export function getExtensions(options: GetExtensionsOptions = {}): Extensions {
         if (node.type.name === 'noteBlock') return '';
         if (node.type.name === 'columns' || node.type.name === 'column') return '';
         if (node.type.name === 'details' || node.type.name === 'detailsContent') return '';
+        if (node.type.name === 'heading') {
+          const level = typeof node.attrs.level === 'number' ? node.attrs.level : 1;
+          return `Heading ${level}`;
+        }
         if (
           node.type.name === 'blockquote' ||
           node.type.name === 'bulletList' ||
@@ -239,6 +250,8 @@ export function getExtensions(options: GetExtensionsOptions = {}): Extensions {
     AttachmentInline, // Non-image file attachments as inline chips
     StatusBadge, // Inline status pill (e.g. IN PROGRESS, DONE)
     DateInline, // Inline date pill with popover editing
+    EmbedInline, // Inline embed chip with provider + resolved title
+    ExternalLinkInline.configure({ linkHandler: externalLinkHandler }), // Inline chip for external non-embed links
     InternalDocInline.configure({ resourceHandler: internalResourceHandler }), // Inline chip for pasted Beskar document links
     EmbedBlock, // External iframe embeds from supported providers
     InternalLinkBlock.configure({ resourceHandler: internalResourceHandler }), // Beskar resource preview cards

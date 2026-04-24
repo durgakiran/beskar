@@ -3,6 +3,7 @@ import { getAttachmentPasteStorage } from '../attachment-paste-drop';
 import { insertAttachmentsAt } from '../attachment-upload';
 import { getImagePasteStorage, insertImageAt } from '../image-paste-drop';
 import { getTodayDateValue } from '../../nodes/dateInlineUtils';
+import { getBrowserAppBaseUrl } from '../../nodes/internalDocumentUrl';
 
 export interface Command {
   name: string;
@@ -56,6 +57,14 @@ function openImageFilePicker(editor: Editor, nodeType: 'imageBlock' | 'imageInli
   requestAnimationFrame(() => {
     input.click();
   });
+}
+
+function getInternalDocResourceHandler(editor: Editor): { appBaseUrl?: string } | undefined {
+  return (editor.storage as any).internalDocInline?.resourceHandler;
+}
+
+function canResolveInternalDocLinks(editor: Editor): boolean {
+  return Boolean(getInternalDocResourceHandler(editor)?.appBaseUrl ?? getBrowserAppBaseUrl());
 }
 
 export const GROUPS: Group[] = [
@@ -338,6 +347,24 @@ export const GROUPS: Group[] = [
     name: 'inline',
     title: 'Inline',
     commands: [
+      {
+        name: 'internalDocInline',
+        label: 'Internal Link',
+        icon: '📄',
+        description: 'Insert an inline link to another document or whiteboard',
+        aliases: ['doc', 'document', 'page', 'whiteboard', 'internal', 'internal-link'],
+        shouldBeHidden: (editor) =>
+          !editor.isEditable || !canResolveInternalDocLinks(editor),
+        action: (editor) => {
+          editor.chain().focus().setInternalDocInline({
+            resourceType: 'document',
+            resourceId: '',
+            resourceTitle: '',
+            resourceIcon: '',
+            href: '',
+          }).run();
+        },
+      },
       {
         name: 'status',
         label: 'Status Badge',

@@ -6,11 +6,16 @@ import { Node, mergeAttributes } from '@tiptap/core';
 import { ReactNodeViewRenderer } from '@tiptap/react';
 import { Plugin } from '@tiptap/pm/state';
 import { InternalDocInlineView } from '../components/internal-link/InternalDocInlineView';
-import type { InternalResourceHandler } from '../types';
+import type { InternalResourceHandler, InternalResourceType } from '../types';
+import { getBrowserAppBaseUrl, parseInternalResourceUrl } from './internalDocumentUrl';
+
+export { parseInternalResourceUrl };
 
 export interface InternalDocInlineAttributes {
+  resourceType: InternalResourceType;
   resourceId: string;
   resourceTitle: string;
+  resourceIcon: string;
   href: string;
 }
 
@@ -19,34 +24,12 @@ export interface InternalDocInlineOptions {
 }
 
 const DEFAULT_ATTRS: InternalDocInlineAttributes = {
+  resourceType: 'document',
   resourceId: '',
   resourceTitle: '',
+  resourceIcon: '',
   href: '',
 };
-
-function parseInternalDocumentUrl(rawUrl: string, appBaseUrl: string): { resourceId: string; href: string } | null {
-  try {
-    const text = rawUrl.trim();
-    const pasted = new URL(text);
-    const base = new URL(appBaseUrl);
-    if (pasted.origin !== base.origin) return null;
-
-    const path = pasted.pathname;
-    const routedMatch = path.match(/\/space\/[^/]+\/(view|edit|page|document|doc)\/([^/?#]+)/);
-    if (routedMatch) {
-      return { resourceId: decodeURIComponent(routedMatch[2]), href: text };
-    }
-
-    const shortMatch = path.match(/\/(doc|docs|document|documents|page|pages)\/([^/?#]+)/);
-    if (shortMatch) {
-      return { resourceId: decodeURIComponent(shortMatch[2]), href: text };
-    }
-
-    return null;
-  } catch {
-    return null;
-  }
-}
 
 export const InternalDocInline = Node.create<InternalDocInlineOptions>({
   name: 'internalDocInline',
@@ -74,6 +57,11 @@ export const InternalDocInline = Node.create<InternalDocInlineOptions>({
 
   addAttributes() {
     return {
+      resourceType: {
+        default: DEFAULT_ATTRS.resourceType,
+        parseHTML: (element) => (element.getAttribute('data-resource-type') === 'whiteboard' ? 'whiteboard' : 'document'),
+        renderHTML: (attributes) => ({ 'data-resource-type': attributes.resourceType }),
+      },
       resourceId: {
         default: DEFAULT_ATTRS.resourceId,
         parseHTML: (element) => element.getAttribute('data-resource-id') || '',
@@ -83,6 +71,11 @@ export const InternalDocInline = Node.create<InternalDocInlineOptions>({
         default: DEFAULT_ATTRS.resourceTitle,
         parseHTML: (element) => element.getAttribute('data-resource-title') || '',
         renderHTML: (attributes) => ({ 'data-resource-title': attributes.resourceTitle }),
+      },
+      resourceIcon: {
+        default: DEFAULT_ATTRS.resourceIcon,
+        parseHTML: (element) => element.getAttribute('data-resource-icon') || '',
+        renderHTML: (attributes) => ({ 'data-resource-icon': attributes.resourceIcon }),
       },
       href: {
         default: DEFAULT_ATTRS.href,
@@ -97,13 +90,16 @@ export const InternalDocInline = Node.create<InternalDocInlineOptions>({
   },
 
   renderHTML({ node, HTMLAttributes }) {
-    const label = node.attrs.resourceTitle || `Document ${node.attrs.resourceId}`;
+    const resourceLabel = node.attrs.resourceType === 'whiteboard' ? 'Whiteboard' : 'Document';
+    const label = node.attrs.resourceTitle || `${resourceLabel} ${node.attrs.resourceId}`;
     return [
       'span',
       mergeAttributes(HTMLAttributes, {
         'data-type': 'internal-doc-inline',
+        'data-resource-type': node.attrs.resourceType,
         'data-resource-id': node.attrs.resourceId,
         'data-resource-title': node.attrs.resourceTitle,
+        'data-resource-icon': node.attrs.resourceIcon,
         'data-href': node.attrs.href,
         class: 'internal-doc-inline-chip',
       }),
@@ -112,7 +108,8 @@ export const InternalDocInline = Node.create<InternalDocInlineOptions>({
   },
 
   renderText({ node }) {
-    return node.attrs.resourceTitle || `Document ${node.attrs.resourceId}`;
+    const resourceLabel = node.attrs.resourceType === 'whiteboard' ? 'Whiteboard' : 'Document';
+    return node.attrs.resourceTitle || `${resourceLabel} ${node.attrs.resourceId}`;
   },
 
   addNodeView() {
@@ -141,15 +138,19 @@ export const InternalDocInline = Node.create<InternalDocInlineOptions>({
       new Plugin({
         props: {
           handlePaste: (view, event) => {
-            if (!this.editor.isEditable || !handler?.appBaseUrl) return false;
+            if (!this.editor.isEditable) return false;
             const text = event.clipboardData?.getData('text/plain')?.trim() ?? '';
             if (!text || /\s/.test(text)) return false;
 
-            const parsed = parseInternalDocumentUrl(text, handler.appBaseUrl);
+            const appBaseUrl = handler?.appBaseUrl ?? getBrowserAppBaseUrl();
+            if (!appBaseUrl) return false;
+
+            const parsed = parseInternalResourceUrl(text, appBaseUrl);
             if (!parsed) return false;
 
             const node = view.state.schema.nodes.internalDocInline.create({
               ...DEFAULT_ATTRS,
+              resourceType: parsed.resourceType,
               resourceId: parsed.resourceId,
               href: parsed.href,
             });

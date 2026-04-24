@@ -9,7 +9,7 @@ import type { NodeViewProps } from '@tiptap/react';
 import type { ChildPageResult, ChildPagesHandler } from '../../types';
 
 function getHandler(editor: NodeViewProps['editor']): ChildPagesHandler | undefined {
-  return editor.storage.childPagesList?.childPagesHandler;
+  return (editor.storage as any).childPagesList?.childPagesHandler;
 }
 
 function flattenTree(pages: ChildPageResult[]): ChildPageResult[] {
