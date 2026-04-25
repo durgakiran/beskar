@@ -17,6 +17,8 @@ import {
     type ImageAPIHandler,
     type AttachmentAPIHandler,
     type AttachmentRef,
+    type ChildPageResult,
+    type ChildPagesHandler,
     type ExternalLinkHandler,
     type ExternalLinkMetadata,
     type InternalResourceHandler,
@@ -315,6 +317,57 @@ export function TipTap({
         };
     }, [spaceId]);
 
+    const childPagesHandler: ChildPagesHandler | undefined = useMemo(() => {
+        if (!spaceId || !Number.isFinite(id) || id < 1) return undefined;
+
+        const baseUrl = process.env.NEXT_PUBLIC_USER_SERVER_URL?.replace(/\/+$/, "") || "";
+
+        const fetchJson = async <T,>(path: string): Promise<T> => {
+            const response = await fetch(`${baseUrl}/${path}`, {
+                credentials: "include",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+            });
+
+            if (!response.ok) {
+                const error: Error & { status?: number } = new Error(`Request failed: ${response.status}`);
+                error.status = response.status;
+                throw error;
+            }
+
+            return response.json() as Promise<T>;
+        };
+
+        type PageDescendant = {
+            pageId: number;
+            title: string;
+            type?: "document" | "whiteboard";
+            children?: PageDescendant[];
+        };
+
+        const mapDescendants = (pages: PageDescendant[]): ChildPageResult[] => {
+            return pages.map((page) => ({
+                pageId: String(page.pageId),
+                title: page.title || "Untitled",
+                children: mapDescendants(page.children ?? []),
+            }));
+        };
+
+        return {
+            async getPageHierarchy() {
+                const response = await fetchJson<{ data?: PageDescendant[] }>(
+                    `space/${spaceId}/page/${id}/descendants`,
+                );
+                return mapDescendants(Array.isArray(response.data) ? response.data : []);
+            },
+            navigateToChildPage(pageId: string) {
+                if (typeof window === "undefined") return;
+                window.location.href = `/space/${spaceId}/view/${pageId}`;
+            },
+        };
+    }, [spaceId, id]);
+
     const collaborationExtensions = () => {
         return [
             Collaboration.configure({
@@ -495,6 +548,7 @@ export function TipTap({
                     attachmentHandler={attachmentHandler}
                     internalResourceHandler={internalResourceHandler}
                     externalLinkHandler={externalLinkHandler}
+                    childPagesHandler={childPagesHandler}
                     commentHandler={commentApiHandler}
                     maxAttachmentBytes={MAX_ATTACHMENT_BYTES}
                     onAttachmentRejected={handleAttachmentRejected}
@@ -513,6 +567,7 @@ export function TipTap({
                     attachmentHandler={attachmentHandler}
                     internalResourceHandler={internalResourceHandler}
                     externalLinkHandler={externalLinkHandler}
+                    childPagesHandler={childPagesHandler}
                     commentHandler={commentApiHandler}
                     maxAttachmentBytes={MAX_ATTACHMENT_BYTES}
                     onAttachmentRejected={handleAttachmentRejected}
