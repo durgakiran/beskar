@@ -256,7 +256,7 @@ init_lock() {
 cleanup() {
     local exit_code=$?
 
-    if [[ ${#TMP_FILES[@]:-0} -gt 0 ]]; then
+    if [[ ${#TMP_FILES[@]} -gt 0 ]]; then
         rm -f "${TMP_FILES[@]}" 2>/dev/null || true
     fi
 
