@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
 	"log"
 	"net/http"
 	"net/url"
@@ -155,7 +154,6 @@ func (c *Client) readPump(h *Hub) {
 		case "subscribe":
 			h.mu.Lock()
 			for _, t := range msg.Topics {
-				fmt.Println("topics", h.topics)
 				if h.topics[t] == nil {
 					h.topics[t] = make(map[*Client]bool)
 				}
@@ -169,9 +167,6 @@ func (c *Client) readPump(h *Hub) {
 			h.mu.RLock()
 			if clients, ok := h.topics[msg.Topic]; ok {
 				msg.Clients = len(clients)
-				fmt.Println("topics", h.topics)
-				fmt.Println("publish message", msg)
-				fmt.Println("clients length", len(clients))
 				resp, _ := json.Marshal(msg)
 				for client := range clients {
 					if client != c {

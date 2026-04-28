@@ -12,6 +12,7 @@ import (
 	"github.com/durgakiran/beskar/comment"
 	"github.com/durgakiran/beskar/core"
 	"github.com/durgakiran/beskar/page"
+	"github.com/durgakiran/beskar/quota"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
@@ -682,6 +683,9 @@ func DeleteDocument(pageId int64, spaceId uuid.UUID, ownerId uuid.UUID) (int64, 
 	defer tx.Rollback(ctx)
 	defer conn.Release()
 	page := Page{Id: pageId, SpaceId: spaceId, OwnerId: ownerId}
+	if err := quota.ReleasePageStorageUsageTx(ctx, tx, spaceId, pageId, "page_delete"); err != nil {
+		return 0, err
+	}
 	rowsAffected, err := page.Delete(tx, ctx)
 	if err != nil {
 		return rowsAffected, err

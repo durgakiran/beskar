@@ -1,7 +1,6 @@
 package core
 
 import (
-	"fmt"
 	"net/http"
 
 	"github.com/go-chi/render"
@@ -35,7 +34,6 @@ func NewFailedResponse(code int, status string, message string, details string) 
 
 func SendFailedReponse(w http.ResponseWriter, r *http.Request, code int, message string) {
 	status, statusCode := GetStatus(message)
-	fmt.Println(status, statusCode, message)
 	if code == 0 {
 		code = statusCode
 	}

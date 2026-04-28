@@ -7,6 +7,8 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
+	"strings"
 
 	attachment "github.com/durgakiran/beskar/attachment/controller"
 	auth "github.com/durgakiran/beskar/auth"
@@ -18,7 +20,9 @@ import (
 	"github.com/durgakiran/beskar/notification"
 	page "github.com/durgakiran/beskar/page"
 	profile "github.com/durgakiran/beskar/profile/controller"
+	"github.com/durgakiran/beskar/quota"
 	space "github.com/durgakiran/beskar/space"
+	blobstorage "github.com/durgakiran/beskar/storage"
 	"github.com/durgakiran/beskar/user"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -29,6 +33,18 @@ import (
 
 func logger() *zap.Logger {
 	return core.Logger
+}
+
+func requestLoggingEnabled() bool {
+	value := strings.TrimSpace(os.Getenv("HTTP_REQUEST_LOGGING_ENABLED"))
+	if value == "" {
+		return true
+	}
+	enabled, err := strconv.ParseBool(value)
+	if err != nil {
+		return true
+	}
+	return enabled
 }
 
 func addCorsMiddleWare(r *chi.Mux) {
@@ -95,16 +111,27 @@ func main() {
 	}
 	connection.Release()
 
+	if _, err := blobstorage.RuntimeStore(context.Background()); err != nil {
+		logger().Error(fmt.Sprintf("Could not initialize runtime storage %s", err.Error()))
+		os.Exit(1)
+	}
+
 	notificationConfig := notification.LoadConfig()
+	quotaConfig := quota.LoadConfig()
 	if notificationConfig.WorkerEnabled {
 		go notification.NewWorker(notificationConfig).Start(context.Background())
+	}
+	if quotaConfig.ReconciliationEnabled {
+		go quota.NewReconciler(quotaConfig).Start(context.Background())
 	}
 
 	r := chi.NewRouter()
 	addCorsMiddleWare(r)
 	mw := core.ZitadelMiddleware()
 
-	r.Use(middleware.Logger)
+	if requestLoggingEnabled() {
+		r.Use(middleware.Logger)
+	}
 	r.Use(middleware.Heartbeat("/"))
 	r.Use(middleware.Recoverer)
 	// r.Use(CookieLogger)
@@ -114,6 +141,7 @@ func main() {
 	r.Mount("/api/v1/media", mw.CheckAuthentication()(media.Router()))
 	r.Mount("/api/v1/attachments", mw.CheckAuthentication()(attachment.Router()))
 	r.Mount("/api/v1/profile", mw.CheckAuthentication()(profile.Router()))
+	r.Mount("/api/v1/quota", mw.CheckAuthentication()(quota.Router()))
 	r.Mount("/api/v1/editor", mw.CheckAuthentication()(editor.Router()))
 	r.Mount("/api/v1/space", mw.CheckAuthentication()(space.Router()))
 	r.Mount("/api/v1/invite", mw.CheckAuthentication()(invite.Router()))
@@ -122,6 +150,9 @@ func main() {
 	r.Mount("/api/v1/user", user.Router())
 	if notificationConfig.AdminEnabled && notificationConfig.AdminToken != "" {
 		r.Mount("/api/v1/admin/email", mw.CheckAuthentication()(notification.NewAdminController(notificationConfig).Router()))
+	}
+	if quotaConfig.AdminEnabled && quotaConfig.AdminToken != "" {
+		r.Mount("/api/v1/admin/quota", mw.CheckAuthentication()(quota.NewAdminController(quotaConfig).Router()))
 	}
 
 	logger().Info(fmt.Sprintf("Serving on port: %s", port))

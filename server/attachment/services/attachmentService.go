@@ -1,4 +1,4 @@
-// Package services implements file persistence and DB metadata for page attachments.
+// Package services implements blob persistence and DB metadata for page attachments.
 //
 // Lifecycle policy: blobs are not deleted when an inline chip is removed from a document.
 // The app does not call a delete endpoint on chip removal. Orphan blobs (no document
@@ -7,15 +7,18 @@
 package services
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
-	"os"
+	"io"
 	"path/filepath"
 	"strings"
 	"unicode"
 
 	"github.com/durgakiran/beskar/core"
+	"github.com/durgakiran/beskar/quota"
+	blobstorage "github.com/durgakiran/beskar/storage"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
@@ -29,10 +32,6 @@ type AttachmentRecord struct {
 	FileSize    int64
 	MimeType    string
 	CreatedBy   string
-}
-
-func ensureAttachmentsDir() error {
-	return os.MkdirAll(core.AttachmentStorageDir(), 0o755)
 }
 
 // SanitizeDisplayName strips path segments and control characters for DB / Content-Disposition.
@@ -81,8 +80,9 @@ func diskFileName(original string) string {
 	return uuid.New().String() + ext
 }
 
-// SaveAttachment writes bytes to disk and inserts core.attachment. Caller must enforce size and MIME.
-func SaveAttachment(ctx context.Context, pageID int64, createdBy, originalFilename, mimeType string, data []byte) (*AttachmentRecord, error) {
+// SaveAttachment writes bytes to object storage, inserts core.attachment, and finalizes quota usage.
+// Caller must enforce size and MIME, and must pass a successful reservation from quota.ReserveUploadCapacity.
+func SaveAttachment(ctx context.Context, reservation quota.UploadReservation, pageID int64, createdBy, originalFilename, mimeType string, data []byte) (*AttachmentRecord, error) {
 	if len(data) > MaxAttachmentBytes {
 		return nil, fmt.Errorf("file too large")
 	}
@@ -92,41 +92,48 @@ func SaveAttachment(ctx context.Context, pageID int64, createdBy, originalFilena
 
 	display := SanitizeDisplayName(originalFilename)
 	onDisk := diskFileName(originalFilename)
-	relPath := core.AttachmentStoragePath(onDisk)
+	relPath := blobstorage.AttachmentObjectKey(onDisk)
+	size := int64(len(data))
 
-	if err := ensureAttachmentsDir(); err != nil {
-		return nil, err
-	}
-
-	fullPath, err := core.ResolveUploadPath(relPath)
+	store, err := blobstorage.RuntimeStore(ctx)
 	if err != nil {
 		return nil, err
 	}
-	f, err := os.Create(fullPath)
-	if err != nil {
-		core.Logger.Error("attachment: create file: " + err.Error())
+	if err := store.Put(ctx, relPath, bytes.NewReader(data), size, mimeType); err != nil {
+		core.Logger.Error("attachment: upload blob: " + err.Error())
 		return nil, fmt.Errorf("failed to store file")
 	}
-	_, werr := f.Write(data)
-	cerr := f.Close()
-	if werr != nil {
-		_ = os.Remove(fullPath)
-		return nil, werr
-	}
-	if cerr != nil {
-		_ = os.Remove(fullPath)
-		return nil, cerr
-	}
 
-	size := int64(len(data))
-	pool := core.GetPool()
+	tx, err := core.GetPool().Begin(ctx)
+	if err != nil {
+		if delErr := store.Delete(ctx, relPath); delErr != nil {
+			core.Logger.Error("attachment: rollback blob delete: " + delErr.Error())
+		}
+		return nil, err
+	}
+	defer tx.Rollback(ctx)
+
 	var id string
 	const q = `INSERT INTO core.attachment (page_id, storage_path, file_name, file_size, mime_type, created_by)
 VALUES ($1, $2, $3, $4, $5, $6)
 RETURNING id::text`
-	err = pool.QueryRow(ctx, q, pageID, relPath, display, size, mimeType, createdBy).Scan(&id)
+	err = tx.QueryRow(ctx, q, pageID, relPath, display, size, mimeType, createdBy).Scan(&id)
 	if err != nil {
-		_ = os.Remove(fullPath)
+		if delErr := store.Delete(ctx, relPath); delErr != nil {
+			core.Logger.Error("attachment: rollback blob delete: " + delErr.Error())
+		}
+		return nil, err
+	}
+	if err := quota.CommitUploadUsageTx(ctx, tx, reservation); err != nil {
+		if delErr := store.Delete(ctx, relPath); delErr != nil {
+			core.Logger.Error("attachment: rollback blob delete: " + delErr.Error())
+		}
+		return nil, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		if delErr := store.Delete(ctx, relPath); delErr != nil {
+			core.Logger.Error("attachment: rollback blob delete: " + delErr.Error())
+		}
 		return nil, err
 	}
 
@@ -189,29 +196,16 @@ ORDER BY created_at DESC, id DESC`
 	return records, nil
 }
 
-// ReadAttachmentBytes loads file bytes from disk using storage_path relative to process cwd.
-func ReadAttachmentBytes(storagePath string) ([]byte, error) {
+// OpenAttachment opens the blob for the given stored storage key or legacy path.
+func OpenAttachment(ctx context.Context, storagePath string) (io.ReadCloser, blobstorage.BlobMetadata, error) {
 	relPath, err := core.NormalizeAttachmentStoragePath(storagePath)
 	if err != nil {
-		return nil, err
+		return nil, blobstorage.BlobMetadata{}, err
 	}
 
-	fullPath, err := core.ResolveUploadPath(relPath)
+	store, err := blobstorage.RuntimeStore(ctx)
 	if err != nil {
-		return nil, err
+		return nil, blobstorage.BlobMetadata{}, err
 	}
-	data, err := os.ReadFile(fullPath)
-	if err == nil {
-		return data, nil
-	}
-
-	if !errors.Is(err, os.ErrNotExist) || core.UploadStorageDir() == "public" {
-		return nil, err
-	}
-
-	legacyPath, legacyErr := core.ResolveLegacyPublicUploadPath(relPath)
-	if legacyErr != nil {
-		return nil, legacyErr
-	}
-	return os.ReadFile(legacyPath)
+	return store.Get(ctx, relPath)
 }

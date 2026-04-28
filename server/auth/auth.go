@@ -1,7 +1,6 @@
 package auth
 
 import (
-	"fmt"
 	"net/http"
 
 	"github.com/durgakiran/beskar/core"
@@ -11,7 +10,6 @@ import (
 )
 
 func authenticated(w http.ResponseWriter, r *http.Request) {
-	fmt.Println(authentication.IsAuthenticated(r.Context()))
 	if authentication.IsAuthenticated(r.Context()) {
 		render.Status(r, http.StatusOK)
 		render.Render(w, r, core.NewSucessResponse(core.SUCCESS, nil))

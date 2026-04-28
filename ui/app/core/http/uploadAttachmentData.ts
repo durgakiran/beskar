@@ -1,5 +1,6 @@
 import { post } from "./call";
 import { getApiOrigin, getApiV1Base } from "./apiBase";
+import { extractRequestErrorMessage } from "./errorMessage";
 
 export interface AttachmentUploadResponse {
     attachmentId: string;
@@ -25,25 +26,25 @@ function toAbsoluteAttachmentUrl(serverRelativePath: string): string {
  * Upload a file for the given page. Requires auth (Bearer via `post`).
  * Server: POST /api/v1/attachments/upload — multipart field `file`, form field `pageId`.
  */
-export async function uploadAttachmentData(
-    file: File,
-    pageId: number,
-    options?: { signal?: AbortSignal },
-): Promise<AttachmentUploadResponse> {
+export async function uploadAttachmentData(file: File, pageId: number, options?: { signal?: AbortSignal }): Promise<AttachmentUploadResponse> {
     const apiV1 = getApiV1Base({ fallbackBase: process.env.NEXT_PUBLIC_IMAGE_SERVER_URL });
     const url = `${apiV1}/attachments/upload`;
     const formData = new FormData();
     formData.append("file", file);
     formData.append("pageId", String(pageId));
-    const res = await post(url, formData, { Accept: "application/json" }, { signal: options?.signal });
-    const inner = res.data?.data as AttachmentUploadResponse | undefined;
-    if (!inner?.attachmentId) {
-        throw new Error("Invalid attachment upload response");
+    try {
+        const res = await post(url, formData, { Accept: "application/json" }, { signal: options?.signal });
+        const inner = res.data?.data as AttachmentUploadResponse | undefined;
+        if (!inner?.attachmentId) {
+            throw new Error("Invalid attachment upload response");
+        }
+        return {
+            ...inner,
+            url: toAbsoluteAttachmentUrl(inner.url),
+        };
+    } catch (error) {
+        throw new Error(extractRequestErrorMessage(error, "Upload failed"));
     }
-    return {
-        ...inner,
-        url: toAbsoluteAttachmentUrl(inner.url),
-    };
 }
 
 /** Authenticated download to a local file save (same pattern as editor chip). */

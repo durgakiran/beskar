@@ -9,6 +9,7 @@ import (
 
 	services "github.com/durgakiran/beskar/attachment/services"
 	"github.com/durgakiran/beskar/core"
+	"github.com/durgakiran/beskar/quota"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/render"
 	"github.com/google/uuid"
@@ -120,8 +121,28 @@ func uploadAttachment(w http.ResponseWriter, r *http.Request) {
 		origName = "file"
 	}
 
-	rec, err := services.SaveAttachment(ctx, pageID, user.Id, origName, mimeType, data)
+	reservation, err := quota.ReserveUploadCapacity(ctx, pageID, int64(len(data)), "attachment", origName, map[string]any{
+		"actorUserId": ownerID.String(),
+		"contentType": mimeType,
+		"fileName":    origName,
+	})
 	if err != nil {
+		if err == quota.ErrAccountStorageLimitExceeded {
+			render.Status(r, http.StatusForbidden)
+			render.Render(w, r, core.NewFailedResponse(http.StatusForbidden, core.FAILURE, err.Error(), ""))
+			return
+		}
+		core.Logger.Error("attachment reserve: " + err.Error())
+		render.Status(r, http.StatusInternalServerError)
+		render.Render(w, r, core.NewFailedResponse(500, core.FAILURE, "upload failed", ""))
+		return
+	}
+
+	rec, err := services.SaveAttachment(ctx, reservation, pageID, user.Id, origName, mimeType, data)
+	if err != nil {
+		if releaseErr := quota.ReleaseUploadReservation(ctx, reservation); releaseErr != nil {
+			core.Logger.Error("attachment release reservation: " + releaseErr.Error())
+		}
 		core.Logger.Error("attachment save: " + err.Error())
 		msg := err.Error()
 		if strings.Contains(msg, "mime type not allowed") {
@@ -188,19 +209,32 @@ func downloadAttachment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	data, err := services.ReadAttachmentBytes(rec.StoragePath)
+	reader, meta, err := services.OpenAttachment(ctx, rec.StoragePath)
 	if err != nil {
 		core.Logger.Error("attachment read: " + err.Error())
 		render.Status(r, http.StatusNotFound)
 		render.Render(w, r, core.NewFailedResponse(404, core.FAILURE, "file missing", ""))
 		return
 	}
+	defer reader.Close()
 
 	w.Header().Set("Content-Disposition", contentDispositionFilename(rec.FileName))
-	w.Header().Set("Content-Type", rec.MimeType)
-	w.Header().Set("Content-Length", strconv.FormatInt(rec.FileSize, 10))
+	contentType := rec.MimeType
+	if contentType == "" {
+		contentType = meta.ContentType
+	}
+	contentLength := rec.FileSize
+	if contentLength <= 0 {
+		contentLength = meta.Size
+	}
+	w.Header().Set("Content-Type", contentType)
+	if contentLength > 0 {
+		w.Header().Set("Content-Length", strconv.FormatInt(contentLength, 10))
+	}
 	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write(data)
+	if _, err := io.Copy(w, reader); err != nil {
+		core.Logger.Error("attachment stream: " + err.Error())
+	}
 }
 
 // beskarUserUUID returns the app user id used by Permify (user.AId).

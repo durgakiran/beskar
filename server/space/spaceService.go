@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/durgakiran/beskar/core"
+	"github.com/durgakiran/beskar/quota"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
@@ -480,7 +481,7 @@ func getSpaceSettingsState(spaceId uuid.UUID, userId uuid.UUID) (SpaceSettingsSt
 		WhiteboardCount:      space.WhiteboardCount,
 		UserRole:             space.UserRole,
 		CanManageMembers:     core.ValidateUserSpacePermissions(spaceId, userId, core.SPACE_MANAGE_MEMBERS),
-		CanTransferOwnership: core.ValidateUserSpacePermissions(spaceId, userId, core.SPACE_TRANSFER_OWNER),
+		CanTransferOwnership: false,
 		CanArchive:           core.ValidateUserSpacePermissions(spaceId, userId, core.SPACE_ARCHIVE),
 		CanDelete:            core.ValidateUserSpacePermissions(spaceId, userId, core.SPACE_DELETE),
 	}, nil
@@ -547,16 +548,27 @@ func addSpaceMembers(spaceId uuid.UUID, actorId uuid.UUID, req AddSpaceMembersRe
 	for _, user := range existingUsers {
 		existing[user.Id.String()] = true
 	}
+	pendingAddSet := make(map[string]bool)
+	for _, member := range req.Members {
+		if !existing[member.UserId] {
+			pendingAddSet[member.UserId] = true
+		}
+	}
+	if err := quota.ValidateCollaboratorAddition(context.Background(), spaceId, len(pendingAddSet), false); err != nil {
+		return nil, err
+	}
 	addedCount := 0
 	skippedExisting := 0
+	seenAdds := make(map[string]bool)
 	for _, member := range req.Members {
-		if existing[member.UserId] {
+		if existing[member.UserId] || seenAdds[member.UserId] {
 			skippedExisting++
 			continue
 		}
 		if err := core.WriteRelations(spaceId.String(), "space", member.UserId, "user", storageRole(member.Role)); err != nil {
 			return nil, err
 		}
+		seenAdds[member.UserId] = true
 		addedCount++
 	}
 	return map[string]any{

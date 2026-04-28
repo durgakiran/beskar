@@ -79,8 +79,7 @@ export default function MenuBar() {
 
     const userMenuItems: TopbarMenuItem[] = useMemo(
         () => [
-            { id: "profile", label: "Profile", icon: "User", href: "#" },
-            { id: "settings", label: "Settings", icon: "Settings", href: "#" },
+            { id: "storage", label: "Storage & Limits", icon: "HardDrive", href: "/user/storage" },
             { id: "notifications", label: "Notifications", icon: "Bell", href: "/user/notifications" },
             {
                 id: "signout",

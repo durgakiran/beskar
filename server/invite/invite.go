@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"github.com/durgakiran/beskar/core"
+	"github.com/durgakiran/beskar/quota"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/render"
 	"github.com/google/uuid"
@@ -39,6 +40,8 @@ func sendInviteActionError(w http.ResponseWriter, r *http.Request, err error) {
 		sendFailedReponse(w, r, http.StatusForbidden, "This invitation was sent to a different email address")
 	case errors.Is(err, errInviteInvalidDecision):
 		sendFailedReponse(w, r, http.StatusBadRequest, "Decision must be accept or reject")
+	case errors.Is(err, quota.ErrCollaboratorLimitExceeded):
+		sendFailedReponse(w, r, http.StatusForbidden, err.Error())
 	case err.Error() == core.ErrorCode_name[core.ErrorCode_ERROR_CODE_PERMISSION_SERVER_ISSUE]:
 		sendFailedReponse(w, r, http.StatusBadGateway, err.Error())
 	default:
@@ -67,6 +70,10 @@ func acceptInvitation(w http.ResponseWriter, r *http.Request) {
 	// process token
 	err = processInvitation(userId, emailId, token, STATUS_ACCEPTED)
 	if err != nil {
+		if errors.Is(err, quota.ErrCollaboratorLimitExceeded) {
+			sendFailedReponse(w, r, http.StatusForbidden, err.Error())
+			return
+		}
 		sendFailedReponse(w, r, http.StatusForbidden, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNAUTHORIZED])
 		return
 	}
@@ -118,6 +125,10 @@ func createInvitation(w http.ResponseWriter, r *http.Request) {
 	}
 	token, err := invite.invite()
 	if err != nil {
+		if errors.Is(err, quota.ErrCollaboratorLimitExceeded) {
+			sendFailedReponse(w, r, http.StatusForbidden, err.Error())
+			return
+		}
 		core.SendFailedReponse(w, r, 0, err.Error())
 		return
 	}

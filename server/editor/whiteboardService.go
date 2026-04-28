@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/durgakiran/beskar/core"
+	"github.com/durgakiran/beskar/quota"
 )
 
 func CreateWhiteboard(d WhiteboardInput) (int64, error) {
@@ -106,11 +107,20 @@ func UpdateWhiteboard(d WhiteboardInput) error {
 
 func DeleteWhiteboard(d WhiteboardInput) error {
 	ctx := context.Background()
-	_, err := core.GetPool().Exec(ctx, deleteDocumentQuery, d.Id, d.SpaceId)
+	tx, err := core.GetPool().Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	if err := quota.ReleasePageStorageUsageTx(ctx, tx, d.SpaceId, d.Id, "whiteboard_delete"); err != nil {
+		logger().Error(fmt.Sprintf("DeleteWhiteboard release quota err: %s", err.Error()))
+		return err
+	}
+	_, err = tx.Exec(ctx, deleteDocumentQuery, d.Id, d.SpaceId)
 	// Database cascade rules cover core.page_doc_map and core.whiteboard_data
 	if err != nil {
 		logger().Error(fmt.Sprintf("DeleteWhiteboard err: %s", err.Error()))
 		return err
 	}
-	return nil
+	return tx.Commit(ctx)
 }

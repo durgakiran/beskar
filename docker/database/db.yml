@@ -22,3 +22,4 @@ services:
 networks:
   dbnet:
     name: custom_local_network
+    external: true

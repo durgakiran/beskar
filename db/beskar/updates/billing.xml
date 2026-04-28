@@ -1,0 +1,559 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext"
+    xmlns:pro="http://www.liquibase.org/xml/ns/pro"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd
+                        http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd
+                        http://www.liquibase.org/xml/ns/pro http://www.liquibase.org/xml/ns/pro/liquibase-pro-latest.xsd">
+
+    <changeSet id="1-create-billing-schema" author="Kiran Kumar">
+        <comment>Create billing schema</comment>
+        <sql>
+            CREATE SCHEMA IF NOT EXISTS billing;
+        </sql>
+        <rollback/>
+    </changeSet>
+
+    <changeSet id="2-create-account-table" author="Kiran Kumar">
+        <preConditions onFail="MARK_RAN">
+            <sqlCheck expectedResult="0">
+                SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'account' AND table_schema = 'billing';
+            </sqlCheck>
+        </preConditions>
+        <comment>Create personal billing account table</comment>
+        <createTable tableName="account" schemaName="billing">
+            <column name="id" type="UUID" defaultValueComputed="gen_random_uuid()">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="user_id" type="UUID">
+                <constraints nullable="false" unique="true" uniqueConstraintName="uq_billing_account_user_id"/>
+            </column>
+            <column name="status" type="TEXT" defaultValue="active">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="now()">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="now()">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+        <rollback>
+            <dropTable tableName="account" schemaName="billing"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="3-create-plan-table" author="Kiran Kumar">
+        <preConditions onFail="MARK_RAN">
+            <sqlCheck expectedResult="0">
+                SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'plan' AND table_schema = 'billing';
+            </sqlCheck>
+        </preConditions>
+        <comment>Create billing plan table</comment>
+        <createTable tableName="plan" schemaName="billing">
+            <column name="id" type="UUID" defaultValueComputed="gen_random_uuid()">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="code" type="TEXT">
+                <constraints nullable="false" unique="true" uniqueConstraintName="uq_billing_plan_code"/>
+            </column>
+            <column name="display_name" type="TEXT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="is_active" type="BOOLEAN" defaultValueBoolean="true">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="now()">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="now()">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+        <rollback>
+            <dropTable tableName="plan" schemaName="billing"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="4-create-plan-limit-table" author="Kiran Kumar">
+        <preConditions onFail="MARK_RAN">
+            <sqlCheck expectedResult="0">
+                SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'plan_limit' AND table_schema = 'billing';
+            </sqlCheck>
+        </preConditions>
+        <comment>Create generic plan limit table keyed by metric_key</comment>
+        <createTable tableName="plan_limit" schemaName="billing">
+            <column name="id" type="UUID" defaultValueComputed="gen_random_uuid()">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="plan_id" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+            <column name="metric_key" type="TEXT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="limit_value" type="BIGINT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="limit_unit" type="TEXT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="enforcement_mode" type="TEXT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="now()">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="now()">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+        <addForeignKeyConstraint
+            baseTableName="plan_limit" baseTableSchemaName="billing" baseColumnNames="plan_id"
+            constraintName="billing_plan_limit_plan_id_fkey"
+            referencedTableName="plan" referencedTableSchemaName="billing" referencedColumnNames="id"
+            deleteCascade="true"/>
+        <addUniqueConstraint
+            tableName="plan_limit" schemaName="billing"
+            columnNames="plan_id, metric_key"
+            constraintName="uq_billing_plan_limit_plan_metric"/>
+        <rollback>
+            <dropUniqueConstraint tableName="plan_limit" schemaName="billing" constraintName="uq_billing_plan_limit_plan_metric"/>
+            <dropForeignKeyConstraint baseTableName="plan_limit" baseTableSchemaName="billing" constraintName="billing_plan_limit_plan_id_fkey"/>
+            <dropTable tableName="plan_limit" schemaName="billing"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="5-create-account-subscription-table" author="Kiran Kumar">
+        <preConditions onFail="MARK_RAN">
+            <sqlCheck expectedResult="0">
+                SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'account_subscription' AND table_schema = 'billing';
+            </sqlCheck>
+        </preConditions>
+        <comment>Create account subscription table for plan assignment history</comment>
+        <createTable tableName="account_subscription" schemaName="billing">
+            <column name="id" type="UUID" defaultValueComputed="gen_random_uuid()">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="account_id" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+            <column name="plan_id" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+            <column name="status" type="TEXT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="effective_from" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="now()">
+                <constraints nullable="false"/>
+            </column>
+            <column name="effective_to" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="source" type="TEXT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="now()">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="now()">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+        <addForeignKeyConstraint
+            baseTableName="account_subscription" baseTableSchemaName="billing" baseColumnNames="account_id"
+            constraintName="billing_account_subscription_account_id_fkey"
+            referencedTableName="account" referencedTableSchemaName="billing" referencedColumnNames="id"
+            deleteCascade="true"/>
+        <addForeignKeyConstraint
+            baseTableName="account_subscription" baseTableSchemaName="billing" baseColumnNames="plan_id"
+            constraintName="billing_account_subscription_plan_id_fkey"
+            referencedTableName="plan" referencedTableSchemaName="billing" referencedColumnNames="id"/>
+        <rollback>
+            <dropForeignKeyConstraint baseTableName="account_subscription" baseTableSchemaName="billing" constraintName="billing_account_subscription_account_id_fkey"/>
+            <dropForeignKeyConstraint baseTableName="account_subscription" baseTableSchemaName="billing" constraintName="billing_account_subscription_plan_id_fkey"/>
+            <dropTable tableName="account_subscription" schemaName="billing"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="6-create-space-usage-table" author="Kiran Kumar">
+        <preConditions onFail="MARK_RAN">
+            <sqlCheck expectedResult="0">
+                SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'space_usage' AND table_schema = 'billing';
+            </sqlCheck>
+        </preConditions>
+        <comment>Create per-space usage aggregate table</comment>
+        <createTable tableName="space_usage" schemaName="billing">
+            <column name="space_id" type="UUID">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="storage_bytes_used" type="BIGINT" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="storage_bytes_reserved" type="BIGINT" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="last_reconciled_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="updated_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="now()">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+        <addForeignKeyConstraint
+            baseTableName="space_usage" baseTableSchemaName="billing" baseColumnNames="space_id"
+            constraintName="billing_space_usage_space_id_fkey"
+            referencedTableName="space" referencedTableSchemaName="core" referencedColumnNames="id"
+            deleteCascade="true"/>
+        <rollback>
+            <dropForeignKeyConstraint baseTableName="space_usage" baseTableSchemaName="billing" constraintName="billing_space_usage_space_id_fkey"/>
+            <dropTable tableName="space_usage" schemaName="billing"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="7-create-space-usage-event-table" author="Kiran Kumar">
+        <preConditions onFail="MARK_RAN">
+            <sqlCheck expectedResult="0">
+                SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'space_usage_event' AND table_schema = 'billing';
+            </sqlCheck>
+        </preConditions>
+        <comment>Create append-only space usage event ledger</comment>
+        <createTable tableName="space_usage_event" schemaName="billing">
+            <column name="id" type="UUID" defaultValueComputed="gen_random_uuid()">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="space_id" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+            <column name="metric_key" type="TEXT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="event_type" type="TEXT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="delta_value" type="BIGINT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="source_type" type="TEXT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="source_id" type="TEXT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="correlation_id" type="TEXT"/>
+            <column name="metadata" type="JSONB"/>
+            <column name="created_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="now()">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+        <addForeignKeyConstraint
+            baseTableName="space_usage_event" baseTableSchemaName="billing" baseColumnNames="space_id"
+            constraintName="billing_space_usage_event_space_id_fkey"
+            referencedTableName="space" referencedTableSchemaName="core" referencedColumnNames="id"
+            deleteCascade="true"/>
+        <rollback>
+            <dropForeignKeyConstraint baseTableName="space_usage_event" baseTableSchemaName="billing" constraintName="billing_space_usage_event_space_id_fkey"/>
+            <dropTable tableName="space_usage_event" schemaName="billing"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="8-create-billing-indexes" author="Kiran Kumar">
+        <comment>Create indexes required for account and usage lookups</comment>
+        <createIndex tableName="account_subscription" schemaName="billing" indexName="idx_billing_account_subscription_account_status_effective_from">
+            <column name="account_id"/>
+            <column name="status"/>
+            <column name="effective_from"/>
+        </createIndex>
+        <createIndex tableName="space_usage_event" schemaName="billing" indexName="idx_billing_space_usage_event_space_created_at">
+            <column name="space_id"/>
+            <column name="created_at"/>
+        </createIndex>
+        <rollback>
+            <dropIndex tableName="account_subscription" schemaName="billing" indexName="idx_billing_account_subscription_account_status_effective_from"/>
+            <dropIndex tableName="space_usage_event" schemaName="billing" indexName="idx_billing_space_usage_event_space_created_at"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="9-create-account-helper-function" author="Kiran Kumar" runOnChange="true">
+        <comment>Create helper to ensure one personal account per user</comment>
+        <createProcedure>
+            <![CDATA[
+            CREATE OR REPLACE FUNCTION billing.ensure_account_for_user(p_user_id UUID)
+            RETURNS UUID AS
+            $$
+            DECLARE
+                v_account_id UUID;
+            BEGIN
+                IF p_user_id IS NULL THEN
+                    RAISE EXCEPTION 'billing.ensure_account_for_user requires a non-null user id';
+                END IF;
+
+                LOOP
+                    SELECT id INTO v_account_id
+                    FROM billing.account
+                    WHERE user_id = p_user_id;
+
+                    IF v_account_id IS NOT NULL THEN
+                        RETURN v_account_id;
+                    END IF;
+
+                    BEGIN
+                        INSERT INTO billing.account (user_id, status)
+                        VALUES (p_user_id, 'active')
+                        RETURNING id INTO v_account_id;
+                        RETURN v_account_id;
+                    EXCEPTION WHEN unique_violation THEN
+                    END;
+                END LOOP;
+            END;
+            $$
+            LANGUAGE plpgsql;
+            ]]>
+        </createProcedure>
+        <rollback/>
+    </changeSet>
+
+    <changeSet id="10-backfill-accounts" author="Kiran Kumar">
+        <comment>Create billing accounts for existing space owners</comment>
+        <sql>
+            INSERT INTO billing.account (user_id, status)
+            SELECT DISTINCT s.user_id, 'active'
+            FROM core.space s
+            WHERE s.user_id IS NOT NULL
+            ON CONFLICT (user_id) DO NOTHING;
+        </sql>
+        <rollback/>
+    </changeSet>
+
+    <changeSet id="11-add-space-account-id-column" author="Kiran Kumar">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <columnExists schemaName="core" tableName="space" columnName="account_id"/>
+            </not>
+        </preConditions>
+        <comment>Add account_id to core.space</comment>
+        <addColumn tableName="space" schemaName="core">
+            <column name="account_id" type="UUID"/>
+        </addColumn>
+        <rollback>
+            <dropColumn tableName="space" schemaName="core" columnName="account_id"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="12-backfill-space-account-id" author="Kiran Kumar">
+        <comment>Backfill space.account_id from the owning user billing account</comment>
+        <sql>
+            UPDATE core.space s
+            SET account_id = billing.ensure_account_for_user(s.user_id)
+            WHERE s.account_id IS NULL;
+        </sql>
+        <rollback/>
+    </changeSet>
+
+    <changeSet id="13-space-account-id-constraints" author="Kiran Kumar">
+        <comment>Enforce space.account_id ownership link</comment>
+        <addNotNullConstraint tableName="space" schemaName="core" columnName="account_id" columnDataType="UUID"/>
+        <addForeignKeyConstraint
+            baseTableName="space" baseTableSchemaName="core" baseColumnNames="account_id"
+            constraintName="core_space_account_id_fkey"
+            referencedTableName="account" referencedTableSchemaName="billing" referencedColumnNames="id"/>
+        <createIndex tableName="space" schemaName="core" indexName="idx_core_space_account_id">
+            <column name="account_id"/>
+        </createIndex>
+        <rollback>
+            <dropIndex tableName="space" schemaName="core" indexName="idx_core_space_account_id"/>
+            <dropForeignKeyConstraint baseTableName="space" baseTableSchemaName="core" constraintName="core_space_account_id_fkey"/>
+            <dropNotNullConstraint tableName="space" schemaName="core" columnName="account_id" columnDataType="UUID"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="14-create-space-account-sync-trigger" author="Kiran Kumar" runOnChange="true">
+        <comment>Ensure new spaces are bound to the owner's billing account</comment>
+        <createProcedure>
+            <![CDATA[
+            CREATE OR REPLACE FUNCTION billing.space_account_sync_trigger_function()
+            RETURNS TRIGGER AS
+            $$
+            BEGIN
+                NEW.account_id := billing.ensure_account_for_user(NEW.user_id);
+                RETURN NEW;
+            END;
+            $$
+            LANGUAGE plpgsql;
+            ]]>
+        </createProcedure>
+        <sql>
+            <![CDATA[
+            DROP TRIGGER IF EXISTS billing_space_account_sync_trigger ON core.space;
+            CREATE TRIGGER billing_space_account_sync_trigger
+            BEFORE INSERT OR UPDATE OF user_id ON core.space
+            FOR EACH ROW
+            EXECUTE FUNCTION billing.space_account_sync_trigger_function();
+            ]]>
+        </sql>
+        <rollback/>
+    </changeSet>
+
+    <changeSet id="15-backfill-space-usage" author="Kiran Kumar">
+        <comment>Create zeroed usage rows for existing spaces</comment>
+        <sql>
+            INSERT INTO billing.space_usage (space_id, storage_bytes_used, storage_bytes_reserved, updated_at)
+            SELECT s.id, 0, 0, now()
+            FROM core.space s
+            ON CONFLICT (space_id) DO NOTHING;
+        </sql>
+        <rollback/>
+    </changeSet>
+
+    <changeSet id="16-create-space-usage-trigger" author="Kiran Kumar" runOnChange="true">
+        <comment>Ensure new spaces receive a usage aggregate row</comment>
+        <createProcedure>
+            <![CDATA[
+            CREATE OR REPLACE FUNCTION billing.space_usage_seed_trigger_function()
+            RETURNS TRIGGER AS
+            $$
+            BEGIN
+                INSERT INTO billing.space_usage (space_id, storage_bytes_used, storage_bytes_reserved, updated_at)
+                VALUES (NEW.id, 0, 0, now())
+                ON CONFLICT (space_id) DO NOTHING;
+                RETURN NEW;
+            END;
+            $$
+            LANGUAGE plpgsql;
+            ]]>
+        </createProcedure>
+        <sql>
+            <![CDATA[
+            DROP TRIGGER IF EXISTS billing_space_usage_seed_trigger ON core.space;
+            CREATE TRIGGER billing_space_usage_seed_trigger
+            AFTER INSERT ON core.space
+            FOR EACH ROW
+            EXECUTE FUNCTION billing.space_usage_seed_trigger_function();
+            ]]>
+        </sql>
+        <rollback/>
+    </changeSet>
+
+    <changeSet id="17-grant-billing-privileges" author="Kiran Kumar">
+        <comment>Grant billing schema and table privileges to app user</comment>
+        <sql>
+            GRANT USAGE ON SCHEMA billing TO ${app_user};
+            GRANT SELECT, INSERT, UPDATE, DELETE ON billing.account TO ${app_user};
+            GRANT SELECT, INSERT, UPDATE, DELETE ON billing.plan TO ${app_user};
+            GRANT SELECT, INSERT, UPDATE, DELETE ON billing.plan_limit TO ${app_user};
+            GRANT SELECT, INSERT, UPDATE, DELETE ON billing.account_subscription TO ${app_user};
+            GRANT SELECT, INSERT, UPDATE, DELETE ON billing.space_usage TO ${app_user};
+            GRANT SELECT, INSERT, UPDATE, DELETE ON billing.space_usage_event TO ${app_user};
+        </sql>
+        <rollback/>
+    </changeSet>
+
+    <changeSet id="18-seed-basic-plan" author="Kiran Kumar">
+        <comment>Create the default basic billing plan</comment>
+        <sql>
+            INSERT INTO billing.plan (code, display_name, is_active)
+            VALUES ('basic', 'Basic', true)
+            ON CONFLICT (code) DO UPDATE
+            SET display_name = EXCLUDED.display_name,
+                is_active = EXCLUDED.is_active,
+                updated_at = now();
+        </sql>
+        <rollback/>
+    </changeSet>
+
+    <changeSet id="19-seed-basic-plan-limits" author="Kiran Kumar">
+        <comment>Seed default limits for the basic plan</comment>
+        <sql>
+            INSERT INTO billing.plan_limit (plan_id, metric_key, limit_value, limit_unit, enforcement_mode)
+            SELECT
+                p.id,
+                seeded.metric_key,
+                seeded.limit_value,
+                seeded.limit_unit,
+                seeded.enforcement_mode
+            FROM billing.plan p
+            JOIN (
+                VALUES
+                    ('storage.bytes.total', 2147483648::BIGINT, 'bytes', 'hard_block'),
+                    ('collaborators.count.per_space', 5::BIGINT, 'count', 'hard_block')
+            ) AS seeded(metric_key, limit_value, limit_unit, enforcement_mode)
+                ON true
+            WHERE p.code = 'basic'
+            ON CONFLICT (plan_id, metric_key) DO UPDATE
+            SET limit_value = EXCLUDED.limit_value,
+                limit_unit = EXCLUDED.limit_unit,
+                enforcement_mode = EXCLUDED.enforcement_mode,
+                updated_at = now();
+        </sql>
+        <rollback/>
+    </changeSet>
+
+    <changeSet id="20-backfill-basic-subscriptions" author="Kiran Kumar">
+        <comment>Assign the basic plan to existing billing accounts that have no active subscription</comment>
+        <sql>
+            INSERT INTO billing.account_subscription (account_id, plan_id, status, effective_from, source)
+            SELECT
+                a.id,
+                p.id,
+                'active',
+                now(),
+                'system_default_basic'
+            FROM billing.account a
+            JOIN billing.plan p ON p.code = 'basic'
+            WHERE NOT EXISTS (
+                SELECT 1
+                FROM billing.account_subscription s
+                WHERE s.account_id = a.id
+                  AND (s.effective_to IS NULL OR s.effective_to > now())
+                  AND lower(s.status) IN ('active', 'trialing', 'grace_period')
+            );
+        </sql>
+        <rollback/>
+    </changeSet>
+
+    <changeSet id="21-create-default-subscription-trigger" author="Kiran Kumar" runOnChange="true">
+        <comment>Automatically attach the basic plan to newly created billing accounts</comment>
+        <createProcedure>
+            <![CDATA[
+            CREATE OR REPLACE FUNCTION billing.account_default_subscription_trigger_function()
+            RETURNS TRIGGER AS
+            $$
+            DECLARE
+                v_basic_plan_id UUID;
+            BEGIN
+                SELECT id INTO v_basic_plan_id
+                FROM billing.plan
+                WHERE code = 'basic';
+
+                IF v_basic_plan_id IS NULL THEN
+                    RAISE EXCEPTION 'billing.account_default_subscription_trigger_function requires the basic plan to exist';
+                END IF;
+
+                IF NOT EXISTS (
+                    SELECT 1
+                    FROM billing.account_subscription s
+                    WHERE s.account_id = NEW.id
+                      AND (s.effective_to IS NULL OR s.effective_to > now())
+                      AND lower(s.status) IN ('active', 'trialing', 'grace_period')
+                ) THEN
+                    INSERT INTO billing.account_subscription (account_id, plan_id, status, effective_from, source)
+                    VALUES (NEW.id, v_basic_plan_id, 'active', now(), 'system_default_basic');
+                END IF;
+
+                RETURN NEW;
+            END;
+            $$
+            LANGUAGE plpgsql;
+            ]]>
+        </createProcedure>
+        <sql>
+            <![CDATA[
+            DROP TRIGGER IF EXISTS billing_account_default_subscription_trigger ON billing.account;
+            CREATE TRIGGER billing_account_default_subscription_trigger
+            AFTER INSERT ON billing.account
+            FOR EACH ROW
+            EXECUTE FUNCTION billing.account_default_subscription_trigger_function();
+            ]]>
+        </sql>
+        <rollback/>
+    </changeSet>
+
+</databaseChangeLog>

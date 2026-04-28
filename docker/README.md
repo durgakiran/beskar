@@ -130,6 +130,7 @@ Optional but important:
 
 - Set `UPLOAD_STORAGE_DIR` if uploads should not be stored under the default `public` path inside the server container
 - Set `UI_USE_LOCAL_EDITOR_DIST=true` only when you want the deployment-style UI image to test local `packages/editor/dist` output instead of the published `@durgakiran/editor` package
+- Review the log controls if disk usage matters: `DOCKER_LOG_MAX_SIZE`, `DOCKER_LOG_MAX_FILE`, `POSTGRES_LOG_MIN_MESSAGES`, `REDIS_LOG_LEVEL`, `PERMIFY_LOG_LEVEL`, `ZITADEL_ACCESS_LOG_STDOUT_ENABLED`, `SERVER_LOG_TO_FILES`, and `SERVER_HTTP_REQUEST_LOGGING_ENABLED`
 
 ### Configure Email Notifications
 
@@ -187,6 +188,51 @@ What this does:
 - Starts `postgres` and `redis`
 - Runs the `db-init` job
 - Starts `guard`, `zitadel`, `server`, `signalserver`, `ui`, `launchsite`, and `proxy`
+
+### Apply Only the Liquibase Changesets in Production
+
+If you only want to apply database schema changes for a production-style environment and do not want to start or redeploy the full app stack, run just the `db-init` job.
+
+1. Render the deployment config for the target environment:
+
+```bash
+./docker/scripts/render-configs.sh --env docker/env/<environment>.env
+```
+
+2. Validate the generated compose file:
+
+```bash
+./docker/scripts/validate-config.sh --env docker/env/<environment>.env
+```
+
+3. Start PostgreSQL if it is not already running:
+
+```bash
+docker compose -f docker/.generated/compose.yml -p <compose-project-name> up -d postgres
+```
+
+4. Run the Liquibase job:
+
+```bash
+docker compose -f docker/.generated/compose.yml -p <compose-project-name> run --rm --build db-init
+```
+
+Use the `COMPOSE_PROJECT_NAME` value from `docker/env/<environment>.env` as `<compose-project-name>`.
+
+Example for production:
+
+```bash
+./docker/scripts/render-configs.sh --env docker/env/prod.env
+./docker/scripts/validate-config.sh --env docker/env/prod.env
+docker compose -f docker/.generated/compose.yml -p beskar-prod up -d postgres
+docker compose -f docker/.generated/compose.yml -p beskar-prod run --rm --build db-init
+```
+
+Notes:
+
+- `db-init` is the same job used by `./docker/scripts/deploy.sh`.
+- This is safe to run repeatedly because Liquibase tracks applied changesets in its changelog tables and only applies unapplied entries from [db/beskar/update.xml](/Users/kiran/projects/beskar/db/beskar/update.xml:1).
+- This flow only handles database changes. It does not restart `server`, `ui`, or any other application service.
 
 ### Clean Restart One Production Service
 

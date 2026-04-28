@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -23,6 +25,18 @@ const (
 
 var poolLock = &sync.Mutex{}
 
+func dbPoolDebugLogsEnabled() bool {
+	value := strings.TrimSpace(os.Getenv("DB_POOL_DEBUG_LOGS"))
+	if value == "" {
+		return false
+	}
+	enabled, err := strconv.ParseBool(value)
+	if err != nil {
+		return false
+	}
+	return enabled
+}
+
 func ConnectionString() string {
 	return fmt.Sprintf("postgres://%v:%v@%v:%v/%v", os.Getenv("PG_USER"), os.Getenv("PG_PASSWORD"), os.Getenv("PG_HOST"), os.Getenv("PG_PORT"), os.Getenv("PG_DB"))
 }
@@ -40,18 +54,20 @@ func Config() *pgxpool.Config {
 	dbConfig.HealthCheckPeriod = defaultHealthCheckPeriod
 	dbConfig.ConnConfig.ConnectTimeout = defaultConnectTimeout
 
-	dbConfig.BeforeAcquire = func(ctx context.Context, c *pgx.Conn) bool {
-		log.Println("Before acquiring the connection pool to the database!!")
-		return true
-	}
+	if dbPoolDebugLogsEnabled() {
+		dbConfig.BeforeAcquire = func(ctx context.Context, c *pgx.Conn) bool {
+			log.Println("Before acquiring the connection pool to the database!!")
+			return true
+		}
 
-	dbConfig.AfterRelease = func(c *pgx.Conn) bool {
-		log.Println("After releasing the connection to the pool!!")
-		return true
-	}
+		dbConfig.AfterRelease = func(c *pgx.Conn) bool {
+			log.Println("After releasing the connection to the pool!!")
+			return true
+		}
 
-	dbConfig.BeforeClose = func(c *pgx.Conn) {
-		log.Println("Closed the connection pool to the database!!")
+		dbConfig.BeforeClose = func(c *pgx.Conn) {
+			log.Println("Closed the connection pool to the database!!")
+		}
 	}
 
 	return dbConfig

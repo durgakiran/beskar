@@ -40,3 +40,4 @@ server/server
 docker/.generated
 docker/env/*.env
 .playwright-cli
+.DS_Store

@@ -322,29 +322,11 @@ func removeMemberController(w http.ResponseWriter, r *http.Request) {
 }
 
 func transferOwnershipController(w http.ResponseWriter, r *http.Request) {
-	_, userID, ok := currentUser(r)
-	if !ok {
-		core.SendFailedReponse(w, r, http.StatusForbidden, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNAUTHORIZED])
-		return
-	}
-	spaceID := uuid.MustParse(chi.URLParam(r, "spaceId"))
-	data, err := io.ReadAll(r.Body)
-	defer r.Body.Close()
-	if err != nil {
-		core.SendFailedReponse(w, r, http.StatusBadRequest, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_INVALID_INPUT])
-		return
-	}
-	req, err := validateTransferOwnership(data)
-	if err != nil {
-		core.SendFailedReponse(w, r, http.StatusBadRequest, err.Error())
-		return
-	}
-	owner, err := transferOwnership(spaceID, userID, req)
-	if err != nil {
-		core.SendFailedReponse(w, r, http.StatusForbidden, err.Error())
-		return
-	}
-	core.SendSuccessResponse(w, r, http.StatusOK, owner)
+	renderDisabledOwnershipTransfer(w, r)
+}
+
+func renderDisabledOwnershipTransfer(w http.ResponseWriter, r *http.Request) {
+	core.SendFailedReponse(w, r, http.StatusForbidden, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNAUTHORIZED])
 }
 
 func archiveSpaceController(w http.ResponseWriter, r *http.Request) {

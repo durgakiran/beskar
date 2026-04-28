@@ -6,7 +6,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import "@durgakiran/editor/styles.css"; // Import editor styles
 import "@durgakiran/editor/index.css"; // Import tailwind and radix UI styles
 import { Flex, Button } from "@radix-ui/themes";
+import ToastComponent from "@components/ui/ToastComponent";
 import { uploadImageData } from "../http/uploadImageData";
+import { getApiV1Base } from "../http/apiBase";
 import Collaboration from "@tiptap/extension-collaboration";
 import CollaborationCursor from "@tiptap/extension-collaboration-caret";
 import { HocuspocusProvider } from "@hocuspocus/provider";
@@ -34,14 +36,8 @@ import { WebrtcProvider } from "y-webrtc";
 import * as Y from "yjs";
 import { makeCommentApiHandler } from "../http/commentApiHandler";
 import { useCommentEvents } from "../hooks/useCommentEvents";
-import {
-    CommentInputPopover,
-    CommentGutter,
-    CommentThreadCard,
-    CommentSidePanel,
-    OverlapDisambiguationPopover,
-    type CommentThread,
-} from "@durgakiran/editor";
+import { mapUploadErrorMessage } from "../queries/quota";
+import { CommentInputPopover, CommentGutter, CommentThreadCard, CommentSidePanel, OverlapDisambiguationPopover, type CommentThread } from "@durgakiran/editor";
 
 interface TipTapProps {
     setEditorContext: (editorContext: Editor) => void;
@@ -114,6 +110,7 @@ export function TipTap({
     const [ambiguityRect, setAmbiguityRect] = useState<DOMRect | null>(null);
     const [showComments, setShowComments] = useState(true);
     const [resolvedCount, setResolvedCount] = useState(0);
+    const [uploadToast, setUploadToast] = useState<{ type: "warning"; message: string } | null>(null);
 
     const reloadThreads = useCallback(async () => {
         try {
@@ -121,7 +118,7 @@ export function TipTap({
             setThreads(data);
             return data;
         } catch (err) {
-            console.error('Failed to load threads', err);
+            console.error("Failed to load threads", err);
             return [];
         }
     }, [commentApiHandler, pageId]);
@@ -142,7 +139,11 @@ export function TipTap({
     const imageHandler: ImageAPIHandler = {
         uploadImage: async (file: File) => {
             try {
-                const [name, width, height] = await uploadImageData(file);
+                if (!Number.isFinite(id) || id < 1) {
+                    throw new Error("Invalid page id for image upload");
+                }
+
+                const [name, width, height] = await uploadImageData(file, id);
                 let adjustedWidth = width;
                 let adjustedHeight = height;
 
@@ -153,12 +154,16 @@ export function TipTap({
                 }
 
                 return {
-                    url: `${process.env.NEXT_PUBLIC_IMAGE_SERVER_URL}/media/image/${name}`,
+                    url: `${getApiV1Base({ fallbackBase: process.env.NEXT_PUBLIC_IMAGE_SERVER_URL })}/media/image/${name}`,
                     width: adjustedWidth,
                     height: adjustedHeight,
                 };
             } catch (error) {
                 console.error("Image upload failed:", error);
+                setUploadToast({
+                    type: "warning",
+                    message: mapUploadErrorMessage(error instanceof Error ? error.message : "Upload failed"),
+                });
                 throw error;
             }
         },
@@ -166,6 +171,9 @@ export function TipTap({
 
     const handleAttachmentRejected = useCallback((reason: "too_large", file: File) => {
         console.warn(`[TipTap] Attachment rejected (${reason}):`, file.name, file.size);
+        if (reason === "too_large") {
+            setUploadToast({ type: "warning", message: `“${file.name}” is larger than the 10 MB attachment limit.` });
+        }
     }, []);
 
     const attachmentHandler: AttachmentAPIHandler = useMemo(
@@ -174,14 +182,22 @@ export function TipTap({
                 if (!Number.isFinite(id) || id < 1) {
                     throw new Error("Invalid page id for attachment upload");
                 }
-                const result = await uploadAttachmentData(file, id, { signal: opts?.signal });
-                return {
-                    attachmentId: result.attachmentId,
-                    url: result.url,
-                    fileName: result.fileName,
-                    fileSize: result.fileSize,
-                    mimeType: result.mimeType,
-                };
+                try {
+                    const result = await uploadAttachmentData(file, id, { signal: opts?.signal });
+                    return {
+                        attachmentId: result.attachmentId,
+                        url: result.url,
+                        fileName: result.fileName,
+                        fileSize: result.fileSize,
+                        mimeType: result.mimeType,
+                    };
+                } catch (error) {
+                    setUploadToast({
+                        type: "warning",
+                        message: mapUploadErrorMessage(error instanceof Error ? error.message : "Upload failed"),
+                    });
+                    throw error;
+                }
             },
             downloadAttachment: async ({ url, fileName }) => {
                 await downloadAttachmentBlob(url, fileName);
@@ -194,8 +210,7 @@ export function TipTap({
         if (!spaceId) return undefined;
 
         const baseUrl = process.env.NEXT_PUBLIC_USER_SERVER_URL?.replace(/\/+$/, "") || "";
-        const appBaseUrl =
-            typeof window !== "undefined" ? window.location.origin : "";
+        const appBaseUrl = typeof window !== "undefined" ? window.location.origin : "";
 
         const fetchJson = async <T,>(path: string): Promise<T> => {
             const response = await fetch(`${baseUrl}/${path}`, {
@@ -214,18 +229,22 @@ export function TipTap({
             return response.json() as Promise<T>;
         };
 
-        const listPages = async (): Promise<Array<{
-            pageId: number;
-            title: string;
-            parentId: number;
-            type: "document" | "whiteboard";
-        }>> => {
-            const response = await fetchJson<{ data?: Array<{
+        const listPages = async (): Promise<
+            Array<{
                 pageId: number;
                 title: string;
                 parentId: number;
                 type: "document" | "whiteboard";
-            }> }>(`space/${spaceId}/page/list`);
+            }>
+        > => {
+            const response = await fetchJson<{
+                data?: Array<{
+                    pageId: number;
+                    title: string;
+                    parentId: number;
+                    type: "document" | "whiteboard";
+                }>;
+            }>(`space/${spaceId}/page/list`);
             return Array.isArray(response.data) ? response.data : [];
         };
 
@@ -251,11 +270,13 @@ export function TipTap({
             },
             async getResourceMetadata(resourceId: string, resourceType: InternalResourceType): Promise<InternalResourceMetadata | null> {
                 if (resourceType === "document") {
-                    const response = await fetchJson<{ data?: {
-                        pageId: number;
-                        type: string;
-                        title: string;
-                    } }>(`editor/space/${spaceId}/page/${resourceId}/inline-link`);
+                    const response = await fetchJson<{
+                        data?: {
+                            pageId: number;
+                            type: string;
+                            title: string;
+                        };
+                    }>(`editor/space/${spaceId}/page/${resourceId}/inline-link`);
                     const metadata = response.data;
                     if (!metadata) return null;
 
@@ -309,9 +330,7 @@ export function TipTap({
 
         return {
             async getLinkMetadata(url: string): Promise<ExternalLinkMetadata | null> {
-                const response = await fetchJson<{ data?: ExternalLinkMetadata }>(
-                    `editor/external-link/metadata?url=${encodeURIComponent(url)}`,
-                );
+                const response = await fetchJson<{ data?: ExternalLinkMetadata }>(`editor/external-link/metadata?url=${encodeURIComponent(url)}`);
                 return response.data || null;
             },
         };
@@ -356,9 +375,7 @@ export function TipTap({
 
         return {
             async getPageHierarchy() {
-                const response = await fetchJson<{ data?: PageDescendant[] }>(
-                    `space/${spaceId}/page/${id}/descendants`,
-                );
+                const response = await fetchJson<{ data?: PageDescendant[] }>(`space/${spaceId}/page/${id}/descendants`);
                 return mapDescendants(Array.isArray(response.data) ? response.data : []);
             },
             navigateToChildPage(pageId: string) {
@@ -395,12 +412,15 @@ export function TipTap({
         }
     }, []);
 
-    const handleReady = useCallback((editorInstance: TiptapEditor) => {
-        console.log("Editor ready:", editorInstance);
-        setEditor(editorInstance);
+    const handleReady = useCallback(
+        (editorInstance: TiptapEditor) => {
+            console.log("Editor ready:", editorInstance);
+            setEditor(editorInstance);
 
-        reloadThreads();
-    }, [reloadThreads]);
+            reloadThreads();
+        },
+        [reloadThreads],
+    );
 
     // Editor bounds click for opening comments
     useEffect(() => {
@@ -433,21 +453,21 @@ export function TipTap({
 
         const handleClick = (e: MouseEvent) => {
             const target = e.target as HTMLElement;
-            const span = target.closest('[data-comment-id]') as HTMLElement | null;
+            const span = target.closest("[data-comment-id]") as HTMLElement | null;
             if (!span) return;
             e.stopPropagation();
-            const threadId = span.getAttribute('data-comment-id');
+            const threadId = span.getAttribute("data-comment-id");
             if (!threadId) return;
             void openThreadCard(threadId);
         };
 
-        editorDom.addEventListener('COMMENT_CLICKED', handleCommentClicked as EventListener);
-        editorDom.addEventListener('COMMENT_AMBIGUITY_DETECTED', handleAmbiguityDetected as EventListener);
-        editorDom.addEventListener('click', handleClick);
+        editorDom.addEventListener("COMMENT_CLICKED", handleCommentClicked as EventListener);
+        editorDom.addEventListener("COMMENT_AMBIGUITY_DETECTED", handleAmbiguityDetected as EventListener);
+        editorDom.addEventListener("click", handleClick);
         return () => {
-            editorDom.removeEventListener('COMMENT_CLICKED', handleCommentClicked as EventListener);
-            editorDom.removeEventListener('COMMENT_AMBIGUITY_DETECTED', handleAmbiguityDetected as EventListener);
-            editorDom.removeEventListener('click', handleClick);
+            editorDom.removeEventListener("COMMENT_CLICKED", handleCommentClicked as EventListener);
+            editorDom.removeEventListener("COMMENT_AMBIGUITY_DETECTED", handleAmbiguityDetected as EventListener);
+            editorDom.removeEventListener("click", handleClick);
         };
     }, [editor, reloadThreads, threads]);
 
@@ -456,38 +476,44 @@ export function TipTap({
         setThreads((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
     }, []);
 
-    const handleThreadDeleted = useCallback((threadId: string) => {
-        const thread = threads.find((t) => t.id === threadId);
-        if (thread && editor) {
-            const wasEditable = editor.isEditable;
-            if (!wasEditable) editor.setEditable(true);
-            editor.commands.removeComment(thread.commentId);
-            if (!wasEditable) editor.setEditable(false);
-        }
-        setThreads((prev) => {
-            const next = prev.filter((t) => t.id !== threadId);
-            setCardActiveIndex((idx) => Math.min(idx, Math.max(0, next.length - 1)));
-            if (next.length === 0) setCommentCardOpen(false);
-            return next;
-        });
-    }, [threads, editor, editable, title, updateContent]);
+    const handleThreadDeleted = useCallback(
+        (threadId: string) => {
+            const thread = threads.find((t) => t.id === threadId);
+            if (thread && editor) {
+                const wasEditable = editor.isEditable;
+                if (!wasEditable) editor.setEditable(true);
+                editor.commands.removeComment(thread.commentId);
+                if (!wasEditable) editor.setEditable(false);
+            }
+            setThreads((prev) => {
+                const next = prev.filter((t) => t.id !== threadId);
+                setCardActiveIndex((idx) => Math.min(idx, Math.max(0, next.length - 1)));
+                if (next.length === 0) setCommentCardOpen(false);
+                return next;
+            });
+        },
+        [threads, editor, editable, title, updateContent],
+    );
 
-    const handleGutterThreadClick = useCallback((threadId: string) => {
-        if (!editor) return;
-        const thread = threads.find((t) => t.id === threadId);
-        if (!thread) return;
+    const handleGutterThreadClick = useCallback(
+        (threadId: string) => {
+            if (!editor) return;
+            const thread = threads.find((t) => t.id === threadId);
+            if (!thread) return;
 
-        const span = editor.view.dom.querySelector(`[data-comment-id="${thread.id}"]`) as HTMLElement | null;
-        if (span) {
-            setCardFallbackRect(null);
-        } else {
-            const editorRect = (editor.view.dom as HTMLElement).getBoundingClientRect();
-            setCardFallbackRect(new DOMRect(editorRect.left, editorRect.top + 100, editorRect.width, 24));
-        }
-        const idx = threads.findIndex((t) => t.id === threadId);
-        setCardActiveIndex(idx >= 0 ? idx : 0);
-        setCommentCardOpen(true);
-    }, [editor, threads]);
+            const span = editor.view.dom.querySelector(`[data-comment-id="${thread.id}"]`) as HTMLElement | null;
+            if (span) {
+                setCardFallbackRect(null);
+            } else {
+                const editorRect = (editor.view.dom as HTMLElement).getBoundingClientRect();
+                setCardFallbackRect(new DOMRect(editorRect.left, editorRect.top + 100, editorRect.width, 24));
+            }
+            const idx = threads.findIndex((t) => t.id === threadId);
+            setCardActiveIndex(idx >= 0 ? idx : 0);
+            setCommentCardOpen(true);
+        },
+        [editor, threads],
+    );
 
     // Get all extensions from the editor package plus collaboration extensions
     const allExtensions = useMemo(() => {
@@ -530,8 +556,9 @@ export function TipTap({
     }, [editor, setEditorContext]);
 
     return (
-        <div ref={menuContainerRef} className="beskar-editor">
-            {/* {editor && (
+        <>
+            <div ref={menuContainerRef} className="beskar-editor">
+                {/* {editor && (
                 <Flex justify="end" gap="3" align="center" style={{ marginBottom: "1rem" }}>
                     <Button onClick={() => setIsSidePanelOpen(true)} variant="soft" color="indigo" style={{ cursor: 'pointer' }}>
                         💬 All Comments
@@ -541,147 +568,138 @@ export function TipTap({
                     </Button>
                 </Flex>
             )} */}
-            {editable ? (
-                <EditorBeskar
-                    initialContent={content}
-                    imageHandler={imageHandler}
-                    attachmentHandler={attachmentHandler}
-                    internalResourceHandler={internalResourceHandler}
-                    externalLinkHandler={externalLinkHandler}
-                    childPagesHandler={childPagesHandler}
-                    commentHandler={commentApiHandler}
-                    maxAttachmentBytes={MAX_ATTACHMENT_BYTES}
-                    onAttachmentRejected={handleAttachmentRejected}
-                    allowedMimeAccept={ATTACHMENT_ACCEPT}
-                    onAttachmentsChange={onDocAttachmentsChange}
-                    extensions={collaborationExtensions()}
-                    editable={editable}
-                    placeholder={EDITOR_PLACEHOLDER}
-                    onUpdate={editedDataFn}
-                    onReady={handleReady}
-                />
-            ) : (
-                <EditorBeskar
-                    initialContent={content}
-                    imageHandler={imageHandler}
-                    attachmentHandler={attachmentHandler}
-                    internalResourceHandler={internalResourceHandler}
-                    externalLinkHandler={externalLinkHandler}
-                    childPagesHandler={childPagesHandler}
-                    commentHandler={commentApiHandler}
-                    maxAttachmentBytes={MAX_ATTACHMENT_BYTES}
-                    onAttachmentRejected={handleAttachmentRejected}
-                    allowedMimeAccept={ATTACHMENT_ACCEPT}
-                    onAttachmentsChange={onDocAttachmentsChange}
-                    extensions={[]}
-                    editable={editable}
-                    placeholder={EDITOR_PLACEHOLDER}
-                    onUpdate={editedDataFn}
-                    onReady={handleReady}
-                />
-            )}
-
-            {editor && (
-                <CommentSidePanel
-                    editor={editor}
-                    threads={threads}
-                    commentHandler={commentApiHandler}
-                    attachmentHandler={attachmentHandler}
-                    documentId={pageId}
-                    isOpen={isInlineMessageSidePanelOpen}
-                    presentation={!editable ? commentPresentation : "docked"}
-                    onClose={() => setIsInlineMessageSidePanelOpen(false)}
-                    onThreadUpdated={handleThreadUpdated}
-                    onThreadDeleted={handleThreadDeleted}
-                />
-            )}
-
-            {editor && (
-                <>
-                    <TextFormattingMenu
-                        editor={editor}
-                        editable={editable}
+                {editable ? (
+                    <EditorBeskar
+                        initialContent={content}
+                        imageHandler={imageHandler}
+                        attachmentHandler={attachmentHandler}
+                        internalResourceHandler={internalResourceHandler}
+                        externalLinkHandler={externalLinkHandler}
+                        childPagesHandler={childPagesHandler}
                         commentHandler={commentApiHandler}
-                        onCommentClick={() => setShowCommentPopover(true)}
+                        maxAttachmentBytes={MAX_ATTACHMENT_BYTES}
+                        onAttachmentRejected={handleAttachmentRejected}
+                        allowedMimeAccept={ATTACHMENT_ACCEPT}
+                        onAttachmentsChange={onDocAttachmentsChange}
+                        extensions={collaborationExtensions()}
+                        editable={editable}
+                        placeholder={EDITOR_PLACEHOLDER}
+                        onUpdate={editedDataFn}
+                        onReady={handleReady}
                     />
+                ) : (
+                    <EditorBeskar
+                        initialContent={content}
+                        imageHandler={imageHandler}
+                        attachmentHandler={attachmentHandler}
+                        internalResourceHandler={internalResourceHandler}
+                        externalLinkHandler={externalLinkHandler}
+                        childPagesHandler={childPagesHandler}
+                        commentHandler={commentApiHandler}
+                        maxAttachmentBytes={MAX_ATTACHMENT_BYTES}
+                        onAttachmentRejected={handleAttachmentRejected}
+                        allowedMimeAccept={ATTACHMENT_ACCEPT}
+                        onAttachmentsChange={onDocAttachmentsChange}
+                        extensions={[]}
+                        editable={editable}
+                        placeholder={EDITOR_PLACEHOLDER}
+                        onUpdate={editedDataFn}
+                        onReady={handleReady}
+                    />
+                )}
 
-                    {editable && (
-                        <>
-                            {/* Table Floating Menu */}
-                            <TableFloatingMenu editor={editor} />
-                            <CodeBlockFloatingMenu editor={editor} />
-                        </>
-                    )}
+                {editor && (
+                    <CommentSidePanel
+                        editor={editor}
+                        threads={threads}
+                        commentHandler={commentApiHandler}
+                        attachmentHandler={attachmentHandler}
+                        documentId={pageId}
+                        isOpen={isInlineMessageSidePanelOpen}
+                        presentation={!editable ? commentPresentation : "docked"}
+                        onClose={() => setIsInlineMessageSidePanelOpen(false)}
+                        onThreadUpdated={handleThreadUpdated}
+                        onThreadDeleted={handleThreadDeleted}
+                    />
+                )}
 
-                    {showComments && (
-                        <>
-                            {(editable || commentPresentation === "docked") ? (
-                                <CommentGutter
-                                    editor={editor}
-                                    threads={threads}
-                                    onThreadClick={handleGutterThreadClick}
-                                />
-                            ) : null}
+                {editor && (
+                    <>
+                        <TextFormattingMenu editor={editor} editable={editable} commentHandler={commentApiHandler} onCommentClick={() => setShowCommentPopover(true)} />
 
-                            {showCommentPopover && (
-                                <CommentInputPopover
-                                    editor={editor}
-                                    commentHandler={commentApiHandler}
-                                    attachmentHandler={attachmentHandler}
-                                    documentId={pageId}
-                                    onClose={() => setShowCommentPopover(false)}
-                                    onThreadCreated={async (threadId: string) => {
-                                        setShowCommentPopover(false);
-                                        const latest = await reloadThreads();
-                                        const idx = latest.findIndex((t) => t.id === threadId);
-                                        setCardFallbackRect(null);
-                                        setCardActiveIndex(idx >= 0 ? idx : 0);
-                                        setCommentCardOpen(true);
-                                    }}
-                                />
-                            )}
+                        {editable && (
+                            <>
+                                {/* Table Floating Menu */}
+                                <TableFloatingMenu editor={editor} />
+                                <CodeBlockFloatingMenu editor={editor} />
+                            </>
+                        )}
 
-                            {ambiguousThreads.length > 0 && ambiguityRect && (
-                                <OverlapDisambiguationPopover
-                                    editor={editor}
-                                    threads={ambiguousThreads}
-                                    anchorRect={ambiguityRect}
-                                    onClose={() => {
-                                        setAmbiguousThreads([]);
-                                        setAmbiguityRect(null);
-                                    }}
-                                    onSelect={(thread: CommentThread) => {
-                                        const idx = threads.findIndex((t) => t.id === thread.id);
-                                        if (idx >= 0) {
+                        {showComments && (
+                            <>
+                                {editable || commentPresentation === "docked" ? <CommentGutter editor={editor} threads={threads} onThreadClick={handleGutterThreadClick} /> : null}
+
+                                {showCommentPopover && (
+                                    <CommentInputPopover
+                                        editor={editor}
+                                        commentHandler={commentApiHandler}
+                                        attachmentHandler={attachmentHandler}
+                                        documentId={pageId}
+                                        onClose={() => setShowCommentPopover(false)}
+                                        onThreadCreated={async (threadId: string) => {
+                                            setShowCommentPopover(false);
+                                            const latest = await reloadThreads();
+                                            const idx = latest.findIndex((t) => t.id === threadId);
                                             setCardFallbackRect(null);
-                                            setCardActiveIndex(idx);
+                                            setCardActiveIndex(idx >= 0 ? idx : 0);
                                             setCommentCardOpen(true);
-                                        }
-                                        setAmbiguousThreads([]);
-                                        setAmbiguityRect(null);
-                                    }}
-                                />
-                            )}
+                                        }}
+                                    />
+                                )}
 
-                            {commentCardOpen && threads.length > 0 && cardActiveIndex < threads.length && (
-                                <CommentThreadCard
-                                    editor={editor}
-                                    threads={threads}
-                                    activeIndex={cardActiveIndex}
-                                    fallbackAnchorRect={cardFallbackRect}
-                                    commentHandler={commentApiHandler}
-                                    attachmentHandler={attachmentHandler}
-                                    presentation={!editable ? (commentPresentation === "bottom-sheet" ? "bottom-sheet" : "popover") : "popover"}
-                                    onClose={() => setCommentCardOpen(false)}
-                                    onNavigate={setCardActiveIndex}
-                                    onThreadUpdated={handleThreadUpdated}
-                                    onThreadDeleted={handleThreadDeleted}
-                                />
-                            )}
-                        </>
-                    )}
-                </>
-            )}
-        </div>
+                                {ambiguousThreads.length > 0 && ambiguityRect && (
+                                    <OverlapDisambiguationPopover
+                                        editor={editor}
+                                        threads={ambiguousThreads}
+                                        anchorRect={ambiguityRect}
+                                        onClose={() => {
+                                            setAmbiguousThreads([]);
+                                            setAmbiguityRect(null);
+                                        }}
+                                        onSelect={(thread: CommentThread) => {
+                                            const idx = threads.findIndex((t) => t.id === thread.id);
+                                            if (idx >= 0) {
+                                                setCardFallbackRect(null);
+                                                setCardActiveIndex(idx);
+                                                setCommentCardOpen(true);
+                                            }
+                                            setAmbiguousThreads([]);
+                                            setAmbiguityRect(null);
+                                        }}
+                                    />
+                                )}
+
+                                {commentCardOpen && threads.length > 0 && cardActiveIndex < threads.length && (
+                                    <CommentThreadCard
+                                        editor={editor}
+                                        threads={threads}
+                                        activeIndex={cardActiveIndex}
+                                        fallbackAnchorRect={cardFallbackRect}
+                                        commentHandler={commentApiHandler}
+                                        attachmentHandler={attachmentHandler}
+                                        presentation={!editable ? (commentPresentation === "bottom-sheet" ? "bottom-sheet" : "popover") : "popover"}
+                                        onClose={() => setCommentCardOpen(false)}
+                                        onNavigate={setCardActiveIndex}
+                                        onThreadUpdated={handleThreadUpdated}
+                                        onThreadDeleted={handleThreadDeleted}
+                                    />
+                                )}
+                            </>
+                        )}
+                    </>
+                )}
+            </div>
+            {uploadToast ? <ToastComponent icon="AlertTriangle" message={uploadToast.message} toggle type={uploadToast.type} /> : null}
+        </>
     );
 }

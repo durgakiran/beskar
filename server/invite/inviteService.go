@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/durgakiran/beskar/core"
+	"github.com/durgakiran/beskar/quota"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -125,6 +126,14 @@ func (invite InviteDBO) _rejectInvitation(userId string, emailId string, role st
 }
 
 func (invite InviteDBO) _acceptInvitation(userId string, emailId string, role string, token string, conn *pgxpool.Conn) error {
+	if invite.Entity == "space" {
+		spaceID, err := uuid.Parse(invite.EntityId)
+		if err == nil {
+			if err := quota.ValidateCollaboratorAddition(context.Background(), spaceID, 1, false); err != nil {
+				return err
+			}
+		}
+	}
 	_, err := core.CreateSubjectPermissions(invite.Entity, invite.EntityId, "user", userId, role)
 	if err != nil {
 		logger().Error(err.Error())
@@ -329,6 +338,15 @@ func (i *Invite) invite() (string, error) {
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		logger().Error(err.Error())
 		return token, err
+	}
+	if i.Entity == "space" {
+		spaceID, err := uuid.Parse(i.EntityId)
+		if err != nil {
+			return token, err
+		}
+		if err := quota.ValidateCollaboratorAddition(ctx, spaceID, 1, true); err != nil {
+			return token, err
+		}
 	}
 	// create entry in the database
 	tag, err := tx.Exec(ctx, CREATE_INVITE, i.SenderId, token, i.UserId, i.Entity, i.EntityId, i.Email, i.Role)
