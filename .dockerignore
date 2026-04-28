@@ -19,4 +19,11 @@ pgdata
 docker/database/pgdata
 docker/.generated
 
+!packages/
+packages/*
+!packages/editor/
+packages/editor/*
+!packages/editor/dist/
+!packages/editor/dist/**
+
 *.log
