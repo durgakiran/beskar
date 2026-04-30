@@ -37,7 +37,7 @@ func LoadConfig() Config {
 		AdminToken:           strings.TrimSpace(os.Getenv("EMAIL_ADMIN_TOKEN")),
 		Provider:             envString("EMAIL_PROVIDER", "smtp"),
 		FromAddress:          strings.TrimSpace(os.Getenv("EMAIL_FROM_ADDRESS")),
-		FromName:             envString("EMAIL_FROM_NAME", "Beskar"),
+		FromName:             envString("EMAIL_FROM_NAME", "Teddox"),
 		AppBaseURL:           strings.TrimRight(strings.TrimSpace(os.Getenv("EMAIL_APP_BASE_URL")), "/"),
 		SMTPHost:             strings.TrimSpace(os.Getenv("SMTP_HOST")),
 		SMTPPort:             envInt("SMTP_PORT", 587),

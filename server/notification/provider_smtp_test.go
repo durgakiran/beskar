@@ -8,7 +8,7 @@ import (
 
 func TestBuildGoMailMessageCreatesMultipartAlternative(t *testing.T) {
 	email, messageID, err := buildGoMailMessage(OutboundEmail{
-		FromName:    "Beskar",
+		FromName:    "Teddox",
 		FromAddress: "no-reply@example.com",
 		ToName:      "User",
 		ToAddress:   "user@example.com",
@@ -26,7 +26,7 @@ func TestBuildGoMailMessageCreatesMultipartAlternative(t *testing.T) {
 
 	raw := buf.String()
 	for _, expected := range []string{
-		`From: "Beskar" <no-reply@example.com>`,
+		`From: "Teddox" <no-reply@example.com>`,
 		`To: "User" <user@example.com>`,
 		"Subject: Welcome",
 		"multipart/alternative",

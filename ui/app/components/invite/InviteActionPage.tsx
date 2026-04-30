@@ -444,7 +444,7 @@ export default function InviteActionPage() {
                     icon="Loader"
                     eyebrow="Updating invite"
                     title={`${actionWord} invitation`}
-                    copy={`Keep this page open while Beskar updates your access to ${invite.name || "this space"}.`}
+                    copy={`Keep this page open while Teddox updates your access to ${invite.name || "this space"}.`}
                     actions={
                         <>
                             <ActionButton tone="disabled" disabled>

@@ -42,7 +42,7 @@ Accept the invitation:
 Reject the invitation:
 %s
 
-Open Beskar:
+Open Teddox:
 %s
 `, senderName, spaceName, role, acceptURL, rejectURL, appURL)
 
@@ -52,7 +52,7 @@ Open Beskar:
     <p>%s invited you to join <strong>%s</strong> as <strong>%s</strong>.</p>
     <p><a href="%s">Accept invitation</a></p>
     <p><a href="%s">Reject invitation</a></p>
-    <p><a href="%s">Open Beskar</a></p>
+    <p><a href="%s">Open Teddox</a></p>
   </body>
 </html>`,
 		htmlEscape(senderName),
