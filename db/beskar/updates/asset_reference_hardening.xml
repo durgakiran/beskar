@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext"
+    xmlns:pro="http://www.liquibase.org/xml/ns/pro"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd
+                        http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd
+                        http://www.liquibase.org/xml/ns/pro http://www.liquibase.org/xml/ns/pro/liquibase-pro-latest.xsd">
+
+    <changeSet id="1-asset-reference-check-constraints" author="OpenAI Codex">
+        <comment>Enforce valid asset_type and source_kind values in core.asset_reference</comment>
+        <sql>
+            ALTER TABLE core.asset_reference
+            ADD CONSTRAINT ck_asset_reference_asset_type
+            CHECK (asset_type IN ('attachment', 'image'));
+        </sql>
+        <sql>
+            ALTER TABLE core.asset_reference
+            ADD CONSTRAINT ck_asset_reference_source_kind
+            CHECK (source_kind IN ('draft_doc', 'published_doc', 'comment_reply'));
+        </sql>
+        <rollback>
+            ALTER TABLE core.asset_reference DROP CONSTRAINT IF EXISTS ck_asset_reference_asset_type;
+            ALTER TABLE core.asset_reference DROP CONSTRAINT IF EXISTS ck_asset_reference_source_kind;
+        </rollback>
+    </changeSet>
+
+    <changeSet id="2-asset-reference-coverage-check-constraint" author="OpenAI Codex">
+        <comment>Enforce valid draft_status values in core.asset_reference_coverage</comment>
+        <sql>
+            ALTER TABLE core.asset_reference_coverage
+            ADD CONSTRAINT ck_asset_reference_coverage_draft_status
+            CHECK (draft_status IN ('unknown', 'indexed', 'blocked_binary_draft'));
+        </sql>
+        <rollback>
+            ALTER TABLE core.asset_reference_coverage DROP CONSTRAINT IF EXISTS ck_asset_reference_coverage_draft_status;
+        </rollback>
+    </changeSet>
+
+</databaseChangeLog>

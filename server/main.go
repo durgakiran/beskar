@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/durgakiran/beskar/assetcleanup"
 	attachment "github.com/durgakiran/beskar/attachment/controller"
 	auth "github.com/durgakiran/beskar/auth"
 	"github.com/durgakiran/beskar/comment"
@@ -118,11 +119,16 @@ func main() {
 
 	notificationConfig := notification.LoadConfig()
 	quotaConfig := quota.LoadConfig()
+	assetCleanupConfig := assetcleanup.LoadConfig()
 	if notificationConfig.WorkerEnabled {
 		go notification.NewWorker(notificationConfig).Start(context.Background())
 	}
 	if quotaConfig.ReconciliationEnabled {
 		go quota.NewReconciler(quotaConfig).Start(context.Background())
+	}
+	assetCleanupWorker := assetcleanup.NewWorker(assetCleanupConfig)
+	if assetCleanupConfig.Enabled {
+		go assetCleanupWorker.Start(context.Background())
 	}
 
 	r := chi.NewRouter()
@@ -153,6 +159,9 @@ func main() {
 	}
 	if quotaConfig.AdminEnabled && quotaConfig.AdminToken != "" {
 		r.Mount("/api/v1/admin/quota", mw.CheckAuthentication()(quota.NewAdminController(quotaConfig).Router()))
+	}
+	if assetCleanupConfig.AdminEnabled && assetCleanupConfig.AdminToken != "" {
+		r.Mount("/api/v1/admin/asset-cleanup", mw.CheckAuthentication()(assetcleanup.NewAdminController(assetCleanupConfig, assetCleanupWorker).Router()))
 	}
 
 	logger().Info(fmt.Sprintf("Serving on port: %s", port))

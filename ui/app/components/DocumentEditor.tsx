@@ -2,6 +2,7 @@
 
 import { TipTap, AttachmentPanel } from "@editor";
 import type { AttachmentRef } from "@durgakiran/editor";
+import type { JSONContent } from "@tiptap/core";
 import { EditorContext } from "@editor/context/editorContext";
 import { Editorheader } from "@editor/header";
 import TextArea from "@editor/textarea/TextArea";
@@ -16,6 +17,7 @@ import { useRouter } from "next/navigation";
 import { WebrtcProvider } from "y-webrtc";
 import { prosemirrorJSONToYDoc } from "@tiptap/y-tiptap";
 import { getSignalingUrl } from "app/core/signaling";
+import { extractAssetReferences, type AssetReferencesPayload } from "app/core/editor/extractAssetReferences";
 
 interface User {
     name: string;
@@ -33,6 +35,7 @@ interface IPayload {
     docId?: number;
     spaceId: string;
     data: any;
+    assetReferences?: AssetReferencesPayload;
 }
 
 interface DocumentDTO {
@@ -82,6 +85,7 @@ interface IPayloadPublish {
     docId?: number;
     spaceId: string;
     nodeData: any;
+    assetReferences?: AssetReferencesPayload;
 }
 
 export default function DocumentEditor({ slug }: { slug: string[] }) {
@@ -99,7 +103,6 @@ export default function DocumentEditor({ slug }: { slug: string[] }) {
     const [editorContext, setEditorContext] = useState<Editor>();
     const [title, setTitle] = useState<string>();
     const [titleTextProvider, setTitleTextProvider] = useState<y.Text>();
-    const [publishableDocument, setPublishableDocument] = useState<any>();
     const [updatedTitle, setUpdatedTitle] = useState<string>();
     const [docId, setDocId] = useState<number>();
     const [parentId, setParentId] = useState<number>();
@@ -112,6 +115,8 @@ export default function DocumentEditor({ slug }: { slug: string[] }) {
     const [docAttachments, setDocAttachments] = useState<AttachmentRef[]>([]);
     const [isSidePanelOpen, setIsSidePanelOpen] = useState(false);
     const [activeCollaborators, setActiveCollaborators] = useState<Array<{ id: string; name: string; color?: string }>>([]);
+    const pendingPublishRef = useRef<IPayloadPublish | null>(null);
+    const [isPreparingPublish, setIsPreparingPublish] = useState(false);
     // end of editor handling
 
     // wasm handling
@@ -177,13 +182,24 @@ export default function DocumentEditor({ slug }: { slug: string[] }) {
     }, []);
 
     const handleUpdate = () => {
-        if (!isEditorReady) return;
+        if (!isEditorReady || isPreparingPublish || publishing) return;
         if (editorContext) {
+            pendingPublishRef.current = {
+                title: title ?? "",
+                id: Number(slug[1]),
+                spaceId: slug[0],
+                ownerId: profileData.data.id,
+                docId: docId,
+                parentId: parentId,
+                nodeData: null,
+                assetReferences: extractAssetReferences(editorContext.getJSON() as JSONContent),
+            };
+            setIsPreparingPublish(true);
             workerRef.current.postMessage({ type: "data", data: { data: editorContext.getJSON(), pageId: Number(slug[1]), id: docId } });
         }
     };
 
-    const updateContent = (content: any, title: string) => {
+    const updateContent = (content: JSONContent, title: string) => {
         if (!isLeader || !isEditorReady) return;
 
         const payLoad: IPayload = {
@@ -194,6 +210,7 @@ export default function DocumentEditor({ slug }: { slug: string[] }) {
             docId: docId,
             parentId: parentId,
             title: title,
+            assetReferences: extractAssetReferences(content),
         };
         setUpdatedTitle(title);
         updateDraftData({ ...payLoad, data: Buffer.from(y.encodeStateAsUpdate(ydoc)).toString('base64') });
@@ -202,20 +219,6 @@ export default function DocumentEditor({ slug }: { slug: string[] }) {
     const handleClose = () => {
         router.push(`/space/${slug[0]}/view/${slug[1]}`);
     };
-
-    useEffect(() => {
-        if (!publishing && publishableDocument) {
-            publishDraftData({
-                title: title,
-                id: Number(slug[1]),
-                spaceId: slug[0],
-                ownerId: profileData.data.id,
-                nodeData: publishableDocument,
-                docId: docId,
-                parentId: parentId,
-            });
-        }
-    }, [publishableDocument]);
 
     // if leader load document from database only once.
     useEffect(() => {
@@ -386,6 +389,12 @@ export default function DocumentEditor({ slug }: { slug: string[] }) {
             router.push(`/space/${slug[0]}/view/${slug[1]}`);
         }
     }, [publishigData, publishing]);
+
+    useEffect(() => {
+        if (publishing) {
+            setIsPreparingPublish(false);
+        }
+    }, [publishing]);
 
     useEffect(() => {
         const _provider = new WebrtcProvider(slug[1] + "-space-" + slug[0], ydoc, {
@@ -623,12 +632,23 @@ export default function DocumentEditor({ slug }: { slug: string[] }) {
                     e.data.data ? applyEditorData(e.data.data) : console.error("No editor data received");
                     break;
                 case "contentData":
-                    setPublishableDocument(JSON.parse(e.data.data).data);
+                    if (!pendingPublishRef.current) {
+                        setIsPreparingPublish(false);
+                        break;
+                    }
+                    publishDraftData({
+                        ...pendingPublishRef.current,
+                        nodeData: JSON.parse(e.data.data).data,
+                    });
+                    pendingPublishRef.current = null;
+                    break;
                 default:
                     break;
             }
         };
         workerRef.current.onerror = (e) => {
+            pendingPublishRef.current = null;
+            setIsPreparingPublish(false);
             console.error(e);
         };
         workerRef.current.postMessage({ type: "init" });
@@ -674,7 +694,7 @@ export default function DocumentEditor({ slug }: { slug: string[] }) {
                                     isEditorReady={isEditorReady}
                                     handleClose={handleClose}
                                     handleUpdate={handleUpdate}
-                                    isUpdating={updating || publishing}
+                                    isUpdating={updating || publishing || isPreparingPublish}
                                     isSidePanelOpen={isSidePanelOpen}
                                     setIsSidePanelOpen={setIsSidePanelOpen}
                                     spaceId={slug[0]}

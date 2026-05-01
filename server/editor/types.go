@@ -3,6 +3,7 @@ package editor
 import (
 	"time"
 
+	"github.com/durgakiran/beskar/assetref"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
@@ -80,7 +81,8 @@ type Document struct {
 
 type InputDocument struct {
 	Document
-	Nodes NodeData `json:"nodeData"`
+	Nodes           NodeData                    `json:"nodeData"`
+	AssetReferences *assetref.PayloadReferences `json:"assetReferences,omitempty"`
 }
 
 type ContentDraft struct {
@@ -91,7 +93,8 @@ type ContentDraft struct {
 
 type InputDraftDocument struct {
 	Document
-	Data []byte `json:"data"`
+	Data            []byte                      `json:"data"`
+	AssetReferences *assetref.PayloadReferences `json:"assetReferences,omitempty"`
 }
 
 type OutputDocument struct {

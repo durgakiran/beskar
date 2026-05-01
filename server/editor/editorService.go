@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/durgakiran/beskar/assetref"
 	attachmentservices "github.com/durgakiran/beskar/attachment/services"
 	"github.com/durgakiran/beskar/comment"
 	"github.com/durgakiran/beskar/core"
@@ -361,6 +362,15 @@ func (document InputDocument) Publish() (int64, error) {
 	if err := comment.PromoteComments(ctx, tx, document.Id); err != nil {
 		return document.Id, err
 	}
+	if document.AssetReferences != nil {
+		refs, err := assetref.NormalizePayloadReferences(ctx, tx, document.Id, document.AssetReferences)
+		if err != nil {
+			return document.Id, err
+		}
+		if err := assetref.ReplacePublishedDocReferences(ctx, tx, document.Id, docId, refs); err != nil {
+			return document.Id, err
+		}
+	}
 	// delete drafts for given docId
 	// ===== put delete on hold for now =====
 	// draftContent := ContentDraft{DocId: docId}
@@ -435,6 +445,18 @@ func (document InputDraftDocument) Update() (int64, error) {
 	}
 	if err != nil {
 		return document.Id, err
+	}
+	if document.AssetReferences != nil {
+		refs, err := assetref.NormalizePayloadReferences(ctx, tx, document.Id, document.AssetReferences)
+		if err != nil {
+			return document.Id, err
+		}
+		if err := assetref.ReplaceDraftDocReferences(ctx, tx, document.Id, docId, refs); err != nil {
+			return document.Id, err
+		}
+		if err := assetref.SetDraftStatus(ctx, tx, document.Id, assetref.DraftStatusIndexed, time.Now()); err != nil {
+			return document.Id, err
+		}
 	}
 	tx.Commit(ctx)
 	// return updated page id

@@ -62,6 +62,12 @@ const (
 	DELETE_THREAD = `
 		DELETE FROM core.comment_threads WHERE id = $1`
 
+	LIST_THREAD_REPLY_IDS = `
+		SELECT id::text
+		FROM core.comment_replies
+		WHERE thread_id = $1
+		ORDER BY created_at ASC`
+
 	PROMOTE_COMMENTS = `
 		UPDATE core.comment_threads
 		SET published_visible = true

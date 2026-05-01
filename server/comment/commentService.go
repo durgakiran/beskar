@@ -5,12 +5,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"time"
 
+	"github.com/durgakiran/beskar/assetref"
 	"github.com/durgakiran/beskar/core"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/jackc/pgx/v5"
 )
 
 type CommentService struct {
@@ -179,6 +181,38 @@ func loadReplyAttachments(ctx context.Context, conn *pgxpool.Conn, replyIDs []st
 	return result, nil
 }
 
+func parsePageID(documentID string) (int64, error) {
+	pageID, err := strconv.ParseInt(documentID, 10, 64)
+	if err != nil || pageID < 1 {
+		return 0, fmt.Errorf("invalid page id %q", documentID)
+	}
+	return pageID, nil
+}
+
+func replaceReplyAssetReferences(ctx context.Context, tx pgx.Tx, pageID int64, replyID string, attachmentIDs []string) error {
+	refs, err := assetref.NormalizePayloadReferences(ctx, tx, pageID, &assetref.PayloadReferences{
+		Attachments: attachmentIDs,
+	})
+	if err != nil {
+		return err
+	}
+	return assetref.ReplaceCommentReplyReferences(ctx, tx, pageID, replyID, refs)
+}
+
+func listThreadReplyIDs(ctx context.Context, tx pgx.Tx, threadID string) ([]string, error) {
+	rows, err := tx.Query(ctx, LIST_THREAD_REPLY_IDS, threadID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	return pgx.CollectRows(rows, func(row pgx.CollectableRow) (string, error) {
+		var replyID string
+		err := row.Scan(&replyID)
+		return replyID, err
+	})
+}
+
 func (s *CommentService) CreateThread(ctx context.Context, docId, commentId string, anchor CommentAnchor, publishedVisible bool, body string, attachmentIDs []string, userId string) (CommentThread, error) {
 	connPool := core.GetPool()
 	conn, err := connPool.Acquire(ctx)
@@ -186,6 +220,11 @@ func (s *CommentService) CreateThread(ctx context.Context, docId, commentId stri
 		return CommentThread{}, fmt.Errorf("pool acquire: %w", err)
 	}
 	defer conn.Release()
+
+	pageID, err := parsePageID(docId)
+	if err != nil {
+		return CommentThread{}, err
+	}
 
 	tx, err := conn.Begin(ctx)
 	if err != nil {
@@ -225,6 +264,9 @@ func (s *CommentService) CreateThread(ctx context.Context, docId, commentId stri
 
 	if err := attachReplyAttachments(ctx, tx, reply.ID, attachmentIDs); err != nil {
 		return CommentThread{}, fmt.Errorf("attach initial reply attachments: %w", err)
+	}
+	if err := replaceReplyAssetReferences(ctx, tx, pageID, reply.ID, attachmentIDs); err != nil {
+		return CommentThread{}, fmt.Errorf("index initial reply attachments: %w", err)
 	}
 
 	thread.Replies = append(thread.Replies, reply)
@@ -528,8 +570,26 @@ func (s *CommentService) DeleteThread(ctx context.Context, threadId, userId stri
 		return fmt.Errorf("forbidden")
 	}
 
-	_, err = conn.Exec(ctx, DELETE_THREAD, threadId)
-	return err
+	tx, err := conn.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	replyIDs, err := listThreadReplyIDs(ctx, tx, threadId)
+	if err != nil {
+		return err
+	}
+	for _, replyID := range replyIDs {
+		if err := assetref.DeleteCommentReplyReferences(ctx, tx, replyID); err != nil {
+			return err
+		}
+	}
+
+	if _, err := tx.Exec(ctx, DELETE_THREAD, threadId); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 func (s *CommentService) OrphanThread(ctx context.Context, threadId, userId string) (CommentThread, error) {
@@ -590,6 +650,11 @@ func (s *CommentService) CreateReply(ctx context.Context, threadId, body string,
 	}
 	_ = createdBy
 
+	pageID, err := parsePageID(docId)
+	if err != nil {
+		return CommentReply{}, err
+	}
+
 	allowed, _ := core.CheckPermission("page", docId, "user", userId, core.PAGE_ADD_COMMENT)
 	if !allowed {
 		return CommentReply{}, fmt.Errorf("forbidden")
@@ -612,6 +677,9 @@ func (s *CommentService) CreateReply(ctx context.Context, threadId, body string,
 		return CommentReply{}, err
 	}
 	if err := attachReplyAttachments(ctx, tx, reply.ID, attachmentIDs); err != nil {
+		return CommentReply{}, err
+	}
+	if err := replaceReplyAssetReferences(ctx, tx, pageID, reply.ID, attachmentIDs); err != nil {
 		return CommentReply{}, err
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -658,6 +726,11 @@ func (s *CommentService) EditReply(ctx context.Context, replyId, body string, at
 		return CommentReply{}, fmt.Errorf("forbidden")
 	}
 
+	pageID, err := parsePageID(docId)
+	if err != nil {
+		return CommentReply{}, err
+	}
+
 	tx, err := conn.Begin(ctx)
 	if err != nil {
 		return CommentReply{}, err
@@ -680,6 +753,9 @@ func (s *CommentService) EditReply(ctx context.Context, replyId, body string, at
 		return CommentReply{}, err
 	}
 	if err := attachReplyAttachments(ctx, tx, replyId, attachmentIDs); err != nil {
+		return CommentReply{}, err
+	}
+	if err := replaceReplyAssetReferences(ctx, tx, pageID, replyId, attachmentIDs); err != nil {
 		return CommentReply{}, err
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -739,6 +815,17 @@ func (s *CommentService) DeleteReply(ctx context.Context, replyId, userId string
 		return fmt.Errorf("forbidden")
 	}
 
-	_, err = conn.Exec(ctx, DELETE_REPLY, replyId)
-	return err
+	tx, err := conn.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	if err := assetref.DeleteCommentReplyReferences(ctx, tx, replyId); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx, DELETE_REPLY, replyId); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }

@@ -1,0 +1,251 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext"
+    xmlns:pro="http://www.liquibase.org/xml/ns/pro"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd
+                        http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd
+                        http://www.liquibase.org/xml/ns/pro http://www.liquibase.org/xml/ns/pro/liquibase-pro-latest.xsd">
+
+    <changeSet id="1-create-asset-reference-table" author="OpenAI Codex">
+        <preConditions onFail="MARK_RAN">
+            <sqlCheck expectedResult="0">
+                SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'asset_reference' AND table_schema = 'core';
+            </sqlCheck>
+        </preConditions>
+        <comment>Create normalized retained asset reference index for draft, published, and comment sources</comment>
+        <createTable tableName="asset_reference" schemaName="core">
+            <column name="id" type="UUID" defaultValueComputed="gen_random_uuid()">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="asset_type" type="TEXT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="asset_id" type="TEXT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="page_id" type="BIGINT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="doc_id" type="BIGINT"/>
+            <column name="source_kind" type="TEXT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="source_id" type="TEXT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="last_seen_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="now()">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="now()">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="now()">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+        <rollback>
+            <dropTable tableName="asset_reference" schemaName="core"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="2-asset-reference-page-fkey" author="OpenAI Codex">
+        <comment>Foreign key: asset_reference.page_id → core.page.id (cascade on page delete)</comment>
+        <addForeignKeyConstraint
+            baseTableName="asset_reference" baseTableSchemaName="core" baseColumnNames="page_id"
+            constraintName="asset_reference_page_id_fkey"
+            referencedTableName="page" referencedTableSchemaName="core" referencedColumnNames="id"
+            deleteCascade="true"/>
+        <rollback>
+            <dropForeignKeyConstraint baseTableName="asset_reference" baseTableSchemaName="core" constraintName="asset_reference_page_id_fkey"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="3-asset-reference-doc-fkey" author="OpenAI Codex">
+        <comment>Foreign key: asset_reference.doc_id → core.page_doc_map.doc_id (set null on doc delete)</comment>
+        <addForeignKeyConstraint
+            baseTableName="asset_reference" baseTableSchemaName="core" baseColumnNames="doc_id"
+            constraintName="asset_reference_doc_id_fkey"
+            referencedTableName="page_doc_map" referencedTableSchemaName="core" referencedColumnNames="doc_id"
+            onDelete="SET NULL"/>
+        <rollback>
+            <dropForeignKeyConstraint baseTableName="asset_reference" baseTableSchemaName="core" constraintName="asset_reference_doc_id_fkey"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="4-asset-reference-uniqueness" author="OpenAI Codex">
+        <comment>Ensure one reference row per asset and retained source snapshot</comment>
+        <addUniqueConstraint
+            tableName="asset_reference" schemaName="core"
+            columnNames="asset_type, asset_id, source_kind, source_id"
+            constraintName="uq_asset_reference_asset_source"/>
+        <rollback>
+            <dropUniqueConstraint tableName="asset_reference" schemaName="core" constraintName="uq_asset_reference_asset_source"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="5-asset-reference-indexes" author="OpenAI Codex">
+        <comment>Indexes for asset lookups by asset, page/doc, and source</comment>
+        <createIndex tableName="asset_reference" schemaName="core" indexName="idx_asset_reference_asset">
+            <column name="asset_type"/>
+            <column name="asset_id"/>
+        </createIndex>
+        <createIndex tableName="asset_reference" schemaName="core" indexName="idx_asset_reference_page_doc">
+            <column name="page_id"/>
+            <column name="doc_id"/>
+        </createIndex>
+        <createIndex tableName="asset_reference" schemaName="core" indexName="idx_asset_reference_source">
+            <column name="source_kind"/>
+            <column name="source_id"/>
+        </createIndex>
+        <createIndex tableName="asset_reference" schemaName="core" indexName="idx_asset_reference_page_asset_type">
+            <column name="page_id"/>
+            <column name="asset_type"/>
+        </createIndex>
+        <rollback>
+            <dropIndex tableName="asset_reference" schemaName="core" indexName="idx_asset_reference_asset"/>
+            <dropIndex tableName="asset_reference" schemaName="core" indexName="idx_asset_reference_page_doc"/>
+            <dropIndex tableName="asset_reference" schemaName="core" indexName="idx_asset_reference_source"/>
+            <dropIndex tableName="asset_reference" schemaName="core" indexName="idx_asset_reference_page_asset_type"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="6-grant-asset-reference-privileges" author="OpenAI Codex">
+        <comment>Grant SELECT, INSERT, UPDATE, DELETE on asset_reference to app user</comment>
+        <sql>
+            GRANT SELECT, INSERT, UPDATE, DELETE ON core.asset_reference TO ${app_user};
+        </sql>
+        <rollback/>
+    </changeSet>
+
+    <changeSet id="7-create-asset-reference-coverage-table" author="OpenAI Codex">
+        <preConditions onFail="MARK_RAN">
+            <sqlCheck expectedResult="0">
+                SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'asset_reference_coverage' AND table_schema = 'core';
+            </sqlCheck>
+        </preConditions>
+        <comment>Create per-page asset reference coverage tracking for cleanup eligibility</comment>
+        <createTable tableName="asset_reference_coverage" schemaName="core">
+            <column name="page_id" type="BIGINT">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="published_backfilled_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="comment_backfilled_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="draft_status" type="TEXT" defaultValue="unknown">
+                <constraints nullable="false"/>
+            </column>
+            <column name="draft_checked_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="cleanup_eligible" type="BOOLEAN" defaultValueBoolean="false">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="now()">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+        <rollback>
+            <dropTable tableName="asset_reference_coverage" schemaName="core"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="8-asset-reference-coverage-page-fkey" author="OpenAI Codex">
+        <comment>Foreign key: asset_reference_coverage.page_id → core.page.id (cascade on page delete)</comment>
+        <addForeignKeyConstraint
+            baseTableName="asset_reference_coverage" baseTableSchemaName="core" baseColumnNames="page_id"
+            constraintName="asset_reference_coverage_page_id_fkey"
+            referencedTableName="page" referencedTableSchemaName="core" referencedColumnNames="id"
+            deleteCascade="true"/>
+        <rollback>
+            <dropForeignKeyConstraint baseTableName="asset_reference_coverage" baseTableSchemaName="core" constraintName="asset_reference_coverage_page_id_fkey"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="9-asset-reference-coverage-indexes" author="OpenAI Codex">
+        <comment>Indexes for cleanup eligibility and draft coverage lookups</comment>
+        <createIndex tableName="asset_reference_coverage" schemaName="core" indexName="idx_asset_reference_coverage_cleanup_eligible">
+            <column name="cleanup_eligible"/>
+        </createIndex>
+        <createIndex tableName="asset_reference_coverage" schemaName="core" indexName="idx_asset_reference_coverage_draft_status">
+            <column name="draft_status"/>
+        </createIndex>
+        <rollback>
+            <dropIndex tableName="asset_reference_coverage" schemaName="core" indexName="idx_asset_reference_coverage_cleanup_eligible"/>
+            <dropIndex tableName="asset_reference_coverage" schemaName="core" indexName="idx_asset_reference_coverage_draft_status"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="10-grant-asset-reference-coverage-privileges" author="OpenAI Codex">
+        <comment>Grant SELECT, INSERT, UPDATE, DELETE on asset_reference_coverage to app user</comment>
+        <sql>
+            GRANT SELECT, INSERT, UPDATE, DELETE ON core.asset_reference_coverage TO ${app_user};
+        </sql>
+        <rollback/>
+    </changeSet>
+
+    <changeSet id="11-add-attachment-cleanup-columns" author="OpenAI Codex">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <columnExists schemaName="core" tableName="attachment" columnName="orphaned_at"/>
+            </not>
+        </preConditions>
+        <comment>Add orphan and purge tracking columns to core.attachment</comment>
+        <addColumn tableName="attachment" schemaName="core">
+            <column name="orphaned_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="purged_at" type="TIMESTAMP WITH TIME ZONE"/>
+        </addColumn>
+        <rollback>
+            <dropColumn tableName="attachment" schemaName="core" columnName="orphaned_at"/>
+            <dropColumn tableName="attachment" schemaName="core" columnName="purged_at"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="12-attachment-cleanup-indexes" author="OpenAI Codex">
+        <comment>Indexes for attachment cleanup scans</comment>
+        <createIndex tableName="attachment" schemaName="core" indexName="idx_attachment_deleted_purged">
+            <column name="deleted_at"/>
+            <column name="purged_at"/>
+        </createIndex>
+        <createIndex tableName="attachment" schemaName="core" indexName="idx_attachment_page_deleted">
+            <column name="page_id"/>
+            <column name="deleted_at"/>
+        </createIndex>
+        <rollback>
+            <dropIndex tableName="attachment" schemaName="core" indexName="idx_attachment_deleted_purged"/>
+            <dropIndex tableName="attachment" schemaName="core" indexName="idx_attachment_page_deleted"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="13-add-image-asset-cleanup-columns" author="OpenAI Codex">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <columnExists schemaName="core" tableName="image_asset" columnName="orphaned_at"/>
+            </not>
+        </preConditions>
+        <comment>Add orphan and purge tracking columns to core.image_asset</comment>
+        <addColumn tableName="image_asset" schemaName="core">
+            <column name="orphaned_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="purged_at" type="TIMESTAMP WITH TIME ZONE"/>
+        </addColumn>
+        <rollback>
+            <dropColumn tableName="image_asset" schemaName="core" columnName="orphaned_at"/>
+            <dropColumn tableName="image_asset" schemaName="core" columnName="purged_at"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="14-image-asset-cleanup-indexes" author="OpenAI Codex">
+        <comment>Indexes for image cleanup scans</comment>
+        <createIndex tableName="image_asset" schemaName="core" indexName="idx_image_asset_deleted_purged">
+            <column name="deleted_at"/>
+            <column name="purged_at"/>
+        </createIndex>
+        <createIndex tableName="image_asset" schemaName="core" indexName="idx_image_asset_page_deleted">
+            <column name="page_id"/>
+            <column name="deleted_at"/>
+        </createIndex>
+        <rollback>
+            <dropIndex tableName="image_asset" schemaName="core" indexName="idx_image_asset_deleted_purged"/>
+            <dropIndex tableName="image_asset" schemaName="core" indexName="idx_image_asset_page_deleted"/>
+        </rollback>
+    </changeSet>
+
+</databaseChangeLog>

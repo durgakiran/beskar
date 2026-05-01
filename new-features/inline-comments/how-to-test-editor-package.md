@@ -9,3 +9,7 @@ Testing editor package you need to consider only editor directory and the change
 4. clean install dependencies `rm -rf node_modules package-lock.json` in editor-demo directory, followed by `npx npm install` in editor-demo directory
 5. run `npm run dev` in editor-demo directory
 6. Try to auto verify using browser extension, that you have.
+
+or
+
+You can just run `npm run fresh` in editor-demo

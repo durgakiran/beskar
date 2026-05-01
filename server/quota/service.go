@@ -788,6 +788,30 @@ func ReleasePageStorageUsageTx(ctx context.Context, tx pgx.Tx, spaceID uuid.UUID
 	return insertUsageEvent(ctx, tx, reservation, "release", -total)
 }
 
+func ApplyStorageUsageDeltaTx(ctx context.Context, tx pgx.Tx, spaceID uuid.UUID, deltaBytes int64, eventType string, sourceType string, sourceID string, metadata map[string]any) error {
+	if !quotaSystemEnabled() || deltaBytes == 0 {
+		return nil
+	}
+	if _, err := tx.Exec(ctx, ensureSpaceUsageRowQuery, spaceID); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx, updateSpaceUsageUsedDeltaQuery, spaceID, deltaBytes); err != nil {
+		return err
+	}
+	reservation := UploadReservation{
+		SpaceID:       spaceID,
+		ReservedBytes: absInt64(deltaBytes),
+		SourceType:    sourceType,
+		SourceID:      sourceID,
+		CorrelationID: uuid.NewString(),
+		Metadata:      metadata,
+	}
+	if strings.TrimSpace(eventType) == "" {
+		eventType = "reconcile"
+	}
+	return insertUsageEvent(ctx, tx, reservation, eventType, deltaBytes)
+}
+
 func ReconcileSpace(ctx context.Context, spaceID uuid.UUID, sourceType string) (SpaceReconcileResult, error) {
 	if !quotaSystemEnabled() {
 		return SpaceReconcileResult{SpaceID: spaceID}, nil
