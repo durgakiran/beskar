@@ -15,6 +15,7 @@
     <include file="updates/asset_references.xml" />
     <include file="updates/asset_reference_hardening.xml" />
     <include file="updates/billing.xml" />
+    <include file="updates/document_version_cleanup.xml" />
     <!-- <include file="updates/auth.xml" /> -->
     <include file="updates/notifications.xml" />
     <include file="updates/email_notifications.xml" />

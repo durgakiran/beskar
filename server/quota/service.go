@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/durgakiran/beskar/core"
+	"github.com/durgakiran/beskar/docversioncleanup"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"go.uber.org/zap"
@@ -183,6 +184,26 @@ func getLimitPointer(limits map[string]PlanLimit, metricKey string) *int64 {
 	return &value
 }
 
+func documentHistoryRetentionDays(limits map[string]PlanLimit) int64 {
+	if limit, ok := limits[metricDocumentHistoryRetention]; ok && limit.LimitValue > 0 && limit.LimitUnit == "days" {
+		return limit.LimitValue
+	}
+	return int64(docversioncleanup.LoadConfig().DefaultRetentionDays)
+}
+
+func getDocumentHistoryRetentionDaysForAccount(ctx context.Context, accountID uuid.UUID) (int64, error) {
+	fallback := documentHistoryRetentionDays(nil)
+	var retentionDays int64
+	err := core.GetPool().QueryRow(ctx, getActiveDocumentHistoryRetentionDaysQuery, accountID, fallback).Scan(&retentionDays)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return fallback, nil
+	}
+	if err != nil {
+		return 0, err
+	}
+	return retentionDays, nil
+}
+
 func getCollaboratorCount(spaceID uuid.UUID) (int, error) {
 	tuples, err := core.GetSubjectsAssociatedWithEntity("space", spaceID.String())
 	if err != nil {
@@ -340,13 +361,18 @@ func GetAccountUsageSummaryForUser(ctx context.Context, userID uuid.UUID) (Accou
 	}
 	if accountID == nil {
 		return AccountUsageSummary{
-			AccountID:  uuid.Nil,
-			UserID:     userID,
-			SpaceCount: 0,
+			AccountID:                    uuid.Nil,
+			UserID:                       userID,
+			DocumentHistoryRetentionDays: documentHistoryRetentionDays(nil),
+			SpaceCount:                   0,
 		}, nil
 	}
 
 	usage, reconciled, subscription, limits, err := loadQuotaState(ctx, *accountID)
+	if err != nil {
+		return AccountUsageSummary{}, err
+	}
+	retentionDays, err := getDocumentHistoryRetentionDaysForAccount(ctx, usage.AccountID)
 	if err != nil {
 		return AccountUsageSummary{}, err
 	}
@@ -360,6 +386,7 @@ func GetAccountUsageSummaryForUser(ctx context.Context, userID uuid.UUID) (Accou
 		AccountStorageLimit:          storageLimit,
 		AccountPercentConsumed:       percentage(usage.StorageBytesUsed, storageLimit),
 		ReconciledAccountStorageUsed: reconciled,
+		DocumentHistoryRetentionDays: retentionDays,
 		SpaceCount:                   usage.SpaceCount,
 	}
 	if subscription != nil {
@@ -374,6 +401,10 @@ func GetAccountUsageSummaryByAccountID(ctx context.Context, accountID uuid.UUID)
 	if err != nil {
 		return AccountUsageSummary{}, err
 	}
+	retentionDays, err := getDocumentHistoryRetentionDaysForAccount(ctx, usage.AccountID)
+	if err != nil {
+		return AccountUsageSummary{}, err
+	}
 
 	storageLimit := getLimitPointer(limits, metricStorageBytesTotal)
 	summary := AccountUsageSummary{
@@ -384,6 +415,7 @@ func GetAccountUsageSummaryByAccountID(ctx context.Context, accountID uuid.UUID)
 		AccountStorageLimit:          storageLimit,
 		AccountPercentConsumed:       percentage(usage.StorageBytesUsed, storageLimit),
 		ReconciledAccountStorageUsed: reconciled,
+		DocumentHistoryRetentionDays: retentionDays,
 		SpaceCount:                   usage.SpaceCount,
 	}
 	if subscription != nil {
@@ -417,16 +449,21 @@ func GetSpaceUsageSummary(ctx context.Context, spaceID uuid.UUID) (SpaceUsageSum
 	if err != nil {
 		return SpaceUsageSummary{}, err
 	}
+	retentionDays, err := getDocumentHistoryRetentionDaysForAccount(ctx, usage.AccountID)
+	if err != nil {
+		return SpaceUsageSummary{}, err
+	}
 
 	collaboratorLimit := getLimitPointer(limits, metricCollaboratorsPerSpace)
 	summary := SpaceUsageSummary{
-		SpaceID:                    usage.SpaceID,
-		AccountID:                  usage.AccountID,
-		SpaceStorageUsed:           usage.StorageBytesUsed,
-		SpaceStorageReserved:       usage.StorageBytesReserved,
-		ReconciledSpaceStorageUsed: reconciled,
-		CollaboratorLimitPerSpace:  collaboratorLimit,
-		CurrentCollaboratorCount:   memberCount,
+		SpaceID:                      usage.SpaceID,
+		AccountID:                    usage.AccountID,
+		SpaceStorageUsed:             usage.StorageBytesUsed,
+		SpaceStorageReserved:         usage.StorageBytesReserved,
+		ReconciledSpaceStorageUsed:   reconciled,
+		CollaboratorLimitPerSpace:    collaboratorLimit,
+		DocumentHistoryRetentionDays: retentionDays,
+		CurrentCollaboratorCount:     memberCount,
 	}
 	if subscription != nil {
 		summary.AccountPlanCode = subscription.PlanCode

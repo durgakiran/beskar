@@ -8,10 +8,11 @@ import (
 )
 
 const (
-	metricStorageBytesTotal       = "storage.bytes.total"
-	metricCollaboratorsPerSpace   = "collaborators.count.per_space"
-	reasonAccountStorageExceeded  = "account_storage_limit_exceeded"
-	reasonCollaboratorCapExceeded = "space_collaborator_limit_exceeded"
+	metricStorageBytesTotal        = "storage.bytes.total"
+	metricCollaboratorsPerSpace    = "collaborators.count.per_space"
+	metricDocumentHistoryRetention = "document_history_retention_days"
+	reasonAccountStorageExceeded   = "account_storage_limit_exceeded"
+	reasonCollaboratorCapExceeded  = "space_collaborator_limit_exceeded"
 )
 
 var (
@@ -81,20 +82,22 @@ type AccountUsageSummary struct {
 	AccountStorageLimit          *int64    `json:"accountStorageLimit"`
 	AccountPercentConsumed       *float64  `json:"accountPercentConsumed"`
 	ReconciledAccountStorageUsed int64     `json:"reconciledAccountStorageUsed"`
+	DocumentHistoryRetentionDays int64     `json:"documentHistoryRetentionDays"`
 	SpaceCount                   int       `json:"spaceCount"`
 }
 
 type SpaceUsageSummary struct {
-	SpaceID                     uuid.UUID `json:"spaceId"`
-	AccountID                   uuid.UUID `json:"accountId"`
-	AccountPlanCode             string    `json:"accountPlanCode"`
-	AccountSubscriptionStatus   string    `json:"accountSubscriptionStatus"`
-	SpaceStorageUsed            int64     `json:"spaceStorageUsed"`
-	SpaceStorageReserved        int64     `json:"spaceStorageReserved"`
-	ReconciledSpaceStorageUsed  int64     `json:"reconciledSpaceStorageUsed"`
-	CollaboratorLimitPerSpace   *int64    `json:"collaboratorLimitPerSpace"`
-	CurrentCollaboratorCount    int       `json:"currentCollaboratorCount"`
-	CollaboratorPercentConsumed *float64  `json:"collaboratorPercentConsumed"`
+	SpaceID                      uuid.UUID `json:"spaceId"`
+	AccountID                    uuid.UUID `json:"accountId"`
+	AccountPlanCode              string    `json:"accountPlanCode"`
+	AccountSubscriptionStatus    string    `json:"accountSubscriptionStatus"`
+	SpaceStorageUsed             int64     `json:"spaceStorageUsed"`
+	SpaceStorageReserved         int64     `json:"spaceStorageReserved"`
+	ReconciledSpaceStorageUsed   int64     `json:"reconciledSpaceStorageUsed"`
+	CollaboratorLimitPerSpace    *int64    `json:"collaboratorLimitPerSpace"`
+	DocumentHistoryRetentionDays int64     `json:"documentHistoryRetentionDays"`
+	CurrentCollaboratorCount     int       `json:"currentCollaboratorCount"`
+	CollaboratorPercentConsumed  *float64  `json:"collaboratorPercentConsumed"`
 }
 
 type UploadMonitorInput struct {

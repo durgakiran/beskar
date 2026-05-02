@@ -1,0 +1,174 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext"
+    xmlns:pro="http://www.liquibase.org/xml/ns/pro"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd
+                        http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd
+                        http://www.liquibase.org/xml/ns/pro http://www.liquibase.org/xml/ns/pro/liquibase-pro-latest.xsd">
+
+    <changeSet id="1-create-document-version-cleanup-log" author="OpenAI Codex">
+        <preConditions onFail="MARK_RAN">
+            <sqlCheck expectedResult="0">
+                SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'document_version_cleanup_log' AND table_schema = 'core';
+            </sqlCheck>
+        </preConditions>
+        <comment>Create audit log for document version retention cleanup</comment>
+        <createTable tableName="document_version_cleanup_log" schemaName="core">
+            <column name="id" type="UUID" defaultValueComputed="gen_random_uuid()">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="doc_id" type="BIGINT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="page_id" type="BIGINT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="space_id" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+            <column name="account_id" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+            <column name="plan_id" type="UUID"/>
+            <column name="plan_code" type="TEXT"/>
+            <column name="version" type="TIMESTAMP WITH TIME ZONE">
+                <constraints nullable="false"/>
+            </column>
+            <column name="reason" type="TEXT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="retention_days" type="INTEGER">
+                <constraints nullable="false"/>
+            </column>
+            <column name="retention_cutoff" type="TIMESTAMP WITH TIME ZONE">
+                <constraints nullable="false"/>
+            </column>
+            <column name="content_node_count" type="INTEGER" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="text_node_count" type="INTEGER" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="asset_reference_count" type="INTEGER" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="cleaned_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="now()">
+                <constraints nullable="false"/>
+            </column>
+            <column name="job_run_id" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+        <rollback>
+            <dropTable tableName="document_version_cleanup_log" schemaName="core"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="2-document-version-cleanup-log-indexes" author="OpenAI Codex">
+        <comment>Create indexes for document version cleanup audit lookups</comment>
+        <createIndex tableName="document_version_cleanup_log" schemaName="core" indexName="idx_doc_version_cleanup_log_cleaned_at">
+            <column name="cleaned_at" descending="true"/>
+        </createIndex>
+        <createIndex tableName="document_version_cleanup_log" schemaName="core" indexName="idx_doc_version_cleanup_log_page_cleaned">
+            <column name="page_id"/>
+            <column name="cleaned_at" descending="true"/>
+        </createIndex>
+        <createIndex tableName="document_version_cleanup_log" schemaName="core" indexName="idx_doc_version_cleanup_log_account_cleaned">
+            <column name="account_id"/>
+            <column name="cleaned_at" descending="true"/>
+        </createIndex>
+        <createIndex tableName="document_version_cleanup_log" schemaName="core" indexName="idx_doc_version_cleanup_log_plan_cleaned">
+            <column name="plan_code"/>
+            <column name="cleaned_at" descending="true"/>
+        </createIndex>
+        <createIndex tableName="document_version_cleanup_log" schemaName="core" indexName="idx_doc_version_cleanup_log_job_run">
+            <column name="job_run_id"/>
+        </createIndex>
+        <addUniqueConstraint
+            tableName="document_version_cleanup_log" schemaName="core"
+            columnNames="doc_id"
+            constraintName="uq_doc_version_cleanup_log_doc"/>
+        <rollback>
+            <dropUniqueConstraint tableName="document_version_cleanup_log" schemaName="core" constraintName="uq_doc_version_cleanup_log_doc"/>
+            <dropIndex tableName="document_version_cleanup_log" schemaName="core" indexName="idx_doc_version_cleanup_log_job_run"/>
+            <dropIndex tableName="document_version_cleanup_log" schemaName="core" indexName="idx_doc_version_cleanup_log_plan_cleaned"/>
+            <dropIndex tableName="document_version_cleanup_log" schemaName="core" indexName="idx_doc_version_cleanup_log_account_cleaned"/>
+            <dropIndex tableName="document_version_cleanup_log" schemaName="core" indexName="idx_doc_version_cleanup_log_page_cleaned"/>
+            <dropIndex tableName="document_version_cleanup_log" schemaName="core" indexName="idx_doc_version_cleanup_log_cleaned_at"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="3-grant-document-version-cleanup-log-privileges" author="OpenAI Codex">
+        <comment>Grant SELECT, INSERT, UPDATE, DELETE on document_version_cleanup_log to app user</comment>
+        <sql>
+            GRANT SELECT, INSERT, UPDATE, DELETE ON core.document_version_cleanup_log TO ${app_user};
+        </sql>
+        <rollback>
+            <sql>
+                REVOKE SELECT, INSERT, UPDATE, DELETE ON core.document_version_cleanup_log FROM ${app_user};
+            </sql>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="4-document-version-candidate-indexes" author="OpenAI Codex">
+        <comment>Create indexes for document version cleanup candidate selection</comment>
+        <createIndex tableName="page_doc_map" schemaName="core" indexName="idx_page_doc_map_page_draft_version_doc">
+            <column name="page_id"/>
+            <column name="draft"/>
+            <column name="version" descending="true"/>
+            <column name="doc_id" descending="true"/>
+        </createIndex>
+        <createIndex tableName="page_doc_map" schemaName="core" indexName="idx_page_doc_map_draft_version_doc">
+            <column name="draft"/>
+            <column name="version"/>
+            <column name="doc_id"/>
+        </createIndex>
+        <createIndex tableName="account_subscription" schemaName="billing" indexName="idx_billing_account_subscription_active_lookup">
+            <column name="account_id"/>
+            <column name="status"/>
+            <column name="effective_to"/>
+            <column name="effective_from" descending="true"/>
+            <column name="created_at" descending="true"/>
+        </createIndex>
+        <rollback>
+            <dropIndex tableName="account_subscription" schemaName="billing" indexName="idx_billing_account_subscription_active_lookup"/>
+            <dropIndex tableName="page_doc_map" schemaName="core" indexName="idx_page_doc_map_draft_version_doc"/>
+            <dropIndex tableName="page_doc_map" schemaName="core" indexName="idx_page_doc_map_page_draft_version_doc"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="5-seed-basic-document-history-retention-limit" author="OpenAI Codex">
+        <comment>Seed document history retention limit for the basic plan on existing databases</comment>
+        <sql>
+            INSERT INTO billing.plan_limit (plan_id, metric_key, limit_value, limit_unit, enforcement_mode)
+            SELECT p.id, 'document_history_retention_days', 7::BIGINT, 'days', 'cleanup'
+            FROM billing.plan p
+            WHERE p.code = 'basic'
+            ON CONFLICT (plan_id, metric_key) DO UPDATE
+            SET limit_value = EXCLUDED.limit_value,
+                limit_unit = EXCLUDED.limit_unit,
+                enforcement_mode = EXCLUDED.enforcement_mode,
+                updated_at = now();
+        </sql>
+        <rollback/>
+    </changeSet>
+
+    <changeSet id="6-validate-document-history-plan-limits" author="OpenAI Codex">
+        <preConditions onFail="HALT">
+            <sqlCheck expectedResult="0">
+                SELECT COUNT(*)
+                FROM billing.plan_limit
+                WHERE metric_key = 'document_history_retention_days'
+                  AND (limit_value &lt; 1 OR limit_unit &lt;&gt; 'days');
+            </sqlCheck>
+        </preConditions>
+        <comment>Validate document history retention plan limits are positive day counts</comment>
+        <sql>
+            SELECT 1;
+        </sql>
+        <rollback/>
+    </changeSet>
+
+</databaseChangeLog>

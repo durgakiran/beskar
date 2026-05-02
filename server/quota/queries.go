@@ -110,6 +110,22 @@ LIMIT 1`
 FROM billing.plan_limit
 WHERE plan_id = $1`
 
+	getActiveDocumentHistoryRetentionDaysQuery = `SELECT COALESCE(pl.limit_value, $2)::bigint
+FROM billing.account_subscription s
+JOIN billing.plan p ON p.id = s.plan_id
+LEFT JOIN billing.plan_limit pl
+  ON pl.plan_id = s.plan_id
+ AND pl.metric_key = 'document_history_retention_days'
+ AND pl.limit_value > 0
+ AND pl.limit_unit = 'days'
+WHERE s.account_id = $1
+  AND lower(s.status) = 'active'
+  AND (s.effective_to IS NULL OR s.effective_to > now())
+ORDER BY
+    s.effective_from DESC,
+    s.created_at DESC
+LIMIT 1`
+
 	updateSpaceUsageReserveQuery = `UPDATE billing.space_usage
 SET storage_bytes_reserved = storage_bytes_reserved + $2,
     updated_at = now()

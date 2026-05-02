@@ -15,6 +15,7 @@ import (
 	auth "github.com/durgakiran/beskar/auth"
 	"github.com/durgakiran/beskar/comment"
 	"github.com/durgakiran/beskar/core"
+	"github.com/durgakiran/beskar/docversioncleanup"
 	editor "github.com/durgakiran/beskar/editor"
 	"github.com/durgakiran/beskar/invite"
 	media "github.com/durgakiran/beskar/media/controller"
@@ -120,6 +121,7 @@ func main() {
 	notificationConfig := notification.LoadConfig()
 	quotaConfig := quota.LoadConfig()
 	assetCleanupConfig := assetcleanup.LoadConfig()
+	documentVersionCleanupConfig := docversioncleanup.LoadConfig()
 	if notificationConfig.WorkerEnabled {
 		go notification.NewWorker(notificationConfig).Start(context.Background())
 	}
@@ -129,6 +131,10 @@ func main() {
 	assetCleanupWorker := assetcleanup.NewWorker(assetCleanupConfig)
 	if assetCleanupConfig.Enabled {
 		go assetCleanupWorker.Start(context.Background())
+	}
+	documentVersionCleanupWorker := docversioncleanup.NewWorker(documentVersionCleanupConfig)
+	if documentVersionCleanupConfig.Enabled {
+		go documentVersionCleanupWorker.Start(context.Background())
 	}
 
 	r := chi.NewRouter()
@@ -162,6 +168,9 @@ func main() {
 	}
 	if assetCleanupConfig.AdminEnabled && assetCleanupConfig.AdminToken != "" {
 		r.Mount("/api/v1/admin/asset-cleanup", mw.CheckAuthentication()(assetcleanup.NewAdminController(assetCleanupConfig, assetCleanupWorker).Router()))
+	}
+	if documentVersionCleanupConfig.AdminEnabled && documentVersionCleanupConfig.AdminToken != "" {
+		r.Mount("/api/v1/admin/document-versions/cleanup", mw.CheckAuthentication()(docversioncleanup.NewAdminController(documentVersionCleanupConfig, documentVersionCleanupWorker).Router()))
 	}
 
 	logger().Info(fmt.Sprintf("Serving on port: %s", port))
