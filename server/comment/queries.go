@@ -83,6 +83,9 @@ const (
 	FETCH_THREAD_BASIC = `
 		SELECT created_by, document_id FROM core.comment_threads WHERE id = $1`
 
+	FETCH_THREAD_DOCUMENT_ID = `
+		SELECT document_id FROM core.comment_threads WHERE id = $1`
+
 	// UPDATE_REPLY edits a reply if the requester is the original author
 	UPDATE_REPLY = `
 		UPDATE core.comment_replies 
@@ -100,4 +103,15 @@ const (
 		FROM core.comment_replies r
 		JOIN core.comment_threads t ON r.thread_id = t.id
 		WHERE r.id = $1`
+
+	FETCH_REPLY_DOCUMENT_ID = `
+		SELECT t.document_id
+		FROM core.comment_replies r
+		JOIN core.comment_threads t ON r.thread_id = t.id
+		WHERE r.id = $1`
+
+	FETCH_PAGE_SPACE_ID = `
+		SELECT space_id::text
+		FROM core.page
+		WHERE id = $1::bigint`
 )

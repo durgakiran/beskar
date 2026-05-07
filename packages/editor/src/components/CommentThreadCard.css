@@ -17,6 +17,8 @@
 .ctc-card {
   z-index: 300;
   width: 352px;
+  max-width: calc(100vw - 24px);
+  box-sizing: border-box;
   max-height: min(80vh, 720px);
   font-family: var(--default-font-family, ui-sans-serif, system-ui, sans-serif);
   color: var(--editor-text-primary);
@@ -55,12 +57,14 @@
   padding: 12px 16px;
   border-bottom: 1px solid var(--editor-border-subtle);
   background: var(--editor-bg-primary);
+  min-width: 0;
 }
 
 .ctc-header-left {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  min-width: 0;
 }
 
 .ctc-header-title {
@@ -103,6 +107,7 @@
   gap: 12px;
   min-height: 0;
   overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .ctc-author-row {
@@ -172,12 +177,14 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
+  min-width: 0;
 }
 
 .primary-comment-header {
   display: flex;
   align-items: flex-start;
   gap: 12px;
+  min-width: 0;
 }
 
 .primary-comment-meta {
@@ -194,6 +201,7 @@
   font-size: 13px;
   color: var(--accent-12);
   line-height: 1.5;
+  overflow-wrap: anywhere;
 }
 
 .primary-comment-quote {
@@ -204,12 +212,14 @@
   font-size: 13px;
   color: var(--gray-12);
   line-height: 1.5;
+  overflow-wrap: anywhere;
 }
 
 .primary-comment-actions {
   display: flex;
   align-items: center;
   gap: 6px;
+  flex-shrink: 0;
 }
 
 .primary-comment-action-btn {
@@ -322,6 +332,7 @@
   flex-direction: column;
   gap: 16px;
   position: relative;
+  min-width: 0;
   /* NO margin-left hack, this handles pure absolute offsets for the line */
 }
 
@@ -342,6 +353,8 @@
   position: relative;
   z-index: 2;
   margin-left: 24px; /* Avatar 24px + 12px gap + 24px left margin = exactly 60px text alignment threshold! */
+  min-width: 0;
+  max-width: calc(100% - 24px);
 }
 
 .ctc-reply-body {
@@ -362,18 +375,23 @@
   align-items: flex-start;
   gap: 8px;
   margin-bottom: 8px;
+  min-width: 0;
+  width: 100%;
 }
 
 .ctc-reply-meta {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  flex: 1;
+  min-width: 0;
 }
 
 .ctc-reply-actions {
   display: flex;
   gap: 2px;
   margin-left: auto;
+  flex-shrink: 0;
 }
 
 .csp-reply-body {
@@ -416,6 +434,7 @@
   font-size: 13px;
   color: var(--editor-text-primary);
   line-height: 1.5;
+  overflow-wrap: anywhere;
   word-break: break-word;
 }
 
@@ -424,6 +443,7 @@
   flex-wrap: wrap;
   gap: 6px;
   margin-top: 8px;
+  min-width: 0;
 }
 
 .ctc-attachments--scrollable {
@@ -445,6 +465,7 @@
   text-decoration: none;
   transition: background 0.12s ease;
   max-width: 200px;
+  min-width: 0;
   overflow: hidden;
   white-space: nowrap;
 }

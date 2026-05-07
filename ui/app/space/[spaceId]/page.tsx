@@ -8,6 +8,7 @@ import { SpaceSummaryStat, StatusNotice, PageTree, PageTreeNode, InlineEditable 
 import { FiHome, FiSettings, FiPlus } from "react-icons/fi";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { useSpaceAddPage } from "./SpaceAddPageContext";
 
 interface SpaceDetails {
     id: string;
@@ -76,6 +77,7 @@ export default function Page({ params }: { params: Promise<{ spaceId: string }> 
         [pagesData?.data],
     );
     const isArchived = Boolean(space?.archivedAt);
+    const openAddPage = useSpaceAddPage();
 
     const treeNodes = useMemo<PageTreeNode[]>(() => {
         if (pages.length === 0) {
@@ -225,7 +227,13 @@ export default function Page({ params }: { params: Promise<{ spaceId: string }> 
                 <div className="flex flex-col gap-3 rounded-lg border border-neutral-200 bg-white p-3 md:hidden">
                     <div className="flex items-center justify-between border-b border-neutral-100 pb-2 px-1">
                         <span className="text-[12px] font-bold tracking-wider text-neutral-400 uppercase">PAGES</span>
-                        <button className="text-primary-700" disabled={isArchived} title={isArchived ? "Archived spaces are read-only" : "Add page"}>
+                        <button
+                            type="button"
+                            onClick={() => openAddPage()}
+                            disabled={isArchived}
+                            className="flex h-8 w-8 items-center justify-center rounded-md text-primary-700 transition-colors hover:bg-primary-100 disabled:opacity-40 disabled:hover:bg-transparent"
+                            title={isArchived ? "Archived spaces are read-only" : "Add page"}
+                        >
                             <FiPlus className="h-[18px] w-[18px] stroke-[2.5]" />
                         </button>
                     </div>
@@ -236,6 +244,7 @@ export default function Page({ params }: { params: Promise<{ spaceId: string }> 
                     ) : treeNodes.length > 0 ? (
                         <PageTree
                             nodes={treeNodes}
+                            onAddChild={(id) => openAddPage(id)}
                             onSelect={(id) => router.push(`/space/${spaceId}/view/${id}`)}
                         />
                     ) : (

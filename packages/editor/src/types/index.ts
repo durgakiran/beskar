@@ -139,6 +139,11 @@ export interface CommentReplyAttachment {
   url: string;
 }
 
+export interface CommentReplyCapabilities {
+  canEditReply: boolean;
+  canDeleteReply: boolean;
+}
+
 export interface CommentReply {
   id: string;
   threadId: string;
@@ -148,6 +153,7 @@ export interface CommentReply {
   editedAt?: string;            // ISO timestamp
   createdAt: string;            // ISO timestamp
   attachments?: CommentReplyAttachment[];
+  capabilities?: CommentReplyCapabilities;
 }
 
 export interface CommentAnchor {
@@ -158,6 +164,15 @@ export interface CommentAnchor {
   start: number;
   end: number;
   versionHint: 'draft' | 'published';
+}
+
+export interface CommentThreadCapabilities {
+  canResolve: boolean;
+  canUnresolve: boolean;
+  canDeleteThread: boolean;
+  canReply: boolean;
+  canEditOpeningReply: boolean;
+  canDeleteOpeningReply: boolean;
 }
 
 export interface CommentThread {
@@ -173,6 +188,7 @@ export interface CommentThread {
   createdAt: string;            // ISO timestamp
   orphaned?: boolean;           // true when resolution fails
   replies: CommentReply[];
+  capabilities?: CommentThreadCapabilities;
 }
 
 export interface CommentAPIHandler {

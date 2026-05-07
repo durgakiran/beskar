@@ -73,7 +73,9 @@ export type {
   CommentAPIHandler,
   CommentAnchor,
   CommentThread,
+  CommentThreadCapabilities,
   CommentReply,
+  CommentReplyCapabilities,
   CommentReplyAttachment,
 } from './types';
 

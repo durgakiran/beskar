@@ -36,6 +36,15 @@ import {
   splitOpeningReply,
   uploadCommentAttachments,
 } from './comment-ui';
+import {
+  canDeleteReply,
+  canDeleteThread,
+  canEditOpeningReply,
+  canEditReply,
+  canReplyToThread,
+  canResolveThread,
+  canUnresolveThread,
+} from './comment-capabilities';
 import './CommentThreadCard.css';
 
 export interface CommentThreadCardProps {
@@ -261,14 +270,18 @@ function ReplyItem({
               <span className="ctc-time">{formatCommentRelativeTime(reply.createdAt)}</span>
             </div>
           )}
-          {reply.authorId && variant !== 'embedded' && (
+          {(canEditReply(reply) || canDeleteReply(reply)) && variant !== 'embedded' && (
             <div className="ctc-reply-actions">
-              <button type="button" className="ctc-tiny-btn" onClick={startEditing} title="Edit">
-                <FiEdit2 size={13} strokeWidth={1.5} />
-              </button>
-              <button type="button" className="ctc-tiny-btn ctc-tiny-btn--danger" onClick={onDelete} title="Delete reply">
-                <FiTrash2 size={13} strokeWidth={1.5} />
-              </button>
+              {canEditReply(reply) ? (
+                <button type="button" className="ctc-tiny-btn" onClick={startEditing} title="Edit">
+                  <FiEdit2 size={13} strokeWidth={1.5} />
+                </button>
+              ) : null}
+              {canDeleteReply(reply) ? (
+                <button type="button" className="ctc-tiny-btn ctc-tiny-btn--danger" onClick={onDelete} title="Delete reply">
+                  <FiTrash2 size={13} strokeWidth={1.5} />
+                </button>
+              ) : null}
             </div>
           )}
         </div>
@@ -607,7 +620,7 @@ export function CommentThreadCard({
                     </button>
                   </>
                 )}
-                {!confirmDelete && !isResolved && !isOrphaned && (
+                {!confirmDelete && canResolveThread(thread) && (
                   <button
                     className="primary-comment-action-btn"
                     title="Resolve"
@@ -616,7 +629,7 @@ export function CommentThreadCard({
                     <FiCheckCircle size={14} />
                   </button>
                 )}
-                {!confirmDelete && isResolved && (
+                {!confirmDelete && canUnresolveThread(thread) && (
                   <button
                     className="primary-comment-action-btn"
                     title="Unresolve"
@@ -626,7 +639,7 @@ export function CommentThreadCard({
                   </button>
                 )}
                 {/* Edit for main thread — hidden while confirm is showing */}
-                {!confirmDelete && openingReply && !isResolved && !isOrphaned && (
+                {!confirmDelete && openingReply && canEditOpeningReply(thread) && (
                   <button
                     className="primary-comment-action-btn"
                     title="Edit"
@@ -636,7 +649,7 @@ export function CommentThreadCard({
                   </button>
                 )}
                 {/* Thread-level delete — first click shows confirm row */}
-                {!confirmDelete && (
+                {!confirmDelete && canDeleteThread(thread) && (
                   <button
                     className="primary-comment-action-btn primary-comment-action-btn--danger"
                     title="Delete thread"
@@ -693,7 +706,7 @@ export function CommentThreadCard({
         </div>
 
         {/* ── Reply composer ── */}
-        {!isResolved && (
+        {canReplyToThread(thread) && (
           <div ref={replyComposerRef} className="ctc-reply-composer">
             <div className="ctc-reply-composer-label">Reply to thread</div>
             <textarea

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"sync"
+	"time"
 )
 
 type EventType string
@@ -13,6 +14,7 @@ const (
 	EventThreadCreated   EventType = "thread:created"
 	EventThreadResolved  EventType = "thread:resolved"
 	EventThreadUnresoled EventType = "thread:unresolved"
+	EventThreadOrphaned  EventType = "thread:orphaned"
 	EventThreadDeleted   EventType = "thread:deleted"
 	EventReplyCreated    EventType = "reply:created"
 	EventReplyEdited     EventType = "reply:edited"
@@ -108,6 +110,7 @@ func (h *EventHub) SSEHandler(w http.ResponseWriter, r *http.Request, docId stri
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("X-Accel-Buffering", "no")
 
 	client := &Client{
 		documentID: docId,
@@ -115,11 +118,7 @@ func (h *EventHub) SSEHandler(w http.ResponseWriter, r *http.Request, docId stri
 	}
 
 	h.register <- client
-
-	// Listen for client disconnect
-	notify := r.Context().Done()
-	go func() {
-		<-notify
+	defer func() {
 		h.unregister <- client
 	}()
 
@@ -127,8 +126,26 @@ func (h *EventHub) SSEHandler(w http.ResponseWriter, r *http.Request, docId stri
 	fmt.Fprintf(w, ": ping\n\n")
 	flusher.Flush()
 
-	for msg := range client.channel {
-		w.Write(msg)
-		flusher.Flush()
+	heartbeat := time.NewTicker(25 * time.Second)
+	defer heartbeat.Stop()
+
+	for {
+		select {
+		case <-r.Context().Done():
+			return
+		case msg, ok := <-client.channel:
+			if !ok {
+				return
+			}
+			if _, err := w.Write(msg); err != nil {
+				return
+			}
+			flusher.Flush()
+		case <-heartbeat.C:
+			if _, err := fmt.Fprintf(w, ": ping\n\n"); err != nil {
+				return
+			}
+			flusher.Flush()
+		}
 	}
 }

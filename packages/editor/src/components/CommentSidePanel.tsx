@@ -25,6 +25,15 @@ import {
   splitOpeningReply,
   uploadCommentAttachments,
 } from './comment-ui';
+import {
+  canDeleteReply,
+  canDeleteThread,
+  canEditOpeningReply,
+  canEditReply,
+  canReplyToThread,
+  canResolveThread,
+  canUnresolveThread,
+} from './comment-capabilities';
 import './CommentThreadCard.css';
 import './CommentSidePanel.css';
 
@@ -50,13 +59,12 @@ function getThreadPreview(thread: CommentThread): string {
 
 interface ReplyItemProps {
   reply: CommentReply;
-  readonlyMode?: boolean;
   onDelete: (replyId: string) => void;
   onEdit: (replyId: string, newBody: string, attachments: CommentReplyAttachment[]) => void;
   attachmentHandler?: AttachmentAPIHandler;
 }
 
-function ReplyItem({ reply, readonlyMode = false, onDelete, onEdit, attachmentHandler }: ReplyItemProps) {
+function ReplyItem({ reply, onDelete, onEdit, attachmentHandler }: ReplyItemProps) {
   const [editing, setEditing] = useState(false);
   const [editBody, setEditBody] = useState(reply.body);
   const [editAttachments, setEditAttachments] = useState<CommentReplyAttachment[]>(reply.attachments ?? []);
@@ -122,14 +130,18 @@ function ReplyItem({ reply, readonlyMode = false, onDelete, onEdit, attachmentHa
             <span className="ctc-name">{reply.authorName ?? '👤 Deleted User'}</span>
             <span className="ctc-time">{formatCommentRelativeTime(reply.createdAt)}</span>
           </div>
-          {!readonlyMode && reply.authorId && (
+          {(canEditReply(reply) || canDeleteReply(reply)) && (
             <div className="ctc-reply-actions">
-              <button className="ctc-tiny-btn" title="Edit" onClick={startEdit}>
-                <FiEdit2 size={13} />
-              </button>
-              <button className="ctc-tiny-btn ctc-tiny-btn--danger" title="Delete" onClick={() => onDelete(reply.id)}>
-                <FiTrash2 size={13} />
-              </button>
+              {canEditReply(reply) ? (
+                <button className="ctc-tiny-btn" title="Edit" onClick={startEdit}>
+                  <FiEdit2 size={13} />
+                </button>
+              ) : null}
+              {canDeleteReply(reply) ? (
+                <button className="ctc-tiny-btn ctc-tiny-btn--danger" title="Delete" onClick={() => onDelete(reply.id)}>
+                  <FiTrash2 size={13} />
+                </button>
+              ) : null}
             </div>
           )}
         </div>
@@ -230,7 +242,15 @@ function ThreadCard({
   const [uploadingFiles, setUploadingFiles] = useState<File[]>([]);
   const [replyError, setReplyError] = useState<string | null>(null);
   const [isUploadingAttachments, setIsUploadingAttachments] = useState(false);
+  const [editingOpening, setEditingOpening] = useState(false);
+  const [openingEditBody, setOpeningEditBody] = useState('');
+  const [openingEditAttachments, setOpeningEditAttachments] = useState<CommentReplyAttachment[]>([]);
+  const [openingPendingAttachments, setOpeningPendingAttachments] = useState<CommentReplyAttachment[]>([]);
+  const [openingUploadingFiles, setOpeningUploadingFiles] = useState<File[]>([]);
+  const [openingEditError, setOpeningEditError] = useState<string | null>(null);
+  const [isUploadingOpeningAttachments, setIsUploadingOpeningAttachments] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const openingFileInputRef = useRef<HTMLInputElement>(null);
   const cardRef = useRef<HTMLElement | null>(null);
 
   // Scroll into view when active
@@ -285,6 +305,69 @@ function ThreadCard({
   const quotedText = getQuotedText(thread);
   const { opening, followUps } = splitOpeningReply(thread);
   const rootBody = opening?.body?.trim() || getThreadPreview(thread);
+  const rootAttachments = opening?.attachments ?? [];
+  const canEditOpening = !!opening && canEditOpeningReply(thread);
+  const canRemoveThread = canDeleteThread(thread);
+
+  const startOpeningEdit = () => {
+    if (!opening) return;
+    setOpeningEditBody(opening.body);
+    setOpeningEditAttachments(opening.attachments ?? []);
+    setOpeningPendingAttachments([]);
+    setOpeningUploadingFiles([]);
+    setOpeningEditError(null);
+    setEditingOpening(true);
+  };
+
+  const cancelOpeningEdit = () => {
+    setEditingOpening(false);
+    setOpeningEditBody(opening?.body ?? '');
+    setOpeningEditAttachments(opening?.attachments ?? []);
+    setOpeningPendingAttachments([]);
+    setOpeningUploadingFiles([]);
+    setOpeningEditError(null);
+  };
+
+  const submitOpeningEdit = async () => {
+    if (!opening || isUploadingOpeningAttachments) return;
+    const attachments = [...openingEditAttachments, ...openingPendingAttachments];
+    if (!openingEditBody.trim() && attachments.length === 0) return;
+
+    try {
+      await onEditReply(opening.id, openingEditBody.trim(), attachments);
+      setEditingOpening(false);
+      setOpeningEditError(null);
+      setOpeningPendingAttachments([]);
+    } catch {
+      setOpeningEditError('Failed to save comment. Please try again.');
+    }
+  };
+
+  const handleOpeningFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = readFilesFromInputEvent(e);
+    e.target.value = '';
+    if (files.length === 0) return;
+
+    setOpeningEditError(null);
+    if (attachmentHandler) {
+      setIsUploadingOpeningAttachments(true);
+      setOpeningUploadingFiles((prev) => [...prev, ...files]);
+      try {
+        const { uploaded, failedFiles } = await uploadCommentAttachments(attachmentHandler, files);
+        if (uploaded.length > 0) {
+          setOpeningPendingAttachments((prev) => [...prev, ...uploaded]);
+        }
+        if (failedFiles.length > 0) {
+          setOpeningEditError(`Failed to upload: ${failedFiles.join(', ')}`);
+        }
+      } finally {
+        setOpeningUploadingFiles((prev) => prev.filter((file) => !files.includes(file)));
+        setIsUploadingOpeningAttachments(false);
+      }
+    } else {
+      setOpeningPendingAttachments((prev) => [...prev, ...buildReplyAttachments(files)]);
+    }
+  };
 
   if (isReadOnly) {
     return (
@@ -303,7 +386,7 @@ function ThreadCard({
               <span className="csp-ts">{formatCommentRelativeTime((opening ?? thread).createdAt)}</span>
             </div>
             <div className="primary-comment-actions">
-              {!isResolved && !isOrphaned ? (
+              {canResolveThread(thread) ? (
                 <button
                   type="button"
                   className="primary-comment-action-btn"
@@ -316,7 +399,7 @@ function ThreadCard({
                   <FiCheckCircle size={14} />
                 </button>
               ) : null}
-              {isResolved && !isOrphaned ? (
+              {canUnresolveThread(thread) ? (
                 <button
                   type="button"
                   className="primary-comment-action-btn"
@@ -329,21 +412,98 @@ function ThreadCard({
                   <FiRotateCcw size={14} />
                 </button>
               ) : null}
-              <button
-                type="button"
-                className="primary-comment-action-btn primary-comment-action-btn--danger"
-                title="Delete thread"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onDelete(thread.id);
-                }}
-              >
-                <FiTrash2 size={14} />
-              </button>
+              {canEditOpening ? (
+                <button
+                  type="button"
+                  className="primary-comment-action-btn"
+                  title="Edit comment"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    startOpeningEdit();
+                  }}
+                >
+                  <FiEdit2 size={14} />
+                </button>
+              ) : null}
+              {canRemoveThread ? (
+                <button
+                  type="button"
+                  className="primary-comment-action-btn primary-comment-action-btn--danger"
+                  title="Delete thread"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onDelete(thread.id);
+                  }}
+                >
+                  <FiTrash2 size={14} />
+                </button>
+              ) : null}
             </div>
           </div>
           <div className="primary-comment-quote">"{quotedText}"</div>
-          <p className="primary-comment-body">{rootBody}</p>
+          {editingOpening ? (
+            <div className="ctc-edit-area csp-opening-edit-area" onClick={(event) => event.stopPropagation()}>
+              <textarea
+                className="ctc-reply-input-textarea"
+                value={openingEditBody}
+                onChange={(e) => setOpeningEditBody(e.target.value)}
+                rows={3}
+                autoFocus
+                onKeyDown={(e) => {
+                  if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') submitOpeningEdit();
+                  if (e.key === 'Escape') cancelOpeningEdit();
+                }}
+              />
+              <CommentAttachmentPills
+                attachments={openingEditAttachments}
+                editable
+                scrollable
+                onRemoveAttachment={(attachmentId) =>
+                  setOpeningEditAttachments((prev) => prev.filter((att) => att.attachmentId !== attachmentId))
+                }
+              />
+              <CommentAttachmentPills
+                attachments={openingPendingAttachments}
+                editable
+                scrollable
+                onRemoveAttachment={(attachmentId) =>
+                  setOpeningPendingAttachments((prev) => prev.filter((att) => att.attachmentId !== attachmentId))
+                }
+              />
+              <CommentAttachmentPills files={openingUploadingFiles} scrollable />
+              {openingEditError && <p className="ctc-error-text">{openingEditError}</p>}
+              {isUploadingOpeningAttachments && <p className="ctc-error-text">Uploading attachment…</p>}
+              <input
+                type="file"
+                multiple
+                ref={openingFileInputRef}
+                style={{ display: 'none' }}
+                onChange={handleOpeningFileChange}
+              />
+              <div className="ctc-edit-actions">
+                <button
+                  type="button"
+                  className="ctc-attach-btn"
+                  style={{ marginRight: 'auto' }}
+                  onClick={() => openingFileInputRef.current?.click()}
+                  disabled={isUploadingOpeningAttachments}
+                >
+                  <FiPaperclip size={13} /> Attach
+                </button>
+                <button type="button" className="ctc-btn ctc-btn--ghost" onClick={cancelOpeningEdit}>
+                  Cancel
+                </button>
+                <button type="button" className="ctc-btn ctc-btn--primary" onClick={submitOpeningEdit} disabled={isUploadingOpeningAttachments}>
+                  Save
+                </button>
+              </div>
+            </div>
+          ) : (
+            <>
+              <p className="primary-comment-body">{rootBody}</p>
+              <CommentAttachmentPills attachments={rootAttachments} />
+            </>
+          )}
         </div>
         {!isActive && onOpenThread && (
           <button className="csp-view-thread-btn" onClick={() => onOpenThread(thread.id)}>
@@ -370,7 +530,7 @@ function ThreadCard({
             <span className="ctc-time">{formatCommentRelativeTime(thread.createdAt)}</span>
           </div>
           <div className="primary-comment-actions">
-            {!isResolved && !isOrphaned && (
+            {canResolveThread(thread) && (
               <button
                 className="primary-comment-action-btn"
                 title="Resolve thread"
@@ -379,7 +539,7 @@ function ThreadCard({
                 <FiCheckCircle size={14} />
               </button>
             )}
-            {isResolved && !isOrphaned && (
+            {canUnresolveThread(thread) && (
               <button
                 className="primary-comment-action-btn"
                 title="Unresolve thread"
@@ -388,13 +548,15 @@ function ThreadCard({
                 <FiRotateCcw size={14} />
               </button>
             )}
-            <button
-              className="primary-comment-action-btn primary-comment-action-btn--danger"
-              title="Delete thread"
-              onClick={() => onDelete(thread.id)}
-            >
-              <FiTrash2 size={14} />
-            </button>
+            {canRemoveThread ? (
+              <button
+                className="primary-comment-action-btn primary-comment-action-btn--danger"
+                title="Delete thread"
+                onClick={() => onDelete(thread.id)}
+              >
+                <FiTrash2 size={14} />
+              </button>
+            ) : null}
           </div>
         </div>
 
@@ -427,7 +589,7 @@ function ThreadCard({
       )}
 
       {/* Reply input */}
-      {!isResolved && (
+      {canReplyToThread(thread) && (
         <div className={`csp-reply-composer ${isReadOnly ? 'is-readonly' : ''}`}>
           {isReadOnly && <div className="csp-section-label">Reply to thread</div>}
           <textarea
@@ -480,7 +642,6 @@ function ThreadCard({
 
 interface ThreadDetailProps {
   thread: CommentThread;
-  isEditable: boolean;
   onBack: () => void;
   onClose: () => void;
   onResolve: (threadId: string) => void;
@@ -494,7 +655,6 @@ interface ThreadDetailProps {
 
 function ThreadDetail({
   thread,
-  isEditable,
   onBack,
   onClose,
   onResolve,
@@ -511,7 +671,15 @@ function ThreadDetail({
   const [uploadingFiles, setUploadingFiles] = useState<File[]>([]);
   const [replyError, setReplyError] = useState<string | null>(null);
   const [isUploadingAttachments, setIsUploadingAttachments] = useState(false);
+  const [editingOpening, setEditingOpening] = useState(false);
+  const [openingEditBody, setOpeningEditBody] = useState('');
+  const [openingEditAttachments, setOpeningEditAttachments] = useState<CommentReplyAttachment[]>([]);
+  const [openingPendingAttachments, setOpeningPendingAttachments] = useState<CommentReplyAttachment[]>([]);
+  const [openingUploadingFiles, setOpeningUploadingFiles] = useState<File[]>([]);
+  const [openingEditError, setOpeningEditError] = useState<string | null>(null);
+  const [isUploadingOpeningAttachments, setIsUploadingOpeningAttachments] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const openingFileInputRef = useRef<HTMLInputElement>(null);
   const { opening, followUps } = splitOpeningReply(thread);
 
   const submitReply = async () => {
@@ -554,7 +722,64 @@ function ThreadDetail({
     }
   };
 
-  const isResolved = !!thread.resolvedAt;
+  const startOpeningEdit = () => {
+    if (!opening) return;
+    setOpeningEditBody(opening.body);
+    setOpeningEditAttachments(opening.attachments ?? []);
+    setOpeningPendingAttachments([]);
+    setOpeningUploadingFiles([]);
+    setOpeningEditError(null);
+    setEditingOpening(true);
+  };
+
+  const cancelOpeningEdit = () => {
+    setEditingOpening(false);
+    setOpeningEditBody(opening?.body ?? '');
+    setOpeningEditAttachments(opening?.attachments ?? []);
+    setOpeningPendingAttachments([]);
+    setOpeningUploadingFiles([]);
+    setOpeningEditError(null);
+  };
+
+  const submitOpeningEdit = async () => {
+    if (!opening || isUploadingOpeningAttachments) return;
+    const attachments = [...openingEditAttachments, ...openingPendingAttachments];
+    if (!openingEditBody.trim() && attachments.length === 0) return;
+    try {
+      await onEditReply(opening.id, openingEditBody.trim(), attachments);
+      setEditingOpening(false);
+      setOpeningEditError(null);
+      setOpeningPendingAttachments([]);
+    } catch {
+      setOpeningEditError('Failed to save comment. Please try again.');
+    }
+  };
+
+  const handleOpeningFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = readFilesFromInputEvent(e);
+    e.target.value = '';
+    if (files.length === 0) return;
+
+    setOpeningEditError(null);
+    if (attachmentHandler) {
+      setIsUploadingOpeningAttachments(true);
+      setOpeningUploadingFiles((prev) => [...prev, ...files]);
+      try {
+        const { uploaded, failedFiles } = await uploadCommentAttachments(attachmentHandler, files);
+        if (uploaded.length > 0) {
+          setOpeningPendingAttachments((prev) => [...prev, ...uploaded]);
+        }
+        if (failedFiles.length > 0) {
+          setOpeningEditError(`Failed to upload: ${failedFiles.join(', ')}`);
+        }
+      } finally {
+        setOpeningUploadingFiles((prev) => prev.filter((file) => !files.includes(file)));
+        setIsUploadingOpeningAttachments(false);
+      }
+    } else {
+      setOpeningPendingAttachments((prev) => [...prev, ...buildReplyAttachments(files)]);
+    }
+  };
 
   return (
     <>
@@ -585,23 +810,92 @@ function ThreadDetail({
               <span className="csp-ts">{formatCommentRelativeTime((opening ?? thread).createdAt)}</span>
             </div>
             <div className="primary-comment-actions">
-              {!isResolved && (
+              {canResolveThread(thread) && (
                 <button className="primary-comment-action-btn" title="Resolve" onClick={() => onResolve(thread.id)}>
                   <FiCheckCircle size={14} />
                 </button>
               )}
-              {isResolved && (
+              {canUnresolveThread(thread) && (
                 <button className="primary-comment-action-btn" title="Unresolve" onClick={() => onUnresolve(thread.id)}>
                   <FiRotateCcw size={14} />
                 </button>
               )}
-              <button className="primary-comment-action-btn primary-comment-action-btn--danger" title="Delete" onClick={() => onDeleteThread(thread.id)}>
-                <FiTrash2 size={14} />
-              </button>
+              {opening && canEditOpeningReply(thread) ? (
+                <button className="primary-comment-action-btn" title="Edit comment" onClick={startOpeningEdit}>
+                  <FiEdit2 size={14} />
+                </button>
+              ) : null}
+              {canDeleteThread(thread) ? (
+                <button className="primary-comment-action-btn primary-comment-action-btn--danger" title="Delete" onClick={() => onDeleteThread(thread.id)}>
+                  <FiTrash2 size={14} />
+                </button>
+              ) : null}
             </div>
           </div>
           <div className="primary-comment-quote">"{getQuotedText(thread)}"</div>
-          <p className="primary-comment-body">{opening?.body?.trim() || getThreadPreview(thread)}</p>
+          {editingOpening && opening ? (
+            <div className="ctc-edit-area csp-opening-edit-area">
+              <textarea
+                className="ctc-reply-input-textarea"
+                value={openingEditBody}
+                onChange={(e) => setOpeningEditBody(e.target.value)}
+                rows={3}
+                autoFocus
+                onKeyDown={(e) => {
+                  if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') submitOpeningEdit();
+                  if (e.key === 'Escape') cancelOpeningEdit();
+                }}
+              />
+              <CommentAttachmentPills
+                attachments={openingEditAttachments}
+                editable
+                scrollable
+                onRemoveAttachment={(attachmentId) =>
+                  setOpeningEditAttachments((prev) => prev.filter((att) => att.attachmentId !== attachmentId))
+                }
+              />
+              <CommentAttachmentPills
+                attachments={openingPendingAttachments}
+                editable
+                scrollable
+                onRemoveAttachment={(attachmentId) =>
+                  setOpeningPendingAttachments((prev) => prev.filter((att) => att.attachmentId !== attachmentId))
+                }
+              />
+              <CommentAttachmentPills files={openingUploadingFiles} scrollable />
+              {openingEditError && <p className="ctc-error-text">{openingEditError}</p>}
+              {isUploadingOpeningAttachments && <p className="ctc-error-text">Uploading attachment…</p>}
+              <input
+                type="file"
+                multiple
+                ref={openingFileInputRef}
+                style={{ display: 'none' }}
+                onChange={handleOpeningFileChange}
+              />
+              <div className="ctc-edit-actions">
+                <button
+                  type="button"
+                  className="ctc-attach-btn"
+                  style={{ marginRight: 'auto' }}
+                  onClick={() => openingFileInputRef.current?.click()}
+                  disabled={isUploadingOpeningAttachments}
+                >
+                  <FiPaperclip size={13} /> Attach
+                </button>
+                <button type="button" className="ctc-btn ctc-btn--ghost" onClick={cancelOpeningEdit}>
+                  Cancel
+                </button>
+                <button type="button" className="ctc-btn ctc-btn--primary" onClick={submitOpeningEdit} disabled={isUploadingOpeningAttachments}>
+                  Save
+                </button>
+              </div>
+            </div>
+          ) : (
+            <>
+              <p className="primary-comment-body">{opening?.body?.trim() || getThreadPreview(thread)}</p>
+              <CommentAttachmentPills attachments={opening?.attachments} />
+            </>
+          )}
         </div>
 
         {followUps.length > 0 && (
@@ -614,7 +908,6 @@ function ThreadDetail({
                 <ReplyItem
                   key={reply.id}
                   reply={reply}
-                  readonlyMode={!isEditable}
                   attachmentHandler={attachmentHandler}
                   onDelete={(replyId) => onDeleteReply(thread.id, replyId)}
                   onEdit={onEditReply}
@@ -624,7 +917,7 @@ function ThreadDetail({
           </div>
         )}
 
-        {!isResolved && (
+        {canReplyToThread(thread) && (
           <div className="csp-reply-composer">
             <div className="csp-reply-composer-label">Reply to thread</div>
             <textarea
@@ -695,6 +988,12 @@ export function CommentSidePanel({
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(activeThreadId ?? null);
   const isEditable = editor.isEditable;
   const highlightedThreadId = selectedThreadId ?? activeThreadId ?? null;
+  const panelClassName = [
+    'csp-container',
+    isOpen ? 'is-open' : '',
+    'is-readonly',
+    presentation === 'bottom-sheet' ? 'is-bottom-sheet' : '',
+  ].filter(Boolean).join(' ');
 
   // Sync decorations with the editor plugin
   useEffect(() => {
@@ -708,10 +1007,8 @@ export function CommentSidePanel({
       setSelectedThreadId(activeThreadId ?? null);
       return;
     }
-    if (!isEditable) {
-      setSelectedThreadId(activeThreadId ?? null);
-    }
-  }, [activeThreadId, isEditable, isOpen]);
+    setSelectedThreadId(activeThreadId ?? null);
+  }, [activeThreadId, isOpen]);
 
   // Handle resolve
   const handleResolve = async (threadId: string) => {
@@ -798,17 +1095,16 @@ export function CommentSidePanel({
   const orphanedThreads = filteredThreads.filter((t) => t.orphaned);
 
   const visibleThreads = [...activeThreads, ...orphanedThreads];
-  const selectedThread = !isEditable && selectedThreadId
+  const selectedThread = selectedThreadId
     ? visibleThreads.find((thread) => thread.id === selectedThreadId) ?? null
     : null;
   const openThreadCount = filteredThreads.filter((thread) => !thread.resolvedAt && !thread.orphaned).length;
 
   if (isOpen && selectedThread) {
     return (
-      <div className={`csp-container is-open ${!isEditable ? 'is-readonly' : ''} is-thread-view ${presentation === 'bottom-sheet' ? 'is-bottom-sheet' : ''}`}>
+      <div className={`${panelClassName} is-thread-view`}>
         <ThreadDetail
           thread={selectedThread}
-          isEditable={isEditable}
           onBack={() => setSelectedThreadId(null)}
           onClose={onClose}
           onResolve={handleResolve}
@@ -824,51 +1120,38 @@ export function CommentSidePanel({
   }
 
   return (
-    <div className={`csp-container ${isOpen ? 'is-open' : ''} ${!isEditable ? 'is-readonly' : ''} ${presentation === 'bottom-sheet' ? 'is-bottom-sheet' : ''}`}>
+    <div className={panelClassName}>
       {/* Header */}
       <div className="csp-header">
         <div className="csp-title-block">
           <h3 className="csp-title">
             <FiMessageSquare size={16} />
-            {isEditable ? 'Comments' : 'Inline comments'}
+            Inline comments
             {threads.length > 0 && (
               <span className="csp-count">{threads.filter((t) => !t.resolvedAt).length}</span>
             )}
           </h3>
-          {!isEditable && (
-            <div className="csp-subtitle">
-              {openThreadCount} open threads
-            </div>
-          )}
+          <div className="csp-subtitle">
+            {openThreadCount} open threads
+          </div>
         </div>
         <div className="csp-header-actions">
-          {isEditable ? (
-            <label className="csp-toggle-label">
-              <input
-                type="checkbox"
-                checked={showResolved}
-                onChange={(e) => setShowResolved(e.target.checked)}
-              />
-              Show resolved
-            </label>
-          ) : (
-            <div className="csp-filter-pills">
-              <button
-                type="button"
-                className={`csp-filter-pill ${!showResolved ? 'is-active' : ''}`}
-                onClick={() => setShowResolved(false)}
-              >
-                Open
-              </button>
-              <button
-                type="button"
-                className={`csp-filter-pill ${showResolved ? 'is-active' : ''}`}
-                onClick={() => setShowResolved(true)}
-              >
-                Resolved
-              </button>
-            </div>
-          )}
+          <div className="csp-filter-pills">
+            <button
+              type="button"
+              className={`csp-filter-pill ${!showResolved ? 'is-active' : ''}`}
+              onClick={() => setShowResolved(false)}
+            >
+              Open
+            </button>
+            <button
+              type="button"
+              className={`csp-filter-pill ${showResolved ? 'is-active' : ''}`}
+              onClick={() => setShowResolved(true)}
+            >
+              Resolved
+            </button>
+          </div>
           <button className="csp-icon-btn" onClick={onClose} title="Close">
             <FiX size={16} />
           </button>
@@ -891,7 +1174,7 @@ export function CommentSidePanel({
               key={thread.id}
               thread={thread}
               isActive={thread.id === highlightedThreadId}
-              isReadOnly={!isEditable}
+              isReadOnly
               onOpenThread={setSelectedThreadId}
               onResolve={handleResolve}
               onUnresolve={handleUnresolve}

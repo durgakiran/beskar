@@ -8,27 +8,31 @@ const (
 	getSpace       = "SELECT id, name, date_created AS dateCreated, date_updated AS dateUpdated, user_id AS userId FROM core.space WHERE id = $1"
 	updateContent  = "UPDATE core.content SET parent_id = $2, \"order\" = $3, type = $4, attrs = $5, marks = $6 WHERE id = $7 AND doc_id = $1"
 	deleteContent  = "DELETE FROM core.content WHERE id = $1 AND doc_id = $2"
-	updateDocQuery = "UPDATE core.page_doc_map SET title = $1, version = $2, draft = $5 WHERE doc_id = $3 AND page_id = $4"
-	getDocument    = `SELECT 
-							d.title AS title, 
-							d.owner_id AS ownerId, 
-							d.page_id id, 
-							d.doc_id AS docId, 
-							p.space_id AS spaceId
-						FROM 
-							core.page p, core.page_doc_map d
-						WHERE 
-							p.space_id = $1 AND p.id = $2 AND p.id = d.page_id AND d.draft = 0 ORDER BY d.version DESC LIMIT 1`
+	updateDocQuery = `UPDATE core.page_doc_map SET title = $1, version = $2, draft = $5,
+		draft_generation = CASE WHEN $5::smallint = 1 THEN draft_generation + 1 ELSE draft_generation END
+		WHERE doc_id = $3 AND page_id = $4 RETURNING draft_generation`
 	getDocumentDataToEdit = `SELECT 
 								d.title AS title, 
 								d.owner_id AS ownerId, 
 								d.page_id id, 
 								d.doc_id AS docId, 
+								d.draft_generation AS draftGeneration,
 								p.space_id AS spaceId
 							FROM 
 								core.page p, core.page_doc_map d
 							WHERE 
 								p.space_id = $1 AND p.id = $2 AND p.id = d.page_id AND d.draft = 1 ORDER BY d.version DESC LIMIT 1`
+	getDocument = `SELECT 
+							d.title AS title, 
+							d.owner_id AS ownerId, 
+							d.page_id id, 
+							d.doc_id AS docId, 
+							COALESCE(d.draft_generation, 0) AS draftGeneration,
+							p.space_id AS spaceId
+						FROM 
+							core.page p, core.page_doc_map d
+						WHERE 
+							p.space_id = $1 AND p.id = $2 AND p.id = d.page_id AND d.draft = 0 ORDER BY d.version DESC LIMIT 1`
 	getDocumentNodes = `SELECT 
 							c.doc_id AS docId, 
 							c.id AS contentId, 
@@ -89,4 +93,14 @@ FROM core.page_doc_map d
 WHERE d.page_id = $1 AND d.draft = 0
 ORDER BY d.version DESC
 LIMIT 1`
+
+	getEditMetaDraft = `SELECT d.doc_id, COALESCE(d.draft_generation, 0), d.version, d.title, p.parent_id
+		FROM core.page p JOIN core.page_doc_map d ON p.id = d.page_id
+		WHERE p.space_id = $1 AND p.id = $2 AND d.draft = 1
+		ORDER BY d.version DESC LIMIT 1`
+
+	getEditMetaPublished = `SELECT d.doc_id, COALESCE(d.draft_generation, 0), d.version, d.title, p.parent_id
+		FROM core.page p JOIN core.page_doc_map d ON p.id = d.page_id
+		WHERE p.space_id = $1 AND p.id = $2 AND d.draft = 0
+		ORDER BY d.version DESC LIMIT 1`
 )

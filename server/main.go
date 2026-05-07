@@ -17,6 +17,7 @@ import (
 	"github.com/durgakiran/beskar/core"
 	"github.com/durgakiran/beskar/docversioncleanup"
 	editor "github.com/durgakiran/beskar/editor"
+	"github.com/durgakiran/beskar/editor/pageevents"
 	"github.com/durgakiran/beskar/invite"
 	media "github.com/durgakiran/beskar/media/controller"
 	"github.com/durgakiran/beskar/notification"
@@ -117,6 +118,9 @@ func main() {
 		logger().Error(fmt.Sprintf("Could not initialize runtime storage %s", err.Error()))
 		os.Exit(1)
 	}
+
+	pageevents.SetLogger(core.Logger)
+	pageevents.Init(context.Background())
 
 	notificationConfig := notification.LoadConfig()
 	quotaConfig := quota.LoadConfig()

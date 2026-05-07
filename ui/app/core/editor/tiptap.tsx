@@ -546,10 +546,12 @@ export function TipTap({
     // });
 
     useEffect(() => {
-        if (updated && editable) {
-            updateContent(debouncedValue, debouncedTitle);
-        }
-    }, [debouncedValue, debouncedTitle]);
+        if (!updated || !editable) return;
+        if (debouncedValue == null) return;
+        updateContent(debouncedValue, debouncedTitle);
+        // Intentionally omit `updated` from deps: same as legacy behavior — run when debounced
+        // snapshot changes, not on the first keystroke before debounce elapses.
+    }, [debouncedValue, debouncedTitle, updateContent]);
 
     useEffect(() => {
         setEditorContext(editor);

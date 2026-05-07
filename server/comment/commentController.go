@@ -32,7 +32,7 @@ func listThreads(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	threads, err := svc.ListThreads(ctx, docId, includeResolved)
+	threads, err := svc.ListThreads(ctx, docId, includeResolved, user.AId)
 	if err != nil {
 		core.SendFailedReponse(w, r, http.StatusInternalServerError, "Internal Server Error")
 		return
@@ -144,6 +144,8 @@ func deleteThread(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	docId, docErr := svc.GetThreadDocumentID(ctx, threadId)
+
 	err = svc.DeleteThread(ctx, threadId, user.AId)
 	if err != nil {
 		if err.Error() == "forbidden" {
@@ -154,10 +156,9 @@ func deleteThread(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// We only have threadId in SSE, so payload is { id: threadId }
-	// We don't have documentID readily unless we fetch it before deletion, which is already dropped maybe.
-	// Wait, DeleteThread fetches it inside Service. Let's fix Service to return DocumentID
-	// To save time, we can fetch it before calling delete
+	if docErr == nil && docId != "" {
+		Hub.Publish(EventThreadDeleted, docId, map[string]string{"id": threadId})
+	}
 	core.SendSuccessResponse(w, r, http.StatusNoContent, nil)
 }
 
@@ -184,6 +185,7 @@ func orphanThread(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	Hub.Publish(EventThreadOrphaned, thread.DocumentID, thread)
 	core.SendSuccessResponse(w, r, http.StatusOK, thread)
 }
 
@@ -209,6 +211,8 @@ func createReply(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	docId, docErr := svc.GetThreadDocumentID(ctx, threadId)
+
 	reply, err := svc.CreateReply(ctx, threadId, req.Body, req.AttachmentIDs, user.AId)
 	if err != nil {
 		if err.Error() == "not found" {
@@ -221,9 +225,9 @@ func createReply(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Fetch documentId from thread
-	// In a real scenario we'd query it or return it from the service.
-	// For now we'll just not send it via SSE if we don't have it, but wait! The client filters by DocumentID.
+	if docErr == nil && docId != "" {
+		Hub.Publish(EventReplyCreated, docId, reply)
+	}
 
 	core.SendSuccessResponse(w, r, http.StatusCreated, reply)
 }
@@ -250,6 +254,8 @@ func editReply(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	docId, docErr := svc.GetReplyDocumentID(ctx, replyId)
+
 	reply, err := svc.EditReply(ctx, replyId, req.Body, req.AttachmentIDs, user.AId)
 	if err != nil {
 		if err.Error() == "forbidden" {
@@ -260,6 +266,9 @@ func editReply(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if docErr == nil && docId != "" {
+		Hub.Publish(EventReplyEdited, docId, reply)
+	}
 	core.SendSuccessResponse(w, r, http.StatusOK, reply)
 }
 
@@ -273,6 +282,8 @@ func deleteReply(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	docId, docErr := svc.GetReplyDocumentID(ctx, replyId)
+
 	err = svc.DeleteReply(ctx, replyId, user.AId)
 	if err != nil {
 		if err.Error() == "forbidden" {
@@ -283,10 +294,26 @@ func deleteReply(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if docErr == nil && docId != "" {
+		Hub.Publish(EventReplyDeleted, docId, map[string]string{"id": replyId})
+	}
 	core.SendSuccessResponse(w, r, http.StatusNoContent, nil)
 }
 
 func sseEvents(w http.ResponseWriter, r *http.Request) {
 	docId := chi.URLParam(r, "docId")
+	ctx := r.Context()
+	user, err := core.GetUserInfo(ctx)
+	if err != nil {
+		core.SendFailedReponse(w, r, http.StatusUnauthorized, "Unauthorized")
+		return
+	}
+
+	allowed, err := core.CheckPermission("page", docId, "user", user.AId, core.PAGE_VIEW)
+	if err != nil || !allowed {
+		core.SendFailedReponse(w, r, http.StatusForbidden, "Forbidden")
+		return
+	}
+
 	Hub.SSEHandler(w, r, docId)
 }

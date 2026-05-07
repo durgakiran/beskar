@@ -52,6 +52,7 @@ export default function WhiteboardEditor({ slug, readOnly = false }: { slug: str
         });
         setProvider(_provider);
         return () => {
+            _provider.disconnect();
             _provider.destroy();
             setProvider(null);
         };

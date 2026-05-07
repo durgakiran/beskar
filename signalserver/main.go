@@ -1,38 +1,50 @@
 package main
 
 import (
+	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/redis/go-redis/v9"
+	"slices"
 )
 
 // Client represents a single connected user
 type Client struct {
-	conn   *websocket.Conn // WebSocket connection
-	topics map[string]bool // topics the client is in
-	send   chan []byte     // Outbound messages
+	conn     *websocket.Conn // WebSocket connection
+	topics   map[string]bool   // topics the client is in
+	send     chan []byte       // Outbound messages
+	clientID string            // stable id for deterministic leader election
 }
 
 // Hub maintains the set of active clients and broadcasts messages to them
 type Hub struct {
-	topics map[string]map[*Client]bool // rooms and clients in them
-	mu     sync.RWMutex                // Mutex for the rooms map
+	topics        map[string]map[*Client]bool // rooms and clients in them
+	topicLeaderID map[string]string           // topic -> current leader clientID (sticky amIleader)
+	mu            sync.RWMutex                // Mutex for the rooms map
 }
 
 type Message struct {
-	Type     string   `json:"type"`
-	Topics   []string `json:"topics,omitempty"` // For subscribe
-	Topic    string   `json:"topic,omitempty"`  // For publish
-	Data     any      `json:"data,omitempty"`
-	Binary   []byte   `json:"-"`                  // Raw binary data for y-webrtc updates
-	IsLeader bool     `json:"isLeader,omitempty"` // For leader election
-	Clients  int      `json:"clients,omitempty"`  // For publish
+	Type             string   `json:"type"`
+	Topics           []string `json:"topics,omitempty"` // For subscribe
+	Topic            string   `json:"topic,omitempty"`  // For publish
+	Data             any      `json:"data,omitempty"`
+	Binary           []byte   `json:"-"` // Raw binary data for y-webrtc updates
+	IsLeader         bool     `json:"isLeader"`                   // For leader election (explicit false)
+	LeaderClientID   string   `json:"leaderClientId,omitempty"` // Room leader's stable id
+	Clients          int      `json:"clients,omitempty"`        // For publish
 }
 
 func handleRoot(w http.ResponseWriter, r *http.Request) {
@@ -47,18 +59,219 @@ var upgrader = websocket.Upgrader{
 
 func newHub() *Hub {
 	return &Hub{
-		topics: make(map[string]map[*Client]bool),
-		mu:     sync.RWMutex{},
+		topics:        make(map[string]map[*Client]bool),
+		topicLeaderID: make(map[string]string),
+		mu:            sync.RWMutex{},
 	}
+}
+
+func newClientID() string {
+	var b [16]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return strings.Repeat("0", 32)
+	}
+	return hex.EncodeToString(b[:])
 }
 
 var hub = newHub()
 
+var sigRedis *redis.Client // nil if SIGNAL_REDIS_URL not set
+
+func initSignalRedis() {
+	url := os.Getenv("SIGNAL_REDIS_URL")
+	if url == "" {
+		log.Println("SIGNAL_REDIS_URL not set — watchdog and room Redis writes disabled")
+		return
+	}
+	opts, err := redis.ParseURL(url)
+	if err != nil {
+		log.Printf("signalserver: invalid SIGNAL_REDIS_URL: %v", err)
+		return
+	}
+	c := redis.NewClient(opts)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	if err := c.Ping(ctx).Err(); err != nil {
+		log.Printf("signalserver: redis ping failed: %v — watchdog disabled", err)
+		return
+	}
+	sigRedis = c
+	log.Println("signalserver: redis connected, watchdog enabled")
+}
+
+// parseTopicIDs splits "<pageId>-space-<spaceId>" into its parts.
+func parseTopicIDs(topic string) (pageID string, spaceID string, ok bool) {
+	parts := strings.SplitN(topic, "-space-", 2)
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+		return "", "", false
+	}
+	return parts[0], parts[1], true
+}
+
+const roomKeyTTL = 0 // no expiry — cleaned on unregister when room drains
+
+func redisSetRoomLeader(topic, leaderClientID string) {
+	if sigRedis == nil {
+		return
+	}
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		key := "beskar:room:" + topic + ":leader"
+		if err := sigRedis.Set(ctx, key, leaderClientID, roomKeyTTL).Err(); err != nil {
+			log.Printf("signalserver: redis set room leader: %v", err)
+		}
+	}()
+}
+
+func redisAddRoomMember(topic, clientID string) {
+	if sigRedis == nil {
+		return
+	}
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		key := "beskar:room:" + topic + ":members"
+		if err := sigRedis.HSet(ctx, key, clientID, "1").Err(); err != nil {
+			log.Printf("signalserver: redis add room member: %v", err)
+		}
+	}()
+}
+
+func redisRemoveRoomMember(topic, clientID string, topicDrained bool) {
+	if sigRedis == nil {
+		return
+	}
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		memberKey := "beskar:room:" + topic + ":members"
+		leaderKey := "beskar:room:" + topic + ":leader"
+		pipe := sigRedis.Pipeline()
+		pipe.HDel(ctx, memberKey, clientID)
+		if topicDrained {
+			pipe.Del(ctx, memberKey, leaderKey)
+		}
+		if _, err := pipe.Exec(ctx); err != nil {
+			log.Printf("signalserver: redis remove room member: %v", err)
+		}
+	}()
+}
+
+func watchdogInterval() time.Duration {
+	if v := os.Getenv("SIGNAL_WATCHDOG_INTERVAL_SEC"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			return time.Duration(n) * time.Second
+		}
+	}
+	return 15 * time.Second
+}
+
+func leaderEvictSec() int64 {
+	if v := os.Getenv("SIGNAL_LEADER_EVICT_SEC"); v != "" {
+		if n, err := strconv.ParseInt(v, 10, 64); err == nil && n > 0 {
+			return n
+		}
+	}
+	return 90
+}
+
+func (h *Hub) startWatchdog(ctx context.Context) {
+	if sigRedis == nil {
+		return
+	}
+	go func() {
+		ticker := time.NewTicker(watchdogInterval())
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				h.watchdogTick(ctx)
+			}
+		}
+	}()
+}
+
+func (h *Hub) watchdogTick(ctx context.Context) {
+	threshold := leaderEvictSec()
+
+	h.mu.RLock()
+	snapshot := make(map[string]string, len(h.topicLeaderID))
+	for topic, leaderID := range h.topicLeaderID {
+		snapshot[topic] = leaderID
+	}
+	h.mu.RUnlock()
+
+	for topic, leaderClientID := range snapshot {
+		pageID, spaceID, ok := parseTopicIDs(topic)
+		if !ok {
+			continue
+		}
+
+		tsKey := fmt.Sprintf("beskar:presence:draft_leader_ts:%s:%s", spaceID, pageID)
+
+		tsStr, err := sigRedis.Get(ctx, tsKey).Result()
+		if err != nil {
+			if !errors.Is(err, redis.Nil) {
+				log.Printf("watchdog: redis error topic=%s: %v — skipping", topic, err)
+			}
+			continue
+		}
+
+		lastTS, err := strconv.ParseInt(tsStr, 10, 64)
+		if err != nil {
+			continue
+		}
+		if time.Now().Unix()-lastTS < threshold {
+			continue
+		}
+
+		tsStr2, err := sigRedis.Get(ctx, tsKey).Result()
+		if err != nil || tsStr2 != tsStr {
+			continue
+		}
+
+		h.evictLeader(topic, leaderClientID, pageID, spaceID)
+	}
+}
+
+func (h *Hub) evictLeader(topic, leaderClientID, pageID, spaceID string) {
+	h.mu.RLock()
+	clients, ok := h.topics[topic]
+	if !ok {
+		h.mu.RUnlock()
+		return
+	}
+	var target *Client
+	for c := range clients {
+		if c.clientID == leaderClientID {
+			target = c
+			break
+		}
+	}
+	h.mu.RUnlock()
+
+	if target == nil {
+		return
+	}
+
+	log.Printf("watchdog: evicting stale leader clientID=%s topic=%s", leaderClientID, topic)
+	target.conn.Close()
+
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		dedupeKey := fmt.Sprintf("beskar:presence:inactive_emit:%s:%s", spaceID, pageID)
+		if err := sigRedis.Del(ctx, dedupeKey).Err(); err != nil {
+			log.Printf("watchdog: redis del inactive_emit: %v", err)
+		}
+	}()
+}
+
 func (c *Client) writePump() {
 	for msg := range c.send {
-		// Determine if message is JSON or Binary based on first byte
-		// or pass the type through the channel.
-		// Simplest for Yjs: if it starts with '{', it's Text.
 		mt := websocket.BinaryMessage
 		if len(msg) > 0 && msg[0] == '{' {
 			mt = websocket.TextMessage
@@ -67,34 +280,54 @@ func (c *Client) writePump() {
 	}
 }
 
-func (h *Hub) electLeaderInternal(topicName string) {
+// electLeaderInternal recomputes the leader as the client with the smallest clientID
+// (lexicographic). Caller must hold h.mu (write lock).
+// requester is set only for "amIleader" handling: when the leader id is unchanged, only
+// the requester is notified (reduces churn); subscribe/unregister pass requester == nil
+// to always broadcast to everyone in the room.
+func (h *Hub) electLeaderInternal(topicName string, requester *Client) {
 	clients, ok := h.topics[topicName]
 	if !ok || len(clients) == 0 {
+		delete(h.topicLeaderID, topicName)
 		return
 	}
 
-	// 1. Determine the leader (e.g., the "oldest" or simply the first in the map)
-	var leader *Client
+	clientsSlice := make([]*Client, 0, len(clients))
 	for c := range clients {
-		leader = c
-		break
+		clientsSlice = append(clientsSlice, c)
 	}
+	slices.SortFunc(clientsSlice, func(a, b *Client) int {
+		return strings.Compare(a.clientID, b.clientID)
+	})
+	leader := clientsSlice[0]
+	newLeaderID := leader.clientID
 
-	// 2. Notify all clients in the room of the current leader state
-	for client := range clients {
+	prev, hadPrev := h.topicLeaderID[topicName]
+	h.topicLeaderID[topicName] = newLeaderID
+
+	redisSetRoomLeader(topicName, newLeaderID)
+
+	sendLeader := func(client *Client, isL bool) {
 		msg := Message{
-			Type:     "leader",
-			Topic:    topicName,
-			IsLeader: (client == leader),
+			Type:           "leader",
+			Topic:          topicName,
+			IsLeader:       isL,
+			LeaderClientID: newLeaderID,
 		}
 		payload, _ := json.Marshal(msg)
-
-		// Send to the client's channel (non-blocking)
 		select {
 		case client.send <- payload:
 		default:
-			// If buffer is full, we'll handle this in the unregister logic
 		}
+	}
+
+	if requester != nil && hadPrev && prev == newLeaderID {
+		sendLeader(requester, requester == leader)
+		return
+	}
+
+	for client := range clients {
+		sendLeader(client, client == leader)
 	}
 }
 
@@ -103,14 +336,15 @@ func (h *Hub) handleUnregister(c *Client) {
 	defer h.mu.Unlock()
 	for topic := range c.topics {
 		if clients, ok := h.topics[topic]; ok {
-			delete(clients, c) // 2. Remove the leaver
+			delete(clients, c)
+			topicDrained := len(clients) == 0
+			redisRemoveRoomMember(topic, c.clientID, topicDrained)
 
-			if len(clients) == 0 {
+			if topicDrained {
 				delete(h.topics, topic)
+				delete(h.topicLeaderID, topic)
 			} else {
-				// 3. Pick a new leader from the REMAINING clients
-				// This is safe because we are still under h.mu.Lock()
-				h.electLeaderInternal(topic)
+				h.electLeaderInternal(topic, nil)
 			}
 		}
 	}
@@ -128,7 +362,6 @@ func (c *Client) readPump(h *Hub) {
 			break
 		}
 
-		// Handle Binary (Yjs Updates)
 		if messageType == websocket.BinaryMessage {
 			h.mu.RLock()
 			for topicName := range c.topics {
@@ -144,7 +377,6 @@ func (c *Client) readPump(h *Hub) {
 			continue
 		}
 
-		// Handle JSON Signaling
 		var msg Message
 		if err := json.Unmarshal(payload, &msg); err != nil {
 			continue
@@ -159,7 +391,8 @@ func (c *Client) readPump(h *Hub) {
 				}
 				h.topics[t][c] = true
 				c.topics[t] = true
-				h.electLeaderInternal(t)
+				redisAddRoomMember(t, c.clientID)
+				h.electLeaderInternal(t, nil)
 			}
 			h.mu.Unlock()
 
@@ -178,7 +411,7 @@ func (c *Client) readPump(h *Hub) {
 
 		case "amIleader":
 			h.mu.Lock()
-			h.electLeaderInternal(msg.Topic)
+			h.electLeaderInternal(msg.Topic, c)
 			h.mu.Unlock()
 		case "ping":
 			pong, _ := json.Marshal(Message{Type: "pong"})
@@ -187,11 +420,8 @@ func (c *Client) readPump(h *Hub) {
 	}
 }
 
-// validateSession forwards the request cookies to the main API server and
-// checks whether the session is authenticated. This delegates the Zitadel
-// cookie decryption to the server that already has the KEY configured.
 func validateSession(r *http.Request) bool {
-	authServerURL := os.Getenv("AUTH_SERVER_URL") // e.g. http://server:9095
+	authServerURL := os.Getenv("AUTH_SERVER_URL")
 	if authServerURL == "" {
 		log.Println("AUTH_SERVER_URL not set, skipping auth check")
 		return false
@@ -203,7 +433,6 @@ func validateSession(r *http.Request) bool {
 		return false
 	}
 
-	// Forward all cookies from the original WS upgrade request
 	for _, cookie := range r.Cookies() {
 		req.AddCookie(cookie)
 	}
@@ -218,8 +447,6 @@ func validateSession(r *http.Request) bool {
 	return resp.StatusCode == http.StatusOK
 }
 
-// authMiddleware validates the session before the WebSocket upgrade.
-// Unauthenticated requests receive a plain HTTP 401 response.
 func authMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if !validateSession(r) {
@@ -231,7 +458,6 @@ func authMiddleware(next http.HandlerFunc) http.HandlerFunc {
 }
 
 func handleWebSocket(w http.ResponseWriter, r *http.Request) {
-	// to prevent cross-origin requests
 	upgrader.CheckOrigin = func(r *http.Request) bool {
 		return isAllowedOrigin(r.Header.Get("Origin"))
 	}
@@ -242,9 +468,10 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	client := &Client{
-		conn:   conn,
-		topics: make(map[string]bool),
-		send:   make(chan []byte),
+		conn:     conn,
+		topics:   make(map[string]bool),
+		send:     make(chan []byte, 2048),
+		clientID: newClientID(),
 	}
 	go client.writePump()
 	go client.readPump(hub)
@@ -312,7 +539,9 @@ func setupRoutes() {
 }
 
 func main() {
+	initSignalRedis()
 	setupRoutes()
+	hub.startWatchdog(context.Background())
 	log.Println("Starting server on port 8080")
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }

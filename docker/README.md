@@ -128,6 +128,7 @@ You must set the values for:
 
 Optional but important:
 
+- Set `LANDING_DOMAIN_ALIASES` to additional launch-site hostnames, for example `LANDING_DOMAIN=durgakiran.com` and `LANDING_DOMAIN_ALIASES=www.durgakiran.com`
 - Set `UPLOAD_STORAGE_DIR` if uploads should not be stored under the default `public` path inside the server container
 - Set `UI_USE_LOCAL_EDITOR_DIST=true` only when you want the deployment-style UI image to test local `packages/editor/dist` output instead of the published `@durgakiran/editor` package
 - Review the log controls if disk usage matters: `DOCKER_LOG_MAX_SIZE`, `DOCKER_LOG_MAX_FILE`, `POSTGRES_LOG_MIN_MESSAGES`, `REDIS_LOG_LEVEL`, `PERMIFY_LOG_LEVEL`, `ZITADEL_ACCESS_LOG_STDOUT_ENABLED`, `SERVER_LOG_TO_FILES`, and `SERVER_HTTP_REQUEST_LOGGING_ENABLED`

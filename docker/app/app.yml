@@ -188,6 +188,15 @@ services:
       SERVER_URL: ${BESKAR_SERVER}
       ZITADEL_REGISTRATION_ORG_ID: ${ZITADEL_REGISTRATION_ORG_ID:-}
       UPLOAD_STORAGE_DIR: ${UPLOAD_STORAGE_DIR:-public}
+      REDIS_HOST: ${REDIS_HOST:-redis}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-redis_secure_password}
+      # Draft-leader presence: seconds without POST /presence (isDraftLeader) before SSE may emit editor.inactive
+      EDITOR_INACTIVE_THRESHOLD_SEC: ${EDITOR_INACTIVE_THRESHOLD_SEC:-75}
+      EDITOR_NEW_DRAFT_MIN_PAYLOAD_BYTES: ${EDITOR_NEW_DRAFT_MIN_PAYLOAD_BYTES:-64}
+    depends_on:
+      redis:
+        condition: service_healthy
     ports:
       - "9095:9095"
       - "40000:40000"
@@ -211,6 +220,9 @@ services:
       - "8086:8080"
     environment:
       - AUTH_SERVER_URL=http://teddox-server:9095
+      - SIGNAL_REDIS_URL=${SIGNAL_REDIS_URL:-}
+      - SIGNAL_LEADER_EVICT_SEC=${SIGNAL_LEADER_EVICT_SEC:-90}
+      - SIGNAL_WATCHDOG_INTERVAL_SEC=${SIGNAL_WATCHDOG_INTERVAL_SEC:-15}
     volumes:
       - /Users/kiran/projects/beskar/signalserver/:/app
       - ./nginx/certs/_wildcard.durgakiran.com.pem:/etc/ssl/certs/_wildcard.durgakiran.com.pem:ro

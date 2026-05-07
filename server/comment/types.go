@@ -13,27 +13,29 @@ type CommentAnchor struct {
 }
 
 type CommentThread struct {
-	ID               string         `json:"id"`
-	DocumentID       string         `json:"documentId"`
-	CommentID        string         `json:"commentId"`
-	Anchor           CommentAnchor  `json:"anchor"`
-	PublishedVisible bool           `json:"publishedVisible"`
-	Orphaned         bool           `json:"orphaned"`
-	CreatedBy        *AuthorInfo    `json:"createdBy"` // nil for deleted user
-	ResolvedBy       *AuthorInfo    `json:"resolvedBy,omitempty"`
-	ResolvedAt       *time.Time     `json:"resolvedAt,omitempty"`
-	CreatedAt        time.Time      `json:"createdAt"`
-	Replies          []CommentReply `json:"replies"`
+	ID               string                    `json:"id"`
+	DocumentID       string                    `json:"documentId"`
+	CommentID        string                    `json:"commentId"`
+	Anchor           CommentAnchor             `json:"anchor"`
+	PublishedVisible bool                      `json:"publishedVisible"`
+	Orphaned         bool                      `json:"orphaned"`
+	CreatedBy        *AuthorInfo               `json:"createdBy"` // nil for deleted user
+	ResolvedBy       *AuthorInfo               `json:"resolvedBy,omitempty"`
+	ResolvedAt       *time.Time                `json:"resolvedAt,omitempty"`
+	CreatedAt        time.Time                 `json:"createdAt"`
+	Replies          []CommentReply            `json:"replies"`
+	Capabilities     CommentThreadCapabilities `json:"capabilities"`
 }
 
 type CommentReply struct {
-	ID          string              `json:"id"`
-	ThreadID    string              `json:"threadId"`
-	Author      *AuthorInfo         `json:"author"` // nil for deleted user
-	Body        string              `json:"body"`
-	EditedAt    *time.Time          `json:"editedAt,omitempty"`
-	CreatedAt   time.Time           `json:"createdAt"`
-	Attachments []CommentAttachment `json:"attachments"`
+	ID           string                   `json:"id"`
+	ThreadID     string                   `json:"threadId"`
+	Author       *AuthorInfo              `json:"author"` // nil for deleted user
+	Body         string                   `json:"body"`
+	EditedAt     *time.Time               `json:"editedAt,omitempty"`
+	CreatedAt    time.Time                `json:"createdAt"`
+	Attachments  []CommentAttachment      `json:"attachments"`
+	Capabilities CommentReplyCapabilities `json:"capabilities"`
 }
 
 type AuthorInfo struct {
@@ -47,4 +49,18 @@ type CommentAttachment struct {
 	FileName string `json:"fileName"`
 	MimeType string `json:"mimeType"`
 	FileSize int64  `json:"fileSize"`
+}
+
+type CommentThreadCapabilities struct {
+	CanResolve            bool `json:"canResolve"`
+	CanUnresolve          bool `json:"canUnresolve"`
+	CanDeleteThread       bool `json:"canDeleteThread"`
+	CanReply              bool `json:"canReply"`
+	CanEditOpeningReply   bool `json:"canEditOpeningReply"`
+	CanDeleteOpeningReply bool `json:"canDeleteOpeningReply"`
+}
+
+type CommentReplyCapabilities struct {
+	CanEditReply   bool `json:"canEditReply"`
+	CanDeleteReply bool `json:"canDeleteReply"`
 }

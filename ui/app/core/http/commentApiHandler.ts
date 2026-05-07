@@ -15,6 +15,7 @@ const mapBackendReply = (r: any): CommentReply => ({
   authorId: r.author?.id || null,
   authorName: r.author?.name || "Deleted User",
   attachments: (r.attachments || []).map(mapBackendAttachment),
+  capabilities: r.capabilities,
 });
 
 const mapBackendThread = (t: any): CommentThread => ({
@@ -22,7 +23,8 @@ const mapBackendThread = (t: any): CommentThread => ({
   createdBy: t.createdBy?.id || null,
   createdByName: t.createdBy?.name || "Deleted User",
   resolvedBy: t.resolvedBy?.id || null,
-  replies: (t.replies || []).map(mapBackendReply)
+  replies: (t.replies || []).map(mapBackendReply),
+  capabilities: t.capabilities,
 });
 
 /**
@@ -107,7 +109,10 @@ export function makeCommentApiHandler(documentId: string): CommentAPIHandler {
     deleteThread: async (threadId) => {
       const res = await fetch(`${apiV1}/comment/threads/${threadId}`, {
         method: "DELETE",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${localStorage.getItem("access_token")}`
+        },
         credentials: "include", // Relies on session cookies for auth
       });
       if (!res.ok) throw new Error(`Delete thread failed with status: ${res.status}`);
@@ -140,7 +145,10 @@ export function makeCommentApiHandler(documentId: string): CommentAPIHandler {
     deleteReply: async (replyId) => {
       const res = await fetch(`${apiV1}/comment/replies/${replyId}`, {
         method: "DELETE",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${localStorage.getItem("access_token")}`
+        },
         credentials: "include", // Relies on session cookies for auth
       });
       if (!res.ok) throw new Error(`Delete reply failed with status: ${res.status}`);

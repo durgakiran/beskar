@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { Box, Flex, IconButton, Text } from "@radix-ui/themes";
-import { FiEdit3, FiFileText, FiMessageSquare, FiMoreHorizontal, FiMoreVertical, FiShare2, FiTrash2 } from "react-icons/fi";
+import { FiCheck, FiEdit3, FiFileText, FiMessageSquare, FiMoreHorizontal, FiMoreVertical, FiShare2, FiTrash2 } from "react-icons/fi";
+import { copyTextToClipboard } from "../lib/clipboard";
 
 export interface ReadOnlyBreadcrumb {
     id: number;
@@ -126,23 +127,91 @@ function KebabMenu({
 
 function MobileActionDock({
     capabilities,
+    linkCopied,
+    isCommentsOpen,
     onEdit,
     onDelete,
     onOpenComments,
+    onShare,
 }: {
     capabilities: ReadOnlyCapabilities;
+    linkCopied: boolean;
+    isCommentsOpen: boolean;
     onEdit: () => void;
     onDelete: () => void;
     onOpenComments: () => void;
+    onShare: () => void;
 }) {
+    const [actionsOpen, setActionsOpen] = useState(false);
+    const ref = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        if (!actionsOpen) return;
+
+        const handlePointerDown = (event: MouseEvent) => {
+            if (ref.current && !ref.current.contains(event.target as Node)) {
+                setActionsOpen(false);
+            }
+        };
+
+        document.addEventListener("mousedown", handlePointerDown);
+        return () => document.removeEventListener("mousedown", handlePointerDown);
+    }, [actionsOpen]);
+
+    const selectAction = (handler: () => void) => {
+        handler();
+        setActionsOpen(false);
+    };
+
     return (
-        <div className="readonly-action-dock md:hidden">
-                <button type="button" aria-label="Actions" className="readonly-dock-btn">
+        <div ref={ref} className="readonly-action-dock md:hidden">
+            {actionsOpen ? (
+                <div className="readonly-action-menu">
+                    {capabilities.canShare ? (
+                        <button type="button" className="readonly-action-menu-item" onClick={() => selectAction(onShare)}>
+                            {linkCopied ? <FiCheck size={15} /> : <FiShare2 size={15} />}
+                            {linkCopied ? "Copied" : "Share"}
+                        </button>
+                    ) : null}
+                    {capabilities.canEdit ? (
+                        <button type="button" className="readonly-action-menu-item" onClick={() => selectAction(onEdit)}>
+                            <FiEdit3 size={15} />
+                            Edit
+                        </button>
+                    ) : null}
+                    {capabilities.canComment ? (
+                        <button type="button" className="readonly-action-menu-item" onClick={() => selectAction(onOpenComments)}>
+                            <FiMessageSquare size={15} />
+                            {isCommentsOpen ? "Hide comments" : "Comments"}
+                        </button>
+                    ) : null}
+                    {capabilities.canDelete ? (
+                        <button type="button" className="readonly-action-menu-item readonly-action-menu-item--danger" onClick={() => selectAction(onDelete)}>
+                            <FiTrash2 size={15} />
+                            Delete
+                        </button>
+                    ) : null}
+                </div>
+            ) : null}
+
+                <button
+                    type="button"
+                    aria-label={actionsOpen ? "Close actions" : "Open actions"}
+                    title={actionsOpen ? "Close actions" : "Open actions"}
+                    className="readonly-dock-btn"
+                    onClick={() => setActionsOpen((current) => !current)}
+                >
                     <FiMoreVertical size={15} />
                 </button>
             {capabilities.canShare ? (
-                <button type="button" aria-label="Share" className="readonly-dock-btn">
-                    <FiShare2 size={15} />
+                <button
+                    type="button"
+                    aria-label={linkCopied ? "Page link copied" : "Copy page link"}
+                    title={linkCopied ? "Page link copied" : "Copy page link"}
+                    className="readonly-dock-btn"
+                    onClick={onShare}
+                >
+                    {linkCopied ? <FiCheck size={15} /> : <FiShare2 size={15} />}
                 </button>
             ) : null}
             {capabilities.canEdit ? (
@@ -180,6 +249,17 @@ export default function ReadOnlyContentMain({
     children,
     attachments,
 }: ReadOnlyContentMainProps) {
+    const [linkCopied, setLinkCopied] = useState(false);
+    const resetCopiedTimer = useRef<number | null>(null);
+
+    useEffect(() => {
+        return () => {
+            if (resetCopiedTimer.current) {
+                window.clearTimeout(resetCopiedTimer.current);
+            }
+        };
+    }, []);
+
     const orderedBreadcrumbs = useMemo(() => {
         if (breadcrumbs.length > 0) return breadcrumbs;
         return [{ id: Number(pageId), title: title || `Page #${pageId}`, href: null }];
@@ -193,6 +273,21 @@ export default function ReadOnlyContentMain({
         ].filter(Boolean);
         return parts.join(" · ");
     }, [meta.createdByName, meta.publishedAt, meta.updatedAt, meta.updatedByName]);
+
+    const copyPageLink = async () => {
+        const pageUrl = `${window.location.origin}/space/${spaceId}/view/${pageId}`;
+
+        try {
+            await copyTextToClipboard(pageUrl);
+            setLinkCopied(true);
+            if (resetCopiedTimer.current) {
+                window.clearTimeout(resetCopiedTimer.current);
+            }
+            resetCopiedTimer.current = window.setTimeout(() => setLinkCopied(false), 1800);
+        } catch (error) {
+            console.error("Unable to copy page link", error);
+        }
+    };
 
     return (
         <Box className={`readonly-content-page relative min-h-full bg-[#fbfafc] ${commentPresentation === "bottom-sheet" ? "readonly-comments-mobile" : ""}`}>
@@ -228,10 +323,13 @@ export default function ReadOnlyContentMain({
                                     {capabilities.canShare ? (
                                         <button
                                             type="button"
+                                            aria-label={linkCopied ? "Page link copied" : "Copy page link"}
+                                            title={linkCopied ? "Page link copied" : "Copy page link"}
+                                            onClick={copyPageLink}
                                             className="inline-flex items-center gap-2 rounded-[8px] bg-[#f5f4f6] px-[14px] py-[8px] text-[13px] font-medium text-[#605c67] transition-colors hover:bg-[#ece9ef]"
                                         >
-                                            <FiShare2 size={14} />
-                                            Share
+                                            {linkCopied ? <FiCheck size={14} /> : <FiShare2 size={14} />}
+                                            {linkCopied ? "Copied" : "Share"}
                                         </button>
                                     ) : null}
                                     {capabilities.canEdit ? (
@@ -299,9 +397,12 @@ export default function ReadOnlyContentMain({
 
             <MobileActionDock
                 capabilities={capabilities}
+                linkCopied={linkCopied}
+                isCommentsOpen={isCommentsOpen}
                 onEdit={onEdit}
                 onDelete={onDelete}
                 onOpenComments={onOpenComments}
+                onShare={copyPageLink}
             />
 
             <style jsx global>{`
@@ -363,6 +464,47 @@ export default function ReadOnlyContentMain({
                     z-index: 180;
                 }
 
+                .readonly-action-menu {
+                    position: absolute;
+                    right: 44px;
+                    bottom: 0;
+                    width: 178px;
+                    padding: 6px;
+                    border: 1px solid #d4d1da;
+                    border-radius: 14px;
+                    background: #ffffff;
+                    box-shadow: 0 12px 28px rgba(34, 31, 38, 0.16);
+                }
+
+                .readonly-action-menu-item {
+                    display: flex;
+                    width: 100%;
+                    align-items: center;
+                    gap: 10px;
+                    border: none;
+                    border-radius: 10px;
+                    background: transparent;
+                    padding: 9px 10px;
+                    color: #605c67;
+                    font-size: 13px;
+                    font-weight: 600;
+                    text-align: left;
+                }
+
+                .readonly-action-menu-item:hover {
+                    background: #f5f4f6;
+                    color: #221f26;
+                }
+
+                .readonly-action-menu-item--danger {
+                    color: #b42318;
+                }
+
+                .readonly-action-menu-item--danger:hover {
+                    background: #fef2f3;
+                    color: #b42318;
+                }
+
                 .readonly-dock-btn {
                     display: inline-flex;
                     align-items: center;
@@ -373,6 +515,238 @@ export default function ReadOnlyContentMain({
                     border-radius: 10px;
                     background: #f5f4f6;
                     color: #605c67;
+                }
+
+                .readonly-content-page .csp-container:not(.is-bottom-sheet) {
+                    top: 57px;
+                    height: calc(100dvh - 57px);
+                    max-height: calc(100dvh - 57px);
+                }
+
+                .readonly-content-page .csp-container.is-readonly:not(.is-thread-view):not(.is-bottom-sheet) {
+                    width: min(380px, calc(100vw - 16px));
+                    background: #fbfafc;
+                    border-left: 1px solid #d4d1da;
+                    box-shadow: none;
+                }
+
+                .readonly-content-page .csp-container.is-readonly:not(.is-thread-view):not(.is-bottom-sheet) .csp-header {
+                    position: relative;
+                    display: flex;
+                    flex-direction: column;
+                    align-items: flex-start;
+                    gap: 12px;
+                    padding: 22px 22px 16px;
+                    border-bottom: none;
+                    background: #fbfafc;
+                }
+
+                .readonly-content-page .csp-container.is-readonly:not(.is-thread-view):not(.is-bottom-sheet) .csp-title-block {
+                    gap: 4px;
+                    padding-right: 44px;
+                }
+
+                .readonly-content-page .csp-container.is-readonly:not(.is-thread-view):not(.is-bottom-sheet) .csp-title {
+                    font-size: 14px;
+                    line-height: 1.2;
+                    font-weight: 600;
+                    color: #221f26;
+                }
+
+                .readonly-content-page .csp-container.is-readonly:not(.is-thread-view):not(.is-bottom-sheet) .csp-title svg,
+                .readonly-content-page .csp-container.is-readonly:not(.is-thread-view):not(.is-bottom-sheet) .csp-count {
+                    display: none;
+                }
+
+                .readonly-content-page .csp-container.is-readonly:not(.is-thread-view):not(.is-bottom-sheet) .csp-subtitle {
+                    font-size: 11px;
+                    line-height: 1.35;
+                    font-weight: 500;
+                    color: #898492;
+                }
+
+                .readonly-content-page .csp-container.is-readonly:not(.is-thread-view):not(.is-bottom-sheet) .csp-header-actions {
+                    display: contents;
+                }
+
+                .readonly-content-page .csp-container.is-readonly:not(.is-thread-view):not(.is-bottom-sheet) .csp-filter-pills {
+                    display: flex;
+                    gap: 8px;
+                }
+
+                .readonly-content-page .csp-container.is-readonly:not(.is-thread-view):not(.is-bottom-sheet) .csp-filter-pill {
+                    height: 32px;
+                    border: none;
+                    border-radius: 999px;
+                    background: #f8f7f9;
+                    padding: 0 12px;
+                    color: #605c67;
+                    font-size: 12px;
+                    font-weight: 600;
+                    box-shadow: none;
+                }
+
+                .readonly-content-page .csp-container.is-readonly:not(.is-thread-view):not(.is-bottom-sheet) .csp-filter-pill.is-active {
+                    background: #eadfec;
+                    color: #6b4c7a;
+                }
+
+                .readonly-content-page .csp-container.is-readonly:not(.is-thread-view):not(.is-bottom-sheet) .csp-header-actions > .csp-icon-btn {
+                    position: absolute;
+                    top: 22px;
+                    right: 22px;
+                    width: 32px;
+                    height: 32px;
+                    border: 1px solid #d4d1da;
+                    border-radius: 999px;
+                    background: #fbfafc;
+                    color: #605c67;
+                }
+
+                .readonly-content-page .csp-container.is-readonly:not(.is-thread-view):not(.is-bottom-sheet) .csp-body {
+                    gap: 12px;
+                    padding: 0 22px 24px;
+                    background: #fbfafc;
+                }
+
+                .readonly-content-page .csp-container.is-readonly:not(.is-thread-view):not(.is-bottom-sheet) .csp-thread-card--list {
+                    gap: 12px;
+                    border: 1px solid #d4d1da;
+                    border-radius: 14px;
+                    background: #fbfafc;
+                    padding: 16px;
+                    box-shadow: none;
+                }
+
+                .readonly-content-page .csp-container.is-readonly:not(.is-thread-view):not(.is-bottom-sheet) .csp-thread-card--list.is-active {
+                    border-color: #cfbada;
+                    background: #eadfec;
+                }
+
+                .readonly-content-page .csp-container.is-readonly:not(.is-thread-view):not(.is-bottom-sheet) .csp-thread-card--list .primary-comment-block {
+                    gap: 12px;
+                    border: none;
+                    border-radius: 0;
+                    background: transparent;
+                    padding: 0;
+                }
+
+                .readonly-content-page .csp-container.is-readonly:not(.is-thread-view):not(.is-bottom-sheet) .primary-comment-header {
+                    gap: 10px;
+                    min-width: 0;
+                }
+
+                .readonly-content-page .csp-container.is-readonly:not(.is-thread-view):not(.is-bottom-sheet) .ctc-avatar {
+                    width: 28px;
+                    height: 28px;
+                    background: #f5eef7;
+                    color: #6b4c7a;
+                    font-size: 12px;
+                    font-weight: 700;
+                }
+
+                .readonly-content-page .csp-container.is-readonly:not(.is-thread-view):not(.is-bottom-sheet) .csp-author {
+                    font-size: 13px;
+                    line-height: 1.25;
+                    font-weight: 700;
+                    color: #221f26;
+                }
+
+                .readonly-content-page .csp-container.is-readonly:not(.is-thread-view):not(.is-bottom-sheet) .csp-ts {
+                    font-size: 11px;
+                    line-height: 1.35;
+                    font-weight: 500;
+                    color: #898492;
+                }
+
+                .readonly-content-page .csp-container.is-readonly:not(.is-thread-view):not(.is-bottom-sheet) .primary-comment-actions {
+                    gap: 6px;
+                    flex-shrink: 0;
+                }
+
+                .readonly-content-page .csp-container.is-readonly:not(.is-thread-view):not(.is-bottom-sheet) .primary-comment-action-btn {
+                    width: 28px;
+                    height: 28px;
+                    border: none;
+                    border-radius: 999px;
+                    background: rgba(255, 255, 255, 0.72);
+                    color: #605c67;
+                }
+
+                .readonly-content-page .csp-container.is-readonly:not(.is-thread-view):not(.is-bottom-sheet) .primary-comment-action-btn--danger {
+                    color: #d31e29;
+                }
+
+                .readonly-content-page .csp-container.is-readonly:not(.is-thread-view):not(.is-bottom-sheet) .primary-comment-quote {
+                    border: none;
+                    border-radius: 10px;
+                    background: rgba(255, 255, 255, 0.82);
+                    padding: 10px 12px;
+                    color: #221f26;
+                    font-size: 12px;
+                    line-height: 1.35;
+                    font-style: normal;
+                }
+
+                .readonly-content-page .csp-container.is-readonly:not(.is-thread-view):not(.is-bottom-sheet) .primary-comment-body {
+                    margin: 0;
+                    color: #605c67;
+                    font-size: 13px;
+                    line-height: 1.55;
+                }
+
+                .readonly-content-page .csp-container.is-readonly:not(.is-thread-view):not(.is-bottom-sheet) .csp-view-thread-btn {
+                    width: fit-content;
+                    margin-top: 0;
+                    border: none;
+                    border-radius: 0;
+                    background: transparent;
+                    padding: 0;
+                    color: #898492;
+                    font-size: 12px;
+                    font-weight: 700;
+                }
+
+                .readonly-content-page .csp-container.is-bottom-sheet {
+                    top: auto;
+                    left: 0;
+                    right: 0;
+                    width: 100vw;
+                    max-width: 100vw;
+                    height: min(78dvh, 720px);
+                    max-height: calc(100dvh - 12px);
+                    box-sizing: border-box;
+                }
+
+                .readonly-content-page .csp-container.is-bottom-sheet.is-thread-view,
+                .readonly-content-page .csp-container.is-bottom-sheet.is-readonly.is-thread-view {
+                    width: 100vw;
+                    max-width: 100vw;
+                }
+
+                .readonly-content-page .csp-container.is-bottom-sheet .csp-header {
+                    min-width: 0;
+                    gap: 12px;
+                }
+
+                .readonly-content-page .csp-container.is-bottom-sheet .csp-body {
+                    min-width: 0;
+                    padding: 12px;
+                }
+
+                .readonly-content-page .csp-container.is-bottom-sheet.is-readonly .csp-body {
+                    padding: 0 12px 16px;
+                }
+
+                .readonly-content-page .csp-container.is-bottom-sheet .csp-thread-card {
+                    min-width: 0;
+                    max-width: 100%;
+                    box-sizing: border-box;
+                }
+
+                .readonly-content-page .csp-container.is-bottom-sheet .ctc-reply-composer-actions {
+                    min-width: 0;
+                    flex-wrap: wrap;
                 }
 
                 @media (min-width: 768px) {

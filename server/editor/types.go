@@ -71,12 +71,23 @@ type Editor interface {
 }
 
 type Document struct {
-	Title    string    `json:"title"`
-	OwnerId  uuid.UUID `json:"ownerId"`
-	ParentId int64     `json:"parentId"`
-	Id       int64     `json:"id"`
-	DocId    int64     `json:"docId"`
-	SpaceId  uuid.UUID `json:"spaceId"`
+	Title             string    `json:"title"`
+	OwnerId           uuid.UUID `json:"ownerId"`
+	ParentId          int64     `json:"parentId"`
+	Id                int64     `json:"id"`
+	DocId             int64     `json:"docId"`
+	SpaceId           uuid.UUID `json:"spaceId"`
+	DraftGeneration   int64     `json:"draftGeneration,omitempty"`
+}
+
+// EditDocumentMeta is a lightweight payload for GET …/edit/meta and page events (draftGeneration idempotency).
+type EditDocumentMeta struct {
+	DocID             int64     `json:"docId"`
+	DraftGeneration   int64     `json:"draftGeneration"`
+	UpdatedAt         time.Time `json:"updatedAt"`
+	Title             string    `json:"title"`
+	ParentID          int64     `json:"parentId"`
+	Draft             bool      `json:"draft"`
 }
 
 type InputDocument struct {
@@ -94,6 +105,7 @@ type ContentDraft struct {
 type InputDraftDocument struct {
 	Document
 	Data            []byte                      `json:"data"`
+	IsDraftLeader   bool                        `json:"isDraftLeader"`
 	AssetReferences *assetref.PayloadReferences `json:"assetReferences,omitempty"`
 }
 

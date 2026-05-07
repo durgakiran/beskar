@@ -171,4 +171,21 @@
         <rollback/>
     </changeSet>
 
+    <changeSet id="7-page-doc-map-draft-generation" author="Beskar">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <columnExists tableName="page_doc_map" schemaName="core" columnName="draft_generation"/>
+            </not>
+        </preConditions>
+        <comment>Monotonic draft generation for editor meta + page events / SSE idempotency</comment>
+        <addColumn tableName="page_doc_map" schemaName="core">
+            <column name="draft_generation" type="BIGINT" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+        </addColumn>
+        <rollback>
+            <dropColumn tableName="page_doc_map" schemaName="core" columnName="draft_generation"/>
+        </rollback>
+    </changeSet>
+
 </databaseChangeLog>

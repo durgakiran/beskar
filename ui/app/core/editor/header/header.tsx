@@ -1,12 +1,16 @@
 'use client'
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import FixedMenu from "@editor/fixedMenu/FixedMenu";
-import { Avatar, Box, Button, Flex, IconButton, Text } from "@radix-ui/themes";
-import { FiFileText, FiShare2, FiStar } from "react-icons/fi";
+import { Avatar, Box, Button, Flex, HoverCard, IconButton, Text } from "@radix-ui/themes";
+import { FiCheck, FiFileText, FiShare2, FiStar } from "react-icons/fi";
+import { copyTextToClipboard } from "../../../lib/clipboard";
 
 interface Collaborator {
     id: string;
     name: string;
+    /** From Yjs awareness when peers publish it (older clients may omit). */
+    email?: string;
     color?: string;
 }
 
@@ -18,12 +22,17 @@ interface EditorHeaderProps {
     isSidePanelOpen: boolean;
     setIsSidePanelOpen: (open: boolean) => void;
     spaceId: string;
+    pageId: string;
     spaceName: string;
     pageTitle: string;
     collaborators: Collaborator[];
     canComment: boolean;
     currentUserId?: string;
     isLeader: boolean;
+    /** User id of the draft leader from awareness; preferred over isLeader for collaborator star. */
+    leaderUserId?: string;
+    /** Optional M6 notice (e.g. save leader heartbeat stale). */
+    presenceNotice?: string | null;
 }
 
 export function Editorheader({
@@ -34,14 +43,49 @@ export function Editorheader({
     isSidePanelOpen,
     setIsSidePanelOpen,
     spaceId,
+    pageId,
     spaceName,
     pageTitle,
     collaborators,
     canComment,
     currentUserId,
     isLeader,
+    leaderUserId,
+    presenceNotice,
 }: EditorHeaderProps) {
     const visibleCollaborators = collaborators.slice(0, 3);
+
+    const showLeaderStar = (collaboratorId: string) => {
+        if (leaderUserId) {
+            return collaboratorId === leaderUserId;
+        }
+        return isLeader && collaboratorId === currentUserId;
+    };
+    const [linkCopied, setLinkCopied] = useState(false);
+    const resetCopiedTimer = useRef<number | null>(null);
+
+    useEffect(() => {
+        return () => {
+            if (resetCopiedTimer.current) {
+                window.clearTimeout(resetCopiedTimer.current);
+            }
+        };
+    }, []);
+
+    const copyPageLink = async () => {
+        const pageUrl = `${window.location.origin}/space/${spaceId}/view/${pageId}`;
+
+        try {
+            await copyTextToClipboard(pageUrl);
+            setLinkCopied(true);
+            if (resetCopiedTimer.current) {
+                window.clearTimeout(resetCopiedTimer.current);
+            }
+            resetCopiedTimer.current = window.setTimeout(() => setLinkCopied(false), 1800);
+        } catch (error) {
+            console.error("Unable to copy page link", error);
+        }
+    };
 
     return (
         <Box
@@ -80,44 +124,86 @@ export function Editorheader({
                         {visibleCollaborators.length ? (
                             <Flex align="center" style={{ marginRight: "4px" }}>
                                 {visibleCollaborators.map((collaborator, index) => (
-                                    <Box
-                                        key={collaborator.id}
-                                        style={{
-                                            position: "relative",
-                                            marginLeft: index === 0 ? 0 : -6,
-                                        }}
-                                    >
-                                        <Avatar
-                                            fallback={collaborator.name.charAt(0).toUpperCase()}
-                                            radius="full"
-                                            size="2"
-                                            style={{
-                                                backgroundColor: collaborator.color || "#f1eff4",
-                                                color: "#221f26",
-                                                border: "2px solid white",
-                                            }}
-                                        />
-                                        {isLeader && collaborator.id === currentUserId ? (
-                                            <Box
+                                    <HoverCard.Root key={collaborator.id} openDelay={120} closeDelay={100}>
+                                        <HoverCard.Trigger>
+                                            <span
+                                                aria-label={`${collaborator.name} profile`}
                                                 style={{
-                                                    position: "absolute",
-                                                    right: -2,
-                                                    bottom: -2,
-                                                    width: 14,
-                                                    height: 14,
-                                                    borderRadius: "999px",
-                                                    backgroundColor: "#7c5a96",
-                                                    border: "2px solid white",
-                                                    display: "flex",
-                                                    alignItems: "center",
-                                                    justifyContent: "center",
-                                                    boxSizing: "content-box",
+                                                    position: "relative",
+                                                    marginLeft: index === 0 ? 0 : -6,
+                                                    display: "inline-block",
+                                                    lineHeight: 0,
+                                                    cursor: "default",
+                                                    verticalAlign: "middle",
                                                 }}
                                             >
-                                                <FiStar size={8} color="white" />
-                                            </Box>
-                                        ) : null}
-                                    </Box>
+                                                <Avatar
+                                                    fallback={collaborator.name.charAt(0).toUpperCase()}
+                                                    radius="full"
+                                                    size="2"
+                                                    style={{
+                                                        backgroundColor: collaborator.color || "#f1eff4",
+                                                        color: "#221f26",
+                                                        border: "2px solid white",
+                                                    }}
+                                                />
+                                                {showLeaderStar(collaborator.id) ? (
+                                                    <Box
+                                                        style={{
+                                                            position: "absolute",
+                                                            right: -2,
+                                                            bottom: -2,
+                                                            width: 14,
+                                                            height: 14,
+                                                            borderRadius: "999px",
+                                                            backgroundColor: "#7c5a96",
+                                                            border: "2px solid white",
+                                                            display: "flex",
+                                                            alignItems: "center",
+                                                            justifyContent: "center",
+                                                            boxSizing: "content-box",
+                                                        }}
+                                                    >
+                                                        <FiStar size={8} color="white" />
+                                                    </Box>
+                                                ) : null}
+                                            </span>
+                                        </HoverCard.Trigger>
+                                        <HoverCard.Content
+                                            size="2"
+                                            side="top"
+                                            sideOffset={8}
+                                            style={{ minWidth: 220, maxWidth: 280 }}
+                                        >
+                                            <Flex gap="3" align="start">
+                                                <Avatar
+                                                    fallback={collaborator.name.charAt(0).toUpperCase()}
+                                                    radius="full"
+                                                    size="2"
+                                                    style={{
+                                                        backgroundColor: collaborator.color || "#f1eff4",
+                                                        color: "#221f26",
+                                                        border: "2px solid white",
+                                                        flexShrink: 0,
+                                                    }}
+                                                />
+                                                <Flex direction="column" gap="1" style={{ minWidth: 0 }}>
+                                                    <Text size="2" weight="medium" className="text-[#221f26]">
+                                                        {collaborator.name}
+                                                    </Text>
+                                                    {collaborator.email ? (
+                                                        <Text size="1" className="text-[#605c67] break-all">
+                                                            {collaborator.email}
+                                                        </Text>
+                                                    ) : (
+                                                        <Text size="1" className="text-[#898492]">
+                                                            Email not shared
+                                                        </Text>
+                                                    )}
+                                                </Flex>
+                                            </Flex>
+                                        </HoverCard.Content>
+                                    </HoverCard.Root>
                                 ))}
                             </Flex>
                         ) : null}
@@ -134,12 +220,12 @@ export function Editorheader({
                         color="gray"
                         radius="full"
                         size="2"
-                        aria-label="Share"
-                        title="Share flow is not implemented yet"
-                        disabled
+                        aria-label={linkCopied ? "Page link copied" : "Copy page link"}
+                        title={linkCopied ? "Page link copied" : "Copy page link"}
+                        onClick={copyPageLink}
                         className="!bg-[#f5f4f6] !text-[#605c67]"
                     >
-                        <FiShare2 size={15} />
+                        {linkCopied ? <FiCheck size={15} /> : <FiShare2 size={15} />}
                     </IconButton>
 
                     <Button
@@ -156,6 +242,14 @@ export function Editorheader({
                     </Button>
                 </Flex>
             </Flex>
+
+            {presenceNotice ? (
+                <Box px="4" py="2" style={{ backgroundColor: "#fff7ed", borderBottom: "1px solid #fed7aa" }}>
+                    <Text size="2" className="text-[#9a3412]">
+                        {presenceNotice}
+                    </Text>
+                </Box>
+            ) : null}
 
             <FixedMenu
                 isEditorReady={isEditorReady}

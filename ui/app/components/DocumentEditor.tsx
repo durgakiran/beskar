@@ -18,6 +18,45 @@ import { WebrtcProvider } from "y-webrtc";
 import { prosemirrorJSONToYDoc } from "@tiptap/y-tiptap";
 import { getSignalingUrl } from "app/core/signaling";
 import { extractAssetReferences, type AssetReferencesPayload } from "app/core/editor/extractAssetReferences";
+import { useEditorPageEvents, type PageEventV1 } from "app/core/editor/useEditorPageEvents";
+import { useEditorPresenceHeartbeat } from "app/core/editor/useEditorPresenceHeartbeat";
+
+const FRESH_INIT_BLOCK_NAMES = new Set([
+    "paragraph",
+    "heading",
+    "blockquote",
+    "codeBlock",
+    "horizontalRule",
+    "bulletList",
+    "orderedList",
+    "listItem",
+    "taskList",
+    "taskItem",
+]);
+
+function xmlElementHasNoVisibleText(el: y.XmlElement): boolean {
+    for (let i = 0; i < el.length; i++) {
+        const c = el.get(i);
+        if (c instanceof y.XmlText) {
+            if (c.toString().trim().length > 0) return false;
+        } else if (c instanceof y.XmlElement) {
+            if (!xmlElementHasNoVisibleText(c)) return false;
+        }
+    }
+    return true;
+}
+
+/** True when the Yjs "default" fragment is still TipTap Collaboration's initial empty doc (possibly after a BC/WebRTC peer joined with no real body yet). */
+function defaultFragmentLooksLikeFreshTipTapInit(doc: y.Doc): boolean {
+    const frag = doc.getXmlFragment("default");
+    const n = frag.length;
+    if (n === 0) return true;
+    if (n !== 1) return false;
+    const first = frag.get(0);
+    if (!(first instanceof y.XmlElement)) return false;
+    if (!FRESH_INIT_BLOCK_NAMES.has(first.nodeName)) return false;
+    return xmlElementHasNoVisibleText(first);
+}
 
 interface User {
     name: string;
@@ -35,6 +74,8 @@ interface IPayload {
     docId?: number;
     spaceId: string;
     data: any;
+    /** Matches signaling draft leader; server refreshes draft_leader_ts on save when true. */
+    isDraftLeader?: boolean;
     assetReferences?: AssetReferencesPayload;
 }
 
@@ -48,12 +89,22 @@ interface EditDataDTO {
     data: DocumentDTO;
     docId: number;
     draft: boolean;
+    draftGeneration?: number;
     id: number;
     nodeData: any;
     ownerId: string;
     parentId: number;
     spaceId: string;
     title: string;
+}
+
+interface EditDocumentMetaDTO {
+    docId: number;
+    draftGeneration: number;
+    updatedAt: string;
+    title: string;
+    parentId: number;
+    draft: boolean;
 }
 
 interface EditBreadcrumb {
@@ -109,12 +160,25 @@ export default function DocumentEditor({ slug }: { slug: string[] }) {
     const [docIdProvider, setDocIdProvider] = useState<y.Text>();
     const [parentIdProvider, setParentIdProvider] = useState<y.Text>();
     const [isEditorReady, setIsEditorReady] = useState<boolean>(false);
-    const activeSockets = useRef<Map<WebSocket, number>>(new Map());
+    const activeSockets = useRef<Map<WebSocket, { interval: number; onMessage: (e: MessageEvent) => void; onClose: () => void }>>(new Map());
+    /** y-webrtc can open multiple signaling sockets; the server picks one connection as "leader", so OR across sockets for this tab. */
+    const leaderBySignalingSocketRef = useRef(new Map<WebSocket, boolean>());
     const [isLeader, setIsLeader] = useState<boolean>(false);
     const [isDocumentFetched, setIsDocumentFetched] = useState<boolean>(false);
     const [docAttachments, setDocAttachments] = useState<AttachmentRef[]>([]);
     const [isSidePanelOpen, setIsSidePanelOpen] = useState(false);
-    const [activeCollaborators, setActiveCollaborators] = useState<Array<{ id: string; name: string; color?: string }>>([]);
+    const [activeCollaborators, setActiveCollaborators] = useState<
+        Array<{ id: string; name: string; email?: string; color?: string }>
+    >([]);
+    const [draftLeaderUserId, setDraftLeaderUserId] = useState<string | undefined>(undefined);
+    const draftLeaderUserIdRef = useRef<string | undefined>(undefined);
+    const [saveLeaderOfflineNotice, setSaveLeaderOfflineNotice] = useState(false);
+    /** True after we have ever been draft leader this mount (used to detect real handoff vs first election). */
+    const hadLeadershipRef = useRef(false);
+    /** Set when we were leader and then lost leadership; next time we become leader we refetch server draft. */
+    const lostLeadershipRef = useRef(false);
+    const lastMergedDraftBase64Ref = useRef<string | null>(null);
+    const lastAppliedDraftGenerationRef = useRef(0);
     const pendingPublishRef = useRef<IPayloadPublish | null>(null);
     const [isPreparingPublish, setIsPreparingPublish] = useState(false);
     // end of editor handling
@@ -142,6 +206,11 @@ export default function DocumentEditor({ slug }: { slug: string[] }) {
         return new y.Doc();
     }, []);
 
+    useEffect(() => {
+        lastMergedDraftBase64Ref.current = null;
+        leaderBySignalingSocketRef.current.clear();
+    }, [slug[0], slug[1]]);
+
     const pageIdNum = useMemo(() => {
         const n = parseInt(slug[1], 10);
         return Number.isFinite(n) ? n : 0;
@@ -160,15 +229,6 @@ export default function DocumentEditor({ slug }: { slug: string[] }) {
             color: color,
         };
     }, [profileData]);
-
-    const handleLeaderShipChange = useCallback((event: MessageEvent) => {
-        const data = JSON.parse(event.data);
-        if (data.type === 'leader' && data.isLeader) {
-            setIsLeader(true);
-        } else {
-            setIsLeader(false);
-        }
-    }, []);
 
     const handleObservers = useCallback(() => {
         // setIsSynced(true);
@@ -199,33 +259,194 @@ export default function DocumentEditor({ slug }: { slug: string[] }) {
         }
     };
 
-    const updateContent = (content: JSONContent, title: string) => {
-        if (!isLeader || !isEditorReady) return;
+    const updateContent = useCallback(
+        (content: JSONContent | null, title: string) => {
+            // Only the signaling-room leader persists draft to the API (one writer avoids overwrite churn).
+            if (!isLeader || !isEditorReady || !profileData?.data?.id) return;
+            if (content == null) return;
 
-        const payLoad: IPayload = {
-            data: content,
-            id: Number(slug[1]),
-            ownerId: profileData.data.id,
-            spaceId: slug[0],
-            docId: docId,
-            parentId: parentId,
-            title: title,
-            assetReferences: extractAssetReferences(content),
-        };
-        setUpdatedTitle(title);
-        updateDraftData({ ...payLoad, data: Buffer.from(y.encodeStateAsUpdate(ydoc)).toString('base64') });
-    };
+            const resolvedTitle =
+                (typeof title === "string" ? title.trim() : "") ||
+                titleTextProvider?.toString().trim() ||
+                "";
+            if (!resolvedTitle) return;
+
+            const payLoad: IPayload = {
+                data: content,
+                id: Number(slug[1]),
+                ownerId: profileData.data.id,
+                spaceId: slug[0],
+                docId: docId,
+                parentId: parentId,
+                title: resolvedTitle,
+                isDraftLeader: isLeader,
+                assetReferences: extractAssetReferences(content),
+            };
+            setUpdatedTitle(resolvedTitle);
+            updateDraftData({ ...payLoad, data: Buffer.from(y.encodeStateAsUpdate(ydoc)).toString("base64") });
+        },
+        [
+            isLeader,
+            isEditorReady,
+            profileData?.data?.id,
+            slug,
+            docId,
+            parentId,
+            titleTextProvider,
+            ydoc,
+            updateDraftData,
+        ],
+    );
 
     const handleClose = () => {
         router.push(`/space/${slug[0]}/view/${slug[1]}`);
     };
 
-    // if leader load document from database only once.
+    const applyServerMetaFromFetch = useCallback(
+        async (ev?: PageEventV1) => {
+            if (ev?.type === "document.published" && ev.docId > 0) {
+                const dText = ydoc.getText("docId");
+                const s = String(ev.docId);
+                if (dText.toString() !== s) {
+                    dText.delete(0, dText.length);
+                    dText.insert(0, s);
+                }
+                lastAppliedDraftGenerationRef.current = Math.max(
+                    lastAppliedDraftGenerationRef.current,
+                    typeof ev.draftGeneration === "number" ? ev.draftGeneration : 0,
+                );
+            }
+            const base = (process.env.NEXT_PUBLIC_USER_SERVER_URL || "").replace(/\/+$/, "");
+            if (!base) return;
+            const res = await fetch(`${base}/editor/space/${slug[0]}/page/${slug[1]}/edit/meta`, {
+                credentials: "include",
+                headers: { "Content-Type": "application/json" },
+            });
+            if (!res.ok) return;
+            const json = (await res.json()) as { data?: EditDocumentMetaDTO };
+            const meta = json?.data;
+            if (!meta || typeof meta.draftGeneration !== "number") return;
+
+            const alreadyHaveGeneration =
+                meta.draftGeneration <= lastAppliedDraftGenerationRef.current;
+            // After publish, still apply title/parent from meta even when generation matches what we set from the event.
+            if (alreadyHaveGeneration && ev?.type !== "document.published") {
+                return;
+            }
+            lastAppliedDraftGenerationRef.current = Math.max(
+                lastAppliedDraftGenerationRef.current,
+                meta.draftGeneration,
+            );
+
+            const titleText = ydoc.getText("title");
+            if (meta.title != null && titleText.toString() !== meta.title) {
+                titleText.delete(0, titleText.length);
+                titleText.insert(0, meta.title);
+                setTitle(meta.title);
+            }
+            if (ev?.type !== "document.published") {
+                const docIdText = ydoc.getText("docId");
+                const nextDoc = String(meta.docId);
+                if (docIdText.toString() !== nextDoc) {
+                    docIdText.delete(0, docIdText.length);
+                    docIdText.insert(0, nextDoc);
+                }
+            }
+            const parentIdText = ydoc.getText("parentId");
+            const nextParent = String(meta.parentId ?? "");
+            if (parentIdText.toString() !== nextParent) {
+                parentIdText.delete(0, parentIdText.length);
+                parentIdText.insert(0, nextParent);
+            }
+        },
+        [slug, ydoc],
+    );
+
+    const handlePageEvent = useCallback(
+        (ev: PageEventV1) => {
+            if (ev.schemaVersion !== 1) return;
+            if (ev.type === "editor.inactive") {
+                if (ev.userId && ev.userId === draftLeaderUserIdRef.current && user?.id !== ev.userId) {
+                    setSaveLeaderOfflineNotice(true);
+                }
+                return;
+            }
+            if (ev.type === "document.published" || ev.type === "draft.updated") {
+                setSaveLeaderOfflineNotice(false);
+            }
+            if (ev.type !== "document.published" && ev.type !== "draft.updated") return;
+            if (ev.type === "draft.updated" && ev.draftGeneration <= lastAppliedDraftGenerationRef.current) {
+                return;
+            }
+            void applyServerMetaFromFetch(ev);
+        },
+        [applyServerMetaFromFetch, user?.id],
+    );
+
+    useEditorPageEvents({
+        spaceId: slug[0],
+        pageId: slug[1],
+        enabled: Boolean(profileData && provider),
+        onPageEvent: handlePageEvent,
+        onTransport: (transport) => {
+            if (process.env.NEXT_PUBLIC_PAGE_EVENTS_TRANSPORT_LOG === "1") {
+                console.info("[page-events] transport", transport);
+            }
+        },
+    });
+
+    useEditorPresenceHeartbeat({
+        spaceId: slug[0],
+        pageId: slug[1],
+        enabled: Boolean(profileData && provider),
+        isDraftLeader: isLeader,
+    });
+
+    useEffect(() => {
+        const run = () => {
+            if (document.visibilityState === "visible" && profileData && provider) {
+                void applyServerMetaFromFetch();
+            }
+        };
+        const onPageShow = (e: Event) => {
+            if ((e as PageTransitionEvent).persisted) run();
+        };
+        document.addEventListener("visibilitychange", run);
+        window.addEventListener("pageshow", onPageShow);
+        return () => {
+            document.removeEventListener("visibilitychange", run);
+            window.removeEventListener("pageshow", onPageShow);
+        };
+    }, [profileData, provider, applyServerMetaFromFetch]);
+
+    // Refetch server draft only after we lost leadership and regained it (handoff), not on
+    // first false→true (avoids duplicate fetch / double safeMerge when signaling flickers).
+    useEffect(() => {
+        if (!isLeader) {
+            if (hadLeadershipRef.current) {
+                lostLeadershipRef.current = true;
+            }
+            return;
+        }
+        hadLeadershipRef.current = true;
+        if (lostLeadershipRef.current) {
+            setIsDocumentFetched(false);
+            lostLeadershipRef.current = false;
+        }
+    }, [isLeader]);
+
+    // Leader loads document from database when not yet fetched for this session.
     useEffect(() => {
         if (isLeader && !isDocumentLoading && !isDocumentFetched) {
             fetchData();
         }
-    }, [isLeader]);
+    }, [isLeader, isDocumentLoading, isDocumentFetched, fetchData]);
+
+    // Draft save leader matches signaling leader: collaborators resolve leader pills from awareness.
+    useEffect(() => {
+        if (!provider) return;
+        provider.awareness.setLocalStateField("isDraftLeader", isLeader);
+    }, [provider, isLeader]);
 
     const safeMerge = (base64Update: string) => {
         const dbUpdate = Buffer.from(base64Update, 'base64');
@@ -240,8 +461,10 @@ export default function DocumentEditor({ slug }: { slug: string[] }) {
         // no peers have synced real content yet — it's a fresh load.
         const svMap = y.decodeStateVector(y.encodeStateVector(ydoc));
         const hasOnlyLocalInit = svMap.size === 1 && svMap.has(ydoc.clientID);
+        const treatAsFreshEmptySession =
+            hasOnlyLocalInit || defaultFragmentLooksLikeFreshTipTapInit(ydoc);
 
-        if (hasOnlyLocalInit) {
+        if (treatAsFreshEmptySession) {
             // Fresh reload — clear TipTap's empty paragraph first, then apply
             // the full DB state. Without this, the empty paragraph and the DB content
             // both exist in the CRDT → visible duplication.
@@ -279,12 +502,22 @@ export default function DocumentEditor({ slug }: { slug: string[] }) {
         if (documentData || documentErrors) {
             setIsDocumentFetched(true);
             if (!documentData) return;
+            if (typeof documentData.data.draftGeneration === "number") {
+                lastAppliedDraftGenerationRef.current = Math.max(
+                    lastAppliedDraftGenerationRef.current,
+                    documentData.data.draftGeneration,
+                );
+            }
             // do we have draft document available
             if (documentData.data.draft && documentData.data.data.data) {
                 // documentData.data.data.data is ydoc
                 const data = documentData.data.data.data;
-                // y.applyUpdate(ydoc, Buffer.from(data, 'base64'));
+                if (lastMergedDraftBase64Ref.current === data) {
+                    setIsEditorReady(true);
+                    return;
+                }
                 safeMerge(data);
+                lastMergedDraftBase64Ref.current = data;
                 setIsEditorReady(true);
             } else if (documentData.data.nodeData) {
                 // nodeData exists — but it may be an empty object {} for a brand-new doc.
@@ -350,10 +583,14 @@ export default function DocumentEditor({ slug }: { slug: string[] }) {
         if (!provider) return;
 
         const dispatch = () => {
-            // If any peer already loaded from DB this session, the flag is in the ydoc
-            if (ydoc.getText('dbLoaded').toString() === 'true') {
-                setIsEditorReady(true);
-                return;
+            const dbLoadedText = ydoc.getText("dbLoaded");
+            // Stale dbLoaded can arrive over WebRTC/BC while the body is still TipTap's init — do not skip WASM in that case.
+            if (dbLoadedText.toString() === "true") {
+                if (!defaultFragmentLooksLikeFreshTipTapInit(ydoc)) {
+                    setIsEditorReady(true);
+                    return;
+                }
+                dbLoadedText.delete(0, dbLoadedText.length);
             }
             workerRef.current.postMessage({ type: "doc", data: documentData.data });
         };
@@ -403,6 +640,8 @@ export default function DocumentEditor({ slug }: { slug: string[] }) {
         });
         setProvider(_provider);
         return () => {
+            // y-webrtc: destroy() does not unregister from the shared SignalingConn — WS stays open.
+            _provider.disconnect();
             _provider.destroy();
             setProvider(null);
         };
@@ -416,80 +655,112 @@ export default function DocumentEditor({ slug }: { slug: string[] }) {
     useEffect(() => {
         if (!provider) return;
         if (!user) return;
-        provider.awareness.setLocalStateField('user', {
+
+        const topic = `${slug[1]}-space-${slug[0]}`;
+
+        provider.awareness.setLocalStateField("user", {
             id: user.id,
             name: user.name,
+            email: user.email,
             color: user.color,
         });
 
-        const messageHandler = (event: MessageEvent) => {
-            // y-webrtc mixed binary and JSON. Only process strings.                
-            try {
-                const data = JSON.parse(event.data);
-                if (data.type === 'leader') {
-                    handleLeaderShipChange(event);
-                }
-            } catch (e) {
-                // ignore non-JSON binary frames from y-webrtc
-            }
+        const recomputeLeaderFromSignalingSockets = () => {
+            setIsLeader([...leaderBySignalingSocketRef.current.values()].some(Boolean));
         };
 
-        provider.signalingConns.forEach((conn) => {
-            const socket = conn.ws as WebSocket;
-            if (socket && !activeSockets.current.has(socket)) {
+        const attachSignalingSocket = (socket: WebSocket | null | undefined) => {
+            if (!socket || activeSockets.current.has(socket)) return;
+            if (socket.readyState !== WebSocket.OPEN) return;
 
-                const handleAmILeader = () => {
-                    if (socket.readyState === WebSocket.OPEN) {
-                        socket.send(JSON.stringify({
-                            type: 'amIleader',
-                            topic: slug[1] + "-space-" + slug[0],
-                        }));
+            const messageHandler = (event: MessageEvent) => {
+                try {
+                    const data = JSON.parse(event.data as string) as { type?: string; topic?: string; isLeader?: boolean };
+                    if (data.type === "leader" && data.topic === topic) {
+                        leaderBySignalingSocketRef.current.set(socket, Boolean(data.isLeader));
+                        recomputeLeaderFromSignalingSockets();
                     }
-                };
-
-                const startPolling = () => {
-                    socket.addEventListener('message', messageHandler);
-                    handleAmILeader(); // ask immediately — don't wait 10s
-                    const timeInterval = setInterval(handleAmILeader, 10000) as unknown as number;
-                    socket.addEventListener('close', () => {
-                        socket.removeEventListener('message', messageHandler);
-                        activeSockets.current.delete(socket);
-                        clearInterval(timeInterval);
-                    });
-                    activeSockets.current.set(socket, timeInterval);
-                };
-
-                if (socket.readyState === WebSocket.OPEN) {
-                    // Socket already open — open event already fired, call directly
-                    startPolling();
-                } else {
-                    // Socket not yet open — wait for it
-                    socket.addEventListener('open', startPolling);
+                } catch {
+                    // ignore non-JSON binary frames from y-webrtc
                 }
-            }
-        });
+            };
 
+            const handleAmILeader = () => {
+                if (socket.readyState === WebSocket.OPEN) {
+                    socket.send(JSON.stringify({ type: "amIleader", topic }));
+                }
+            };
+
+            socket.addEventListener("message", messageHandler);
+            handleAmILeader();
+            const timeInterval = setInterval(handleAmILeader, 3000) as unknown as number;
+            const onClose = () => {
+                socket.removeEventListener("message", messageHandler);
+                socket.removeEventListener("close", onClose);
+                leaderBySignalingSocketRef.current.delete(socket);
+                recomputeLeaderFromSignalingSockets();
+                const meta = activeSockets.current.get(socket);
+                if (meta) {
+                    clearInterval(meta.interval);
+                    activeSockets.current.delete(socket);
+                }
+            };
+            socket.addEventListener("close", onClose);
+            activeSockets.current.set(socket, { interval: timeInterval, onMessage: messageHandler, onClose });
+        };
+
+        const scanSignalingConnections = () => {
+            provider.signalingConns.forEach((conn) => {
+                attachSignalingSocket(conn.ws as WebSocket);
+            });
+        };
+
+        scanSignalingConnections();
+        const reconnectInterval = setInterval(scanSignalingConnections, 2000);
 
         return () => {
-            // Clean up awareness state on unmount
-            provider.awareness.setLocalStateField('user', null);
+            clearInterval(reconnectInterval);
+            provider.awareness.setLocalStateField("user", null);
+            provider.awareness.setLocalStateField("isDraftLeader", null);
 
-            activeSockets.current.forEach((timeInterval, socket) => {
-                clearInterval(timeInterval);
-                socket.removeEventListener('message', messageHandler);
+            leaderBySignalingSocketRef.current.clear();
+            setIsLeader(false);
+
+            activeSockets.current.forEach(({ interval, onMessage, onClose }, socket) => {
+                clearInterval(interval);
+                socket.removeEventListener("message", onMessage);
+                socket.removeEventListener("close", onClose);
                 activeSockets.current.delete(socket);
             });
         };
-    }, [provider, user]);
+    }, [provider, user, slug[0], slug[1]]);
 
     useEffect(() => {
         if (!provider) return;
 
         const syncCollaborators = () => {
             const states = Array.from(provider.awareness.getStates().values());
+
+            let leaderId: string | undefined;
+            for (const state of states) {
+                const u = state?.user as { id?: string; name?: string; color?: string } | undefined;
+                if (state?.isDraftLeader === true && u?.id) {
+                    leaderId = u.id;
+                    break;
+                }
+            }
+            setDraftLeaderUserId(leaderId);
+            draftLeaderUserIdRef.current = leaderId;
+
             const nextCollaborators = states
-                .map((state) => state?.user as { id?: string; name?: string; color?: string } | undefined)
-                .filter((candidate): candidate is { id: string; name: string; color?: string } => Boolean(candidate?.id && candidate?.name));
+                .map(
+                    (state) =>
+                        state?.user as { id?: string; name?: string; email?: string; color?: string } | undefined,
+                )
+                .filter(
+                    (candidate): candidate is { id: string; name: string; email?: string; color?: string } =>
+                        Boolean(candidate?.id && candidate?.name),
+                );
 
             const deduped = Array.from(
                 new Map(nextCollaborators.map((candidate) => [candidate.id, candidate])).values(),
@@ -504,6 +775,10 @@ export default function DocumentEditor({ slug }: { slug: string[] }) {
             provider.awareness.off("change", syncCollaborators);
         };
     }, [provider]);
+
+    useEffect(() => {
+        setSaveLeaderOfflineNotice(false);
+    }, [draftLeaderUserId]);
 
     useEffect(() => {
         if (!titleTextProvider) return;
@@ -559,11 +834,13 @@ export default function DocumentEditor({ slug }: { slug: string[] }) {
             return;
         }
 
-        // If the dbLoaded flag is already in the ydoc, another peer (e.g. a BC tab)
-        // already loaded and synced the content — skip to avoid duplication.
-        if (ydoc.getText('dbLoaded').toString() === 'true') {
-            setIsEditorReady(true);
-            return;
+        const dbLoadedText = ydoc.getText("dbLoaded");
+        if (dbLoadedText.toString() === "true") {
+            if (!defaultFragmentLooksLikeFreshTipTapInit(ydoc)) {
+                setIsEditorReady(true);
+                return;
+            }
+            dbLoadedText.delete(0, dbLoadedText.length);
         }
 
         const tiptapDoc = JSON.parse(data);
@@ -584,8 +861,7 @@ export default function DocumentEditor({ slug }: { slug: string[] }) {
         y.applyUpdate(ydoc, y.encodeStateAsUpdate(tempYDoc));
 
         // Set the flag — propagates to all peers via WebRTC/BC
-        const dbLoadedText = ydoc.getText('dbLoaded');
-        if (dbLoadedText.length === 0) dbLoadedText.insert(0, 'true');
+        if (dbLoadedText.length === 0) dbLoadedText.insert(0, "true");
 
         setIsEditorReady(true);
     };
@@ -698,12 +974,19 @@ export default function DocumentEditor({ slug }: { slug: string[] }) {
                                     isSidePanelOpen={isSidePanelOpen}
                                     setIsSidePanelOpen={setIsSidePanelOpen}
                                     spaceId={slug[0]}
+                                    pageId={slug[1]}
                                     spaceName={spaceName}
                                     pageTitle={title || "Untitled"}
                                     collaborators={activeCollaborators}
                                     canComment={canComment}
                                     currentUserId={user?.id}
                                     isLeader={isLeader}
+                                    leaderUserId={draftLeaderUserId}
+                                    presenceNotice={
+                                        saveLeaderOfflineNotice
+                                            ? "Save leader may be offline. Changes might not persist until the leader reconnects."
+                                            : undefined
+                                    }
                                 />
                             </EditorContext.Provider>
                         </div>
@@ -744,9 +1027,7 @@ export default function DocumentEditor({ slug }: { slug: string[] }) {
                                     editable={true}
                                     id={pageIdNum}
                                     user={user}
-                                    updateContent={(content, title) => {
-                                        updateContent(content, title);
-                                    }}
+                                    updateContent={updateContent}
                                     provider={provider}
                                     ydoc={ydoc}
                                     onDocAttachmentsChange={setDocAttachments}

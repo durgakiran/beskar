@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -17,6 +19,22 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
+
+// ErrDraftPayloadTooSmall is returned when a new draft page_doc_map row would be created from a
+// Yjs payload below EDITOR_NEW_DRAFT_MIN_PAYLOAD_BYTES (mitigates empty draft shadowing published).
+var ErrDraftPayloadTooSmall = errors.New("editor: draft payload too small to create a new draft; refetch edit before saving")
+
+func newDraftMinPayloadBytes() int {
+	v := strings.TrimSpace(os.Getenv("EDITOR_NEW_DRAFT_MIN_PAYLOAD_BYTES"))
+	if v == "" {
+		return 64
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil || n < 0 {
+		return 64
+	}
+	return n
+}
 
 func (c ContentDraft) Create(conn pgx.Tx, ctx context.Context) (int64, error) {
 	var docId int64
@@ -94,16 +112,14 @@ func (d Doc) Create(conn pgx.Tx, ctx context.Context) (int64, error) {
 	return docId, nil
 }
 
-func (d Doc) Update(conn pgx.Tx, ctx context.Context) (int64, error) {
-	tag, err := conn.Exec(ctx, updateDocQuery, d.Title, d.Version, d.DocId, d.PageId, d.Draft)
-	affected := tag.RowsAffected()
+func (d Doc) Update(conn pgx.Tx, ctx context.Context) (int64, int64, error) {
+	var gen int64
+	err := conn.QueryRow(ctx, updateDocQuery, d.Title, d.Version, d.DocId, d.PageId, d.Draft).Scan(&gen)
 	if err != nil {
-		// error happened we need to cancel whole transaction
-		fmt.Printf("Error happened while creating doc %v \n", err.Error())
-		return int64(0), err
-		// conn.Rollback(ctx)
+		fmt.Printf("Error happened while updating doc %v \n", err.Error())
+		return 0, 0, err
 	}
-	return affected, nil
+	return 1, gen, nil
 }
 
 func fetchDocument(conn pgx.Tx, ctx context.Context, pageId int64, spaceId uuid.UUID, ownerId uuid.UUID) (Document, error) {
@@ -306,7 +322,7 @@ func (document InputDocument) Create() (int64, error) {
 	return pageId, nil
 }
 
-func (document InputDocument) Publish() (int64, error) {
+func (document InputDocument) Publish() (pageId int64, publishedDocId int64, err error) {
 	connPool := core.GetPool()
 	ctx := context.Background()
 	conn, err := connPool.Acquire(ctx)
@@ -329,16 +345,16 @@ func (document InputDocument) Publish() (int64, error) {
 		doc := Doc{PageId: document.Id, OwnerId: document.OwnerId, Version: time.Now(), Title: document.Title, Draft: 0}
 		docId, err = doc.Create(tx, ctx)
 		if err != nil {
-			return document.Id, err
+			return document.Id, 0, err
 		}
 	} else if err != nil {
-		return document.Id, err
+		return document.Id, 0, err
 	} else {
 		doc := Doc{PageId: document.Id, DocId: existingDocument.DocId, OwnerId: document.OwnerId, Version: time.Now(), Title: document.Title, Draft: 0}
 		docId = existingDocument.DocId
-		_, err = doc.Update(tx, ctx)
+		_, _, err = doc.Update(tx, ctx)
 		if err != nil {
-			return document.Id, err
+			return document.Id, 0, err
 		}
 	}
 	// create content
@@ -348,7 +364,7 @@ func (document InputDocument) Publish() (int64, error) {
 		if err != nil {
 			fmt.Println(child.DocId, child.ContentId)
 			// return pageId and error
-			return document.Id, err
+			return document.Id, 0, err
 		}
 	}
 	for _, child := range document.Nodes.Text {
@@ -356,19 +372,19 @@ func (document InputDocument) Publish() (int64, error) {
 		_, err := child.Create(tx, ctx)
 		if err != nil {
 			// return pageId and error
-			return document.Id, err
+			return document.Id, 0, err
 		}
 	}
 	if err := comment.PromoteComments(ctx, tx, document.Id); err != nil {
-		return document.Id, err
+		return document.Id, 0, err
 	}
 	if document.AssetReferences != nil {
 		refs, err := assetref.NormalizePayloadReferences(ctx, tx, document.Id, document.AssetReferences)
 		if err != nil {
-			return document.Id, err
+			return document.Id, 0, err
 		}
 		if err := assetref.ReplacePublishedDocReferences(ctx, tx, document.Id, docId, refs); err != nil {
-			return document.Id, err
+			return document.Id, 0, err
 		}
 	}
 	// delete drafts for given docId
@@ -399,10 +415,10 @@ func (document InputDocument) Publish() (int64, error) {
 	// }
 	tx.Commit(ctx)
 	// return updated page id
-	return document.Id, nil
+	return document.Id, docId, nil
 }
 
-func (document InputDraftDocument) Update() (int64, error) {
+func (document InputDraftDocument) Update() (pageId int64, draftGeneration int64, err error) {
 	connPool := core.GetPool()
 	ctx := context.Background()
 	conn, err := connPool.Acquire(ctx)
@@ -421,19 +437,24 @@ func (document InputDraftDocument) Update() (int64, error) {
 	// we need to update a doc if exists in draft state
 	existingDocument, err := fetchDocumentToEdit(tx, ctx, document.Id, document.SpaceId, document.OwnerId)
 	var docId int64
+	var draftGen int64
 	if errors.Is(err, pgx.ErrNoRows) {
+		if min := newDraftMinPayloadBytes(); min > 0 && len(document.Data) < min {
+			return document.Id, 0, ErrDraftPayloadTooSmall
+		}
 		doc := Doc{PageId: document.Id, OwnerId: document.OwnerId, Version: time.Now(), Title: document.Title, Draft: 1}
 		docId, err = doc.Create(tx, ctx)
 		if err != nil {
-			return document.Id, err
+			return document.Id, 0, err
 		}
+		draftGen = 0
 	} else if err != nil {
-		return document.Id, err
+		return document.Id, 0, err
 	} else {
 		doc := Doc{PageId: document.Id, DocId: existingDocument.DocId, OwnerId: document.OwnerId, Version: time.Now(), Title: document.Title, Draft: 1}
-		_, err = doc.Update(tx, ctx)
+		_, draftGen, err = doc.Update(tx, ctx)
 		if err != nil {
-			return document.Id, err
+			return document.Id, 0, err
 		}
 		docId = existingDocument.DocId
 	}
@@ -444,23 +465,23 @@ func (document InputDraftDocument) Update() (int64, error) {
 		_, err = ContentDraft.Create(tx, ctx)
 	}
 	if err != nil {
-		return document.Id, err
+		return document.Id, 0, err
 	}
 	if document.AssetReferences != nil {
 		refs, err := assetref.NormalizePayloadReferences(ctx, tx, document.Id, document.AssetReferences)
 		if err != nil {
-			return document.Id, err
+			return document.Id, 0, err
 		}
 		if err := assetref.ReplaceDraftDocReferences(ctx, tx, document.Id, docId, refs); err != nil {
-			return document.Id, err
+			return document.Id, 0, err
 		}
 		if err := assetref.SetDraftStatus(ctx, tx, document.Id, assetref.DraftStatusIndexed, time.Now()); err != nil {
-			return document.Id, err
+			return document.Id, 0, err
 		}
 	}
 	tx.Commit(ctx)
 	// return updated page id
-	return document.Id, nil
+	return document.Id, draftGen, nil
 }
 
 func GetDocument(pageId int64, spaceId uuid.UUID, ownerId uuid.UUID) (OutputDocument, error) {
@@ -688,6 +709,26 @@ func GetDocumentToEdit(pageId int64, spaceId uuid.UUID, ownerId uuid.UUID) (Outp
 	outputDocument.Draft = isDraft
 	tx.Commit(ctx)
 	return outputDocument, nil
+}
+
+// GetEditDocumentMeta returns the latest draft row for the page, or the latest published row if no draft exists.
+func GetEditDocumentMeta(ctx context.Context, pageId int64, spaceId uuid.UUID) (EditDocumentMeta, error) {
+	var m EditDocumentMeta
+	pool := core.GetPool()
+	err := pool.QueryRow(ctx, getEditMetaDraft, spaceId, pageId).Scan(&m.DocID, &m.DraftGeneration, &m.UpdatedAt, &m.Title, &m.ParentID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		err = pool.QueryRow(ctx, getEditMetaPublished, spaceId, pageId).Scan(&m.DocID, &m.DraftGeneration, &m.UpdatedAt, &m.Title, &m.ParentID)
+		if err != nil {
+			return m, err
+		}
+		m.Draft = false
+		return m, nil
+	}
+	if err != nil {
+		return m, err
+	}
+	m.Draft = true
+	return m, nil
 }
 
 func DeleteDocument(pageId int64, spaceId uuid.UUID, ownerId uuid.UUID) (int64, error) {

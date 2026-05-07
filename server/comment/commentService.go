@@ -189,6 +189,84 @@ func parsePageID(documentID string) (int64, error) {
 	return pageID, nil
 }
 
+type commentPermissionContext struct {
+	canAddComment      bool
+	canEditPage        bool
+	canDeletePage      bool
+	canModerateComment bool
+}
+
+func loadCommentPermissionContext(ctx context.Context, conn *pgxpool.Conn, docId string, userId string) commentPermissionContext {
+	perms := commentPermissionContext{}
+	if userId == "" || docId == "" {
+		return perms
+	}
+
+	perms.canAddComment, _ = core.CheckPermission("page", docId, "user", userId, core.PAGE_ADD_COMMENT)
+	perms.canEditPage, _ = core.CheckPermission("page", docId, "user", userId, core.PAGE_EDIT)
+	perms.canDeletePage, _ = core.CheckPermission("page", docId, "user", userId, core.PAGE_DELETE)
+
+	var spaceID string
+	if err := conn.QueryRow(ctx, FETCH_PAGE_SPACE_ID, docId).Scan(&spaceID); err == nil && spaceID != "" {
+		// Comment moderation is intentionally tied to the parent space admin/owner
+		// capability, not page delete. Editors can delete pages but should not
+		// moderate other users' replies.
+		perms.canModerateComment, _ = core.CheckPermission("space", spaceID, "user", userId, core.SPACE_EDIT)
+	}
+
+	return perms
+}
+
+func buildReplyCapabilities(reply CommentReply, userId string, perms commentPermissionContext) CommentReplyCapabilities {
+	isAuthor := reply.Author != nil && reply.Author.ID == userId
+	return CommentReplyCapabilities{
+		CanEditReply:   isAuthor && perms.canAddComment,
+		CanDeleteReply: (isAuthor && perms.canAddComment) || perms.canModerateComment,
+	}
+}
+
+func buildThreadCapabilities(thread CommentThread, userId string, perms commentPermissionContext) CommentThreadCapabilities {
+	isThreadOwner := thread.CreatedBy != nil && thread.CreatedBy.ID == userId
+	isResolved := thread.ResolvedAt != nil
+
+	caps := CommentThreadCapabilities{
+		CanResolve:      !isResolved && !thread.Orphaned && (isThreadOwner || perms.canEditPage),
+		CanUnresolve:    isResolved && (isThreadOwner || perms.canEditPage),
+		CanDeleteThread: isThreadOwner || perms.canDeletePage,
+		CanReply:        !isResolved && !thread.Orphaned && perms.canAddComment,
+	}
+
+	if len(thread.Replies) > 0 {
+		openingCaps := buildReplyCapabilities(thread.Replies[0], userId, perms)
+		caps.CanEditOpeningReply = openingCaps.CanEditReply
+		caps.CanDeleteOpeningReply = openingCaps.CanDeleteReply
+	}
+
+	return caps
+}
+
+func applyCommentCapabilities(ctx context.Context, conn *pgxpool.Conn, threads []CommentThread, userId string) []CommentThread {
+	if len(threads) == 0 || userId == "" {
+		return threads
+	}
+
+	permissionByDoc := make(map[string]commentPermissionContext)
+	for i := range threads {
+		docId := threads[i].DocumentID
+		perms, ok := permissionByDoc[docId]
+		if !ok {
+			perms = loadCommentPermissionContext(ctx, conn, docId, userId)
+			permissionByDoc[docId] = perms
+		}
+		for j := range threads[i].Replies {
+			threads[i].Replies[j].Capabilities = buildReplyCapabilities(threads[i].Replies[j], userId, perms)
+		}
+		threads[i].Capabilities = buildThreadCapabilities(threads[i], userId, perms)
+	}
+
+	return threads
+}
+
 func replaceReplyAssetReferences(ctx context.Context, tx pgx.Tx, pageID int64, replyID string, attachmentIDs []string) error {
 	refs, err := assetref.NormalizePayloadReferences(ctx, tx, pageID, &assetref.PayloadReferences{
 		Attachments: attachmentIDs,
@@ -290,13 +368,15 @@ func (s *CommentService) CreateThread(ctx context.Context, docId, commentId stri
 	// Hydrate the user we just inserted so the API response is complete
 	hydrated, _ := hydrateUsers([]CommentThread{thread})
 	if len(hydrated) > 0 {
-		return hydrated[0], nil
+		withCaps := applyCommentCapabilities(ctx, conn, hydrated, userId)
+		return withCaps[0], nil
 	}
 
-	return thread, nil
+	withCaps := applyCommentCapabilities(ctx, conn, []CommentThread{thread}, userId)
+	return withCaps[0], nil
 }
 
-func (s *CommentService) ListThreads(ctx context.Context, docId string, includeResolved bool) ([]CommentThread, error) {
+func (s *CommentService) ListThreads(ctx context.Context, docId string, includeResolved bool, userId string) ([]CommentThread, error) {
 	connPool := core.GetPool()
 	conn, err := connPool.Acquire(ctx)
 	if err != nil {
@@ -413,9 +493,9 @@ func (s *CommentService) ListThreads(ctx context.Context, docId string, includeR
 
 	hydrated, err := hydrateUsers(result)
 	if err != nil {
-		return result, nil // fallback to non-hydrated
+		return applyCommentCapabilities(ctx, conn, result, userId), nil // fallback to non-hydrated
 	}
-	return hydrated, nil
+	return applyCommentCapabilities(ctx, conn, hydrated, userId), nil
 }
 
 func (s *CommentService) ResolveThread(ctx context.Context, threadId, userId string) (CommentThread, error) {
@@ -457,7 +537,7 @@ func (s *CommentService) ResolveThread(ctx context.Context, threadId, userId str
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			// might already be resolved
-			threads, err := s.ListThreads(ctx, docId, true)
+			threads, err := s.ListThreads(ctx, docId, true, userId)
 			if err == nil {
 				for _, t := range threads {
 					if t.ID == threadId {
@@ -470,7 +550,7 @@ func (s *CommentService) ResolveThread(ctx context.Context, threadId, userId str
 		return CommentThread{}, err
 	}
 
-	threads, _ := s.ListThreads(ctx, docId, true)
+	threads, _ := s.ListThreads(ctx, docId, true, userId)
 	for _, t := range threads {
 		if t.ID == threadId {
 			return t, nil
@@ -513,7 +593,7 @@ func (s *CommentService) UnresolveThread(ctx context.Context, threadId, userId s
 	err = conn.QueryRow(ctx, UNRESOLVE_THREAD, threadId).Scan(&updatedThreadID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			threads, _ := s.ListThreads(ctx, docId, true)
+			threads, _ := s.ListThreads(ctx, docId, true, userId)
 			for _, t := range threads {
 				if t.ID == threadId {
 					return t, nil
@@ -523,7 +603,7 @@ func (s *CommentService) UnresolveThread(ctx context.Context, threadId, userId s
 		return CommentThread{}, err
 	}
 
-	threads, _ := s.ListThreads(ctx, docId, true)
+	threads, _ := s.ListThreads(ctx, docId, true, userId)
 	for _, t := range threads {
 		if t.ID == threadId {
 			return t, nil
@@ -624,7 +704,7 @@ func (s *CommentService) OrphanThread(ctx context.Context, threadId, userId stri
 		return CommentThread{}, err
 	}
 
-	threads, _ := s.ListThreads(ctx, docId, true)
+	threads, _ := s.ListThreads(ctx, docId, true, userId)
 	for _, t := range threads {
 		if t.ID == updatedThreadID {
 			return t, nil
@@ -632,6 +712,32 @@ func (s *CommentService) OrphanThread(ctx context.Context, threadId, userId stri
 	}
 
 	return CommentThread{}, fmt.Errorf("thread not found after orphaning")
+}
+
+func (s *CommentService) GetThreadDocumentID(ctx context.Context, threadId string) (string, error) {
+	connPool := core.GetPool()
+	conn, err := connPool.Acquire(ctx)
+	if err != nil {
+		return "", err
+	}
+	defer conn.Release()
+
+	var docId string
+	err = conn.QueryRow(ctx, FETCH_THREAD_DOCUMENT_ID, threadId).Scan(&docId)
+	return docId, err
+}
+
+func (s *CommentService) GetReplyDocumentID(ctx context.Context, replyId string) (string, error) {
+	connPool := core.GetPool()
+	conn, err := connPool.Acquire(ctx)
+	if err != nil {
+		return "", err
+	}
+	defer conn.Release()
+
+	var docId string
+	err = conn.QueryRow(ctx, FETCH_REPLY_DOCUMENT_ID, replyId).Scan(&docId)
+	return docId, err
 }
 
 func (s *CommentService) CreateReply(ctx context.Context, threadId, body string, attachmentIDs []string, userId string) (CommentReply, error) {
@@ -697,8 +803,10 @@ func (s *CommentService) CreateReply(ctx context.Context, threadId, body string,
 	t := CommentThread{Replies: []CommentReply{reply}}
 	hydrated, _ := hydrateUsers([]CommentThread{t})
 	if len(hydrated) > 0 && len(hydrated[0].Replies) > 0 {
-		return hydrated[0].Replies[0], nil
+		reply = hydrated[0].Replies[0]
 	}
+	perms := loadCommentPermissionContext(ctx, conn, docId, userId)
+	reply.Capabilities = buildReplyCapabilities(reply, userId, perms)
 	return reply, nil
 }
 
@@ -772,9 +880,11 @@ func (s *CommentService) EditReply(ctx context.Context, replyId, body string, at
 	t := CommentThread{Replies: []CommentReply{reply}}
 	hydrated, _ := hydrateUsers([]CommentThread{t})
 	if len(hydrated) > 0 && len(hydrated[0].Replies) > 0 {
-		return hydrated[0].Replies[0], nil
+		reply = hydrated[0].Replies[0]
 	}
 
+	perms := loadCommentPermissionContext(ctx, conn, docId, userId)
+	reply.Capabilities = buildReplyCapabilities(reply, userId, perms)
 	return reply, nil
 }
 
@@ -796,20 +906,9 @@ func (s *CommentService) DeleteReply(ctx context.Context, replyId, userId string
 		return err
 	}
 
-	allowed, _ := core.CheckPermission("page", docId, "user", userId, core.PAGE_ADD_COMMENT)
-	if !allowed {
-		return fmt.Errorf("forbidden")
-	}
-
-	canDelete := false
-	if authorId != nil && *authorId == userId {
-		canDelete = true
-	} else {
-		allowedDelete, _ := core.CheckPermission("page", docId, "user", userId, core.PAGE_DELETE)
-		if allowedDelete {
-			canDelete = true
-		}
-	}
+	perms := loadCommentPermissionContext(ctx, conn, docId, userId)
+	isAuthor := authorId != nil && *authorId == userId
+	canDelete := (isAuthor && perms.canAddComment) || perms.canModerateComment
 
 	if !canDelete {
 		return fmt.Errorf("forbidden")

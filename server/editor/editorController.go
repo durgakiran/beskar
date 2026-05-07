@@ -1,6 +1,8 @@
 package editor
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -8,6 +10,7 @@ import (
 	"strconv"
 
 	"github.com/durgakiran/beskar/core"
+	"github.com/durgakiran/beskar/editor/pageevents"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/render"
 	"github.com/google/uuid"
@@ -193,7 +196,7 @@ func publishDoc(w http.ResponseWriter, r *http.Request) {
 	if !ensureMutableSpace(w, r, inputDoc.SpaceId) {
 		return
 	}
-	pageId, err := inputDoc.Publish()
+	pageId, publishedDocId, err := inputDoc.Publish()
 	if err != nil && err.Error() == "nothing new to update" {
 		render.Status(r, http.StatusConflict)
 		render.Render(w, r, core.NewFailedResponse(http.StatusConflict, core.FAILURE, core.FAILURE, "There is nothing new to update"))
@@ -203,6 +206,18 @@ func publishDoc(w http.ResponseWriter, r *http.Request) {
 		render.Status(r, http.StatusInternalServerError)
 		render.Render(w, r, core.NewFailedResponse(http.StatusInternalServerError, core.FAILURE, core.FAILURE, "Unable to update document"))
 		return
+	}
+
+	docID := publishedDocId
+	gen := int64(0)
+	if meta, mErr := GetEditDocumentMeta(ctx, pageId, inputDoc.SpaceId); mErr == nil {
+		docID = meta.DocID
+		gen = meta.DraftGeneration
+	}
+	if pageevents.Enabled() {
+		if errPub := pageevents.PublishDocumentPublished(ctx, inputDoc.SpaceId, pageId, docID, gen); errPub != nil {
+			logger().Warn("pageevents: document.published", zap.Error(errPub))
+		}
 	}
 
 	type PageId struct {
@@ -247,11 +262,31 @@ func updateDraftDoc(w http.ResponseWriter, r *http.Request) {
 	if !ensureMutableSpace(w, r, inputDoc.SpaceId) {
 		return
 	}
-	pageId, err := inputDoc.Update()
+	pageId, draftGen, err := inputDoc.Update()
 	if err != nil {
+		if errors.Is(err, ErrDraftPayloadTooSmall) {
+			render.Status(r, http.StatusConflict)
+			render.Render(w, r, core.NewFailedResponse(http.StatusConflict, core.FAILURE, "Editor not synced with server", err.Error()))
+			return
+		}
 		render.Status(r, http.StatusInternalServerError)
 		render.Render(w, r, core.NewFailedResponse(http.StatusInternalServerError, core.FAILURE, core.FAILURE, "Unable to update document"))
 		return
+	}
+	if inputDoc.IsDraftLeader && pageevents.Enabled() {
+		if terr := pageevents.TouchDraftLeaderTs(ctx, inputDoc.SpaceId, pageId, inputDoc.OwnerId); terr != nil {
+			logger().Warn("pageevents: touch draft leader ts", zap.Error(terr))
+		}
+	}
+
+	docID := int64(0)
+	if meta, mErr := GetEditDocumentMeta(ctx, pageId, inputDoc.SpaceId); mErr == nil {
+		docID = meta.DocID
+	}
+	if pageevents.Enabled() {
+		if errPub := pageevents.PublishDraftUpdated(ctx, inputDoc.SpaceId, pageId, docID, draftGen); errPub != nil {
+			logger().Warn("pageevents: draft.updated", zap.Error(errPub))
+		}
 	}
 
 	type PageId struct {
@@ -395,6 +430,125 @@ func getPageInlineLinkMetadataHandler(w http.ResponseWriter, r *http.Request) {
 	core.SendSuccessResponse(w, r, http.StatusOK, metadata)
 }
 
+func postEditorPresence(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	user, err := core.GetUserInfo(ctx)
+	if err != nil || user.Id == "" {
+		core.SendFailedReponse(w, r, http.StatusForbidden, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNAUTHORIZED])
+		return
+	}
+	ownerID := uuid.MustParse(user.AId)
+	spaceID := uuid.MustParse(chi.URLParam(r, "spaceId"))
+	pageIDStr := chi.URLParam(r, "pageId")
+	if !core.ValidateUserPagePermission(pageIDStr, ownerID, "edit") {
+		core.SendFailedReponse(w, r, http.StatusForbidden, "Invalid space permissions")
+		return
+	}
+	if !ensureMutableSpace(w, r, spaceID) {
+		return
+	}
+	pageID, err := strconv.ParseInt(pageIDStr, 10, 64)
+	if err != nil {
+		core.SendFailedReponse(w, r, http.StatusBadRequest, "Invalid page id")
+		return
+	}
+	b, err := io.ReadAll(r.Body)
+	if err != nil {
+		render.Status(r, http.StatusInternalServerError)
+		render.Render(w, r, core.NewFailedResponse(http.StatusInternalServerError, core.FAILURE, core.FAILURE, "Unable to read request body"))
+		return
+	}
+	_ = r.Body.Close()
+
+	var body struct {
+		ClientTime    *string `json:"clientTime"`
+		IsDraftLeader bool    `json:"isDraftLeader"`
+	}
+	if len(bytes.TrimSpace(b)) > 0 {
+		if err := json.Unmarshal(b, &body); err != nil {
+			render.Status(r, http.StatusBadRequest)
+			render.Render(w, r, core.NewFailedResponse(http.StatusBadRequest, core.FAILURE, core.FAILURE, "Invalid JSON body"))
+			return
+		}
+	}
+	clientTime := ""
+	if body.ClientTime != nil {
+		clientTime = *body.ClientTime
+	}
+	rateLimited, err := pageevents.RecordEditorPresence(ctx, spaceID, pageID, ownerID, body.IsDraftLeader, clientTime)
+	if err != nil {
+		logger().Warn("postEditorPresence", zap.Error(err))
+		core.SendFailedReponse(w, r, http.StatusInternalServerError, "Unable to record presence")
+		return
+	}
+	if rateLimited {
+		render.Status(r, http.StatusTooManyRequests)
+		render.Render(w, r, core.NewFailedResponse(http.StatusTooManyRequests, core.FAILURE, "Too many presence requests", "rate limited"))
+		return
+	}
+	core.SendSuccessResponse(w, r, http.StatusNoContent, nil)
+}
+
+func getDocumentEditMeta(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	user, err := core.GetUserInfo(ctx)
+	if err != nil || user.Id == "" {
+		core.SendFailedReponse(w, r, http.StatusForbidden, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNAUTHORIZED])
+		return
+	}
+	ownerId := uuid.MustParse(user.AId)
+	spaceId := uuid.MustParse(chi.URLParam(r, "spaceId"))
+	pageIdStr := chi.URLParam(r, "pageId")
+	if !core.ValidateUserPagePermission(pageIdStr, ownerId, "edit") {
+		core.SendFailedReponse(w, r, http.StatusForbidden, "Invalid space permissions")
+		return
+	}
+	if !ensureMutableSpace(w, r, spaceId) {
+		return
+	}
+	pageId, err := strconv.ParseInt(pageIdStr, 10, 64)
+	if err != nil {
+		core.SendFailedReponse(w, r, http.StatusBadRequest, "Invalid page id")
+		return
+	}
+	meta, err := GetEditDocumentMeta(ctx, pageId, spaceId)
+	if errors.Is(err, pgx.ErrNoRows) {
+		core.SendSuccessResponse(w, r, http.StatusOK, nil)
+		return
+	}
+	if err != nil {
+		logger().Error("getDocumentEditMeta", zap.Error(err))
+		core.SendFailedReponse(w, r, http.StatusInternalServerError, "Unable to load edit meta")
+		return
+	}
+	core.SendSuccessResponse(w, r, http.StatusOK, meta)
+}
+
+func getEditorPageEventsSSE(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	user, err := core.GetUserInfo(ctx)
+	if err != nil || user.Id == "" {
+		core.SendFailedReponse(w, r, http.StatusForbidden, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNAUTHORIZED])
+		return
+	}
+	ownerId := uuid.MustParse(user.AId)
+	spaceId := uuid.MustParse(chi.URLParam(r, "spaceId"))
+	pageIdStr := chi.URLParam(r, "pageId")
+	if !core.ValidateUserPagePermission(pageIdStr, ownerId, "edit") {
+		core.SendFailedReponse(w, r, http.StatusForbidden, "Invalid space permissions")
+		return
+	}
+	if !ensureMutableSpace(w, r, spaceId) {
+		return
+	}
+	pageId, err := strconv.ParseInt(pageIdStr, 10, 64)
+	if err != nil {
+		core.SendFailedReponse(w, r, http.StatusBadRequest, "Invalid page id")
+		return
+	}
+	pageevents.ServeSSE(w, r, spaceId, pageId)
+}
+
 func Router() *chi.Mux {
 	r := chi.NewRouter()
 	r.Use(core.Authenticated)
@@ -402,6 +556,9 @@ func Router() *chi.Mux {
 	// Document endpoints
 	r.Get("/space/{spaceId}/page/{pageId}", getDocumentToView)
 	r.Get("/space/{spaceId}/page/{pageId}/edit", getDocumentToEdit)
+	r.Get("/space/{spaceId}/page/{pageId}/edit/meta", getDocumentEditMeta)
+	r.Post("/space/{spaceId}/page/{pageId}/presence", postEditorPresence)
+	r.Get("/space/{spaceId}/page/{pageId}/events", getEditorPageEventsSSE)
 	r.Get("/space/{spaceId}/page/{pageId}/metadata", getPageMetadataHandler)
 	r.Get("/space/{spaceId}/page/{pageId}/inline-link", getPageInlineLinkMetadataHandler)
 	r.Get("/external-link/metadata", getExternalLinkMetadataHandler)

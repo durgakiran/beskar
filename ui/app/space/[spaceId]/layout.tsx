@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { PageTree, PageTreeNode } from "@components/primitives";
 import AddPage from "@components/addPage";
 import { Response, useGet } from "@http/hooks";
+import { SpaceAddPageProvider } from "./SpaceAddPageContext";
 
 interface IPageList {
     pageId: number;
@@ -111,13 +112,13 @@ export default function Layout({ children, params }: { children: React.ReactNode
         localStorage.setItem(`sidebar-width-${spaceId}`, newWidth.toString());
     }, [spaceId]);
 
-    const handleAddPage = (parentId?: string) => {
+    const handleAddPage = useCallback((parentId?: string) => {
         if (spaceDetails?.data?.archivedAt) {
             return;
         }
         setAddPageParentId(parentId ? parseInt(parentId) : undefined);
         setIsAddPageOpen(true);
-    };
+    }, [spaceDetails?.data?.archivedAt]);
 
     const handlePageSelect = (id: string) => {
         const node = data?.data.find(p => p.pageId.toString() === id && p.type !== "whiteboard");
@@ -144,6 +145,7 @@ export default function Layout({ children, params }: { children: React.ReactNode
     };
 
     return (
+        <SpaceAddPageProvider openAddPage={handleAddPage}>
         <div className="flex h-full w-full overflow-hidden bg-white">
             {/* Sidebar */}
             <aside 
@@ -245,5 +247,6 @@ export default function Layout({ children, params }: { children: React.ReactNode
                 editPage={handleCreatedPage}
             />
         </div>
+        </SpaceAddPageProvider>
     );
 }

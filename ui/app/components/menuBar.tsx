@@ -101,7 +101,7 @@ export default function MenuBar() {
             brandHref="/"
             navItems={[
                 { id: "spaces", label: "Spaces", href: "/space", active: pathname?.startsWith("/space") },
-                { id: "contact", label: "Contact", href: "#", active: false },
+                { id: "contact", label: "Contact", href: "/contact", active: pathname === "/contact" },
             ]}
             user={user}
             userMenuItems={userMenuItems}

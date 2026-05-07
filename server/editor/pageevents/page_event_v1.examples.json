@@ -1,0 +1,31 @@
+[
+  {
+    "schemaVersion": 1,
+    "type": "document.published",
+    "spaceId": "00000000-0000-0000-0000-000000000000",
+    "pageId": 1,
+    "docId": 2,
+    "draftGeneration": 3,
+    "occurredAt": "2026-05-04T12:00:00.000Z"
+  },
+  {
+    "schemaVersion": 1,
+    "type": "draft.updated",
+    "spaceId": "00000000-0000-0000-0000-000000000000",
+    "pageId": 1,
+    "docId": 2,
+    "draftGeneration": 4,
+    "occurredAt": "2026-05-04T12:00:01.000Z"
+  },
+  {
+    "schemaVersion": 1,
+    "type": "editor.inactive",
+    "spaceId": "00000000-0000-0000-0000-000000000000",
+    "pageId": 1,
+    "docId": 0,
+    "draftGeneration": 0,
+    "occurredAt": "2026-05-04T12:05:00.000Z",
+    "userId": "00000000-0000-0000-0000-000000000099",
+    "reason": "draft_leader_heartbeat_stale"
+  }
+]
