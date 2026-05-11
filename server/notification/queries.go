@@ -156,4 +156,110 @@ const (
 		updated_at = now()
 	WHERE id = $1 AND status IN ('failed', 'dead_lettered')
 	RETURNING id`
+
+	upsertNotificationEvent = `INSERT INTO notifications.notification_events (
+		event_key,
+		type,
+		category,
+		actor_user_id,
+		target_type,
+		target_id,
+		space_id,
+		page_id,
+		data,
+		created_at
+	) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10)
+	ON CONFLICT (event_key) DO UPDATE SET event_key = EXCLUDED.event_key
+	RETURNING id`
+
+	insertInAppNotification = `INSERT INTO notifications.in_app_notifications (
+		event_id,
+		recipient_user_id,
+		type,
+		category,
+		title,
+		body,
+		target_type,
+		target_id,
+		space_id,
+		page_id,
+		action_required,
+		actions,
+		data,
+		expires_at,
+		created_at,
+		updated_at
+	) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::jsonb, $13::jsonb, $14, $15, now())
+	ON CONFLICT (event_id, recipient_user_id) DO NOTHING`
+
+	listInAppNotifications = `SELECT
+		n.id,
+		n.type,
+		n.category,
+		n.title,
+		COALESCE(n.body, ''),
+		e.actor_user_id,
+		e.data,
+		n.target_type,
+		n.target_id,
+		n.space_id,
+		n.page_id,
+		n.action_required,
+		n.actions,
+		n.data,
+		n.read_at,
+		n.dismissed_at,
+		n.resolved_at,
+		n.expires_at,
+		n.created_at,
+		n.updated_at
+	FROM notifications.in_app_notifications n
+	JOIN notifications.notification_events e ON e.id = n.event_id
+	WHERE n.recipient_user_id = $1
+		AND n.dismissed_at IS NULL
+		AND ($2 <> 'unread' OR n.read_at IS NULL)
+		AND ($2 <> 'action_required' OR (n.action_required = true AND n.resolved_at IS NULL))
+		AND ($3::timestamptz IS NULL OR (n.created_at, n.id) < ($3::timestamptz, $4::uuid))
+	ORDER BY n.created_at DESC, n.id DESC
+	LIMIT $5`
+
+	countInAppNotifications = `SELECT
+		COUNT(*) FILTER (WHERE dismissed_at IS NULL) AS total,
+		COUNT(*) FILTER (WHERE read_at IS NULL AND dismissed_at IS NULL) AS unread,
+		COUNT(*) FILTER (WHERE action_required = true AND resolved_at IS NULL AND dismissed_at IS NULL) AS action_required
+	FROM notifications.in_app_notifications
+	WHERE recipient_user_id = $1`
+
+	markInAppNotificationsRead = `UPDATE notifications.in_app_notifications
+	SET read_at = COALESCE(read_at, now()),
+		updated_at = now()
+	WHERE recipient_user_id = $1
+		AND id = ANY($2)
+		AND read_at IS NULL`
+
+	markAllInAppNotificationsRead = `UPDATE notifications.in_app_notifications
+	SET read_at = COALESCE(read_at, now()),
+		updated_at = now()
+	WHERE recipient_user_id = $1
+		AND dismissed_at IS NULL
+		AND read_at IS NULL
+		AND ($2 = '' OR category = $2)`
+
+	dismissInAppNotification = `UPDATE notifications.in_app_notifications
+	SET dismissed_at = COALESCE(dismissed_at, now()),
+		updated_at = now()
+	WHERE id = $1
+		AND recipient_user_id = $2
+		AND dismissed_at IS NULL
+		AND (action_required = false OR resolved_at IS NOT NULL)
+	RETURNING id`
+
+	resolveInAppNotificationByEventKey = `UPDATE notifications.in_app_notifications n
+	SET resolved_at = COALESCE(n.resolved_at, now()),
+		read_at = COALESCE(n.read_at, now()),
+		updated_at = now()
+	FROM notifications.notification_events e
+	WHERE n.event_id = e.id
+		AND e.event_key = $1
+		AND ($2::uuid IS NULL OR n.recipient_user_id = $2::uuid)`
 )

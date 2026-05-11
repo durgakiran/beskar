@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/durgakiran/beskar/core"
+	"github.com/durgakiran/beskar/notification"
 	"github.com/durgakiran/beskar/quota"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -548,6 +549,8 @@ func addSpaceMembers(spaceId uuid.UUID, actorId uuid.UUID, req AddSpaceMembersRe
 	for _, user := range existingUsers {
 		existing[user.Id.String()] = true
 	}
+	spaceDetails, _ := getSpaceDetails(spaceId, actorId)
+	actor, _ := userByID(existingUsers, actorId)
 	pendingAddSet := make(map[string]bool)
 	for _, member := range req.Members {
 		if !existing[member.UserId] {
@@ -560,6 +563,7 @@ func addSpaceMembers(spaceId uuid.UUID, actorId uuid.UUID, req AddSpaceMembersRe
 	addedCount := 0
 	skippedExisting := 0
 	seenAdds := make(map[string]bool)
+	addedRoles := make(map[uuid.UUID]string)
 	for _, member := range req.Members {
 		if existing[member.UserId] || seenAdds[member.UserId] {
 			skippedExisting++
@@ -569,7 +573,19 @@ func addSpaceMembers(spaceId uuid.UUID, actorId uuid.UUID, req AddSpaceMembersRe
 			return nil, err
 		}
 		seenAdds[member.UserId] = true
+		if addedID, err := uuid.Parse(member.UserId); err == nil {
+			addedRoles[addedID] = member.Role
+		}
 		addedCount++
+	}
+	if addedCount > 0 && spaceDetails.Id != uuid.Nil {
+		if updatedUsers, err := getSpaceUsers(spaceId); err == nil {
+			for addedID, role := range addedRoles {
+				if recipient, ok := userByID(updatedUsers, addedID); ok {
+					emitSpaceMemberAddedNotification(context.Background(), spaceDetails, actor, recipient, role)
+				}
+			}
+		}
 	}
 	return map[string]any{
 		"addedCount":      addedCount,
@@ -594,13 +610,25 @@ func changeSpaceMemberRole(spaceId uuid.UUID, actorId uuid.UUID, req ChangeSpace
 			if user.IsOwner {
 				return User{}, errors.New(core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNAUTHORIZED])
 			}
+			oldRole := user.Role
+			newRole := normalizeRole(req.Role)
+			if normalizeRole(oldRole) == newRole {
+				user.Role = newRole
+				return user, nil
+			}
+			spaceDetails, _ := getSpaceDetails(spaceId, actorId)
+			actor, _ := userByID(users, actorId)
+			changedAt := time.Now()
 			if err := core.DeleteSubjectRelations(spaceId.String(), "space", req.UserId, "user"); err != nil {
 				return User{}, err
 			}
 			if err := core.WriteRelations(spaceId.String(), "space", req.UserId, "user", storageRole(req.Role)); err != nil {
 				return User{}, err
 			}
-			user.Role = normalizeRole(req.Role)
+			user.Role = newRole
+			if spaceDetails.Id != uuid.Nil {
+				emitSpaceMemberRoleChangedNotification(context.Background(), spaceDetails, actor, user, oldRole, newRole, changedAt)
+			}
 			return user, nil
 		}
 	}
@@ -621,12 +649,21 @@ func removeSpaceMember(spaceId uuid.UUID, actorId uuid.UUID, req RemoveSpaceMemb
 	if err != nil {
 		return err
 	}
+	spaceDetails, _ := getSpaceDetails(spaceId, actorId)
+	actor, _ := userByID(users, actorId)
 	for _, user := range users {
 		if user.Id.String() == req.UserId {
 			if user.IsOwner {
 				return errors.New(core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNAUTHORIZED])
 			}
-			return core.DeleteSubjectRelations(spaceId.String(), "space", req.UserId, "user")
+			removedAt := time.Now()
+			if err := core.DeleteSubjectRelations(spaceId.String(), "space", req.UserId, "user"); err != nil {
+				return err
+			}
+			if spaceDetails.Id != uuid.Nil {
+				emitSpaceMemberRemovedNotification(context.Background(), spaceDetails, actor, user, removedAt)
+			}
+			return nil
 		}
 	}
 	return errors.New(core.ErrorCode_name[core.ErrorCode_ERROR_CODE_NO_DATA])
@@ -824,6 +861,8 @@ func archiveSpace(spaceId uuid.UUID, actorId uuid.UUID) (Space, error) {
 	if !core.ValidateUserSpacePermissions(spaceId, actorId, core.SPACE_ARCHIVE) {
 		return Space{}, errors.New(core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNAUTHORIZED])
 	}
+	members, _ := getSpaceUsers(spaceId)
+	actor, _ := userByID(members, actorId)
 	connPool := core.GetPool()
 	ctx := context.Background()
 	conn, err := connPool.Acquire(ctx)
@@ -839,6 +878,7 @@ func archiveSpace(spaceId uuid.UUID, actorId uuid.UUID) (Space, error) {
 	if err != nil {
 		return Space{}, err
 	}
+	emitSpaceLifecycleNotification(context.Background(), notification.NotificationTypeSpaceArchived, space, actor, members, time.Now())
 	return space, nil
 }
 
@@ -846,6 +886,8 @@ func unarchiveSpace(spaceId uuid.UUID, actorId uuid.UUID) (Space, error) {
 	if !core.ValidateUserSpacePermissions(spaceId, actorId, core.SPACE_ARCHIVE) {
 		return Space{}, errors.New(core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNAUTHORIZED])
 	}
+	members, _ := getSpaceUsers(spaceId)
+	actor, _ := userByID(members, actorId)
 	connPool := core.GetPool()
 	ctx := context.Background()
 	conn, err := connPool.Acquire(ctx)
@@ -857,7 +899,12 @@ func unarchiveSpace(spaceId uuid.UUID, actorId uuid.UUID) (Space, error) {
 	if err != nil {
 		return Space{}, err
 	}
-	return pgx.CollectExactlyOneRow(rows, pgx.RowToStructByNameLax[Space])
+	space, err := pgx.CollectExactlyOneRow(rows, pgx.RowToStructByNameLax[Space])
+	if err != nil {
+		return Space{}, err
+	}
+	emitSpaceLifecycleNotification(context.Background(), notification.NotificationTypeSpaceUnarchived, space, actor, members, time.Now())
+	return space, nil
 }
 
 func softDeleteSpace(spaceId uuid.UUID, actorId uuid.UUID, req DeleteSpaceRequest) error {
@@ -868,6 +915,8 @@ func softDeleteSpace(spaceId uuid.UUID, actorId uuid.UUID, req DeleteSpaceReques
 	if err != nil {
 		return err
 	}
+	members, _ := getSpaceUsers(spaceId)
+	actor, _ := userByID(members, actorId)
 	if !strings.EqualFold(strings.TrimSpace(details.Name), strings.TrimSpace(req.ConfirmName)) {
 		return errors.New(core.ErrorCode_name[core.ErrorCode_ERROR_CODE_INVALID_INPUT])
 	}
@@ -878,8 +927,13 @@ func softDeleteSpace(spaceId uuid.UUID, actorId uuid.UUID, req DeleteSpaceReques
 		return err
 	}
 	defer conn.Release()
+	deletedAt := time.Now()
 	_, err = conn.Exec(ctx, SOFT_DELETE_SPACE, spaceId, actorId)
-	return err
+	if err != nil {
+		return err
+	}
+	emitSpaceLifecycleNotification(context.Background(), notification.NotificationTypeSpaceDeleted, details, actor, members, deletedAt)
+	return nil
 }
 
 func getPendingInviteEmails(spaceId uuid.UUID) (map[string]string, error) {

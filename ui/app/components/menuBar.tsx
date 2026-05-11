@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { useGetCall } from "@http";
 import { Response, useGet } from "@http/hooks";
@@ -14,12 +14,10 @@ interface UserInfo {
     username: string;
 }
 
-interface Invite {
-    token: string;
-}
-
-interface Notifications {
-    invites: Invite[];
+interface NotificationCounts {
+    total: number;
+    unread: number;
+    actionRequired: number;
 }
 
 const USER_URI = process.env.NEXT_PUBLIC_USER_SERVER_URL;
@@ -43,8 +41,7 @@ export default function MenuBar() {
     const router = useRouter();
     const pathname = usePathname();
     const [, res] = useGetCall<UserInfo>(USER_URI + "/profile/details");
-    const [{ data: notificationsData }, fetchNotifications] = useGet<Response<Notifications>>("invite/user/invites");
-    const [notificationCountOffset, setNotificationCountOffset] = useState(0);
+    const [{ data: notificationsData }, fetchNotifications] = useGet<Response<NotificationCounts>>("notifications/unread-count");
 
     useEffect(() => {
         fetchNotifications();
@@ -52,7 +49,6 @@ export default function MenuBar() {
 
     useEffect(() => {
         const handleNotificationsChanged = () => {
-            setNotificationCountOffset((count) => count - 1);
             fetchNotifications();
         };
 
@@ -62,11 +58,7 @@ export default function MenuBar() {
         };
     }, [fetchNotifications]);
 
-    useEffect(() => {
-        setNotificationCountOffset(0);
-    }, [notificationsData?.data?.invites?.length]);
-
-    const notificationCount = Math.max(0, (notificationsData?.data?.invites?.length ?? 0) + notificationCountOffset);
+    const notificationCount = Math.max(0, notificationsData?.data?.unread ?? 0);
 
     const user: TopbarUser = useMemo(
         () => ({

@@ -249,6 +249,7 @@ func processInviteDecision(userId string, emailId string, token string, decision
 	if err := processInvitation(userId, emailId, token, status); err != nil {
 		return InviteDecisionResponse{}, err
 	}
+	emitSpaceInviteDecisionInApp(context.Background(), details, userId, emailId, status)
 
 	responseStatus := strings.ToLower(status)
 	return InviteDecisionResponse{
@@ -424,6 +425,9 @@ func getUserInvites(userId string, email string) (UserInvites, error) {
 		logger().Error(err.Error())
 		return userInvites, errors.New(core.ErrorCode_name[core.ErrorCode_ERROR_WHILE_READING_ROWS])
 	}
+	if len(invites) == 0 {
+		return UserInvites{Invites: []InviteDBOV5{}}, nil
+	}
 
 	// get user details of senders
 	senders := make([]string, 0)
@@ -441,25 +445,30 @@ func getUserInvites(userId string, email string) (UserInvites, error) {
 		zitaIds = append(zitaIds, zId.Id)
 		zitaIdMap[zId.Id] = zId.UserId
 	}
-	userDetails, err := core.SearchUsersByIds(zitaIds)
-	if err != nil {
-		logger().Error(err.Error())
-		return userInvites, errors.New(core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNSPECIFIED])
+	senderNameByUserId := make(map[string]string)
+	if len(zitaIds) > 0 {
+		userDetails, err := core.SearchUsersByIds(zitaIds)
+		if err != nil {
+			logger().Error(err.Error())
+			return userInvites, errors.New(core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNSPECIFIED])
+		}
+		for _, user := range userDetails.Result {
+			if senderId, ok := zitaIdMap[user.UserId]; ok {
+				senderNameByUserId[senderId] = user.Human.Profile.DisplayName
+			}
+		}
 	}
 
 	// populate sender details
 	invitesOut := make([]InviteDBOV5, 0)
 	for _, invite := range invites {
-		for _, user := range userDetails.Result {
-			if invite.SenderId.String() == zitaIdMap[user.UserId] {
-				inviteOut := InviteDBOV5{
-					InviteDBOV4: invite,
-					SenderName:  user.Human.Profile.DisplayName,
-				}
-				invitesOut = append(invitesOut, inviteOut)
-				break
-			}
+		inviteOut := InviteDBOV5{
+			InviteDBOV4: invite,
 		}
+		if senderName, ok := senderNameByUserId[invite.SenderId.String()]; ok {
+			inviteOut.SenderName = senderName
+		}
+		invitesOut = append(invitesOut, inviteOut)
 	}
 	userInvites = UserInvites{
 		Invites: invitesOut,

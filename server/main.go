@@ -163,6 +163,7 @@ func main() {
 	r.Mount("/api/v1/invite", mw.CheckAuthentication()(invite.Router()))
 	r.Mount("/api/v1/page", mw.CheckAuthentication()(page.Router()))
 	r.Mount("/api/v1/comment", mw.CheckAuthentication()(comment.Router()))
+	r.Mount("/api/v1/notifications", mw.CheckAuthentication()(notification.NewController().Router()))
 	r.Mount("/api/v1/user", user.Router())
 	if notificationConfig.AdminEnabled && notificationConfig.AdminToken != "" {
 		r.Mount("/api/v1/admin/email", mw.CheckAuthentication()(notification.NewAdminController(notificationConfig).Router()))

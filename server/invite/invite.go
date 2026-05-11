@@ -140,6 +140,13 @@ func createInvitation(w http.ResponseWriter, r *http.Request) {
 			zap.Error(err),
 		)
 	}
+	if err := invite.emitSpaceInviteCreatedInApp(ctx, token, user); err != nil {
+		logger().Warn("failed to emit space invite in-app notification",
+			zap.String("entity", invite.Entity),
+			zap.String("entity_id", invite.EntityId),
+			zap.Error(err),
+		)
+	}
 	sendSuccessResponse(w, r, http.StatusOK, token)
 }
 

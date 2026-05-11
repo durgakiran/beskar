@@ -172,6 +172,10 @@ type ZitaUser struct {
 }
 
 func SearchUsersByIds(userIds []string) (UserSearchResponse, error) {
+	if len(userIds) == 0 {
+		return UserSearchResponse{Result: []User{}}, nil
+	}
+
 	var providerURL = normalizeExternalURL(os.Getenv("ISSUER_URL"))
 	filter := Filter{
 		InUserIdsQuery: &InUserIdsQUeryFilter{

@@ -95,3 +95,16 @@ func TestDetectZitadelError(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
+
+func TestSearchUsersByIdsEmptyInput(t *testing.T) {
+	response, err := SearchUsersByIds(nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if response.Result == nil {
+		t.Fatal("expected empty result slice, got nil")
+	}
+	if len(response.Result) != 0 {
+		t.Fatalf("expected no users, got %d", len(response.Result))
+	}
+}

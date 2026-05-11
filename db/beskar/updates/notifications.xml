@@ -122,4 +122,274 @@
             </sql>
         </rollback>
     </changeSet>
+
+    <changeSet id="11-create-notification-events-table" author="OpenAI">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <tableExists schemaName="notifications" tableName="notification_events"/>
+            </not>
+        </preConditions>
+        <createTable tableName="notification_events" schemaName="notifications">
+            <column name="id" type="UUID" defaultValueComputed="gen_random_uuid()">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="event_key" type="TEXT">
+                <constraints nullable="false" unique="true" uniqueConstraintName="notification_events_event_key_key"/>
+            </column>
+            <column name="type" type="TEXT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="category" type="TEXT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="actor_user_id" type="UUID"/>
+            <column name="target_type" type="TEXT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="target_id" type="TEXT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="space_id" type="UUID"/>
+            <column name="page_id" type="BIGINT"/>
+            <column name="data" type="JSONB" defaultValueComputed="'{}'::jsonb">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="now()">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+        <rollback>
+            <dropTable tableName="notification_events" schemaName="notifications"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="12-create-in-app-notifications-table" author="OpenAI">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <tableExists schemaName="notifications" tableName="in_app_notifications"/>
+            </not>
+        </preConditions>
+        <createTable tableName="in_app_notifications" schemaName="notifications">
+            <column name="id" type="UUID" defaultValueComputed="gen_random_uuid()">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="event_id" type="UUID">
+                <constraints nullable="false" foreignKeyName="in_app_notifications_event_id_fkey"
+                    references="notifications.notification_events(id)" deleteCascade="true"/>
+            </column>
+            <column name="recipient_user_id" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+            <column name="type" type="TEXT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="category" type="TEXT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="title" type="TEXT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="body" type="TEXT"/>
+            <column name="target_type" type="TEXT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="target_id" type="TEXT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="space_id" type="UUID"/>
+            <column name="page_id" type="BIGINT"/>
+            <column name="action_required" type="BOOLEAN" defaultValueBoolean="false">
+                <constraints nullable="false"/>
+            </column>
+            <column name="actions" type="JSONB" defaultValueComputed="'[]'::jsonb">
+                <constraints nullable="false"/>
+            </column>
+            <column name="data" type="JSONB" defaultValueComputed="'{}'::jsonb">
+                <constraints nullable="false"/>
+            </column>
+            <column name="read_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="dismissed_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="resolved_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="expires_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="created_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="now()">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="now()">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+        <rollback>
+            <dropTable tableName="in_app_notifications" schemaName="notifications"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="13-add-in-app-notifications-event-recipient-unique" author="OpenAI">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <uniqueConstraintExists schemaName="notifications" tableName="in_app_notifications" constraintName="in_app_notifications_event_recipient_key"/>
+            </not>
+        </preConditions>
+        <addUniqueConstraint schemaName="notifications" tableName="in_app_notifications"
+            columnNames="event_id, recipient_user_id" constraintName="in_app_notifications_event_recipient_key"/>
+        <rollback>
+            <dropUniqueConstraint schemaName="notifications" tableName="in_app_notifications"
+                constraintName="in_app_notifications_event_recipient_key"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="14-create-in-app-preferences-table" author="OpenAI">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <tableExists schemaName="notifications" tableName="in_app_preferences"/>
+            </not>
+        </preConditions>
+        <createTable tableName="in_app_preferences" schemaName="notifications">
+            <column name="recipient_user_id" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+            <column name="category" type="TEXT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="enabled" type="BOOLEAN" defaultValueBoolean="true">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="now()">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="now()">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+        <rollback>
+            <dropTable tableName="in_app_preferences" schemaName="notifications"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="15-add-in-app-preferences-primary-key" author="OpenAI">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <primaryKeyExists schemaName="notifications" tableName="in_app_preferences" primaryKeyName="in_app_preferences_pkey"/>
+            </not>
+        </preConditions>
+        <addPrimaryKey schemaName="notifications" tableName="in_app_preferences"
+            columnNames="recipient_user_id, category" constraintName="in_app_preferences_pkey"/>
+        <rollback>
+            <dropPrimaryKey schemaName="notifications" tableName="in_app_preferences"
+                constraintName="in_app_preferences_pkey"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="16-create-in-app-notifications-user-created-index" author="OpenAI">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <indexExists schemaName="notifications" tableName="in_app_notifications" indexName="idx_in_app_notifications_user_created"/>
+            </not>
+        </preConditions>
+        <createIndex schemaName="notifications" tableName="in_app_notifications" indexName="idx_in_app_notifications_user_created">
+            <column name="recipient_user_id"/>
+            <column name="created_at" descending="true"/>
+            <column name="id" descending="true"/>
+        </createIndex>
+        <rollback>
+            <dropIndex schemaName="notifications" tableName="in_app_notifications" indexName="idx_in_app_notifications_user_created"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="17-create-in-app-notifications-user-unread-index" author="OpenAI">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <indexExists schemaName="notifications" tableName="in_app_notifications" indexName="idx_in_app_notifications_user_unread"/>
+            </not>
+        </preConditions>
+        <createIndex schemaName="notifications" tableName="in_app_notifications" indexName="idx_in_app_notifications_user_unread">
+            <column name="recipient_user_id"/>
+            <column name="read_at"/>
+            <column name="created_at" descending="true"/>
+            <column name="id" descending="true"/>
+        </createIndex>
+        <rollback>
+            <dropIndex schemaName="notifications" tableName="in_app_notifications" indexName="idx_in_app_notifications_user_unread"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="18-create-in-app-notifications-user-action-required-index" author="OpenAI">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <indexExists schemaName="notifications" tableName="in_app_notifications" indexName="idx_in_app_notifications_user_action_required"/>
+            </not>
+        </preConditions>
+        <createIndex schemaName="notifications" tableName="in_app_notifications" indexName="idx_in_app_notifications_user_action_required">
+            <column name="recipient_user_id"/>
+            <column name="action_required"/>
+            <column name="resolved_at"/>
+            <column name="created_at" descending="true"/>
+            <column name="id" descending="true"/>
+        </createIndex>
+        <rollback>
+            <dropIndex schemaName="notifications" tableName="in_app_notifications" indexName="idx_in_app_notifications_user_action_required"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="19-create-in-app-notifications-space-created-index" author="OpenAI">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <indexExists schemaName="notifications" tableName="in_app_notifications" indexName="idx_in_app_notifications_space_created"/>
+            </not>
+        </preConditions>
+        <createIndex schemaName="notifications" tableName="in_app_notifications" indexName="idx_in_app_notifications_space_created">
+            <column name="space_id"/>
+            <column name="created_at" descending="true"/>
+        </createIndex>
+        <rollback>
+            <dropIndex schemaName="notifications" tableName="in_app_notifications" indexName="idx_in_app_notifications_space_created"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="20-create-in-app-notifications-page-created-index" author="OpenAI">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <indexExists schemaName="notifications" tableName="in_app_notifications" indexName="idx_in_app_notifications_page_created"/>
+            </not>
+        </preConditions>
+        <createIndex schemaName="notifications" tableName="in_app_notifications" indexName="idx_in_app_notifications_page_created">
+            <column name="page_id"/>
+            <column name="created_at" descending="true"/>
+        </createIndex>
+        <rollback>
+            <dropIndex schemaName="notifications" tableName="in_app_notifications" indexName="idx_in_app_notifications_page_created"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="21-grant-notification-events-privileges" author="OpenAI">
+        <sql>
+            GRANT SELECT, INSERT, UPDATE, DELETE ON notifications.notification_events TO ${app_user};
+        </sql>
+        <rollback>
+            <sql>
+                REVOKE SELECT, INSERT, UPDATE, DELETE ON notifications.notification_events FROM ${app_user};
+            </sql>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="22-grant-in-app-notifications-privileges" author="OpenAI">
+        <sql>
+            GRANT SELECT, INSERT, UPDATE, DELETE ON notifications.in_app_notifications TO ${app_user};
+        </sql>
+        <rollback>
+            <sql>
+                REVOKE SELECT, INSERT, UPDATE, DELETE ON notifications.in_app_notifications FROM ${app_user};
+            </sql>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="23-grant-in-app-preferences-privileges" author="OpenAI">
+        <sql>
+            GRANT SELECT, INSERT, UPDATE, DELETE ON notifications.in_app_preferences TO ${app_user};
+        </sql>
+        <rollback>
+            <sql>
+                REVOKE SELECT, INSERT, UPDATE, DELETE ON notifications.in_app_preferences FROM ${app_user};
+            </sql>
+        </rollback>
+    </changeSet>
 </databaseChangeLog>
