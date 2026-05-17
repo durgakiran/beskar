@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Spike 0.3: Arrow Routing Preview</title>
+  <style>
+    body { background: #020617; color: #e2e8f0; font-family: system-ui; margin: 0; padding: 24px; }
+    h1 { font-size: 18px; margin: 0 0 4px; color: #f1f5f9; }
+    h2 { font-size: 13px; color: #94a3b8; margin: 24px 0 8px; font-family: monospace; }
+    .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
+    .card { }
+    table { border-collapse: collapse; font-size: 13px; font-family: monospace; margin-top: 32px; }
+    th { text-align: left; padding: 6px 16px; color: #94a3b8; }
+    td { padding: 6px 16px; border-top: 1px solid #1e293b; }
+  </style>
+</head>
+<body>
+  <h1>Spike 0.3: Arrow Routing Preview</h1>
+  
+<div style="display:flex;gap:16px;margin-bottom:8px;font-size:13px;font-family:monospace">
+  <span><span style="color:#ef4444">━━</span> straight</span><span><span style="color:#3b82f6">━━</span> bezier</span><span><span style="color:#22c55e">━━</span> manhattan</span>
+  <span><span style="color:#f59e0b">●</span> anchor</span>
+</div>
+  <div class="grid">
+    
+    <div class="card">
+      <h2>Left → Right (easy)</h2>
+      
+<svg width="420" height="380" viewBox="0 0 420 380"
+  xmlns="http://www.w3.org/2000/svg" style="background:#0f172a;border-radius:8px">
+  <defs>
+    
+    <marker id="arrow-straight" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#ef4444"/>
+    </marker>
+    <marker id="arrow-bezier" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#3b82f6"/>
+    </marker>
+    <marker id="arrow-manhattan" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#22c55e"/>
+    </marker>
+  </defs>
+  <rect x="20" y="25" width="100" height="100"
+      fill="#1e293b" stroke="#64748b" stroke-width="1.5" rx="4"/>
+     <text x="70" y="80" text-anchor="middle"
+      fill="#94a3b8" font-size="13" font-family="monospace">A</text>
+<rect x="280" y="25" width="100" height="100"
+      fill="#1e293b" stroke="#64748b" stroke-width="1.5" rx="4"/>
+     <text x="330" y="80" text-anchor="middle"
+      fill="#94a3b8" font-size="13" font-family="monospace">B</text>
+  <path d="M 120 75 L 280 75" fill="none" stroke="#ef4444" stroke-width="2"
+      marker-end="url(#arrow-straight)" opacity="0.85"/>
+<path d="M 120 75 C 184 75 344 75 280 75" fill="none" stroke="#3b82f6" stroke-width="2"
+      marker-end="url(#arrow-bezier)" opacity="0.85"/>
+<path d="M 120 75 L 140 75 L 220 75 L 220 75 L 300 75 L 280 75" fill="none" stroke="#22c55e" stroke-width="2"
+      marker-end="url(#arrow-manhattan)" opacity="0.85"/>
+  <circle cx="120" cy="75" r="4" fill="#f59e0b"/>
+<circle cx="280" cy="75" r="4" fill="#f59e0b"/>
+</svg>
+    </div>
+    <div class="card">
+      <h2>Top → Bottom (vertical)</h2>
+      
+<svg width="420" height="380" viewBox="0 0 420 380"
+  xmlns="http://www.w3.org/2000/svg" style="background:#0f172a;border-radius:8px">
+  <defs>
+    
+    <marker id="arrow-straight" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#ef4444"/>
+    </marker>
+    <marker id="arrow-bezier" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#3b82f6"/>
+    </marker>
+    <marker id="arrow-manhattan" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#22c55e"/>
+    </marker>
+  </defs>
+  <rect x="20" y="20" width="100" height="100"
+      fill="#1e293b" stroke="#64748b" stroke-width="1.5" rx="4"/>
+     <text x="70" y="75" text-anchor="middle"
+      fill="#94a3b8" font-size="13" font-family="monospace">A</text>
+<rect x="20" y="270" width="100" height="100"
+      fill="#1e293b" stroke="#64748b" stroke-width="1.5" rx="4"/>
+     <text x="70" y="325" text-anchor="middle"
+      fill="#94a3b8" font-size="13" font-family="monospace">B</text>
+  <path d="M 70 130 L 70 270" fill="none" stroke="#ef4444" stroke-width="2"
+      marker-end="url(#arrow-straight)" opacity="0.85"/>
+<path d="M 70 130 C 70 186 70 326 70 270" fill="none" stroke="#3b82f6" stroke-width="2"
+      marker-end="url(#arrow-bezier)" opacity="0.85"/>
+<path d="M 70 130 L 70 150 L 70 220 L 70 220 L 70 290 L 70 270" fill="none" stroke="#22c55e" stroke-width="2"
+      marker-end="url(#arrow-manhattan)" opacity="0.85"/>
+  <circle cx="70" cy="130" r="4" fill="#f59e0b"/>
+<circle cx="70" cy="270" r="4" fill="#f59e0b"/>
+</svg>
+    </div>
+    <div class="card">
+      <h2>Back-facing (both exit right, U-bend needed)</h2>
+      
+<svg width="420" height="380" viewBox="0 0 420 380"
+  xmlns="http://www.w3.org/2000/svg" style="background:#0f172a;border-radius:8px">
+  <defs>
+    
+    <marker id="arrow-straight" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#ef4444"/>
+    </marker>
+    <marker id="arrow-bezier" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#3b82f6"/>
+    </marker>
+    <marker id="arrow-manhattan" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#22c55e"/>
+    </marker>
+  </defs>
+  <rect x="20" y="25" width="100" height="100"
+      fill="#1e293b" stroke="#64748b" stroke-width="1.5" rx="4"/>
+     <text x="70" y="80" text-anchor="middle"
+      fill="#94a3b8" font-size="13" font-family="monospace">A</text>
+<rect x="280" y="25" width="100" height="100"
+      fill="#1e293b" stroke="#64748b" stroke-width="1.5" rx="4"/>
+     <text x="330" y="80" text-anchor="middle"
+      fill="#94a3b8" font-size="13" font-family="monospace">B</text>
+  <path d="M 120 75 L 280 75" fill="none" stroke="#ef4444" stroke-width="2"
+      marker-end="url(#arrow-straight)" opacity="0.85"/>
+<path d="M 120 75 C 184 75 216 75 280 75" fill="none" stroke="#3b82f6" stroke-width="2"
+      marker-end="url(#arrow-bezier)" opacity="0.85"/>
+<path d="M 120 75 L 140 75 L 140 35 L 260 35 L 260 75 L 280 75" fill="none" stroke="#22c55e" stroke-width="2"
+      marker-end="url(#arrow-manhattan)" opacity="0.85"/>
+  <circle cx="120" cy="75" r="4" fill="#f59e0b"/>
+<circle cx="280" cy="75" r="4" fill="#f59e0b"/>
+</svg>
+    </div>
+    <div class="card">
+      <h2>Overlapping shapes (source inside target bounds)</h2>
+      
+<svg width="420" height="380" viewBox="0 0 420 380"
+  xmlns="http://www.w3.org/2000/svg" style="background:#0f172a;border-radius:8px">
+  <defs>
+    
+    <marker id="arrow-straight" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#ef4444"/>
+    </marker>
+    <marker id="arrow-bezier" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#3b82f6"/>
+    </marker>
+    <marker id="arrow-manhattan" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#22c55e"/>
+    </marker>
+  </defs>
+  <rect x="10" y="25" width="100" height="100"
+      fill="#1e293b" stroke="#64748b" stroke-width="1.5" rx="4"/>
+     <text x="60" y="80" text-anchor="middle"
+      fill="#94a3b8" font-size="13" font-family="monospace">A</text>
+<rect x="80" y="25" width="100" height="100"
+      fill="#1e293b" stroke="#64748b" stroke-width="1.5" rx="4"/>
+     <text x="130" y="80" text-anchor="middle"
+      fill="#94a3b8" font-size="13" font-family="monospace">B (overlaps A)</text>
+  <path d="M 110 75 L 130 75" fill="none" stroke="#ef4444" stroke-width="2"
+      marker-end="url(#arrow-straight)" opacity="0.85"/>
+<path d="M 110 75 C 118 75 138 75 130 75" fill="none" stroke="#3b82f6" stroke-width="2"
+      marker-end="url(#arrow-bezier)" opacity="0.85"/>
+<path d="M 110 75 L 130 75 L 140 75 L 140 75 L 150 75 L 130 75" fill="none" stroke="#22c55e" stroke-width="2"
+      marker-end="url(#arrow-manhattan)" opacity="0.85"/>
+  <circle cx="110" cy="75" r="4" fill="#f59e0b"/>
+<circle cx="130" cy="75" r="4" fill="#f59e0b"/>
+</svg>
+    </div>
+    <div class="card">
+      <h2>Diagonal (mixed normals)</h2>
+      
+<svg width="420" height="380" viewBox="0 0 420 380"
+  xmlns="http://www.w3.org/2000/svg" style="background:#0f172a;border-radius:8px">
+  <defs>
+    
+    <marker id="arrow-straight" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#ef4444"/>
+    </marker>
+    <marker id="arrow-bezier" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#3b82f6"/>
+    </marker>
+    <marker id="arrow-manhattan" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#22c55e"/>
+    </marker>
+  </defs>
+  <rect x="20" y="70" width="100" height="100"
+      fill="#1e293b" stroke="#64748b" stroke-width="1.5" rx="4"/>
+     <text x="70" y="125" text-anchor="middle"
+      fill="#94a3b8" font-size="13" font-family="monospace">A</text>
+<rect x="230" y="230" width="100" height="100"
+      fill="#1e293b" stroke="#64748b" stroke-width="1.5" rx="4"/>
+     <text x="280" y="285" text-anchor="middle"
+      fill="#94a3b8" font-size="13" font-family="monospace">B</text>
+  <path d="M 120 120 L 280 230" fill="none" stroke="#ef4444" stroke-width="2"
+      marker-end="url(#arrow-straight)" opacity="0.85"/>
+<path d="M 120 120 C 197.67 120 280 307.67 280 230" fill="none" stroke="#3b82f6" stroke-width="2"
+      marker-end="url(#arrow-bezier)" opacity="0.85"/>
+<path d="M 120 120 L 140 120 L 280 120 L 280 250 L 280 230" fill="none" stroke="#22c55e" stroke-width="2"
+      marker-end="url(#arrow-manhattan)" opacity="0.85"/>
+  <circle cx="120" cy="120" r="4" fill="#f59e0b"/>
+<circle cx="280" cy="230" r="4" fill="#f59e0b"/>
+</svg>
+    </div>
+    <div class="card">
+      <h2>Self-loop</h2>
+      
+<svg width="420" height="380" viewBox="0 0 420 380"
+  xmlns="http://www.w3.org/2000/svg" style="background:#0f172a;border-radius:8px">
+  <defs>
+    
+    <marker id="arrow-straight" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#ef4444"/>
+    </marker>
+    <marker id="arrow-bezier" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#3b82f6"/>
+    </marker>
+    <marker id="arrow-manhattan" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#22c55e"/>
+    </marker>
+  </defs>
+  <rect x="20" y="20" width="100" height="100"
+      fill="#1e293b" stroke="#64748b" stroke-width="1.5" rx="4"/>
+     <text x="70" y="75" text-anchor="middle"
+      fill="#94a3b8" font-size="13" font-family="monospace">A (self)</text>
+  <path d="M 70 20 L 70 20" fill="none" stroke="#ef4444" stroke-width="2"
+      marker-end="url(#arrow-straight)" opacity="0.85"/>
+<path d="M 70 20 C 70 20 70 20 70 20" fill="none" stroke="#3b82f6" stroke-width="2"
+      marker-end="url(#arrow-bezier)" opacity="0.85"/>
+<path d="M 70 20 L 70 -30 L 120 -30 L 120 20 L 70 20" fill="none" stroke="#22c55e" stroke-width="2"
+      marker-end="url(#arrow-manhattan)" opacity="0.85"/>
+  <circle cx="70" cy="20" r="4" fill="#f59e0b"/>
+<circle cx="70" cy="20" r="4" fill="#f59e0b"/>
+</svg>
+    </div>
+  </div>
+
+  <table>
+    <tr><th>Algorithm</th><th>Total (10k)</th><th>Per route</th><th>Routes/sec</th></tr>
+    
+    <tr>
+      <td style="color:#ef4444">straight</td>
+      <td>43.63ms</td>
+      <td>4.36μs</td>
+      <td>229k</td>
+    </tr>
+    <tr>
+      <td style="color:#3b82f6">bezier</td>
+      <td>80.13ms</td>
+      <td>8.01μs</td>
+      <td>125k</td>
+    </tr>
+    <tr>
+      <td style="color:#22c55e">manhattan</td>
+      <td>65.36ms</td>
+      <td>6.54μs</td>
+      <td>153k</td>
+    </tr>
+  </table>
+</body>
+</html>
