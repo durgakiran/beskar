@@ -59,6 +59,18 @@ export class GlideStore {
    */
   private _batchChanges: Map<string, AnyRecord | null> | null = null;
 
+  /** Hook injected by GlideEditor to compute bounding boxes for the spatial index. */
+  public getGeometry?: (shape: AnyRecord) => { minX: number; minY: number; maxX: number; maxY: number } | undefined;
+
+  /** Hook injected by GlideEditor to filter point queries. */
+  public hitTestPoint?: (shape: AnyRecord, x: number, y: number) => boolean;
+
+  /** Reactive signal containing the array of all shape IDs in the store */
+  private _shapeIdsSignal = signal<ShapeId[]>([]);
+
+  /** Signal incremented on any store mutation (put/remove). Useful for global persistence. */
+  private _versionSignal = signal(0);
+
   constructor(public readonly schema: GlideSchema = new GlideSchema()) {}
 
   // ─────────────────────────────────────────────────────────────
@@ -88,6 +100,16 @@ export class GlideStore {
     return this._signals.get(id);
   }
 
+  /** Returns a signal that fires whenever a shape is added or removed. */
+  getShapeIdsSignal(): Signal<ShapeId[]> {
+    return this._shapeIdsSignal;
+  }
+
+  /** Returns a signal that fires whenever ANY record is added, updated, or removed. */
+  getVersionSignal(): Signal<number> {
+    return this._versionSignal;
+  }
+
   /** O(1) — uses secondary index. */
   getBindingsFromShape(shapeId: ShapeId): GlideBinding[] {
     const ids = this._bindingsByFrom.get(shapeId);
@@ -112,10 +134,12 @@ export class GlideStore {
     return result;
   }
 
-  /** Spatial query — O(log N). Returns shapes at the given point. */
+  /** Spatial query — O(log N). Returns shapes whose precise geometry contains the point. */
   getShapesAtPoint(x: number, y: number): AnyRecord[] {
     const hits = this._tree.search({ minX: x, minY: y, maxX: x, maxY: y });
-    return hits.map(h => this.get(h.id)).filter((r): r is AnyRecord => r !== undefined);
+    const shapes = hits.map(h => this.get(h.id)).filter((r): r is AnyRecord => r !== undefined);
+    if (!this.hitTestPoint) return shapes;
+    return shapes.filter(s => this.hitTestPoint!(s, x, y));
   }
 
   /** Spatial query — O(log N). Returns shapes intersecting the given box. */
@@ -161,6 +185,7 @@ export class GlideStore {
       for (const record of records) {
         this._writeRecord(record);
       }
+      this._versionSignal.value++;
     });
   }
 
@@ -183,6 +208,7 @@ export class GlideStore {
       for (const id of ids) {
         this._deleteRecord(id);
       }
+      this._versionSignal.value++;
     });
   }
 
@@ -269,20 +295,29 @@ export class GlideStore {
     }
     sig.value = record;
 
-    // Update spatial index (shapes only — must have x, y, w, h)
+    // Update spatial index (shapes only)
     if (!isGlideBinding(record)) {
-      const x = record['x'] as number | undefined;
-      const y = record['y'] as number | undefined;
-      const w = record['w'] as number | undefined;
-      const h = record['h'] as number | undefined;
+      let entryBox: { minX: number; minY: number; maxX: number; maxY: number } | undefined;
 
-      if (typeof x === 'number' && typeof y === 'number' &&
-          typeof w === 'number' && typeof h === 'number') {
+      if (this.getGeometry) {
+        entryBox = this.getGeometry(record);
+      } else {
+        // Fallback for Phase 1 tests without ShapeUtils
+        const x = record['x'] as number | undefined;
+        const y = record['y'] as number | undefined;
+        const w = record['w'] as number | undefined;
+        const h = record['h'] as number | undefined;
+        if (typeof x === 'number' && typeof y === 'number' && typeof w === 'number' && typeof h === 'number') {
+          entryBox = { minX: x, minY: y, maxX: x + w, maxY: y + h };
+        }
+      }
+
+      if (entryBox) {
         // Remove old entry first
         const old = this._treeEntries.get(id);
         if (old) this._tree.remove(old, (a, b) => a.id === b.id);
 
-        const entry: RBushEntry = { id, minX: x, minY: y, maxX: x + w, maxY: y + h };
+        const entry: RBushEntry = { id, minX: entryBox.minX, minY: entryBox.minY, maxX: entryBox.maxX, maxY: entryBox.maxY };
         this._treeEntries.set(id, entry);
         this._tree.insert(entry);
       }
@@ -292,6 +327,12 @@ export class GlideStore {
       if (pageId) {
         if (!this._shapesByPage.has(pageId)) this._shapesByPage.set(pageId, new Set());
         this._shapesByPage.get(pageId)!.add(id as ShapeId);
+      }
+
+      // Add to _shapeIdsSignal if not already present
+      const shapeId = id as ShapeId;
+      if (!this._shapeIdsSignal.value.includes(shapeId)) {
+        this._shapeIdsSignal.value = [...this._shapeIdsSignal.value, shapeId];
       }
     } else {
       // Binding — update secondary indices
@@ -331,6 +372,14 @@ export class GlideStore {
     // Remove from shapesByPage
     const pageId = record?.['pageId'] as PageId | undefined;
     if (pageId) this._shapesByPage.get(pageId)?.delete(id as ShapeId);
+
+    // Remove from _shapeIdsSignal
+    if (record && !isGlideBinding(record)) {
+      const shapeId = id as ShapeId;
+      if (this._shapeIdsSignal.value.includes(shapeId)) {
+        this._shapeIdsSignal.value = this._shapeIdsSignal.value.filter(x => x !== shapeId);
+      }
+    }
 
     // Remove the signal entirely (does not fire it)
     this._signals.delete(id);

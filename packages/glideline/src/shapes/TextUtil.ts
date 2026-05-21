@@ -13,6 +13,7 @@ import { makeBox } from '../types';
 import type { GlideShape, Box2d, Vec2 } from '../types';
 
 export interface TextProps {
+  [key: string]: unknown;
   text:     string;
   fontSize: number;
   color:    string;
@@ -20,13 +21,36 @@ export interface TextProps {
 
 export type TextShape = GlideShape<TextProps>;
 
-/** Estimate text bounding box from font metrics. No canvas needed. */
+let measurementContext: CanvasRenderingContext2D | null = null;
+function getMeasurementContext() {
+  if (typeof document === 'undefined') return null;
+  if (!measurementContext) {
+    const canvas = document.createElement('canvas');
+    measurementContext = canvas.getContext('2d');
+  }
+  return measurementContext;
+}
+
+/** Estimate text bounding box from exact font metrics. */
 function estimateBounds(text: string, fontSize: number): { w: number; h: number } {
   const lines = text.split('\n');
-  const longestLine = lines.reduce((max, l) => Math.max(max, l.length), 0);
-  const w = Math.max(longestLine * fontSize * 0.6, 10); // rough em width ≈ 0.6×
-  const h = lines.length * fontSize * 1.4;              // line-height ≈ 1.4×
-  return { w, h };
+  const h = lines.length * fontSize * 1.4; // line-height ≈ 1.4×
+
+  const ctx = getMeasurementContext();
+  if (!ctx) {
+    // Fallback if no DOM
+    const longestLine = lines.reduce((max, l) => Math.max(max, l.length), 0);
+    const w = Math.max(longestLine * fontSize * 0.6, fontSize * 0.6);
+    return { w, h };
+  }
+
+  ctx.font = `${fontSize}px Inter, system-ui, sans-serif`;
+  let maxW = fontSize * 0.6; // minimum 1 character width
+  for (const line of lines) {
+    const metrics = ctx.measureText(line);
+    if (metrics.width > maxW) maxW = metrics.width;
+  }
+  return { w: maxW, h };
 }
 
 export class TextUtil extends ShapeUtil<TextShape> {

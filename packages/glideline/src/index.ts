@@ -1,5 +1,5 @@
 /**
- * Glideline — Public API surface (Phase 1)
+ * Glideline — Public API surface (Phase 1–5 + Phase A)
  */
 
 // Types
@@ -25,5 +25,68 @@ export { GlideSchema, CURRENT_STORE_VERSION } from './schema';
 // Store
 export { GlideStore } from './store';
 
-// Shapes
+// Shapes (base)
 export { ShapeUtil, BindingUtil } from './shapes/ShapeUtil';
+
+// Phase 3 — State machine + history + tools
+export { StateNode } from './state-node';
+export type { GlideEvent, PointerDownEvent, PointerMoveEvent, PointerUpEvent, KeyDownEvent, DoubleClickEvent } from './state-node';
+export { HistoryManager } from './history';
+export type { HistoryEntry, BatchOptions } from './history';
+export { SelectTool } from './tools/SelectTool';
+export { BoxTool } from './tools/BoxTool';
+
+// Editor
+export { GlideEditor, createEditor } from './editor';
+export type { GlidePlugin, CreateEditorOptions } from './editor';
+
+// Phase 4 — Bindings & Arrow Routing
+export { computeArcPath, parseArcControlPoint } from './arc-router';
+export { computeElbowPath, parseElbowPoints, countElbowSegments } from './elbow-router';
+export {
+  ArrowUtil, ArrowBindingUtil, ArrowPlugin,
+  anchorToEdge, anchorToPoint,
+} from './shapes/ArrowUtil';
+export type { ArrowProps, ArrowShape, ArrowTerminal, ArrowBindingProps, ArrowBinding } from './shapes/ArrowUtil';
+export { ArrowTool, ArrowIdle } from './tools/ArrowTool';
+
+// Phase A — Style system
+export {
+  TLDRAW_COLORS, resolveColor, hexWithOpacity, svgFill,
+  STROKE_WIDTHS, FONT_SIZES, FONT_FAMILIES,
+  STROKE_DASH_ARRAYS, FILL_OPACITIES,
+} from './styles';
+export type {
+  TldrawColor,
+  FillStyle, StrokeStyle, SizeStyle, FontSize, TextAlign, Font,
+  ShapeStyleProps,
+} from './styles';
+
+// Phase A — Ellipse shape
+export { EllipseUtil, EllipsePlugin } from './shapes/EllipseUtil';
+export type { EllipseProps, EllipseShape } from './shapes/EllipseUtil';
+
+// Phase A — Sticky note shape
+export {
+  StickyNoteUtil, StickyNotePlugin,
+  STICKY_COLORS, wrapText,
+} from './shapes/StickyNoteUtil';
+export type { StickyNoteProps, StickyNoteShape } from './shapes/StickyNoteUtil';
+
+// Phase A — Freehand shape
+export {
+  FreehandUtil, FreehandPlugin,
+  catmullRomPath,
+} from './shapes/FreehandUtil';
+export type { FreehandProps, FreehandShape, FreehandPoint } from './shapes/FreehandUtil';
+
+// Phase B — New tools
+export { HandTool } from './tools/HandTool';
+export { EllipseTool } from './tools/EllipseTool';
+export { TextTool } from './tools/TextTool';
+export { StickyNoteTool } from './tools/StickyNoteTool';
+export { DrawTool } from './tools/DrawTool';
+export { EraserTool } from './tools/EraserTool';
+
+// Phase B — SelectTool extensions (resize + rotation types)
+export type { ResizeHandle, ResizeInfo, RotationInfo } from './tools/SelectTool';

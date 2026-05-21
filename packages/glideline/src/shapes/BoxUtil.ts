@@ -16,6 +16,7 @@ import { makeBox } from '../types';
 import type { GlideShape, Box2d } from '../types';
 
 export interface BoxProps {
+  [key: string]: unknown;
   w: number;
   h: number;
   cornerRadius: number;

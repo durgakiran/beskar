@@ -13,6 +13,7 @@ import { makeBox } from '../types';
 import type { GlideShape, Box2d } from '../types';
 
 export interface FrameProps {
+  [key: string]: unknown;
   w:     number;
   h:     number;
   label: string;
