@@ -117,9 +117,7 @@ export function getBezierSegment(
 export function computeArcPath(
   start: Vec2,
   end: Vec2,
-  bend: number,
-  sourceBox?: Box2d | null,
-  destBox?: Box2d | null
+  bend: number
 ): string {
   const sx = start.x;
   const sy = start.y;
@@ -161,40 +159,12 @@ export function computeArcPath(
   let tStart = 0;
   let tEnd = 1;
 
-  if (sourceBox) {
-    const tStartIntersections = intersectBezierWithBox(p0, p1, p2, sourceBox);
-    // Find first exit. Since it starts inside, look for the smallest t > 0
-    const valid = tStartIntersections.filter(t => t > 0);
-    if (valid.length > 0) {
-      tStart = Math.min(...valid);
-    }
-  }
-
-  if (destBox) {
-    const tEndIntersections = intersectBezierWithBox(p0, p1, p2, destBox);
-    // Find last entry. Since it ends inside, look for the largest t < 1
-    const valid = tEndIntersections.filter(t => t < 1);
-    if (valid.length > 0) {
-      tEnd = Math.max(...valid);
-    }
-  }
-
-  // Fallback if clipping makes no sense
-  if (tStart >= tEnd) {
-    if (bend === 0) {
-      return `M ${sx} ${sy} L ${ex} ${ey}`;
-    }
-    return `M ${sx} ${sy} Q ${cpx} ${cpy} ${ex} ${ey}`;
-  }
-
-  // Truncate the Bezier curve
-  const [q0, q1, q2] = getBezierSegment(p0, p1, p2, tStart, tEnd);
-
+  // Return the full Bezier curve
   if (bend === 0) {
-    return `M ${q0.x} ${q0.y} L ${q2.x} ${q2.y}`;
+    return `M ${sx} ${sy} L ${ex} ${ey}`;
   }
 
-  return `M ${q0.x} ${q0.y} Q ${q1.x} ${q1.y} ${q2.x} ${q2.y}`;
+  return `M ${sx} ${sy} Q ${cpx} ${cpy} ${ex} ${ey}`;
 }
 
 /**

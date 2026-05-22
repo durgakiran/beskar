@@ -1,10 +1,11 @@
 import { StateNode } from '../state-node';
+import { signal } from '@preact/signals';
 import type { PointerDownEvent, PointerMoveEvent, PointerUpEvent, KeyDownEvent, DoubleClickEvent } from '../state-node';
 import type { ShapeId, Vec2, AnyRecord } from '../types';
-import { makeBox, bid, sid } from '../types';
+import { makeBox, bid } from '../types';
 import type { ArrowShape, ArrowProps } from '../shapes/ArrowUtil';
-import { anchorToPoint, anchorToEdge, getClosestConnectionPoint } from '../shapes/ArrowUtil';
-import { computeElbowPath, parseElbowPoints, getOrthoHandlePoint } from '../elbow-router';
+import { getClosestConnectionPoint, anchorToEdge } from '../shapes/ArrowUtil';
+import type { ResizeHandle, ResizeInfo } from '../shapes/ShapeUtil';
 
 const DRAG_THRESHOLD = 4;
 
@@ -20,114 +21,135 @@ class Idle extends StateNode {
   static override readonly id = 'idle';
 
   override onPointerDown(e: PointerDownEvent): void {
-    // 1. Check if clicked on any handle of currently selected arrows
-    const selectedIds = this.editor.getSelectedShapeIds();
-    for (const id of selectedIds) {
-      const shape = this.editor.getShape(id);
-      if (!shape || shape.type !== 'arrow') continue;
-
-      const arrow = shape as ArrowShape;
-      const { start, end, routeStyle, bend } = arrow.props;
-
-      // Start handle
-      if (dist(e.point, start.point) <= 8) {
-        const bindings = this.editor.getBindingsFromShape(id);
-        const b = bindings.find((b: any) => b.props.terminal === 'start');
-        this.parent!.transition('draggingHandle', {
-          arrowId: id,
-          handleType: 'start',
-          origin: e.point,
-          initialProps: { ...arrow.props },
-          initialBinding: b ? { ...b } : null,
-        });
-        return;
-      }
-
-      // End handle
-      if (dist(e.point, end.point) <= 8) {
-        const bindings = this.editor.getBindingsFromShape(id);
-        const b = bindings.find((b: any) => b.props.terminal === 'end');
-        this.parent!.transition('draggingHandle', {
-          arrowId: id,
-          handleType: 'end',
-          origin: e.point,
-          initialProps: { ...arrow.props },
-          initialBinding: b ? { ...b } : null,
-        });
-        return;
-      }
-
-      // Bend handle
-      if (routeStyle === 'curve') {
-        const sx = start.point.x;
-        const sy = start.point.y;
-        const ex = end.point.x;
-        const ey = end.point.y;
-        const mx = (sx + ex) / 2;
-        const my = (sy + ey) / 2;
-        const dx = ex - sx;
-        const dy = ey - sy;
-        const chord = Math.sqrt(dx * dx + dy * dy);
-        let cpx = mx;
-        let cpy = my;
-        if (chord >= 1e-9 && bend !== 0) {
-          const perpX = dy / chord;
-          const perpY = -dx / chord;
-          const offset = chord * bend;
-          cpx = mx + perpX * offset;
-          cpy = my + perpY * offset;
-        }
-        const midX = 0.25 * start.point.x + 0.5 * cpx + 0.25 * end.point.x;
-        const midY = 0.25 * start.point.y + 0.5 * cpy + 0.25 * end.point.y;
-
-        if (dist(e.point, { x: midX, y: midY }) <= 8) {
-          this.parent!.transition('draggingHandle', {
-            arrowId: id,
-            handleType: 'bend',
-            origin: e.point,
-            initialProps: { ...arrow.props },
-            initialBinding: null,
-          });
-          return;
-        }
-      } else if (routeStyle === 'ortho') {
-        const fromShape = start.boundShapeId ? this.editor.getShape(start.boundShapeId) : null;
-        const toShape   = end.boundShapeId   ? this.editor.getShape(end.boundShapeId)   : null;
-        if (fromShape && toShape) {
-          const fu = this.editor.getShapeUtil(fromShape.type);
-          const tu = this.editor.getShapeUtil(toShape.type);
-          const fromBounds = fu.getGeometry(fromShape as any);
-          const toBounds   = tu.getGeometry(toShape as any);
-          const bindings = this.editor.getBindingsFromShape(id) || [];
-          const startBind = bindings.find((b: any) => b.props.terminal === 'start');
-          const endBind   = bindings.find((b: any) => b.props.terminal === 'end');
-          const fromEdge = startBind?.props.fromEdge ?? 'right';
-          const toEdge = endBind?.props.fromEdge ?? 'left';
-          const pathStr = computeElbowPath(fromBounds, toBounds, fromEdge, toEdge, bend);
-          const pts = parseElbowPoints(pathStr);
-          const handlePt = getOrthoHandlePoint(pts);
-          if (dist(e.point, handlePt) <= 8) {
+    if (e.target === 'handle' && e.handleId) {
+      const sel = this.editor.getSelectedShapeIds();
+      
+      // Arrow handles
+      if (['start', 'end', 'bend'].includes(e.handleId)) {
+        if (sel.length === 1) {
+          const id = sel[0];
+          const shape = this.editor.getShape(id);
+          if (shape && shape.type === 'arrow') {
+            const bindings = this.editor.getBindingsFromShape(id) || [];
+            const b = bindings.find((b: any) => b.props.terminal === e.handleId);
             this.parent!.transition('draggingHandle', {
               arrowId: id,
-              handleType: 'bend',
+              handleType: e.handleId,
               origin: e.point,
-              initialProps: { ...arrow.props },
-              initialBinding: null,
+              initialProps: { ...(shape.props as any) },
+              initialBinding: b ? { ...b } : null,
             });
             return;
           }
         }
       }
+
+      // Rotation handle
+      if (e.handleId === 'rotate') {
+        const boxes = sel.map(id => {
+          const s = this.editor.getShape(id); if (!s) return null;
+          const b = this.editor.getShapeUtil(s.type).getGeometry(s as any).getBounds();
+          return { minX: b.minX + s.x, minY: b.minY + s.y, maxX: b.maxX + s.x, maxY: b.maxY + s.y, w: b.w, h: b.h };
+        }).filter(Boolean) as any[];
+        
+        if (boxes.length > 0) {
+          const minX = Math.min(...boxes.map((b: any) => b.minX));
+          const minY = Math.min(...boxes.map((b: any) => b.minY));
+          const maxX = Math.max(...boxes.map((b: any) => b.maxX));
+          const maxY = Math.max(...boxes.map((b: any) => b.maxY));
+          const center = { x: (minX + maxX) / 2, y: (minY + maxY) / 2 };
+          const startAngle = Math.atan2(e.point.y - center.y, e.point.x - center.x);
+          
+          const initRot = new Map(sel.map(id => {
+            const s = this.editor.getShape(id);
+            return [id, s?.rotation ?? 0] as [ShapeId, number];
+          }));
+          
+          const initialCenters = new Map(sel.map(id => {
+            const s = this.editor.getShape(id); if (!s) return null;
+            const b = this.editor.getShapeUtil(s.type).getGeometry(s as any).getBounds();
+            return [id, { x: b.minX + s.x + b.w / 2, y: b.minY + s.y + b.h / 2 }] as [ShapeId, Vec2];
+          }).filter(Boolean) as [ShapeId, Vec2][]);
+          
+          const initialShapes = new Map(sel.map(id => {
+            const s = this.editor.getShape(id); if (!s) return null;
+            return [id, JSON.parse(JSON.stringify(s))] as [ShapeId, import('../types').GlideShape];
+          }).filter(Boolean) as [ShapeId, import('../types').GlideShape][]);
+
+          this.parent!.transition('draggingRotation', { shapeIds: sel, center, initialRotation: initRot, initialCenters, initialShapes, startAngle });
+          return;
+        }
+      }
+
+      // Resize handle
+      const resizeHandles = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'];
+      if (resizeHandles.includes(e.handleId)) {
+        const boxes = sel.map(id => {
+          const s = this.editor.getShape(id); if (!s) return null;
+          const b = this.editor.getShapeUtil(s.type).getGeometry(s as any).getBounds();
+          return { minX: b.minX + s.x, minY: b.minY + s.y, maxX: b.maxX + s.x, maxY: b.maxY + s.y, w: b.w, h: b.h };
+        }).filter(Boolean) as any[];
+        
+        const minX = Math.min(...boxes.map((b: any) => b.minX));
+        const minY = Math.min(...boxes.map((b: any) => b.minY));
+        const maxX = Math.max(...boxes.map((b: any) => b.maxX));
+        const maxY = Math.max(...boxes.map((b: any) => b.maxY));
+        const initialBounds = makeBox(minX, minY, maxX - minX, maxY - minY);
+
+        const initialGeom = new Map(sel.map(id => {
+          const s = this.editor.getShape(id); if (!s) return null;
+          const b = this.editor.getShapeUtil(s.type).getGeometry(s as any).getBounds();
+          const clone = JSON.parse(JSON.stringify(s));
+          return [id, { shape: clone, bounds: b }];
+        }).filter(Boolean) as [ShapeId, { shape: import('../types').GlideShape; bounds: import('../types').Box2d }][]);
+        
+        this.parent!.transition('draggingResize', {
+          shapeIds: sel,
+          handle: e.handleId as ResizeHandle,
+          origin: e.point,
+          initialGeom,
+          initialBounds,
+        });
+        return;
+      }
     }
 
-    // 2. Standard shape/canvas pointing logic
+    // Standard shape/canvas pointing logic
     if (e.target === 'shape' && e.shapeId) {
       // Select on enter if not already selected
-      if (!e.shiftKey) {
+      if (!e.shiftKey && !this.editor.getSelectedShapeIds().includes(e.shapeId)) {
         this.editor.setSelectedShapeIds([e.shapeId]);
       }
       this.parent!.transition('pointingShape', e);
     } else {
+      // Check if clicking inside a multi-selection bounding box
+      const sel = this.editor.getSelectedShapeIds();
+      if (sel.length > 1 && !e.shiftKey) {
+        const boxes = sel.map(id => {
+          const s = this.editor.getShape(id); if (!s) return null;
+          const localBounds = this.editor.getShapeUtil(s.type).getGeometry(s as any).getBounds();
+          return {
+            minX: localBounds.minX + s.x,
+            minY: localBounds.minY + s.y,
+            maxX: localBounds.maxX + s.x,
+            maxY: localBounds.maxY + s.y,
+          };
+        }).filter(Boolean) as any[];
+
+        if (boxes.length > 0) {
+          const minX = Math.min(...boxes.map((b: any) => b.minX));
+          const minY = Math.min(...boxes.map((b: any) => b.minY));
+          const maxX = Math.max(...boxes.map((b: any) => b.maxX));
+          const maxY = Math.max(...boxes.map((b: any) => b.maxY));
+
+          if (e.point.x >= minX && e.point.x <= maxX && e.point.y >= minY && e.point.y <= maxY) {
+            // Act as if we clicked the first shape in the selection to start a drag
+            this.parent!.transition('pointingShape', { ...e, target: 'shape', shapeId: sel[0] });
+            return;
+          }
+        }
+      }
+
       this.parent!.transition('pointingCanvas', e);
     }
   }
@@ -306,6 +328,9 @@ class DraggingHandle extends StateNode {
   private _origin!: Vec2;
   private _initialProps!: ArrowProps;
   private _initialBinding: any = null;
+  /** World-space arrow position at drag start (= shape.x, shape.y). */
+  private _initialArrowX!: number;
+  private _initialArrowY!: number;
 
   override onEnter(info: {
     arrowId: ShapeId;
@@ -319,6 +344,10 @@ class DraggingHandle extends StateNode {
     this._origin         = info.origin;
     this._initialProps   = info.initialProps;
     this._initialBinding = info.initialBinding;
+    // Capture initial world position of the arrow (= start terminal world pos)
+    const arrow = this.editor.getShape(info.arrowId) as ArrowShape;
+    this._initialArrowX = arrow?.x ?? 0;
+    this._initialArrowY = arrow?.y ?? 0;
   }
 
   override onPointerMove(e: PointerMoveEvent): void {
@@ -376,8 +405,9 @@ class DraggingHandle extends StateNode {
           return;
         }
 
-        const sx = start.point.x;
-        const sy = start.point.y;
+        // Curve bend — local coords. start.point={0,0}, end.point=local offset.
+        const sx = start.point.x;  // = 0
+        const sy = start.point.y;  // = 0
         const ex = end.point.x;
         const ey = end.point.y;
         const mx = (sx + ex) / 2;
@@ -388,26 +418,23 @@ class DraggingHandle extends StateNode {
 
         if (chord < 1e-9) {
           this.editor.updateShape(this._arrowId, {
-            props: {
-              ...arrow.props,
-              bend: 0,
-            }
+            props: { ...arrow.props, bend: 0 }
           });
           return;
         }
 
         const perpX = dy / chord;
         const perpY = -dx / chord;
-        const px = e.point.x - mx;
-        const py = e.point.y - my;
+        // The bend handle's world position relative to the arrow's origin
+        const localCursorX = e.point.x - arrow.x;
+        const localCursorY = e.point.y - arrow.y;
+        const px = localCursorX - mx;
+        const py = localCursorY - my;
         const dist_perp = px * perpX + py * perpY;
         const bend = (2 * dist_perp) / chord;
 
         this.editor.updateShape(this._arrowId, {
-          props: {
-            ...arrow.props,
-            bend,
-          }
+          props: { ...arrow.props, bend }
         });
       } else {
         const term = this._handleType;
@@ -415,44 +442,129 @@ class DraggingHandle extends StateNode {
         const dx = e.point.x - this._origin.x;
         const dy = e.point.y - this._origin.y;
 
-        const nextPoint = {
-          x: initialTerminal.point.x + dx,
-          y: initialTerminal.point.y + dy,
-        };
+        if (term === 'start') {
+          // Moving the start terminal: shape.x/y moves, start.point stays {0,0}
+          // end.point adjusts to keep end world position stable
+          const initArrowX = this._initialProps.start.point.x + (this.editor.getShape(this._arrowId) as any)?.x ?? 0;
+          // Use _origin as initial world arrow.x
+          const newArrowX = this._origin.x + dx;
+          const newArrowY = this._origin.y + dy;
+          const initEndWorldX = (this.editor.getShape(this._arrowId) as ArrowShape)?.x + this._initialProps.end.point.x ?? 0;
+          const initEndWorldY = (this.editor.getShape(this._arrowId) as ArrowShape)?.y + this._initialProps.end.point.y ?? 0;
 
-        if (this._initialBinding) {
-          this.editor.deleteBinding(this._initialBinding.id);
-        }
+          // World end stays the same, new local end = world_end - new_start
+          const currentArrow = this.editor.getShape(this._arrowId) as ArrowShape;
+          const worldEndX = currentArrow.x + currentArrow.props.end.point.x;
+          const worldEndY = currentArrow.y + currentArrow.props.end.point.y;
 
-        const otherTerminal = term === 'start' ? 'end' : 'start';
-        const otherBoundId = arrow.props[otherTerminal].boundShapeId;
-        const hits = this.editor.getShapesAtPoint(e.point)
-          .filter(s => s.type !== 'arrow' && s.id !== otherBoundId && s.id !== this._arrowId);
+          const newEndLocalX = worldEndX - (this._initialProps.start.point.x + this._origin.x + dx - this._origin.x);
+          const newEndLocalY = worldEndY - (this._initialProps.start.point.y + this._origin.y + dy - this._origin.y);
 
-        let finalPoint = nextPoint;
-        let boundShapeId: ShapeId | null = null;
-        let normalizedAnchor = { x: 0.5, y: 0.5 };
+          // Simpler: new start world = cursor; new end local = old_world_end - cursor_world_start
+          const nextStartWorldX = e.point.x;
+          const nextStartWorldY = e.point.y;
+          const oldWorldEndX = this._initialArrowX + this._initialProps.end.point.x;
+          const oldWorldEndY = this._initialArrowY + this._initialProps.end.point.y;
 
-        if (hits.length > 0) {
-          const targetShape = hits[hits.length - 1];
-          const util = this.editor.getShapeUtil(targetShape.type);
-          const bounds = util.getGeometry(targetShape as any);
-          const snapped = getClosestConnectionPoint(e.point, bounds);
-          finalPoint = snapped.point;
-          boundShapeId = targetShape.id as ShapeId;
-          normalizedAnchor = snapped.normalizedAnchor;
-        }
+          const otherTerminal = 'end';
+          const otherBoundId = arrow.props[otherTerminal].boundShapeId;
+          const hits = this.editor.getShapesAtPoint(e.point)
+            .filter(s => s.type !== 'arrow' && s.id !== otherBoundId && s.id !== this._arrowId);
 
-        this.editor.updateShape(this._arrowId, {
-          props: {
-            ...arrow.props,
-            [term]: {
-              boundShapeId,
-              normalizedAnchor,
-              point: finalPoint,
-            }
+          let finalStartX = nextStartWorldX;
+          let finalStartY = nextStartWorldY;
+          let boundShapeId: ShapeId | null = null;
+          let normalizedAnchor = { x: 0.5, y: 0.5 };
+
+          if (hits.length > 0) {
+            const targetShape = hits[hits.length - 1];
+            const util = this.editor.getShapeUtil(targetShape.type);
+            const localBounds = util.getGeometry(targetShape as any).getBounds();
+            const worldBounds = {
+              ...localBounds,
+              x: localBounds.x + targetShape.x,
+              y: localBounds.y + targetShape.y,
+              minX: localBounds.minX + targetShape.x,
+              minY: localBounds.minY + targetShape.y,
+              maxX: localBounds.maxX + targetShape.x,
+              maxY: localBounds.maxY + targetShape.y,
+            };
+            const snapped = getClosestConnectionPoint(e.point, worldBounds);
+            finalStartX = snapped.point.x;
+            finalStartY = snapped.point.y;
+            boundShapeId = targetShape.id as ShapeId;
+            normalizedAnchor = snapped.normalizedAnchor;
           }
-        });
+
+          this.editor.updateShape(this._arrowId, {
+            x: finalStartX,
+            y: finalStartY,
+            props: {
+              ...arrow.props,
+              start: {
+                ...initialTerminal,
+                point: { x: 0, y: 0 },
+                boundShapeId,
+              },
+              end: {
+                ...arrow.props.end,
+                point: {
+                  x: oldWorldEndX - finalStartX,
+                  y: oldWorldEndY - finalStartY,
+                },
+              },
+            }
+          });
+        } else {
+          // Moving the end terminal: end.point changes (local offset)
+          const initEndLocal = this._initialProps.end.point;
+          const nextEndWorldX = e.point.x;
+          const nextEndWorldY = e.point.y;
+          const arrowX = (this.editor.getShape(this._arrowId) as ArrowShape)?.x ?? 0;
+          const arrowY = (this.editor.getShape(this._arrowId) as ArrowShape)?.y ?? 0;
+
+          const otherTerminal = 'start';
+          const otherBoundId = arrow.props[otherTerminal].boundShapeId;
+          const hits = this.editor.getShapesAtPoint(e.point)
+            .filter(s => s.type !== 'arrow' && s.id !== otherBoundId && s.id !== this._arrowId);
+
+          let finalEndLocalX = nextEndWorldX - arrowX;
+          let finalEndLocalY = nextEndWorldY - arrowY;
+          let boundShapeId: ShapeId | null = null;
+          let normalizedAnchor = { x: 0.5, y: 0.5 };
+
+          if (hits.length > 0) {
+            const targetShape = hits[hits.length - 1];
+            const util = this.editor.getShapeUtil(targetShape.type);
+            const localBounds = util.getGeometry(targetShape as any).getBounds();
+            const worldBounds = {
+              ...localBounds,
+              x: localBounds.x + targetShape.x,
+              y: localBounds.y + targetShape.y,
+              minX: localBounds.minX + targetShape.x,
+              minY: localBounds.minY + targetShape.y,
+              maxX: localBounds.maxX + targetShape.x,
+              maxY: localBounds.maxY + targetShape.y,
+            };
+            const snapped = getClosestConnectionPoint(e.point, worldBounds);
+            finalEndLocalX = snapped.point.x - arrowX;
+            finalEndLocalY = snapped.point.y - arrowY;
+            boundShapeId = targetShape.id as ShapeId;
+            normalizedAnchor = snapped.normalizedAnchor;
+          }
+
+          this.editor.updateShape(this._arrowId, {
+            props: {
+              ...arrow.props,
+              end: {
+                ...arrow.props.end,
+                point: { x: finalEndLocalX, y: finalEndLocalY },
+                boundShapeId,
+                normalizedAnchor,
+              }
+            }
+          });
+        }
       }
     }, { history: 'ignore' });
   }
@@ -465,13 +577,15 @@ class DraggingHandle extends StateNode {
     }
 
     const finalProps = { ...arrow.props };
+    const finalArrowX = arrow.x;
+    const finalArrowY = arrow.y;
 
     // 1. Revert to initial state
     this.editor.history.batch('Revert Drag Handle', () => {
       this.editor.updateShape(this._arrowId, {
-        props: {
-          ...this._initialProps,
-        }
+        x: this._initialArrowX,
+        y: this._initialArrowY,
+        props: { ...this._initialProps }
       });
       if (this._initialBinding) {
         this.editor.store.put([this._initialBinding]);
@@ -496,14 +610,46 @@ class DraggingHandle extends StateNode {
           if (hits.length > 0) {
             const targetShape = hits[hits.length - 1];
             const util = this.editor.getShapeUtil(targetShape.type);
-            const bounds = util.getGeometry(targetShape as any);
-            const snapped = getClosestConnectionPoint(e.point, bounds);
-
-            finalProps[term] = {
-              boundShapeId: targetShape.id as ShapeId,
-              normalizedAnchor: snapped.normalizedAnchor,
-              point: snapped.point,
+            // getGeometry returns local bounds; convert to world for connection point snap
+            const localBounds = util.getGeometry(targetShape as any).getBounds();
+            const worldBounds = {
+              ...localBounds,
+              minX: localBounds.minX + targetShape.x,
+              minY: localBounds.minY + targetShape.y,
+              maxX: localBounds.maxX + targetShape.x,
+              maxY: localBounds.maxY + targetShape.y,
             };
+            const snapped = getClosestConnectionPoint(e.point, worldBounds);
+
+            if (term === 'start') {
+              // World end = arrow.x + end.point (local)
+              const worldEndX = finalArrowX + finalProps.end.point.x;
+              const worldEndY = finalArrowY + finalProps.end.point.y;
+              finalProps.start = {
+                boundShapeId: targetShape.id as ShapeId,
+                normalizedAnchor: snapped.normalizedAnchor,
+                point: { x: 0, y: 0 },
+              };
+              finalProps.end = {
+                ...finalProps.end,
+                point: {
+                  x: worldEndX - snapped.point.x,
+                  y: worldEndY - snapped.point.y,
+                },
+              };
+              // Update arrow world position to match new start anchor
+              this.editor.updateShape(this._arrowId, { x: snapped.point.x, y: snapped.point.y });
+            } else {
+              // end terminal: store as local offset from arrow.x/y
+              finalProps.end = {
+                boundShapeId: targetShape.id as ShapeId,
+                normalizedAnchor: snapped.normalizedAnchor,
+                point: {
+                  x: snapped.point.x - finalArrowX,
+                  y: snapped.point.y - finalArrowY,
+                },
+              };
+            }
 
             const newBinding = {
               id: bid(`bind-${term}-${Date.now()}-${Math.random().toString(36).slice(2)}`),
@@ -521,9 +667,7 @@ class DraggingHandle extends StateNode {
           }
         }
 
-        this.editor.updateShape(this._arrowId, {
-          props: finalProps,
-        });
+        this.editor.updateShape(this._arrowId, { props: finalProps });
 
         // Trigger updates to fire onAfterChangeToShape and refresh coordinates
         if (finalProps.start.boundShapeId) {
@@ -539,6 +683,7 @@ class DraggingHandle extends StateNode {
 
     this.parent!.transition('idle');
   }
+
 
   override onKeyDown(e: KeyDownEvent): void {
     if (e.key === 'Escape') {
@@ -591,11 +736,15 @@ class MarqueeSelecting extends StateNode {
   static override readonly id = 'marqueeSelecting';
 
   private _origin!: Vec2;
-  marqueeBox = makeBox(0, 0, 0, 0);
+  readonly marqueeBoxSignal = signal(makeBox(0, 0, 0, 0));
 
   override onEnter(info: { origin: Vec2; current: Vec2 }): void {
     this._origin   = info.origin;
     this._updateMarquee(info.current);
+  }
+
+  override onExit(): void {
+    this.marqueeBoxSignal.value = makeBox(0, 0, 0, 0);
   }
 
   override onPointerMove(e: PointerMoveEvent): void {
@@ -604,9 +753,9 @@ class MarqueeSelecting extends StateNode {
 
   override onPointerUp(e: PointerUpEvent): void {
     this._updateMarquee(e.point);
-    const { minX, minY, maxX, maxY } = this.marqueeBox;
-    const shapes = this.editor.getShapesInBox({ minX, minY, maxX, maxY });
+    const shapes = this.editor.getShapesInBox(this.marqueeBoxSignal.peek());
     this.editor.setSelectedShapeIds(shapes.map(s => s.id as ShapeId));
+    this.marqueeBoxSignal.value = makeBox(0, 0, 0, 0);
     this.parent!.transition('idle');
   }
 
@@ -615,7 +764,7 @@ class MarqueeSelecting extends StateNode {
     const y  = Math.min(this._origin.y, pt.y);
     const w  = Math.abs(pt.x - this._origin.x);
     const h  = Math.abs(pt.y - this._origin.y);
-    this.marqueeBox = makeBox(x, y, w, h);
+    this.marqueeBoxSignal.value = makeBox(x, y, w, h);
   }
 }
 
@@ -631,22 +780,21 @@ class MarqueeSelecting extends StateNode {
  *
  * Each handle knows which corners it anchors and which it moves.
  */
-export type ResizeHandle = 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w';
-
-export interface ResizeInfo {
+export interface DraggingResizeState {
   shapeIds:    ShapeId[];
   handle:      ResizeHandle;
   origin:      Vec2;
-  /** Per-shape snapshot: { x, y, w, h } before resize begins */
-  initialGeom: Map<ShapeId, { x: number; y: number; w: number; h: number }>;
+  /** Per-shape snapshot: clone of shape + initial bounds */
+  initialGeom: Map<ShapeId, { shape: import('../types').GlideShape; bounds: import('../types').Box2d }>;
+  initialBounds: import('../types').Box2d;
 }
 
 class DraggingResize extends StateNode {
   static override readonly id = 'draggingResize';
 
-  private _info!: ResizeInfo;
+  private _info!: DraggingResizeState;
 
-  override onEnter(info: ResizeInfo): void {
+  override onEnter(info: DraggingResizeState): void {
     this._info = info;
   }
 
@@ -667,11 +815,10 @@ class DraggingResize extends StateNode {
     if (e.key === 'Escape') {
       // Restore all shapes to their initial geometry
       this.editor.history.batch('Cancel Resize', () => {
-        for (const [id, g] of this._info.initialGeom) {
-          const existing = this.editor.getShape(id);
+        for (const [id, { shape }] of this._info.initialGeom) {
           this.editor.updateShape(id, {
-            x: g.x, y: g.y,
-            props: { ...(existing?.props as any), w: g.w, h: g.h },
+            x: shape.x, y: shape.y,
+            props: shape.props as any,
           });
         }
       }, { history: 'ignore' });
@@ -680,44 +827,51 @@ class DraggingResize extends StateNode {
   }
 
   private _applyResize(cursor: Vec2, constrainAspect: boolean): void {
-    const { handle, origin, initialGeom } = this._info;
+    const { handle, origin, initialGeom, initialBounds } = this._info;
     const dx = cursor.x - origin.x;
     const dy = cursor.y - origin.y;
 
-    for (const [id, g] of initialGeom) {
-      let { x, y, w, h } = g;
+    // First, compute the new bounds of the selection box
+    let { minX: bx, minY: by, w: bw, h: bh } = initialBounds;
+    switch (handle) {
+      case 'se': bw += dx; bh += dy; break;
+      case 'sw': bx += dx; bw -= dx; bh += dy; break;
+      case 'ne': bw += dx; by += dy; bh -= dy; break;
+      case 'nw': bx += dx; bw -= dx; by += dy; bh -= dy; break;
+      case 'e':  bw += dx; break;
+      case 'w':  bx += dx; bw -= dx; break;
+      case 's':  bh += dy; break;
+      case 'n':  by += dy; bh -= dy; break;
+    }
 
-      // Apply delta per handle type
-      switch (handle) {
-        case 'se': w += dx; h += dy; break;
-        case 'sw': x += dx; w -= dx; h += dy; break;
-        case 'ne': w += dx; y += dy; h -= dy; break;
-        case 'nw': x += dx; w -= dx; y += dy; h -= dy; break;
-        case 'e':  w += dx; break;
-        case 'w':  x += dx; w -= dx; break;
-        case 's':  h += dy; break;
-        case 'n':  y += dy; h -= dy; break;
+    // Enforce minimum size for the overall bounds
+    if (bw < 4) { if (handle.includes('w')) bx = initialBounds.minX + initialBounds.w - 4; bw = 4; }
+    if (bh < 4) { if (handle.includes('n')) by = initialBounds.minY + initialBounds.h - 4; bh = 4; }
+
+    // Shift: constrain to original aspect ratio
+    if (constrainAspect && initialBounds.w > 0 && initialBounds.h > 0) {
+      const aspect = initialBounds.w / initialBounds.h;
+      if (Math.abs(dx) >= Math.abs(dy)) {
+        bh = bw / aspect;
+        if (handle.includes('n')) by = initialBounds.minY + initialBounds.h - bh;
+      } else {
+        bw = bh * aspect;
+        if (handle.includes('w')) bx = initialBounds.minX + initialBounds.w - bw;
       }
+    }
 
-      // Enforce minimum size
-      if (w < 4) { if (handle.includes('w')) x = g.x + g.w - 4; w = 4; }
-      if (h < 4) { if (handle.includes('n')) y = g.y + g.h - 4; h = 4; }
+    // Now map every shape using delegated resizing
+    const newBounds = makeBox(bx, by, bw, bh);
+    const scaleX = bw / (initialBounds.w || 1);
+    const scaleY = bh / (initialBounds.h || 1);
 
-      // Shift: constrain to original aspect ratio
-      if (constrainAspect && g.w > 0 && g.h > 0) {
-        const aspect = g.w / g.h;
-        if (Math.abs(dx) >= Math.abs(dy)) {
-          h = w / aspect;
-        } else {
-          w = h * aspect;
-        }
-      }
+    for (const [id, { shape }] of initialGeom) {
+      // If initial bounds has no size, skip to avoid NaN
+      if (initialBounds.w === 0 || initialBounds.h === 0) continue;
 
-      const existing = this.editor.getShape(id);
-      this.editor.updateShape(id, {
-        x, y,
-        props: { ...(existing?.props as any), w, h },
-      });
+      const util = this.editor.getShapeUtil(shape.type);
+      const result = util.onResize(shape as any, { handle, scaleX, scaleY, initialShape: shape as any, initialBounds, newBounds });
+      this.editor.updateShape(id, result);
     }
   }
 }
@@ -731,6 +885,9 @@ export interface RotationInfo {
   center:          Vec2;
   /** Per-shape rotation at start (radians). */
   initialRotation: Map<ShapeId, number>;
+  /** Per-shape center at start */
+  initialCenters:  Map<ShapeId, Vec2>;
+  initialShapes:   Map<ShapeId, import('../types').GlideShape>;
   /** Angle from center to cursor at drag start (radians). */
   startAngle:      number;
 }
@@ -763,7 +920,14 @@ class DraggingRotation extends StateNode {
     if (e.key === 'Escape') {
       this.editor.history.batch('Cancel Rotate', () => {
         for (const [id, r] of this._info.initialRotation) {
-          this.editor.updateShape(id, { rotation: r });
+          const shape = this._info.initialShapes.get(id);
+          if (shape) {
+            this.editor.updateShape(id, { 
+              rotation: r,
+              x: shape.x, y: shape.y,
+              props: shape.props as any
+            });
+          }
         }
       }, { history: 'ignore' });
       this.parent!.transition('idle');
@@ -771,7 +935,7 @@ class DraggingRotation extends StateNode {
   }
 
   private _applyRotation(cursor: Vec2, snap: boolean): void {
-    const { center, startAngle, initialRotation } = this._info;
+    const { center, startAngle, initialRotation, initialCenters } = this._info;
     const currentAngle = Math.atan2(cursor.y - center.y, cursor.x - center.x);
     let delta = currentAngle - startAngle;
 
@@ -780,8 +944,60 @@ class DraggingRotation extends StateNode {
       delta = Math.round(delta / SNAP_ANGLE) * SNAP_ANGLE;
     }
 
-    for (const [id, initRot] of initialRotation) {
-      this.editor.updateShape(id, { rotation: initRot + delta });
+    const cos = Math.cos(delta);
+    const sin = Math.sin(delta);
+
+    for (const id of this._info.shapeIds) {
+      const initRot = initialRotation.get(id) ?? 0;
+      const initC = initialCenters.get(id);
+      const initS = this._info.initialShapes.get(id);
+      if (!initC || !initS) continue;
+
+      // Orbit center around pivot
+      const dx = initC.x - center.x;
+      const dy = initC.y - center.y;
+      const rotCx = center.x + (dx * cos - dy * sin);
+      const rotCy = center.y + (dx * sin + dy * cos);
+
+      const s = this.editor.getShape(id);
+      if (s) {
+        if (s.type === 'arrow') {
+          const arr = initS as unknown as ArrowShape;
+          const sWorld = { x: arr.x, y: arr.y };
+          const eWorld = { x: arr.x + arr.props.end.point.x, y: arr.y + arr.props.end.point.y };
+
+          const sdx = sWorld.x - center.x;
+          const sdy = sWorld.y - center.y;
+          const nsx = center.x + (sdx * cos - sdy * sin);
+          const nsy = center.y + (sdx * sin + sdy * cos);
+
+          const edx = eWorld.x - center.x;
+          const edy = eWorld.y - center.y;
+          const nex = center.x + (edx * cos - edy * sin);
+          const ney = center.y + (edx * sin + edy * cos);
+
+          this.editor.updateShape<ArrowShape>(id, {
+            x: nsx,
+            y: nsy,
+            rotation: initRot + delta,
+            props: {
+              ...arr.props,
+              start: { ...arr.props.start, point: { x: 0, y: 0 } },
+              end: { ...arr.props.end, point: { x: nex - nsx, y: ney - nsy } },
+            }
+          });
+        } else {
+          const b = this.editor.getShapeUtil(s.type).getGeometry(s as any).getBounds();
+          // Position top-left such that the shape's local center is at the new rotCx/rotCy
+          // Wait, rotCx/rotCy is the world center. 
+          // newX = rotCx - localCenter.x
+          const localCx = b.minX + b.w / 2;
+          const localCy = b.minY + b.h / 2;
+          const newX = rotCx - localCx;
+          const newY = rotCy - localCy;
+          this.editor.updateShape(id, { x: newX, y: newY, rotation: initRot + delta });
+        }
+      }
     }
   }
 }

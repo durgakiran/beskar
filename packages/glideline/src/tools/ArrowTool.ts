@@ -14,6 +14,11 @@
  *   - pointerUp on a shape → commit ArrowShape + 2 GlideBindings
  *   - pointerUp on canvas → commit unbound arrow (floating end)
  *   - Escape → cancel, remove preview
+ *
+ * Local-coordinate model (Phase 1):
+ *   shape.x/y = world position of the start terminal
+ *   start.point = { x: 0, y: 0 }  (always local origin)
+ *   end.point   = { x: dx, y: dy } (local offset from start)
  */
 
 import { StateNode } from '../state-node';
@@ -34,21 +39,41 @@ function makeTerminal(point: Vec2, boundShapeId: ShapeId | null = null): ArrowTe
   };
 }
 
-function makeArrowShape(id: ShapeId, start: Vec2, end: Vec2, routeStyle: 'curve' | 'ortho' = 'curve'): ArrowShape {
+/**
+ * Build an ArrowShape in the local-coordinate model.
+ * shape.x/y = startWorld; start.point = {0,0}; end.point = local offset.
+ */
+function makeArrowShape(id: ShapeId, startWorld: Vec2, endWorld: Vec2, routeStyle: 'curve' | 'ortho' = 'curve'): ArrowShape {
   return {
     id,
     type: 'arrow',
-    x: Math.min(start.x, end.x),
-    y: Math.min(start.y, end.y),
+    x: startWorld.x,
+    y: startWorld.y,
     index: 'a1',
     rotation: 0,
     meta: {},
     props: {
-      start: makeTerminal(start),
-      end:   makeTerminal(end),
+      start: makeTerminal({ x: 0, y: 0 }),
+      end:   makeTerminal({ x: endWorld.x - startWorld.x, y: endWorld.y - startWorld.y }),
       routeStyle,
       bend: DEFAULT_CURVE_BEND,
     },
+  };
+}
+
+/** Convert local bounds (from getGeometry) to world bounds by adding shape.x/y. */
+function toWorldBounds(
+  localBounds: { minX: number; minY: number; maxX: number; maxY: number; w: number; h: number; x?: number; y?: number },
+  shape: { x: number; y: number }
+) {
+  return {
+    ...localBounds,
+    x: localBounds.minX + shape.x,
+    y: localBounds.minY + shape.y,
+    minX: localBounds.minX + shape.x,
+    minY: localBounds.minY + shape.y,
+    maxX: localBounds.maxX + shape.x,
+    maxY: localBounds.maxY + shape.y,
   };
 }
 
@@ -97,8 +122,9 @@ class Drawing extends StateNode {
       const fromShape = this.editor.getShape(this._fromShapeId);
       if (fromShape) {
         const util = this.editor.getShapeUtil(fromShape.type);
-        const bounds = util.getGeometry(fromShape as any);
-        const snapped = getClosestConnectionPoint(info.origin, bounds);
+        const localBounds = util.getGeometry(fromShape as any).getBounds();
+        const worldBounds = toWorldBounds(localBounds, fromShape);
+        const snapped = getClosestConnectionPoint(info.origin, worldBounds);
         startPt = snapped.point;
         this._origin = snapped.point;
       }
@@ -114,23 +140,28 @@ class Drawing extends StateNode {
     const existing = this.editor.getShape<ArrowShape>(PREVIEW_ID);
     if (!existing) return;
 
-    // Check if hovered on a shape (exclude the from-shape to avoid self-loop, and exclude arrows)
+    // Check if hovered on a shape (exclude the from-shape and arrows)
     const hits = this.editor.getShapesAtPoint(e.point)
       .filter(s => s.type !== 'arrow' && s.id !== this._fromShapeId);
     const hoveredShape = hits.length > 0 ? hits[hits.length - 1] : null;
 
-    let endPt = e.point;
+    let endWorldPt = e.point;
     let boundShapeId: ShapeId | null = null;
     let normalizedAnchor = { x: 0.5, y: 0.5 };
 
     if (hoveredShape) {
       const util = this.editor.getShapeUtil(hoveredShape.type);
-      const bounds = util.getGeometry(hoveredShape as any);
-      const snapped = getClosestConnectionPoint(e.point, bounds);
-      endPt = snapped.point;
+      const localBounds = util.getGeometry(hoveredShape as any).getBounds();
+      const worldBounds = toWorldBounds(localBounds, hoveredShape);
+      const snapped = getClosestConnectionPoint(e.point, worldBounds);
+      endWorldPt = snapped.point;
       boundShapeId = hoveredShape.id as ShapeId;
       normalizedAnchor = snapped.normalizedAnchor;
     }
+
+    // Local model: end.point is relative to arrow.x/y (= start world position)
+    const localEndX = endWorldPt.x - existing.x;
+    const localEndY = endWorldPt.y - existing.y;
 
     this.editor.history.batch('Arrow Preview Update', () => {
       this.editor.updateShape<ArrowShape>(PREVIEW_ID, {
@@ -139,7 +170,7 @@ class Drawing extends StateNode {
           end: {
             boundShapeId,
             normalizedAnchor,
-            point: endPt,
+            point: { x: localEndX, y: localEndY },
           },
         },
       });
@@ -147,7 +178,7 @@ class Drawing extends StateNode {
   }
 
   override onPointerUp(e: PointerUpEvent): void {
-    // Check if released on a shape (exclude the from-shape to avoid self-loop, and exclude arrows)
+    // Check if released on a shape (exclude the from-shape and arrows)
     const hits = this.editor.getShapesAtPoint(e.point)
       .filter(s => s.type !== 'arrow' && s.id !== this._fromShapeId);
     const toShapeId: ShapeId | null = hits.length > 0
@@ -164,47 +195,50 @@ class Drawing extends StateNode {
     // Commit final arrow + bindings
     const finalId = sid(`arrow-${Date.now()}`);
     this.editor.history.batch('Create Arrow', () => {
-      // Set start terminal
+      // Compute start world point
       let startAnchor = { x: 0.5, y: 0.5 };
       let startPt = this._origin;
       if (this._fromShapeId) {
         const fromShape = this.editor.getShape(this._fromShapeId);
         if (fromShape) {
           const util = this.editor.getShapeUtil(fromShape.type);
-          const bounds = util.getGeometry(fromShape as any);
-          const snapped = getClosestConnectionPoint(this._origin, bounds);
+          const localBounds = util.getGeometry(fromShape as any).getBounds();
+          const worldBounds = toWorldBounds(localBounds, fromShape);
+          const snapped = getClosestConnectionPoint(this._origin, worldBounds);
           startAnchor = snapped.normalizedAnchor;
           startPt = snapped.point;
         }
       }
 
-      // Set end terminal
+      // Compute end world point
       let endAnchor = { x: 0.5, y: 0.5 };
       let endPt = e.point;
       if (toShapeId) {
         const target = this.editor.getShape(toShapeId);
         if (target) {
           const util = this.editor.getShapeUtil(target.type);
-          const bounds = util.getGeometry(target as any);
-          const snapped = getClosestConnectionPoint(e.point, bounds);
+          const localBounds = util.getGeometry(target as any).getBounds();
+          const worldBounds = toWorldBounds(localBounds, target);
+          const snapped = getClosestConnectionPoint(e.point, worldBounds);
           endAnchor = snapped.normalizedAnchor;
           endPt = snapped.point;
         }
       }
 
+      // Local model: shape.x/y = startPt; start.point = {0,0}; end.point = local offset
       const arrow = makeArrowShape(finalId, startPt, endPt, routeStyle);
       if (this._fromShapeId) {
         arrow.props.start = {
           boundShapeId: this._fromShapeId,
           normalizedAnchor: startAnchor,
-          point: startPt,
+          point: { x: 0, y: 0 },
         };
       }
       if (toShapeId) {
         arrow.props.end = {
           boundShapeId: toShapeId,
           normalizedAnchor: endAnchor,
-          point: endPt,
+          point: { x: endPt.x - startPt.x, y: endPt.y - startPt.y },
         };
       }
 

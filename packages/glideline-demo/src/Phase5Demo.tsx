@@ -262,7 +262,7 @@ export default function Phase5Demo() {
         props: { w: 40, h: 40, cornerRadius: 4, color: '#f9e2af', label: '' }
       });
     }
-    editor.store.put(records);
+    for (const r of records) editor.createShape(r);
     setStatus('Added 1000 shapes');
   };
 
@@ -270,10 +270,10 @@ export default function Phase5Demo() {
     setStatus('Running Spec Tests...');
     
     // T5.1-02
-    editor.store.put([{
+    editor.createShape({
       id: sid('out-of-bounds'), type: 'box', x: 10000, y: 10000, index: 'a1', rotation: 0, meta: {},
       props: { w: 100, h: 100, cornerRadius: 0, color: '#ff0000', label: '' }
-    }]);
+    });
     
     // allow render
     await new Promise(r => setTimeout(r, 50));

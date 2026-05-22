@@ -7,6 +7,18 @@
  */
 
 import type { GlideShape, GlideBinding, Box2d, Vec2, GlideProps, GlideMigrations, ShapeId } from '../types';
+import type { Geometry2d } from '../geometry';
+
+export type ResizeHandle = 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w';
+
+export interface ResizeInfo<S extends GlideShape = GlideShape> {
+  handle: ResizeHandle;
+  scaleX: number;
+  scaleY: number;
+  initialShape: S;
+  initialBounds: Box2d;
+  newBounds: Box2d;
+}
 
 // Re-export for convenience
 export type { GlideProps, GlideMigrations };
@@ -48,13 +60,11 @@ export abstract class ShapeUtil<S extends GlideShape = GlideShape> {
    * Axis-aligned bounding box in page space.
    * Used by the RBush spatial index, selection handles, and hit testing.
    */
-  abstract getGeometry(shape: S): Box2d;
+  abstract getGeometry(shape: S): Geometry2d;
 
   /** Override for non-rectangular shapes. Default: AABB check. */
   hitTestPoint(shape: S, point: Vec2): boolean {
-    const b = this.getGeometry(shape);
-    return point.x >= b.minX && point.x <= b.maxX &&
-           point.y >= b.minY && point.y <= b.maxY;
+    return this.getGeometry(shape).hitTestPoint(point);
   }
 
   /** Can this shape contain other shapes? (frames, groups) */
@@ -62,6 +72,47 @@ export abstract class ShapeUtil<S extends GlideShape = GlideShape> {
 
   /** Return false to block deletion. */
   onBeforeDelete(_shape: S): boolean | void { return true; }
+
+  /**
+   * Return true to suppress the 8-point resize handles for this shape.
+   * Arrows return true — they are resized via terminal handle drags instead.
+   */
+  hideResizeHandles(_shape: S): boolean { return false; }
+
+  /**
+   * Return true to suppress the circular rotate handle for this shape.
+   * Arrows return true — rotation is handled by orbiting shape.x/y in DraggingRotation.
+   */
+  hideRotateHandle(_shape: S): boolean { return false; }
+
+  /**
+   * Called when the shape is resized.
+   * Default implementation performs proportional scaling.
+   */
+  onResize(shape: S, info: ResizeInfo<S>): Partial<S> {
+    const { initialBounds, newBounds, initialShape } = info;
+    const { minX: bx, minY: by, w: bw, h: bh } = newBounds;
+
+    const relX = (initialShape.x - initialBounds.minX) / initialBounds.w;
+    const relY = (initialShape.y - initialBounds.minY) / initialBounds.h;
+    const relW = ((initialShape.props as any).w ?? initialBounds.w) / initialBounds.w;
+    const relH = ((initialShape.props as any).h ?? initialBounds.h) / initialBounds.h;
+
+    const newX = bx + relX * bw;
+    const newY = by + relY * bh;
+    const newW = Math.max(1, relW * bw);
+    const newH = Math.max(1, relH * bh);
+
+    return {
+      x: newX,
+      y: newY,
+      props: {
+        ...(initialShape.props as any),
+        w: newW,
+        h: newH,
+      },
+    } as Partial<S>;
+  }
 }
 
 // ─────────────────────────────────────────────────────────────

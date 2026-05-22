@@ -10,7 +10,8 @@ import { ShapeUtil } from './ShapeUtil';
 import { T } from '../validators';
 import { defineMigrations } from '../migrations';
 import { makeBox } from '../types';
-import type { GlideShape, Box2d } from '../types';
+import type { GlideShape } from '../types';
+import { Geometry2d, Rectangle2d } from '../geometry';
 
 export interface FrameProps {
   [key: string]: unknown;
@@ -46,8 +47,8 @@ export class FrameUtil extends ShapeUtil<FrameShape> {
     return { w: 400, h: 300, label: 'Frame', color: '#313244' };
   }
 
-  getGeometry(shape: FrameShape): Box2d {
-    return makeBox(shape.x, shape.y, shape.props.w, shape.props.h);
+  getGeometry(shape: FrameShape): Geometry2d {
+    return new Rectangle2d(0, 0, shape.props.w, shape.props.h);
   }
 
   /** Frames act as containers — child shapes can be dropped inside. */
@@ -56,13 +57,13 @@ export class FrameUtil extends ShapeUtil<FrameShape> {
   }
 
   toSvg(shape: FrameShape): SVGElement {
-    const { x, y, props } = shape;
+    const { props } = shape;
     const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
 
-    // Dashed border
+    // Dashed border (local coords: x=0, y=0)
     const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-    rect.setAttribute('x',              String(x));
-    rect.setAttribute('y',              String(y));
+    rect.setAttribute('x',              '0');
+    rect.setAttribute('y',              '0');
     rect.setAttribute('width',          String(props.w));
     rect.setAttribute('height',         String(props.h));
     rect.setAttribute('fill',           `${props.color}22`);
@@ -72,10 +73,10 @@ export class FrameUtil extends ShapeUtil<FrameShape> {
     rect.setAttribute('rx',             '4');
     g.appendChild(rect);
 
-    // Label (above top-left corner)
+    // Label (above top-left corner at local 0,0)
     const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-    label.setAttribute('x',           String(x + 8));
-    label.setAttribute('y',           String(y - 6));
+    label.setAttribute('x',           '8');
+    label.setAttribute('y',           '-6');
     label.setAttribute('font-size',   '13');
     label.setAttribute('font-family', 'Inter, system-ui, sans-serif');
     label.setAttribute('fill',        props.color);

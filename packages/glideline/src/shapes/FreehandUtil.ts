@@ -21,8 +21,9 @@ import { ShapeUtil } from './ShapeUtil';
 import { T } from '../validators';
 import { defineMigrations } from '../migrations';
 import { makeBox } from '../types';
-import type { GlideShape, Box2d, Vec2, GlideProps } from '../types';
+import type { GlideShape, Vec2, GlideProps } from '../types';
 import { STROKE_WIDTHS, resolveColor, type SizeStyle } from '../styles';
+import { Geometry2d, Polyline2d } from '../geometry';
 
 // ─────────────────────────────────────────────────────────────
 // Freehand point type
@@ -118,17 +119,8 @@ export function catmullRomPath(pts: Vec2[], isClosed: boolean): string {
 }
 
 // ─────────────────────────────────────────────────────────────
-// Hit-test helpers
+// Hit-test helpers removed (now handled by Geometry2d)
 // ─────────────────────────────────────────────────────────────
-
-function pointToSegmentDist(p: Vec2, a: Vec2, b: Vec2): number {
-  const dx = b.x - a.x;
-  const dy = b.y - a.y;
-  const lenSq = dx * dx + dy * dy;
-  if (lenSq < 1e-9) return Math.hypot(p.x - a.x, p.y - a.y);
-  const t = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / lenSq));
-  return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
-}
 
 // ─────────────────────────────────────────────────────────────
 // FreehandUtil
@@ -178,45 +170,10 @@ export class FreehandUtil extends ShapeUtil<FreehandShape> {
     };
   }
 
-  getGeometry(shape: FreehandShape): Box2d {
-    const { points, size } = shape.props;
-    const pad = STROKE_WIDTHS[size] * 2 + 4;
-
-    if (points.length === 0) {
-      return makeBox(shape.x - pad, shape.y - pad, pad * 2, pad * 2);
-    }
-
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-    for (const pt of points) {
-      if (pt.x < minX) minX = pt.x;
-      if (pt.y < minY) minY = pt.y;
-      if (pt.x > maxX) maxX = pt.x;
-      if (pt.y > maxY) maxY = pt.y;
-    }
-
-    return makeBox(minX - pad, minY - pad, maxX - minX + pad * 2, maxY - minY + pad * 2);
-  }
-
-  /**
-   * Hit test: point must be within tolerance of any polyline segment.
-   * Tolerance = strokeWidth + 4 px for comfortable clicking.
-   */
-  override hitTestPoint(shape: FreehandShape, point: Vec2): boolean {
-    const { points, size, isClosed } = shape.props;
-    if (points.length === 0) return false;
-    if (points.length === 1) {
-      return Math.hypot(point.x - points[0].x, point.y - points[0].y) <= STROKE_WIDTHS[size] + 4;
-    }
-
-    const tolerance = STROKE_WIDTHS[size] + 4;
-    const count = isClosed ? points.length : points.length - 1;
-
-    for (let i = 0; i < count; i++) {
-      const a = points[i]!;
-      const b = points[(i + 1) % points.length]!;
-      if (pointToSegmentDist(point, a, b) <= tolerance) return true;
-    }
-    return false;
+  getGeometry(shape: FreehandShape): Geometry2d {
+    const { points } = shape.props;
+    const localPoints = points.map(pt => ({ x: pt.x - shape.x, y: pt.y - shape.y }));
+    return new Polyline2d(localPoints);
   }
 
   toSvg(shape: FreehandShape): SVGElement {
@@ -230,7 +187,9 @@ export class FreehandUtil extends ShapeUtil<FreehandShape> {
 
     if (points.length === 0) return g;
 
-    const pathStr = catmullRomPath(points, isClosed);
+    // Freehand points are in world space; offset by -shape.x, -shape.y to draw in local space
+    const localPoints = points.map(pt => ({ x: pt.x - shape.x, y: pt.y - shape.y }));
+    const pathStr = catmullRomPath(localPoints, isClosed);
 
     const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
     path.setAttribute('d', pathStr);

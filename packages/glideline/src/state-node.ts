@@ -15,7 +15,7 @@ import type { Vec2, ShapeId } from './types';
 // ─────────────────────────────────────────────────────────────
 
 export type GlideEvent =
-  | { type: 'pointerDown'; point: Vec2; shiftKey: boolean; target: 'shape' | 'canvas'; shapeId?: ShapeId }
+  | { type: 'pointerDown'; point: Vec2; shiftKey: boolean; target: 'shape' | 'canvas' | 'handle'; shapeId?: ShapeId; handleId?: string }
   | { type: 'pointerMove'; point: Vec2 }
   | { type: 'pointerUp';   point: Vec2 }
   | { type: 'keyDown';     key: string }

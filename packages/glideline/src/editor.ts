@@ -17,11 +17,12 @@
  */
 
 import { signal, batch as preactBatch, type Signal } from '@preact/signals';
-import { sid } from './types';
+import { sid, makeBox } from './types';
 import { GlideStore } from './store';
 import { GlideSchema } from './schema';
 import { GlideCamera } from './camera';
 import { HistoryManager } from './history';
+import { Rectangle2d } from './geometry';
 import { StateNode } from './state-node';
 import { SelectTool } from './tools/SelectTool';
 import { BoxTool } from './tools/BoxTool';
@@ -56,6 +57,7 @@ export class GlideEditor {
   readonly schema:  GlideSchema;
   readonly camera:  GlideCamera;
   readonly history: HistoryManager;
+  private _clipboard: GlideShape[] = [];
   arrowRouteStyle: 'curve' | 'ortho' = 'curve';
 
   private _utils        = new Map<string, ShapeUtil<any>>();
@@ -172,6 +174,13 @@ export class GlideEditor {
   // ── Shape mutations ────────────────────────────────────────
 
   createShape(partial: AnyRecord): ShapeId {
+    const type = partial['type'] as string;
+    const util = this._utils.get(type);
+    if (util) {
+      const defaultProps = util.getDefaultProps();
+      const userProps = partial['props'] as AnyRecord || {};
+      partial['props'] = { ...defaultProps, ...userProps };
+    }
     this.store.put([partial]);
     return partial['id'] as ShapeId;
   }
@@ -179,7 +188,11 @@ export class GlideEditor {
   updateShape<S extends GlideShape>(id: ShapeId, partial: Partial<Omit<S, 'id' | 'type'>>): void {
     const existing = this.store.get(id);
     if (!existing) throw new Error(`GlideEditor: shape "${id}" not found`);
-    this.store.put([{ ...existing, ...partial }]);
+    const newShape = { ...existing, ...partial } as any;
+    if (partial.props && existing.props) {
+      newShape.props = { ...existing.props, ...(partial.props as any) };
+    }
+    this.store.put([newShape]);
     // Fire onAfterChangeToShape for all bindings pointing to this shape
     const bindings = this.store.getBindingsToShape(id);
     for (const binding of bindings) {
@@ -262,6 +275,51 @@ export class GlideEditor {
       }
     }
     this._selection.value = new Set(all);
+  }
+
+  // ── Clipboard ──────────────────────────────────────────────
+
+  copy(ids: ShapeId[]): void {
+    const shapes = this.getShapes().filter(s => ids.includes(s.id as ShapeId));
+    this._clipboard = JSON.parse(JSON.stringify(shapes));
+  }
+
+  paste(point?: Vec2): ShapeId[] {
+    if (this._clipboard.length === 0) return [];
+    
+    // Find bounding box of clipboard items to calculate offset
+    let minX = Infinity, minY = Infinity;
+    for (const shape of this._clipboard) {
+      minX = Math.min(minX, shape.x as number);
+      minY = Math.min(minY, shape.y as number);
+    }
+    
+    // If a point is provided, paste at that point. Otherwise, offset slightly from original.
+    let offsetX = 20;
+    let offsetY = 20;
+    if (point && minX !== Infinity && minY !== Infinity) {
+      offsetX = point.x - minX;
+      offsetY = point.y - minY;
+    }
+
+    const newIds: ShapeId[] = [];
+    this.history.batch('Paste', () => {
+      for (const shape of this._clipboard) {
+        const newId = sid(`${shape.id}-paste-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+        const clone = {
+          ...shape,
+          id: newId,
+          x: (shape.x as number) + offsetX,
+          y: (shape.y as number) + offsetY,
+        };
+        this.store.put([clone as any]);
+        newIds.push(newId);
+      }
+    });
+
+    // Select the newly pasted items
+    this.setSelectedShapeIds(newIds);
+    return newIds;
   }
 
   // ── Shape list ─────────────────────────────────────────────
@@ -459,7 +517,7 @@ export class GlideEditor {
 
     for (const shape of shapes) {
       const util = this.getShapeUtil(shape.type);
-      const box = util.getGeometry(shape);
+      const box = util.getGeometry(shape).getBounds();
       if (box.minX < minX) minX = box.minX;
       if (box.minY < minY) minY = box.minY;
       if (box.maxX > maxX) maxX = box.maxX;
@@ -585,8 +643,27 @@ export function createEditor(opts: CreateEditorOptions = {}): GlideEditor {
   const editor = new GlideEditor(store, schema, cam);
 
   // Inject geometric hooks for RBush integration
-  store.getGeometry = (shape) => editor.getShapeUtil(shape.type as any).getGeometry(shape as any);
-  store.hitTestPoint = (shape, x, y) => editor.getShapeUtil(shape.type as any).hitTestPoint(shape as any, { x, y });
+  // getGeometry() returns LOCAL bounds; RBush needs WORLD bounds.
+  // We translate by shape.x/y here so the spatial index is always in world space.
+  store.getGeometry = (shape) => {
+    const util = editor.getShapeUtil(shape.type as any);
+    const localBounds = util.getGeometry(shape as any).getBounds();
+    const sx = (shape['x'] as number) ?? 0;
+    const sy = (shape['y'] as number) ?? 0;
+    return new Rectangle2d(
+      localBounds.minX + sx,
+      localBounds.minY + sy,
+      localBounds.w,
+      localBounds.h
+    );
+  };
+  // hitTestPoint receives world-space x/y from the spatial query.
+  // Convert to local space before calling the util.
+  store.hitTestPoint = (shape, x, y) => {
+    const sx = (shape['x'] as number) ?? 0;
+    const sy = (shape['y'] as number) ?? 0;
+    return editor.getShapeUtil(shape.type as any).hitTestPoint(shape as any, { x: x - sx, y: y - sy });
+  };
 
   // 8. Instantiate + inject each ShapeUtil
   for (const plugin of plugins) {

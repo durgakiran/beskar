@@ -87,6 +87,49 @@ export const FILL_OPACITIES: Record<FillStyle, number> = {
 };
 
 // ─────────────────────────────────────────────────────────────
+// Validators for ShapeUtils
+// ─────────────────────────────────────────────────────────────
+
+export const StyleValidators = {
+  fillStyle: {
+    validate(v: unknown): FillStyle {
+      if (!['none', 'semi', 'solid', 'pattern'].includes(v as string)) throw new Error(`fillStyle must be none|semi|solid|pattern, got "${v}"`);
+      return v as FillStyle;
+    },
+  },
+  strokeStyle: {
+    validate(v: unknown): StrokeStyle {
+      if (!['solid', 'dashed', 'dotted'].includes(v as string)) throw new Error(`strokeStyle must be solid|dashed|dotted, got "${v}"`);
+      return v as StrokeStyle;
+    },
+  },
+  strokeWidth: {
+    validate(v: unknown): SizeStyle {
+      if (!['thin', 'medium', 'thick', 'xl'].includes(v as string)) throw new Error(`strokeWidth must be thin|medium|thick|xl, got "${v}"`);
+      return v as SizeStyle;
+    },
+  },
+  fontSize: {
+    validate(v: unknown): FontSize {
+      if (!['sm', 'md', 'lg', 'xl'].includes(v as string)) throw new Error(`fontSize must be sm|md|lg|xl, got "${v}"`);
+      return v as FontSize;
+    },
+  },
+  textAlign: {
+    validate(v: unknown): TextAlign {
+      if (!['left', 'center', 'right'].includes(v as string)) throw new Error(`textAlign must be left|center|right, got "${v}"`);
+      return v as TextAlign;
+    },
+  },
+  font: {
+    validate(v: unknown): Font {
+      if (!['draw', 'sans', 'serif', 'mono'].includes(v as string)) throw new Error(`font must be draw|sans|serif|mono, got "${v}"`);
+      return v as Font;
+    },
+  },
+};
+
+// ─────────────────────────────────────────────────────────────
 // ShapeStyleProps — superset of all style properties
 // ─────────────────────────────────────────────────────────────
 
@@ -106,6 +149,8 @@ export interface ShapeStyleProps {
   strokeStyle?: StrokeStyle;
   /** Stroke width token. */
   strokeWidth?: SizeStyle;
+  /** Text color */
+  labelColor?: string;
   /** Font size token (text / sticky). */
   fontSize?: FontSize;
   /** Text alignment (text / sticky). */
@@ -157,4 +202,51 @@ export function svgFill(
     case 'solid':   return resolveColor(color);
     case 'pattern': return patternId ? `url(#${patternId})` : resolveColor(color);
   }
+}
+
+// ─────────────────────────────────────────────────────────────
+// HTML Text rendering (WYSIWYG identical to InlineEditor)
+// ─────────────────────────────────────────────────────────────
+
+export function createTextForeignObject(opts: {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  text: string;
+  font: Font | string;
+  fontSize: FontSize | number;
+  textAlign: TextAlign | string;
+  color: string;
+  verticalAlign?: 'top' | 'center';
+  padding?: number;
+}): SVGForeignObjectElement {
+  const fo = document.createElementNS('http://www.w3.org/2000/svg', 'foreignObject');
+  fo.setAttribute('x', String(opts.x));
+  fo.setAttribute('y', String(opts.y));
+  fo.setAttribute('width', String(opts.w));
+  fo.setAttribute('height', String(opts.h));
+  fo.setAttribute('pointer-events', 'none');
+
+  const div = document.createElement('div');
+  div.setAttribute('xmlns', 'http://www.w3.org/1999/xhtml');
+  div.style.width = '100%';
+  div.style.height = '100%';
+  div.style.display = 'flex';
+  div.style.alignItems = opts.verticalAlign === 'top' ? 'flex-start' : 'center';
+  div.style.justifyContent = opts.textAlign === 'left' ? 'flex-start' : opts.textAlign === 'right' ? 'flex-end' : 'center';
+  div.style.fontSize = typeof opts.fontSize === 'number' ? `${opts.fontSize}px` : `${FONT_SIZES[opts.fontSize as FontSize]}px`;
+  div.style.fontFamily = (FONT_FAMILIES as any)[opts.font] || opts.font;
+  div.style.color = resolveColor(opts.color) ?? opts.color;
+  div.style.textAlign = opts.textAlign;
+  div.style.whiteSpace = 'pre-wrap';
+  div.style.wordBreak = 'break-word';
+  div.style.lineHeight = 'normal';
+  div.style.margin = '0';
+  div.style.padding = opts.padding ? `${opts.padding}px` : '0';
+  div.style.boxSizing = 'border-box';
+  div.textContent = opts.text;
+
+  fo.appendChild(div);
+  return fo;
 }

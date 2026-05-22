@@ -8,8 +8,9 @@ import { createEditor, GlideEditor, type GlidePlugin } from './editor';
 import { ShapeUtil } from './shapes/ShapeUtil';
 import { T } from './validators';
 import { defineMigrations } from './migrations';
-import { makeBox } from './types';
-import type { GlideShape, Box2d, ShapeId } from './types';
+import { sid } from './types';
+import { Geometry2d, Rectangle2d } from './geometry';
+import type { Box2d, GlideShape, Vec2 } from './types';
 
 // ─────────────────────────────────────────────────────────────
 // Test fixture utilities
@@ -26,8 +27,8 @@ class BoxUtil extends ShapeUtil<BoxShape> {
   }});
 
   getDefaultProps() { return { w: 120, h: 80 }; }
-  getGeometry(shape: BoxShape): Box2d {
-    return makeBox(shape.x, shape.y, shape.props.w, shape.props.h);
+  getGeometry(shape: BoxShape): Geometry2d {
+    return new Rectangle2d(0, 0, shape.props.w, shape.props.h);
   }
 }
 
@@ -39,8 +40,8 @@ class ArrowUtil extends ShapeUtil<GlideShape<{ label: string }>> {
   }});
 
   getDefaultProps() { return { label: '' }; }
-  getGeometry(shape: GlideShape<{ label: string }>): Box2d {
-    return makeBox(shape.x, shape.y, 100, 4);
+  getGeometry(shape: GlideShape<{ label: string }>): Geometry2d {
+    return new Rectangle2d(0, 0, 100, 20);
   }
 }
 
@@ -131,9 +132,8 @@ class DiamondUtil extends ShapeUtil<GlideShape<{ size: number }>> {
   static override type = 'diamond' as const;
   static override props = { size: T.number };
   getDefaultProps() { return { size: 80 }; }
-  getGeometry(s: GlideShape<{ size: number }>): Box2d {
-    const half = s.props.size / 2;
-    return makeBox(s.x - half, s.y - half, s.props.size, s.props.size);
+  getGeometry(s: GlideShape<{ size: number }>): Geometry2d {
+    return new Rectangle2d(0, 0, s.props.size, s.props.size);
   }
   hitTestPoint(s: GlideShape<{ size: number }>, pt: { x: number; y: number }): boolean {
     const half = s.props.size / 2;

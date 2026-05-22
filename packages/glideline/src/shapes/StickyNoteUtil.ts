@@ -24,10 +24,11 @@ import { ShapeUtil } from './ShapeUtil';
 import { T } from '../validators';
 import { defineMigrations } from '../migrations';
 import { makeBox } from '../types';
-import type { GlideShape, Box2d, GlideProps } from '../types';
+import type { GlideShape, GlideProps } from '../types';
+import { Geometry2d, Rectangle2d } from '../geometry';
 import {
   FONT_SIZES, FONT_FAMILIES,
-  resolveColor,
+  resolveColor, createTextForeignObject,
   type FontSize, type TextAlign, type Font,
 } from '../styles';
 
@@ -196,12 +197,12 @@ export class StickyNoteUtil extends ShapeUtil<StickyNoteShape> {
     };
   }
 
-  getGeometry(shape: StickyNoteShape): Box2d {
-    return makeBox(shape.x, shape.y, shape.props.w, shape.props.h);
+  getGeometry(shape: StickyNoteShape): Geometry2d {
+    return new Rectangle2d(0, 0, shape.props.w, shape.props.h);
   }
 
   toSvg(shape: StickyNoteShape): SVGElement {
-    const { x, y, props } = shape;
+    const { props } = shape;
     const bgColor = STICKY_COLORS[props.color] ?? resolveColor(props.color);
     const fontSize = FONT_SIZES[props.fontSize];
     const fontFamily = FONT_FAMILIES[props.font];
@@ -211,10 +212,10 @@ export class StickyNoteUtil extends ShapeUtil<StickyNoteShape> {
     const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
     if (props.opacity < 1) g.setAttribute('opacity', String(props.opacity));
 
-    // Background rect
+    // Background rect (local coords: x=0, y=0)
     const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-    rect.setAttribute('x',      String(x));
-    rect.setAttribute('y',      String(y));
+    rect.setAttribute('x',      '0');
+    rect.setAttribute('y',      '0');
     rect.setAttribute('width',  String(props.w));
     rect.setAttribute('height', String(props.h));
     rect.setAttribute('fill',   bgColor);
@@ -226,31 +227,17 @@ export class StickyNoteUtil extends ShapeUtil<StickyNoteShape> {
 
     // Text content
     if (props.text) {
-      const lines = wrapText(props.text, textW, fontSize);
-      const textEl = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-      textEl.setAttribute('font-size',   String(fontSize));
-      textEl.setAttribute('font-family', fontFamily);
-      textEl.setAttribute('fill',        props.textColor);
-      textEl.setAttribute('pointer-events', 'none');
-
-      let textAnchor: string;
-      let baseX: number;
-      switch (props.textAlign) {
-        case 'center': textAnchor = 'middle'; baseX = x + props.w / 2; break;
-        case 'right':  textAnchor = 'end';    baseX = x + props.w - PAD; break;
-        default:       textAnchor = 'start';  baseX = x + PAD; break;
-      }
-      textEl.setAttribute('text-anchor', textAnchor);
-
-      lines.forEach((line, i) => {
-        const tspan = document.createElementNS('http://www.w3.org/2000/svg', 'tspan');
-        tspan.setAttribute('x', String(baseX));
-        tspan.setAttribute('y', String(y + PAD + (i + 1) * lineHeight));
-        tspan.textContent = line;
-        textEl.appendChild(tspan);
+      const fo = createTextForeignObject({
+        x: 0, y: 0, w: props.w, h: props.h,
+        text: props.text,
+        font: props.font,
+        fontSize: props.fontSize,
+        textAlign: props.textAlign,
+        color: props.textColor,
+        verticalAlign: 'top',
+        padding: PAD,
       });
-
-      g.appendChild(textEl);
+      g.appendChild(fo);
     }
 
     return g;

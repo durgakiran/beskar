@@ -6,11 +6,13 @@
  * toSvg() returns a <text> element inside a <g>.
  */
 
-import { ShapeUtil } from './ShapeUtil';
+import { ShapeUtil, type ResizeInfo } from './ShapeUtil';
 import { T } from '../validators';
 import { defineMigrations } from '../migrations';
 import { makeBox } from '../types';
-import type { GlideShape, Box2d, Vec2 } from '../types';
+import { createTextForeignObject } from '../styles';
+import type { GlideShape, Vec2 } from '../types';
+import { Geometry2d, Rectangle2d } from '../geometry';
 
 export interface TextProps {
   [key: string]: unknown;
@@ -76,33 +78,35 @@ export class TextUtil extends ShapeUtil<TextShape> {
     return { text: '', fontSize: 16, color: '#cdd6f4' };
   }
 
-  getGeometry(shape: TextShape): Box2d {
+  getGeometry(shape: TextShape): Geometry2d {
     const { w, h } = estimateBounds(shape.props.text, shape.props.fontSize);
-    return makeBox(shape.x, shape.y, w, h);
+    return new Rectangle2d(0, 0, (shape.props as any).w ?? w, h);
   }
 
-  override hitTestPoint(shape: TextShape, point: Vec2): boolean {
-    const b = this.getGeometry(shape);
-    return point.x >= b.minX && point.x <= b.maxX &&
-           point.y >= b.minY && point.y <= b.maxY;
+  override onResize(shape: TextShape, info: ResizeInfo<TextShape>): Partial<TextShape> {
+    const base = super.onResize(shape, info) as any;
+    delete base.props?.h;
+    return base;
   }
 
   toSvg(shape: TextShape): SVGElement {
-    const { x, y, props } = shape;
+    const { props } = shape;
     const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-    const lines = props.text.split('\n');
+    const bounds = this.getGeometry(shape).getBounds();
+    const w = bounds.w;
+    const h = bounds.h;
 
-    lines.forEach((line, i) => {
-      const t = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-      t.setAttribute('x',            String(x));
-      t.setAttribute('y',            String(y + (i + 1) * props.fontSize * 1.4));
-      t.setAttribute('font-size',    String(props.fontSize));
-      t.setAttribute('fill',         props.color);
-      t.setAttribute('font-family',  'Inter, system-ui, sans-serif');
-      t.textContent = line;
-      g.appendChild(t);
+    const fo = createTextForeignObject({
+      x: 0, y: 0, w, h,
+      text: props.text,
+      font: 'Inter, system-ui, sans-serif',
+      fontSize: props.fontSize,
+      textAlign: 'left',
+      color: props.color,
+      verticalAlign: 'top',
     });
 
+    g.appendChild(fo);
     return g;
   }
 }

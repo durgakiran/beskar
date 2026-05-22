@@ -13,7 +13,7 @@
  *   - onBeforeDeleteToShape: detaches terminal (boundShapeId → null).
  */
 
-import { ShapeUtil, BindingUtil } from './ShapeUtil';
+import { ShapeUtil, BindingUtil, type ResizeInfo } from './ShapeUtil';
 import { T } from '../validators';
 import { defineMigrations } from '../migrations';
 import type {
@@ -21,8 +21,10 @@ import type {
   Box2d, Vec2, EdgeName, ShapeId,
 } from '../types';
 import { makeBox as makeBoxFn } from '../types';
+import { Geometry2d, Polyline2d } from '../geometry';
 import { computeArcPath, intersectBezierWithBox, getBezierSegment } from '../arc-router';
 import { computeElbowPath, parseElbowPoints } from '../elbow-router';
+import { StyleValidators, STROKE_WIDTHS, STROKE_DASH_ARRAYS, resolveColor, type StrokeStyle, type SizeStyle } from '../styles';
 
 // ─────────────────────────────────────────────────────────────
 // Arrow terminal type
@@ -49,6 +51,10 @@ export interface ArrowProps {
   routeStyle: 'curve' | 'ortho';
   /** Bend scalar for arc router. 0 = straight. */
   bend: number;
+  color: string;
+  opacity: number;
+  strokeStyle: StrokeStyle;
+  strokeWidth: SizeStyle;
 }
 
 export type ArrowShape = GlideShape<ArrowProps>;
@@ -87,14 +93,18 @@ export class ArrowUtil extends ShapeUtil<ArrowShape> {
   static override readonly type = 'arrow';
 
   static override readonly props: GlideProps<ArrowProps> = {
-    start:      terminalValidator,
-    end:        terminalValidator,
-    routeStyle: routeStyleValidator,
-    bend:       T.number,
+    start:       terminalValidator,
+    end:         terminalValidator,
+    routeStyle:  routeStyleValidator,
+    bend:        T.number,
+    color:       T.string,
+    opacity:     T.number,
+    strokeStyle: StyleValidators.strokeStyle,
+    strokeWidth: StyleValidators.strokeWidth,
   };
 
   static override readonly migrations = defineMigrations({
-    currentVersion: 1,
+    currentVersion: 3,
     migrators: {
       1: {
         up:   r => ({
@@ -107,6 +117,51 @@ export class ArrowUtil extends ShapeUtil<ArrowShape> {
         }),
         down: r => r,
       },
+      2: {
+        up: r => ({
+          ...r,
+          props: {
+            color: '#f38ba8',
+            opacity: 1,
+            strokeStyle: 'solid',
+            strokeWidth: 'medium',
+            ...(r['props'] as object),
+          }
+        }),
+        down: r => r,
+      },
+      3: {
+        // v3: Convert world-space terminal points → local-coordinate model.
+        // shape.x/y = start terminal world position;
+        // start.point = {0,0}; end.point = local offset from start.
+        up: (r: any) => {
+          const s = r.props.start.point as { x: number; y: number };
+          const e = r.props.end.point   as { x: number; y: number };
+          return {
+            ...r,
+            x: s.x,
+            y: s.y,
+            props: {
+              ...r.props,
+              start: { ...r.props.start, point: { x: 0, y: 0 } },
+              end:   { ...r.props.end,   point: { x: e.x - s.x, y: e.y - s.y } },
+            },
+          };
+        },
+        down: (r: any) => {
+          const e = r.props.end.point as { x: number; y: number };
+          return {
+            ...r,
+            x: 0,
+            y: 0,
+            props: {
+              ...r.props,
+              start: { ...r.props.start, point: { x: r.x, y: r.y } },
+              end:   { ...r.props.end,   point: { x: r.x + e.x, y: r.y + e.y } },
+            },
+          };
+        },
+      },
     },
   });
 
@@ -118,83 +173,55 @@ export class ArrowUtil extends ShapeUtil<ArrowShape> {
       point:            zero,
     };
     return {
-      start:      { ...terminal },
-      end:        { ...terminal },
+      start:      terminal,
+      end:        terminal,
       routeStyle: 'curve',
       bend:       0,
+      color:       '#f38ba8',
+      opacity:     1,
+      strokeStyle: 'solid',
+      strokeWidth: 'medium',
     };
   }
 
-  getGeometry(shape: ArrowShape): Box2d {
-    const { start, end, routeStyle, bend } = shape.props;
-    let minX = Math.min(start.point.x, end.point.x);
-    let minY = Math.min(start.point.y, end.point.y);
-    let maxX = Math.max(start.point.x, end.point.x);
-    let maxY = Math.max(start.point.y, end.point.y);
+  /**
+   * Returns a Geometry2d in LOCAL space.
+   */
+  getGeometry(shape: ArrowShape): Geometry2d {
+    const { start, end } = shape.props;
+    return new Polyline2d([start.point, end.point]);
+  }
 
-    if (routeStyle === 'curve') {
-      const sx = start.point.x;
-      const sy = start.point.y;
-      const ex = end.point.x;
-      const ey = end.point.y;
-      const mx = (sx + ex) / 2;
-      const my = (sy + ey) / 2;
-      const dx = ex - sx;
-      const dy = ey - sy;
-      const chord = Math.sqrt(dx * dx + dy * dy);
-      let cpx = mx;
-      let cpy = my;
-      if (chord >= 1e-9 && bend !== 0) {
-        const perpX = dy / chord;
-        const perpY = -dx / chord;
-        const offset = chord * bend;
-        cpx = mx + perpX * offset;
-        cpy = my + perpY * offset;
-      }
-      minX = Math.min(minX, cpx);
-      minY = Math.min(minY, cpy);
-      maxX = Math.max(maxX, cpx);
-      maxY = Math.max(maxY, cpy);
-    } else if (routeStyle === 'ortho') {
-      const editor = this.editor as any;
-      if (editor && typeof editor.getShape === 'function') {
-        const fromShape = start.boundShapeId ? editor.getShape(start.boundShapeId) : null;
-        const toShape   = end.boundShapeId   ? editor.getShape(end.boundShapeId)   : null;
-        if (fromShape && toShape) {
-          const fu = editor.getShapeUtil(fromShape.type);
-          const tu = editor.getShapeUtil(toShape.type);
-          if (fu && tu) {
-            const fromBounds = fu.getGeometry(fromShape as any);
-            const toBounds   = tu.getGeometry(toShape as any);
-            const bindings = editor.getBindingsFromShape(shape.id) || [];
-            const startBind = bindings.find((b: any) => b.props.terminal === 'start');
-            const endBind   = bindings.find((b: any) => b.props.terminal === 'end');
-            const fromEdge = startBind?.props.fromEdge ?? 'right';
-            const toEdge = endBind?.props.fromEdge ?? 'left';
-            const pathStr = computeElbowPath(fromBounds, toBounds, fromEdge, toEdge, bend);
-            const pts = parseElbowPoints(pathStr);
-            for (const pt of pts) {
-              minX = Math.min(minX, pt.x);
-              minY = Math.min(minY, pt.y);
-              maxX = Math.max(maxX, pt.x);
-              maxY = Math.max(maxY, pt.y);
-            }
-          }
-        }
-      }
-    }
+  /** Arrows are resized via terminal handle drags, not the standard resize UI. */
+  override hideResizeHandles(_shape: ArrowShape): boolean { return true; }
 
-    const pad = 10;
-    return makeBoxFn(
-      minX - pad,
-      minY - pad,
-      Math.max(1, maxX - minX + 2 * pad),
-      Math.max(1, maxY - minY + 2 * pad)
-    );
+  /** Arrows are rotated by orbiting shape.x/y + rotating end.point vector. */
+  override hideRotateHandle(_shape: ArrowShape): boolean { return true; }
+
+  override onResize(shape: ArrowShape, info: ResizeInfo<ArrowShape>): Partial<ArrowShape> {
+    const base = super.onResize(shape, info) as any;
+    const { scaleX, scaleY, initialShape: arr } = info;
+    return {
+      ...base,
+      props: {
+        ...arr.props,
+        end: {
+          ...arr.props.end,
+          point: {
+            x: arr.props.end.point.x * scaleX,
+            y: arr.props.end.point.y * scaleY,
+          },
+        },
+      },
+    };
   }
 
 
-  /** Override: hit-test the arrow line, not just its AABB. */
+  /**
+   * Override: hit-test the arrow line, not just its AABB.
+   * NOTE: After Phase 1, `point` is in LOCAL space (page coord minus shape.x/y).
+   * start.point = {0,0}, end.point = local offset.
+   */
   override hitTestPoint(shape: ArrowShape, point: Vec2): boolean {
     const { start, end, routeStyle, bend } = shape.props;
 
@@ -206,8 +233,21 @@ export class ArrowUtil extends ShapeUtil<ArrowShape> {
       if (fromShape && toShape) {
         const fu = editor.getShapeUtil(fromShape.type);
         const tu = editor.getShapeUtil(toShape.type);
-        const fromBounds = fu.getGeometry(fromShape as any);
-        const toBounds   = tu.getGeometry(toShape as any);
+        // Convert world-space bounds of bound shapes to local space
+        const fwb = fu.getGeometry(fromShape as any).getBounds();
+        const twb = tu.getGeometry(toShape as any).getBounds();
+        const fromBounds = {
+          ...fwb,
+          x: fwb.minX + fromShape.x - shape.x, y: fwb.minY + fromShape.y - shape.y,
+          minX: fwb.minX + fromShape.x - shape.x, minY: fwb.minY + fromShape.y - shape.y,
+          maxX: fwb.maxX + fromShape.x - shape.x, maxY: fwb.maxY + fromShape.y - shape.y,
+        };
+        const toBounds = {
+          ...twb,
+          x: twb.minX + toShape.x - shape.x, y: twb.minY + toShape.y - shape.y,
+          minX: twb.minX + toShape.x - shape.x, minY: twb.minY + toShape.y - shape.y,
+          maxX: twb.maxX + toShape.x - shape.x, maxY: twb.maxY + toShape.y - shape.y,
+        };
         const bindings = editor.getBindingsFromShape(shape.id);
         const startBind = bindings.find((b: any) => b.props.terminal === 'start');
         const endBind   = bindings.find((b: any) => b.props.terminal === 'end');
@@ -225,7 +265,7 @@ export class ArrowUtil extends ShapeUtil<ArrowShape> {
       }
       return minDist <= 8;
     } else {
-      // Curve style hit test with clipping
+      // Curve style hit test — all coords are local
       const editor = this.editor as any;
       let sourceBox: Box2d | null = null;
       let destBox: Box2d | null = null;
@@ -234,17 +274,30 @@ export class ArrowUtil extends ShapeUtil<ArrowShape> {
         const s = editor.getShape(start.boundShapeId);
         if (s) {
           const u = editor.getShapeUtil(s.type);
-          sourceBox = u.getGeometry(s);
+          const wb = u.getGeometry(s).getBounds();
+          sourceBox = {
+            ...wb,
+            x: wb.minX + s.x - shape.x, y: wb.minY + s.y - shape.y,
+            minX: wb.minX + s.x - shape.x, minY: wb.minY + s.y - shape.y,
+            maxX: wb.maxX + s.x - shape.x, maxY: wb.maxY + s.y - shape.y,
+          };
         }
       }
       if (end.boundShapeId) {
         const d = editor.getShape(end.boundShapeId);
         if (d) {
           const u = editor.getShapeUtil(d.type);
-          destBox = u.getGeometry(d);
+          const wb = u.getGeometry(d).getBounds();
+          destBox = {
+            ...wb,
+            x: wb.minX + d.x - shape.x, y: wb.minY + d.y - shape.y,
+            minX: wb.minX + d.x - shape.x, minY: wb.minY + d.y - shape.y,
+            maxX: wb.maxX + d.x - shape.x, maxY: wb.maxY + d.y - shape.y,
+          };
         }
       }
 
+      // Local coords: start.point = {0,0}, end.point = local offset
       const sx = start.point.x;
       const sy = start.point.y;
       const ex = end.point.x;
@@ -316,8 +369,14 @@ export class ArrowUtil extends ShapeUtil<ArrowShape> {
     }
   }
 
+  /**
+   * Draw the arrow in local space.
+   * start.point = {0,0} (local origin); end.point = local offset.
+   * The parent <g transform="translate(shape.x, shape.y)"> in Canvas.tsx
+   * provides world positioning.
+   */
   toSvg(shape: ArrowShape): SVGElement {
-    const { start, end, routeStyle, bend } = shape.props;
+    const { start, end, routeStyle, bend, color, opacity, strokeStyle, strokeWidth } = shape.props;
     let pathStr: string;
 
     const editor = this.editor as any;
@@ -332,31 +391,56 @@ export class ArrowUtil extends ShapeUtil<ArrowShape> {
         const endBind   = bindings.find((b: any) => b.props.terminal === 'end');
         const fromEdge = startBind?.props.fromEdge ?? 'right';
         const toEdge   = endBind?.props.fromEdge ?? 'left';
-        
+
         const fu = editor.getShapeUtil(fromShape.type);
         const tu = editor.getShapeUtil(toShape.type);
-        const fromBounds = fu.getGeometry(fromShape as any);
-        const toBounds   = tu.getGeometry(toShape as any);
+        // Convert world-space bounds of bound shapes to local space for routing
+        const fwb = fu.getGeometry(fromShape as any).getBounds();
+        const twb = tu.getGeometry(toShape as any).getBounds();
+        const fromBounds = {
+          ...fwb,
+          x:    fwb.minX + fromShape.x - shape.x,
+          y:    fwb.minY + fromShape.y - shape.y,
+          minX: fwb.minX + fromShape.x - shape.x,
+          minY: fwb.minY + fromShape.y - shape.y,
+          maxX: fwb.maxX + fromShape.x - shape.x,
+          maxY: fwb.maxY + fromShape.y - shape.y,
+        };
+        const toBounds = {
+          ...twb,
+          x:    twb.minX + toShape.x - shape.x,
+          y:    twb.minY + toShape.y - shape.y,
+          minX: twb.minX + toShape.x - shape.x,
+          minY: twb.minY + toShape.y - shape.y,
+          maxX: twb.maxX + toShape.x - shape.x,
+          maxY: twb.maxY + toShape.y - shape.y,
+        };
         pathStr = computeElbowPath(fromBounds, toBounds, fromEdge, toEdge, bend);
       } else {
+        // Floating: draw from {0,0} to end.point local offset
         pathStr = computeArcPath(start.point, end.point, 0);
       }
     } else {
-      const fromShape = start.boundShapeId ? editor.getShape(start.boundShapeId) : null;
-      const toShape   = end.boundShapeId   ? editor.getShape(end.boundShapeId)   : null;
-      const fromBounds = fromShape ? editor.getShapeUtil(fromShape.type).getGeometry(fromShape as any) : undefined;
-      const toBounds   = toShape ? editor.getShapeUtil(toShape.type).getGeometry(toShape as any) : undefined;
-      pathStr = computeArcPath(start.point, end.point, bend, fromBounds, toBounds);
+      // Draw from {0,0} (start) to end.point local offset
+      pathStr = computeArcPath(start.point, end.point, bend);
     }
+
+    const strokeW = STROKE_WIDTHS[strokeWidth] ?? 2;
+    const strokeC = resolveColor(color) ?? color;
+    const dashArray = STROKE_DASH_ARRAYS[strokeStyle] ?? 'none';
 
     const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
     g.setAttribute('class', 'glideline-arrow');
+    if (opacity < 1) g.setAttribute('opacity', String(opacity));
 
     const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
     path.setAttribute('d', pathStr);
-    path.setAttribute('stroke', '#f38ba8');
-    path.setAttribute('stroke-width', '2');
+    path.setAttribute('stroke', strokeC);
+    path.setAttribute('stroke-width', String(strokeW));
     path.setAttribute('fill', 'none');
+    if (dashArray !== 'none') {
+      path.setAttribute('stroke-dasharray', dashArray);
+    }
     g.appendChild(path);
 
     const endPt = arrowEndPoint(pathStr, end.point);
@@ -365,7 +449,7 @@ export class ArrowUtil extends ShapeUtil<ArrowShape> {
     if (pts) {
       const polygon = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
       polygon.setAttribute('points', pts);
-      polygon.setAttribute('fill', '#f38ba8');
+      polygon.setAttribute('fill', strokeC);
       g.appendChild(polygon);
     }
 
@@ -473,6 +557,16 @@ export function anchorToPoint(anchor: Vec2, bounds: Box2d): Vec2 {
  * (centers of the four edges) of a shape's bounding box.
  */
 export function getClosestConnectionPoint(pt: Vec2, bounds: Box2d): { normalizedAnchor: Vec2; point: Vec2 } {
+  if (pt.x >= bounds.x && pt.x <= bounds.x + bounds.w && pt.y >= bounds.y && pt.y <= bounds.y + bounds.h) {
+    return {
+      normalizedAnchor: {
+        x: bounds.w > 0 ? (pt.x - bounds.x) / bounds.w : 0.5,
+        y: bounds.h > 0 ? (pt.y - bounds.y) / bounds.h : 0.5,
+      },
+      point: pt,
+    };
+  }
+
   const points = [
     { anchor: { x: 0.5, y: 0.0 }, pt: { x: bounds.x + bounds.w / 2, y: bounds.y } },
     { anchor: { x: 1.0, y: 0.5 }, pt: { x: bounds.x + bounds.w,     y: bounds.y + bounds.h / 2 } },
@@ -534,7 +628,12 @@ export class ArrowBindingUtil extends BindingUtil<ArrowBinding> {
 
   /**
    * Called whenever the target shape (toId) changes.
-   * Recomputes the terminal's absolute point and fromEdge from normalizedAnchor.
+   * Recomputes terminal position in LOCAL arrow space from normalizedAnchor.
+   *
+   * Local model:
+   *  - shape.x/y = world position of the START terminal
+   *  - props.start.point = {0, 0} always
+   *  - props.end.point = local offset (world_end - world_start)
    */
   override onAfterChangeToShape(binding: ArrowBinding): void {
     const editor = this.editor as import('../editor').GlideEditor;
@@ -545,24 +644,67 @@ export class ArrowBindingUtil extends BindingUtil<ArrowBinding> {
     if (!targetShape) return;
 
     const util = editor.getShapeUtil(targetShape.type);
-    const bounds = util.getGeometry(targetShape as any);
+    // getGeometry returns LOCAL bounds for non-arrow shapes (minX=0, minY=0)
+    // anchorToPoint uses bounds.x/bounds.y which equals 0 for local bounds.
+    // We need WORLD position, so use targetShape.x/y + local offset.
+    const localBounds = util.getGeometry(targetShape as any).getBounds();
+    // World bounds = localBounds shifted by targetShape.x/y
+    const worldBounds = {
+      ...localBounds,
+      x:    localBounds.minX + targetShape.x,
+      y:    localBounds.minY + targetShape.y,
+      minX: localBounds.minX + targetShape.x,
+      minY: localBounds.minY + targetShape.y,
+      maxX: localBounds.maxX + targetShape.x,
+      maxY: localBounds.maxY + targetShape.y,
+    };
 
     const { normalizedAnchor, terminal } = binding.props;
-    const point   = anchorToPoint(normalizedAnchor, bounds);
-    const fromEdge = anchorToEdge(normalizedAnchor);
+    const worldPoint = anchorToPoint(normalizedAnchor, worldBounds);
+    const fromEdge   = anchorToEdge(normalizedAnchor);
 
-    // Update the arrow terminal in-place
     const terminalData = arrow.props[terminal];
-    editor.updateShape<ArrowShape>(binding.fromId as ShapeId, {
-      props: {
-        ...arrow.props,
-        [terminal]: {
-          ...terminalData,
-          point,
-          boundShapeId: binding.toId as ShapeId,
+
+    if (terminal === 'start') {
+      // Start terminal: shape.x/y IS the world position of start.
+      // Keep end visually stable by recomputing its local offset.
+      const currentEndWorldX = arrow.x + arrow.props.end.point.x;
+      const currentEndWorldY = arrow.y + arrow.props.end.point.y;
+      const newEndLocalX = currentEndWorldX - worldPoint.x;
+      const newEndLocalY = currentEndWorldY - worldPoint.y;
+
+      editor.updateShape<ArrowShape>(binding.fromId as ShapeId, {
+        x: worldPoint.x,
+        y: worldPoint.y,
+        props: {
+          ...arrow.props,
+          start: {
+            ...terminalData,
+            point: { x: 0, y: 0 },
+            boundShapeId: binding.toId as ShapeId,
+          },
+          end: {
+            ...arrow.props.end,
+            point: { x: newEndLocalX, y: newEndLocalY },
+          },
         },
-      },
-    });
+      });
+    } else {
+      // End terminal: compute local offset from arrow origin
+      const localX = worldPoint.x - arrow.x;
+      const localY = worldPoint.y - arrow.y;
+
+      editor.updateShape<ArrowShape>(binding.fromId as ShapeId, {
+        props: {
+          ...arrow.props,
+          [terminal]: {
+            ...terminalData,
+            point: { x: localX, y: localY },
+            boundShapeId: binding.toId as ShapeId,
+          },
+        },
+      });
+    }
 
     // Update binding's fromEdge
     editor.updateBinding(binding.id, { fromEdge });

@@ -21,7 +21,7 @@ function boxShape(id: string, x = 0, y = 0, w = 100, h = 80) {
   return {
     id: sid(id), type: 'box', x, y,
     index: 'a1', rotation: 0, meta: {},
-    props: { w, h, cornerRadius: 0, color: '#fff', label: '' },
+    props: { ...new BoxUtil().getDefaultProps(), w, h, cornerRadius: 0, color: '#fff', label: '' },
   };
 }
 

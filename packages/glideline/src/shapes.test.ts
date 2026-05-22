@@ -24,7 +24,7 @@ function makeBox(id: string, x: number, y: number, w: number, h: number): BoxSha
   return {
     id: sid(id), type: 'box', x, y,
     index: 'a1', rotation: 0, meta: {},
-    props: { w, h, cornerRadius: 0, color: '#6366f1', label: '' },
+    props: { ...new BoxUtil().getDefaultProps(), w, h, cornerRadius: 0, color: '#6366f1', label: '' },
   };
 }
 
@@ -32,7 +32,7 @@ function makeFrame(id: string, x: number, y: number, w: number, h: number): Fram
   return {
     id: sid(id), type: 'frame', x, y,
     index: 'a1', rotation: 0, meta: {},
-    props: { w, h, label: 'Frame', color: '#313244' },
+    props: { ...new FrameUtil().getDefaultProps(), w, h, label: 'Frame', color: '#313244' },
   };
 }
 
@@ -46,29 +46,29 @@ const frameUtil = new FrameUtil();
 // ─────────────────────────────────────────────────────────────
 
 describe('T2.3-01: BoxUtil.getGeometry returns correct bounds', () => {
-  it('box {x:50,y:100,w:200,h:150} → minX:50, maxX:250, minY:100, maxY:250', () => {
+  it('box {x:50,y:100,w:200,h:150} geometry is now local → minX:0, maxX:200, minY:0, maxY:150', () => {
     const shape = makeBox('box:1', 50, 100, 200, 150);
-    const geo   = boxUtil.getGeometry(shape);
-    expect(geo.minX).toBe(50);
-    expect(geo.maxX).toBe(250);
-    expect(geo.minY).toBe(100);
-    expect(geo.maxY).toBe(250);
+    const geo   = boxUtil.getGeometry(shape).getBounds();
+    expect(geo.minX).toBe(0);
+    expect(geo.maxX).toBe(200);
+    expect(geo.minY).toBe(0);
+    expect(geo.maxY).toBe(150);
   });
 
   it('geometry w and h match props', () => {
     const shape = makeBox('box:2', 0, 0, 300, 200);
-    const geo   = boxUtil.getGeometry(shape);
+    const geo   = boxUtil.getGeometry(shape).getBounds();
     expect(geo.w).toBe(300);
     expect(geo.h).toBe(200);
   });
 
-  it('negative origin works', () => {
+  it('negative origin works, geometry is still local', () => {
     const shape = makeBox('box:3', -100, -50, 80, 40);
-    const geo   = boxUtil.getGeometry(shape);
-    expect(geo.minX).toBe(-100);
-    expect(geo.maxX).toBe(-20);
-    expect(geo.minY).toBe(-50);
-    expect(geo.maxY).toBe(-10);
+    const geo   = boxUtil.getGeometry(shape).getBounds();
+    expect(geo.minX).toBe(0);
+    expect(geo.maxX).toBe(80);
+    expect(geo.minY).toBe(0);
+    expect(geo.maxY).toBe(40);
   });
 });
 
@@ -135,22 +135,25 @@ describe('T2.3-04: toSvg returns SVGElement', () => {
 
   it('BoxUtil.toSvg rect has correct width and height attributes', () => {
     const shape = makeBox('box:svg2', 0, 0, 200, 150);
-    const el    = boxUtil.toSvg(shape) as SVGRectElement;
-    expect(el.getAttribute('width')).toBe('200');
-    expect(el.getAttribute('height')).toBe('150');
+    const el    = boxUtil.toSvg(shape) as SVGGElement;
+    const rect  = el.querySelector('rect') as SVGRectElement;
+    expect(rect.getAttribute('width')).toBe('200');
+    expect(rect.getAttribute('height')).toBe('150');
   });
 
-  it('BoxUtil.toSvg rect has correct x/y attributes', () => {
+  it('BoxUtil.toSvg rect has correct local x/y attributes (0)', () => {
     const shape = makeBox('box:svg3', 50, 75, 100, 80);
-    const el    = boxUtil.toSvg(shape) as SVGRectElement;
-    expect(el.getAttribute('x')).toBe('50');
-    expect(el.getAttribute('y')).toBe('75');
+    const el    = boxUtil.toSvg(shape) as SVGGElement;
+    const rect  = el.querySelector('rect') as SVGRectElement;
+    expect(rect.getAttribute('x')).toBe('0');
+    expect(rect.getAttribute('y')).toBe('0');
   });
 
   it('BoxUtil.toSvg with cornerRadius sets rx', () => {
-    const shape: BoxShape = { ...makeBox('box:svg4', 0, 0, 100, 80), props: { w: 100, h: 80, cornerRadius: 8, color: '#fff', label: '' } };
-    const el = boxUtil.toSvg(shape) as SVGRectElement;
-    expect(el.getAttribute('rx')).toBe('8');
+    const shape: BoxShape = { ...makeBox('box:svg4', 0, 0, 100, 80), props: { ...new BoxUtil().getDefaultProps(), w: 100, h: 80, cornerRadius: 8, color: '#fff', label: '' } };
+    const el = boxUtil.toSvg(shape) as SVGGElement;
+    const rect  = el.querySelector('rect') as SVGRectElement;
+    expect(rect.getAttribute('rx')).toBe('8');
   });
 
   it('FrameUtil.toSvg → instanceof SVGElement (g element)', () => {
@@ -219,7 +222,7 @@ describe('T2.3-06: store.put with invalid props throws; store unchanged', () => 
     const badShape = {
       id: sid('box:bad'), type: 'box', x: 0, y: 0, w: 100, h: 100,
       index: 'a1', rotation: 0, meta: {},
-      props: { w: 'bad', h: 100, cornerRadius: 0, color: '#fff', label: '' },
+      props: { ...new BoxUtil().getDefaultProps(), w: 'bad', h: 100, cornerRadius: 0, color: '#fff', label: '' },
     };
     expect(() => store.put([badShape as any])).toThrow(/prop "w"/);
     expect(store.get('box:bad')).toBeUndefined();
@@ -229,17 +232,17 @@ describe('T2.3-06: store.put with invalid props throws; store unchanged', () => 
     const badShape = {
       id: sid('box:bad2'), type: 'box', x: 0, y: 0, w: 100, h: 100,
       index: 'a1', rotation: 0, meta: {},
-      props: { w: 100, h: null, cornerRadius: 0, color: '#fff', label: '' },
+      props: { ...new BoxUtil().getDefaultProps(), w: 100, h: null, cornerRadius: 0, color: '#fff', label: '' },
     };
     expect(() => store.put([badShape as any])).toThrow();
     expect(store.get('box:bad2')).toBeUndefined();
   });
 
   it('valid box put succeeds after failed put', () => {
-    const bad = { id: sid('box:b'), type: 'box', x: 0, y: 0, index: 'a1', rotation: 0, meta: {}, props: { w: 'x', h: 80, cornerRadius: 0, color: '#fff', label: '' } };
+    const bad = { id: sid('box:b'), type: 'box', x: 0, y: 0, index: 'a1', rotation: 0, meta: {}, props: { ...new BoxUtil().getDefaultProps(), w: 'x', h: 80, cornerRadius: 0, color: '#fff', label: '' } };
     expect(() => store.put([bad as any])).toThrow();
 
-    const good = { id: sid('box:g'), type: 'box', x: 0, y: 0, w: 100, h: 80, index: 'a1', rotation: 0, meta: {}, props: { w: 100, h: 80, cornerRadius: 0, color: '#fff', label: '' } };
+    const good = { id: sid('box:g'), type: 'box', x: 0, y: 0, w: 100, h: 80, index: 'a1', rotation: 0, meta: {}, props: { ...new BoxUtil().getDefaultProps(), w: 100, h: 80, cornerRadius: 0, color: '#fff', label: '' } };
     store.put([good as any]);
     expect(store.get('box:g')).toBeDefined();
   });
@@ -249,9 +252,9 @@ describe('T2.3-06: store.put with invalid props throws; store unchanged', () => 
 // Additional: migrations currentVersion === 1 on all three
 // ─────────────────────────────────────────────────────────────
 
-describe('All three utils have static migrations with currentVersion: 1', () => {
-  it('BoxUtil.migrations.currentVersion === 1', () => {
-    expect(BoxUtil.migrations?.currentVersion).toBe(1);
+describe('All three utils have static migrations with currentVersion: Box 2, Text/Frame 1', () => {
+  it('BoxUtil.migrations.currentVersion === 2', () => {
+    expect(BoxUtil.migrations?.currentVersion).toBe(2);
   });
   it('TextUtil.migrations.currentVersion === 1', () => {
     expect(TextUtil.migrations?.currentVersion).toBe(1);

@@ -35,7 +35,7 @@ const frameUtil = new FrameUtil();
 const textUtil  = new TextUtil();
 
 function makeBox(id: string, x: number, y: number, w: number, h: number): BoxShape {
-  return { id: sid(id), type: 'box', x, y, index: 'a1', rotation: 0, meta: {}, props: { w, h, cornerRadius: 0, color: '#6366f1', label: 'Box' } };
+  return { id: sid(id), type: 'box', x, y, index: 'a1', rotation: 0, meta: {}, props: { w, h, cornerRadius: 0, color: '#6366f1', label: 'Box' } as any };
 }
 function makeFrame(id: string, x: number, y: number, w: number, h: number): FrameShape {
   return { id: sid(id), type: 'frame', x, y, index: 'a1', rotation: 0, meta: {}, props: { w, h, label: 'Frame', color: '#313244' } };
@@ -99,7 +99,7 @@ export default function ShapesDemo() {
       const store = new GlideStore(schema);
       let threw = false;
       try {
-        store.put([{ id: sid('box:bad'), type: 'box', x: 0, y: 0, index: 'a1', rotation: 0, meta: {}, props: { w: 'bad', h: 80, cornerRadius: 0, color: '#fff', label: '' } } as any]);
+        store.put([{ id: sid('box:bad'), type: 'box', x: 0, y: 0, index: 'a1', rotation: 0, meta: {}, props: { w: 'bad', h: 80, cornerRadius: 0, color: '#fff', label: '' } as any }]);
       } catch { threw = true; }
       const unchanged = store.get('box:bad') === undefined;
       log('T2.3-06', threw && unchanged, `threw=${threw}, store unchanged=${unchanged}`);

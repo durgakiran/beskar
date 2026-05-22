@@ -14,11 +14,15 @@
 
 import React, { useRef, useEffect, useCallback, memo, useState } from 'react';
 import { effect } from '@preact/signals';
+
+import { SelectionLayer, MarqueeOverlay } from './SelectionLayer';
+import { preventFocusStealRef } from './WhiteboardApp';
 import { wbEditor } from './editor';
 import { useSignalValue } from '../useSignalValue';
 import type { ShapeId, GlideShape } from '../../../glideline/src/types';
 import type { ResizeHandle } from '../../../glideline/src/tools/SelectTool';
 import { STICKY_COLORS } from '../../../glideline/src/shapes/StickyNoteUtil';
+import { FONT_SIZES, FONT_FAMILIES } from '../../../glideline/src/styles';
 
 // ── Constants ────────────────────────────────────────────────
 
@@ -65,11 +69,16 @@ const ShapeLayer = memo(({ id }: { id: ShapeId }) => {
     return effect(() => {
       if (!shape) return;
       const util = wbEditor.getShapeUtil(shape.type);
-      const bounds = util.getGeometry(shape as any);
+      const localBounds = util.getGeometry(shape as any).getBounds();
       const vp = wbEditor.getViewportBounds();
+      // Convert local bounds to world bounds for viewport culling
+      const worldMinX = localBounds.minX + shape.x;
+      const worldMinY = localBounds.minY + shape.y;
+      const worldMaxX = localBounds.maxX + shape.x;
+      const worldMaxY = localBounds.maxY + shape.y;
       const visible =
-        bounds.maxX >= vp.minX && bounds.minX <= vp.maxX &&
-        bounds.maxY >= vp.minY && bounds.minY <= vp.maxY;
+        worldMaxX >= vp.minX && worldMinX <= vp.maxX &&
+        worldMaxY >= vp.minY && worldMinY <= vp.maxY;
       if (gRef.current) gRef.current.style.display = visible ? '' : 'none';
     });
   }, [shape?.id]);
@@ -79,7 +88,8 @@ const ShapeLayer = memo(({ id }: { id: ShapeId }) => {
     if (!contentRef.current || !shape) return;
     // Dim shape while editing (textarea overlay takes over visually)
     if (editingId === id) {
-      contentRef.current.style.opacity = '0.3';
+      // Don't dim the whole shape, just hide the text elements to prevent double-vision
+      contentRef.current.style.opacity = '1';
     } else {
       contentRef.current.style.opacity = '1';
     }
@@ -88,16 +98,23 @@ const ShapeLayer = memo(({ id }: { id: ShapeId }) => {
       const el = (util as any).toSvg(shape);
       contentRef.current.innerHTML = '';
       if (el) contentRef.current.appendChild(el);
+      
+      // Hide SVG text (now foreignObject) while editing
+      if (editingId === id) {
+        const fos = contentRef.current.querySelectorAll('foreignObject');
+        fos.forEach((fo: any) => fo.style.opacity = '0');
+      }
     }
   });
 
   if (!shape) return null;
 
-  // Compute geometry to find center for rotation
+  // getGeometry returns LOCAL bounds; center for rotation in local space
   const util = wbEditor.getShapeUtil(shape.type);
-  const bounds = util.getGeometry(shape as any);
-  const cx = bounds.minX + bounds.w / 2;
-  const cy = bounds.minY + bounds.h / 2;
+  const localBounds = util.getGeometry(shape as any).getBounds();
+  // Rotation center in local space
+  const cx = localBounds.minX + localBounds.w / 2;
+  const cy = localBounds.minY + localBounds.h / 2;
   const angleDeg = ((shape.rotation || 0) * 180) / Math.PI;
 
   return (
@@ -106,14 +123,15 @@ const ShapeLayer = memo(({ id }: { id: ShapeId }) => {
       id={`wb-shape-${id}`}
       data-shape-id={id}
       style={{ opacity: isErasing ? 0.4 : 1 }}
-      transform={`rotate(${angleDeg}, ${cx}, ${cy})`}
+      // World-space translate: positions the local-coord SVG correctly
+      transform={`translate(${shape.x}, ${shape.y}) rotate(${angleDeg}, ${cx}, ${cy})`}
     >
       <g ref={contentRef} />
       {/* Red tint overlay shown while the eraser is dragging over this shape */}
-      {isErasing && bounds && (
+      {isErasing && localBounds && (
         <rect
-          x={bounds.minX} y={bounds.minY}
-          width={bounds.w} height={bounds.h}
+          x={localBounds.minX} y={localBounds.minY}
+          width={localBounds.w} height={localBounds.h}
           fill="#f38ba8"
           fillOpacity={0.35}
           stroke="#f38ba8"
@@ -127,152 +145,7 @@ const ShapeLayer = memo(({ id }: { id: ShapeId }) => {
   );
 });
 
-// ── Selection overlay (SVG) ───────────────────────────────────
-
-interface OverlayBounds {
-  minX: number; minY: number; maxX: number; maxY: number;
-  w: number; h: number; rotation: number;
-}
-
-function SelectionOverlay() {
-  const selectedIds = useSignalValue(wbEditor.getSelectionSignal());
-  const camera = useSignalValue(wbEditor.camera.signal)!;
-  // Reactively track selected shape positions using preact/signals effect.
-  // getShape() uses peek() so we need effect() to subscribe to each shape signal.
-  const [boxes, setBoxes] = useState<OverlayBounds[]>([]);
-
-  useEffect(() => {
-    if (!selectedIds || selectedIds.length === 0) {
-      setBoxes([]);
-      return;
-    }
-    // effect() from @preact/signals automatically tracks any .value reads inside.
-    // When a shape moves (store signal changes), this re-runs and updates React state.
-    return effect(() => {
-      const next: OverlayBounds[] = [];
-      for (const id of selectedIds) {
-        const sig = wbEditor.store.getSignal(id);
-        if (!sig) continue;
-        const shape = sig.value as GlideShape | null; // reactive read
-        if (!shape) continue;
-        const util = wbEditor.getShapeUtil(shape.type);
-        const b = util.getGeometry(shape as any);
-        next.push({ minX: b.minX, minY: b.minY, maxX: b.maxX, maxY: b.maxY, w: b.w, h: b.h, rotation: shape.rotation ?? 0 });
-      }
-      setBoxes(next);
-    });
-  }, [selectedIds]);
-
-  if (!selectedIds || selectedIds.length === 0 || boxes.length === 0) return null;
-
-  // Text shapes auto-size from content and have no w/h props — skip handles for them
-  const allText = selectedIds.every(id => wbEditor.getShape(id)?.type === 'text');
-
-  // Union bounding box of all selected shapes
-  const minX = Math.min(...boxes.map(b => b.minX));
-  const minY = Math.min(...boxes.map(b => b.minY));
-  const maxX = Math.max(...boxes.map(b => b.maxX));
-  const maxY = Math.max(...boxes.map(b => b.maxY));
-  const W = maxX - minX;
-  const H = maxY - minY;
-  const cx = minX + W / 2;
-  const cy = minY + H / 2;
-
-  let transform = undefined;
-  if (boxes.length === 1) {
-    const angleDeg = (boxes[0].rotation * 180) / Math.PI;
-    transform = `rotate(${angleDeg}, ${cx}, ${cy})`;
-  }
-
-  // In page coords — the SVG transform takes care of camera
-  const handles: { id: ResizeHandle; px: number; py: number }[] = [
-    { id: 'nw', px: minX,       py: minY },
-    { id: 'n',  px: minX + W/2, py: minY },
-    { id: 'ne', px: maxX,       py: minY },
-    { id: 'e',  px: maxX,       py: minY + H/2 },
-    { id: 'se', px: maxX,       py: maxY },
-    { id: 's',  px: minX + W/2, py: maxY },
-    { id: 'sw', px: minX,       py: maxY },
-    { id: 'w',  px: minX,       py: minY + H/2 },
-  ];
-
-  const hs = HANDLE_SIZE / camera.z; // handle size in page coords
-
-  return (
-    <g id="wb-selection-overlay" transform={transform}>
-      {/* Bounding rect */}
-      <rect
-        x={minX} y={minY} width={W} height={H}
-        fill="none" stroke="#89b4fa" strokeWidth={1 / camera.z}
-        strokeDasharray={`${4 / camera.z} ${2 / camera.z}`}
-        pointerEvents="none"
-      />
-
-      {/* Resize + rotation handles: hidden for text shapes (auto-size from content) */}
-      {!allText && (
-        <>
-          {handles.map(h => (
-            <rect
-              key={h.id}
-              data-handle={h.id}
-              x={h.px - hs / 2} y={h.py - hs / 2}
-              width={hs} height={hs}
-              fill="#1e1e2e" stroke="#89b4fa" strokeWidth={1 / camera.z}
-              rx={1 / camera.z}
-              style={{ cursor: handleCursor(h.id) }}
-            />
-          ))}
-          <circle
-            data-handle="rotate"
-            cx={minX + W / 2}
-            cy={minY - ROTATION_HANDLE_OFFSET / camera.z}
-            r={5 / camera.z}
-            fill="#1e1e2e" stroke="#89b4fa" strokeWidth={1 / camera.z}
-            style={{ cursor: 'grab' }}
-          />
-          <line
-            x1={minX + W / 2} y1={minY}
-            x2={minX + W / 2} y2={minY - ROTATION_HANDLE_OFFSET / camera.z}
-            stroke="#89b4fa" strokeWidth={1 / camera.z}
-            pointerEvents="none"
-          />
-        </>
-      )}
-    </g>
-  );
-}
-
-function handleCursor(h: ResizeHandle): string {
-  const map: Record<ResizeHandle, string> = {
-    nw: 'nw-resize', n: 'n-resize', ne: 'ne-resize',
-    e: 'e-resize', se: 'se-resize', s: 's-resize',
-    sw: 'sw-resize', w: 'w-resize',
-  };
-  return map[h];
-}
-
-// ── Marquee overlay ───────────────────────────────────────────
-
-function MarqueeOverlay() {
-  const camera = useSignalValue(wbEditor.camera.signal)!;
-  // Read marquee rect from the select tool's MarqueeSelecting state
-  const selectTool = wbEditor.getCurrentTool();
-  const marqueeState = (selectTool as any)._childMap?.get('marqueeSelecting');
-  const rect = marqueeState?.marqueeRect;
-
-  if (!rect) return null;
-
-  return (
-    <rect
-      x={rect.minX} y={rect.minY}
-      width={rect.maxX - rect.minX} height={rect.maxY - rect.minY}
-      fill="#89b4fa11" stroke="#89b4fa"
-      strokeWidth={1 / camera.z}
-      strokeDasharray={`${3 / camera.z} ${2 / camera.z}`}
-      pointerEvents="none"
-    />
-  );
-}
+// Removed SelectionOverlay and MarqueeOverlay (moved to SelectionLayer.tsx)
 
 // ── Inline editor overlay ────────────────────────────────────
 // Exported so WhiteboardApp can render it as a sibling of Canvas,
@@ -296,10 +169,13 @@ export function InlineEditor() {
   if (!editingId || !shape) return null;
 
   const util = wbEditor.getShapeUtil(shape.type);
-  const bounds = util.getGeometry(shape as any);
-  const topLeft = wbEditor.pageToScreen({ x: bounds.minX, y: bounds.minY });
-  const w = bounds.w * camera.z;
-  const h = bounds.h * camera.z;
+  const localBounds = util.getGeometry(shape as any).getBounds();
+  // Convert local bounds to world coords for screen positioning
+  const worldMinX = localBounds.minX + shape.x;
+  const worldMinY = localBounds.minY + shape.y;
+  const topLeft = wbEditor.pageToScreen({ x: worldMinX, y: worldMinY });
+  const w = localBounds.w * camera.z;
+  const h = localBounds.h * camera.z;
 
   const key = 'text' in (shape.props as any) ? 'text' : 'label';
   const text: string = (shape.props as any)[key] ?? '';
@@ -312,7 +188,7 @@ export function InlineEditor() {
   };
 
   const commit = (newText: string) => {
-    if (newText.trim() === '') {
+    if (newText.trim() === '' && shape.type === 'text') {
       wbEditor.history.batch('Delete Empty Text', () => {
         wbEditor.deleteShapes([editingId]);
       });
@@ -326,9 +202,20 @@ export function InlineEditor() {
 
   // Background colour for sticky notes
   let bg = 'rgba(30,30,46,0.85)';
+  let isSticky = false;
+  let isText = false;
   if (shape.type === 'sticky-note') {
     bg = STICKY_COLORS[(shape.props as any).color] ?? bg;
+    isSticky = true;
+  } else if (shape.type === 'text') {
+    bg = 'transparent';
+    isText = true;
+  } else {
+    bg = 'transparent';
   }
+
+  const font = (shape.props as any).font || 'sans';
+  const fontSize = (shape.props as any).fontSize || 'md';
 
   return (
     <div
@@ -340,38 +227,47 @@ export function InlineEditor() {
         height: h,
         zIndex: 100,
         boxSizing: 'border-box',
-        padding: shape.type === 'sticky-note' ? 12 : 0,
+        padding: isSticky ? 12 : 0,
         transform: `rotate(${((shape.rotation || 0) * 180) / Math.PI}deg)`,
+        display: 'flex',
+        alignItems: isSticky || isText ? 'flex-start' : 'center',
+        justifyContent: 'center',
+        background: bg,
       }}
     >
       <textarea
         ref={textareaRef}
         value={text}
-        onChange={e => liveUpdate(e.currentTarget.value)}
+        onChange={e => {
+          liveUpdate(e.currentTarget.value);
+          e.currentTarget.style.height = 'auto';
+          e.currentTarget.style.height = e.currentTarget.scrollHeight + 'px';
+        }}
         onBlur={e => commit(e.currentTarget.value)}
         onKeyDown={e => {
           if (e.key === 'Escape') { wbEditor.stopEditing(); e.stopPropagation(); }
-          if (e.key === 'Enter' && !e.shiftKey && shape.type !== 'sticky-note') {
+          if (e.key === 'Enter' && !e.shiftKey && !isSticky) {
             commit(e.currentTarget.value);
             e.preventDefault();
           }
         }}
         style={{
           width: '100%',
-          height: '100%',
-          background: bg,
+          height: 'auto',
+          minHeight: '1em',
+          background: 'transparent',
           color: (shape.props as any).textColor ?? (shape.props as any).labelColor ?? '#cdd6f4',
           border: 'none',
           outline: 'none',
           resize: 'none',
-          fontFamily: 'Inter, system-ui, sans-serif',
-          fontSize: Math.max(11, (typeof (shape.props as any).fontSize === 'number'
-            ? (shape.props as any).fontSize
-            : ((shape.props as any).fontSize === 'xl' ? 32 : (shape.props as any).fontSize === 'lg' ? 22 : (shape.props as any).fontSize === 'md' ? 16 : 12)) * camera.z),
+          fontFamily: FONT_FAMILIES[font as keyof typeof FONT_FAMILIES] || FONT_FAMILIES.sans,
+          fontSize: (typeof fontSize === 'number' ? fontSize : FONT_SIZES[fontSize as keyof typeof FONT_SIZES] || 16) * camera.z,
+          lineHeight: 'normal',
           padding: 0,
+          margin: 0,
           boxSizing: 'border-box',
           textAlign: (shape.props as any).textAlign ?? 'left',
-          whiteSpace: shape.type === 'text' ? 'pre' : 'pre-wrap',
+          whiteSpace: isText ? 'pre' : 'pre-wrap',
           overflow: 'hidden',
         }}
       />
@@ -466,41 +362,14 @@ export function Canvas() {
 
     // Check resize/rotation handle first
     if (handleId) {
-      const sel = wbEditor.getSelectedShapeIds();
-      if (handleId === 'rotate') {
-        // Rotation handle
-        const boxes = sel.map(id => {
-          const s = wbEditor.getShape(id); if (!s) return null;
-          return wbEditor.getShapeUtil(s.type).getGeometry(s as any);
-        }).filter(Boolean) as any[];
-        const minX = Math.min(...boxes.map((b: any) => b.minX));
-        const minY = Math.min(...boxes.map((b: any) => b.minY));
-        const maxX = Math.max(...boxes.map((b: any) => b.maxX));
-        const maxY = Math.max(...boxes.map((b: any) => b.maxY));
-        const center = { x: (minX + maxX) / 2, y: (minY + maxY) / 2 };
-        const startAngle = Math.atan2(page.y - center.y, page.x - center.x);
-        const initRot = new Map(sel.map(id => {
-          const s = wbEditor.getShape(id);
-          return [id, s?.rotation ?? 0] as [ShapeId, number];
-        }));
-        wbEditor.setCurrentTool('select');
-        wbEditor.dispatchEvent({ type: 'pointerDown', point: page, shiftKey: e.shiftKey, target: 'canvas' });
-        // Directly transition to draggingRotation
-        const tool = wbEditor.getCurrentTool();
-        (tool as any).transition('draggingRotation', { shapeIds: sel, center, initialRotation: initRot, startAngle });
-      } else {
-        // Resize handle
-        const initialGeom = new Map(sel.map(id => {
-          const s = wbEditor.getShape(id); if (!s) return null;
-          const b = wbEditor.getShapeUtil(s.type).getGeometry(s as any);
-          return [id, { x: s.x, y: s.y, w: b.w, h: b.h }] as [ShapeId, { x: number; y: number; w: number; h: number }];
-        }).filter(Boolean) as [ShapeId, { x: number; y: number; w: number; h: number }][]);
-        const tool = wbEditor.getCurrentTool();
-        (tool as any).transition('draggingResize', {
-          shapeIds: sel, handle: handleId as ResizeHandle,
-          origin: page, initialGeom,
-        });
-      }
+      wbEditor.setCurrentTool('select');
+      wbEditor.dispatchEvent({
+        type: 'pointerDown',
+        point: page,
+        shiftKey: e.shiftKey,
+        target: 'handle',
+        handleId,
+      } as any);
       return;
     }
 
@@ -545,22 +414,7 @@ export function Canvas() {
     // Stop inline editor keystrokes from reaching canvas
     if (wbEditor.editingShapeId.peek()) return;
 
-    if (e.key === 'Backspace' || e.key === 'Delete') {
-      const ids = wbEditor.getSelectedShapeIds();
-      if (ids.length > 0) wbEditor.deleteShapes(ids);
-    } else if (e.key === 'z' && (e.metaKey || e.ctrlKey)) {
-      if (e.shiftKey) wbEditor.history.redo();
-      else wbEditor.history.undo();
-    } else if (e.key === 'd' && (e.metaKey || e.ctrlKey)) {
-      e.preventDefault();
-      const ids = wbEditor.getSelectedShapeIds();
-      if (ids.length > 0) {
-        const newIds = wbEditor.duplicateShapes(ids, { x: 20, y: 20 });
-        wbEditor.setSelectedShapeIds(newIds);
-      }
-    } else {
-      wbEditor.dispatchEvent({ type: 'keyDown', key: e.key } as any);
-    }
+    wbEditor.dispatchEvent({ type: 'keyDown', key: e.key } as any);
   }, []);
 
   // Wheel zoom is handled via a native non-passive addEventListener in the
@@ -623,7 +477,7 @@ export function Canvas() {
             pointerEvents: 'auto',
           }}
         >
-          <SelectionOverlay />
+          <SelectionLayer />
         </g>
       </svg>
 

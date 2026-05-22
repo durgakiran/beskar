@@ -5,7 +5,7 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import { createEditor } from './editor';
-import { ArrowPlugin } from './shapes/ArrowUtil';
+import { ArrowPlugin, ArrowUtil } from './shapes/ArrowUtil';
 import { BoxUtil } from './shapes/BoxUtil';
 import { ArrowTool } from './tools/ArrowTool';
 import { SelectTool } from './tools/SelectTool';
@@ -27,7 +27,7 @@ function boxShape(id: string, x = 0, y = 0, w = 200, h = 100) {
     id: sid(id),
     type: 'box',
     x, y, index: 'a1', rotation: 0, meta: {},
-    props: { w, h, cornerRadius: 0, color: '#6366f1', label: '' },
+    props: { ...new BoxUtil().getDefaultProps(), w, h, cornerRadius: 0, color: '#6366f1', label: '' },
   };
 }
 
@@ -37,8 +37,9 @@ function arrowShape(id: string, x = 0, y = 0) {
     type: 'arrow',
     x, y, index: 'a1', rotation: 0, meta: {},
     props: {
-      start: { boundShapeId: null, normalizedAnchor: { x: 0.5, y: 0.5 }, point: { x, y } },
-      end:   { boundShapeId: null, normalizedAnchor: { x: 0.5, y: 0.5 }, point: { x: x + 100, y } },
+      ...new ArrowUtil().getDefaultProps(),
+      start: { boundShapeId: null, normalizedAnchor: { x: 0.5, y: 0.5 }, point: { x: 0, y: 0 } },
+      end:   { boundShapeId: null, normalizedAnchor: { x: 0.5, y: 0.5 }, point: { x: 100, y: 0 } },
       routeStyle: 'curve',
       bend: 0,
     },

@@ -23,10 +23,11 @@ import { ShapeUtil } from './ShapeUtil';
 import { T } from '../validators';
 import { defineMigrations } from '../migrations';
 import { makeBox } from '../types';
-import type { GlideShape, Box2d, Vec2, GlideProps } from '../types';
+import type { GlideShape, Vec2, GlideProps } from '../types';
+import { Geometry2d, Ellipse2d } from '../geometry';
 import {
-  STROKE_WIDTHS, STROKE_DASH_ARRAYS, FONT_SIZES, FONT_FAMILIES,
-  svgFill, resolveColor,
+  STROKE_WIDTHS, STROKE_DASH_ARRAYS,
+  svgFill, resolveColor, createTextForeignObject,
   type FillStyle, type StrokeStyle, type SizeStyle, type FontSize,
   type TextAlign, type Font,
 } from '../styles';
@@ -177,32 +178,21 @@ export class EllipseUtil extends ShapeUtil<EllipseShape> {
     };
   }
 
-  /** AABB of the bounding box (ellipse sits inside). */
-  getGeometry(shape: EllipseShape): Box2d {
-    return makeBox(shape.x, shape.y, shape.props.w, shape.props.h);
-  }
-
-  /**
-   * Precise point-in-ellipse test.
-   * (dx/rx)² + (dy/ry)² <= 1
-   */
-  override hitTestPoint(shape: EllipseShape, point: Vec2): boolean {
+  /** AABB in LOCAL space (origin at 0,0). */
+  getGeometry(shape: EllipseShape): Geometry2d {
     const rx = shape.props.w / 2;
     const ry = shape.props.h / 2;
-    const cx = shape.x + rx;
-    const cy = shape.y + ry;
-    const dx = (point.x - cx) / rx;
-    const dy = (point.y - cy) / ry;
-    return dx * dx + dy * dy <= 1;
+    return new Ellipse2d(rx, ry, rx, ry);
   }
 
-  /** SVG: <ellipse> + centred <text> label. */
+  /** SVG: <ellipse> + centred label (local coords, centred at rx/ry). */
   toSvg(shape: EllipseShape): SVGElement {
-    const { x, y, props } = shape;
+    const { props } = shape;
     const rx = props.w / 2;
     const ry = props.h / 2;
-    const cx = x + rx;
-    const cy = y + ry;
+    // Local space: ellipse centre = (rx, ry)
+    const cx = rx;
+    const cy = ry;
     const strokeW = STROKE_WIDTHS[props.strokeWidth];
     const fillColor = svgFill(props.fillStyle, resolveColor(props.color));
     const strokeColor = props.fillStyle === 'none' ? resolveColor(props.color) : resolveColor(props.color);
@@ -228,17 +218,16 @@ export class EllipseUtil extends ShapeUtil<EllipseShape> {
     g.appendChild(ellipse);
 
     if (props.label) {
-      const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-      text.setAttribute('x', String(cx));
-      text.setAttribute('y', String(cy));
-      text.setAttribute('text-anchor', props.textAlign === 'left' ? 'start' : props.textAlign === 'right' ? 'end' : 'middle');
-      text.setAttribute('dominant-baseline', 'central');
-      text.setAttribute('font-size', String(FONT_SIZES[props.fontSize]));
-      text.setAttribute('font-family', FONT_FAMILIES[props.font]);
-      text.setAttribute('fill', resolveColor(props.labelColor));
-      text.setAttribute('pointer-events', 'none');
-      text.textContent = props.label;
-      g.appendChild(text);
+      const fo = createTextForeignObject({
+        x: 0, y: 0, w: props.w, h: props.h,
+        text: props.label,
+        font: props.font,
+        fontSize: props.fontSize,
+        textAlign: props.textAlign,
+        color: props.labelColor,
+        verticalAlign: 'center',
+      });
+      g.appendChild(fo);
     }
 
     return g;

@@ -5,7 +5,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { createEditor } from './editor';
-import { ArrowPlugin } from './shapes/ArrowUtil';
+import { ArrowPlugin, ArrowUtil } from './shapes/ArrowUtil';
 import { BoxUtil } from './shapes/BoxUtil';
 import { ArrowTool } from './tools/ArrowTool';
 import { SelectTool } from './tools/SelectTool';
@@ -26,16 +26,17 @@ function makeEditor() {
 function box(id: string, x: number, y: number, w: number, h: number) {
   return {
     id: sid(id), type: 'box', x, y, index: 'a1', rotation: 0, meta: {},
-    props: { w, h, cornerRadius: 0, color: '#6366f1', label: '' },
+    props: { ...new BoxUtil().getDefaultProps(), w, h, cornerRadius: 0, color: '#6366f1', label: '' },
   };
 }
 
 function arrow(id: string, startPt = { x: 0, y: 0 }, endPt = { x: 100, y: 0 }) {
   return {
-    id: sid(id), type: 'arrow', x: 0, y: 0, index: 'a1', rotation: 0, meta: {},
+    id: sid(id), type: 'arrow', x: startPt.x, y: startPt.y, index: 'a1', rotation: 0, meta: {},
     props: {
-      start: { boundShapeId: null, normalizedAnchor: { x: 0.5, y: 0.5 }, point: startPt },
-      end:   { boundShapeId: null, normalizedAnchor: { x: 0.5, y: 0.5 }, point: endPt },
+      ...new ArrowUtil().getDefaultProps(),
+      start: { boundShapeId: null, normalizedAnchor: { x: 0.5, y: 0.5 }, point: { x: 0, y: 0 } },
+      end:   { boundShapeId: null, normalizedAnchor: { x: 0.5, y: 0.5 }, point: { x: endPt.x - startPt.x, y: endPt.y - startPt.y } },
       routeStyle: 'curve', bend: 0,
     },
   };
@@ -177,7 +178,7 @@ describe('Arrow handle dragging via SelectTool', () => {
     ed.setSelectedShapeIds([sid('arrG')]);
 
     // Handle is at (50, 0). pointerDown there.
-    ed.dispatchEvent({ type: 'pointerDown', point: { x: 50, y: 0 }, shiftKey: false, target: 'canvas' });
+    ed.dispatchEvent({ type: 'pointerDown', point: { x: 50, y: 0 }, shiftKey: false, target: 'handle', handleId: 'bend' });
     // Move to (50, 50). chord=100, perp = (0, -1). px=0, py=50. dist_perp = -50.
     // bend = 2 * dist_perp / chord = 2 * -50 / 100 = -1.
     ed.dispatchEvent({ type: 'pointerMove', point: { x: 50, y: 50 } });
@@ -206,7 +207,7 @@ describe('Arrow handle dragging via SelectTool', () => {
     ed.setSelectedShapeIds([sid('arrH')]);
 
     // End handle is at (250, 250). pointerDown there.
-    ed.dispatchEvent({ type: 'pointerDown', point: { x: 250, y: 250 }, shiftKey: false, target: 'canvas' });
+    ed.dispatchEvent({ type: 'pointerDown', point: { x: 250, y: 250 }, shiftKey: false, target: 'handle', handleId: 'end' });
     ed.dispatchEvent({ type: 'pointerMove', point: { x: 400, y: 400 } });
     ed.dispatchEvent({ type: 'pointerUp', point: { x: 400, y: 400 } });
 
@@ -223,7 +224,7 @@ describe('Arrow handle dragging via SelectTool', () => {
     ed.setSelectedShapeIds([sid('arrH2')]);
 
     // End handle is at (400, 400). pointerDown there.
-    ed.dispatchEvent({ type: 'pointerDown', point: { x: 400, y: 400 }, shiftKey: false, target: 'canvas' });
+    ed.dispatchEvent({ type: 'pointerDown', point: { x: 400, y: 400 }, shiftKey: false, target: 'handle', handleId: 'end' });
     // Move to (250, 250) which is inside boxEnd2
     ed.dispatchEvent({ type: 'pointerMove', point: { x: 250, y: 250 } });
     ed.dispatchEvent({ type: 'pointerUp', point: { x: 250, y: 250 } });
@@ -243,7 +244,7 @@ describe('Arrow handle dragging via SelectTool', () => {
     ed.setSelectedShapeIds([sid('arrI')]);
 
     // Handle is at (50, 0). pointerDown.
-    ed.dispatchEvent({ type: 'pointerDown', point: { x: 50, y: 0 }, shiftKey: false, target: 'canvas' });
+    ed.dispatchEvent({ type: 'pointerDown', point: { x: 50, y: 0 }, shiftKey: false, target: 'handle', handleId: 'bend' });
     ed.dispatchEvent({ type: 'pointerMove', point: { x: 50, y: 50 } });
     // Cancel
     ed.dispatchEvent({ type: 'keyDown', key: 'Escape' });
@@ -305,13 +306,15 @@ describe('Arrow handle dragging via SelectTool', () => {
     const arr = all.find(s => s.type === 'arrow') as ArrowShape;
     expect(arr).toBeDefined();
 
+    expect(arr.x).toBe(90);
+    expect(arr.y).toBe(40);
     expect(arr.props.start.boundShapeId).toBe(sid('bxS'));
-    expect(arr.props.start.normalizedAnchor).toEqual({ x: 1.0, y: 0.5 });
-    expect(arr.props.start.point).toEqual({ x: 100, y: 50 });
+    expect(arr.props.start.normalizedAnchor).toEqual({ x: 0.9, y: 0.4 });
+    expect(arr.props.start.point).toEqual({ x: 0, y: 0 });
 
     expect(arr.props.end.boundShapeId).toBe(sid('bxT'));
-    expect(arr.props.end.normalizedAnchor).toEqual({ x: 0.5, y: 0.0 });
-    expect(arr.props.end.point).toEqual({ x: 350, y: 300 });
+    expect(arr.props.end.normalizedAnchor).toEqual({ x: 0.4, y: 0.1 });
+    expect(arr.props.end.point).toEqual({ x: 250, y: 270 });
   });
 
   it('supports selecting and dragging bend handles of orthogonal (ortho) arrows', () => {
@@ -350,7 +353,7 @@ describe('Arrow handle dragging via SelectTool', () => {
     ed.setSelectedShapeIds([sid('arr1')]);
 
     ed.setCurrentTool('select');
-    ed.dispatchEvent({ type: 'pointerDown', point: { x: 200, y: 50 }, shiftKey: false, target: 'canvas' });
+    ed.dispatchEvent({ type: 'pointerDown', point: { x: 200, y: 50 }, shiftKey: false, target: 'handle', handleId: 'bend' });
 
     ed.dispatchEvent({ type: 'pointerMove', point: { x: 230, y: 50 } });
     ed.dispatchEvent({ type: 'pointerUp', point: { x: 230, y: 50 } });
@@ -371,10 +374,12 @@ describe('Arrow handle dragging via SelectTool', () => {
     const arr = all.find(s => s.type === 'arrow') as ArrowShape;
     expect(arr).toBeDefined();
 
+    expect(arr.x).toBe(50);
+    expect(arr.y).toBe(50);
     expect(arr.props.start.boundShapeId).toBeNull();
-    expect(arr.props.start.point).toEqual({ x: 50, y: 50 });
+    expect(arr.props.start.point).toEqual({ x: 0, y: 0 });
     expect(arr.props.end.boundShapeId).toBeNull();
-    expect(arr.props.end.point).toEqual({ x: 150, y: 150 });
+    expect(arr.props.end.point).toEqual({ x: 100, y: 100 });
   });
 });
 

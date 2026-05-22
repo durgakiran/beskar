@@ -131,34 +131,3 @@ describe('getBezierSegment', () => {
   });
 });
 
-describe('computeArcPath clipping', () => {
-  it('clips start and end points at bounding box boundaries', () => {
-    const start = { x: 50, y: 50 }; // inside boxA
-    const end = { x: 250, y: 50 }; // inside boxB
-    const boxA = { x: 0, y: 0, w: 100, h: 100 };
-    const boxB = { x: 200, y: 0, w: 100, h: 100 };
-
-    // With bend = 0 (straight line)
-    const pathStraight = computeArcPath(start, end, 0, boxA, boxB);
-    // Intersection of line (50,50) -> (250,50) with boxA (right edge) is at x=100
-    // Intersection with boxB (left edge) is at x=200
-    expect(pathStraight).toBe('M 100 50 L 200 50');
-
-    // With bend = 0.5 (curved line)
-    const pathCurved = computeArcPath(start, end, 0.5, boxA, boxB);
-    expect(pathCurved).toContain('Q');
-    expect(pathCurved).not.toContain('NaN');
-    // Starts at some x around 100, ends at some x around 200
-    const startMatch = pathCurved.match(/^M\s+([\d.]+)\s+([\d.]+)/);
-    const endMatch = pathCurved.match(/(?:Q.*?\s+)?([\d.]+)\s+([\d.]+)$/);
-    expect(startMatch).toBeDefined();
-    expect(endMatch).toBeDefined();
-    const sx = parseFloat(startMatch![1]);
-    const ex = parseFloat(endMatch![1]);
-    expect(sx).toBeGreaterThanOrEqual(100);
-    expect(sx).toBeLessThan(120);
-    expect(ex).toBeGreaterThan(180);
-    expect(ex).toBeLessThanOrEqual(200);
-  });
-});
-

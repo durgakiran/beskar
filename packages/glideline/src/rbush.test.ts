@@ -13,7 +13,7 @@ describe('Story 2.4: Spatial Index Integration (RBush)', () => {
   it('T2.4-01: Point query finds shape', () => {
     editor.createShape({
       id: sid('b1'), type: 'box', x: 100, y: 100, index: 'a1', rotation: 0, meta: {},
-      props: { w: 100, h: 100, cornerRadius: 0, color: '#fff', label: '' }
+      props: { ...new BoxUtil().getDefaultProps(), w: 100, h: 100, cornerRadius: 0, color: '#fff', label: '' }
     });
 
     const shapes = editor.getShapesAtPoint({ x: 150, y: 150 });
@@ -24,7 +24,7 @@ describe('Story 2.4: Spatial Index Integration (RBush)', () => {
   it('T2.4-02: Point outside returns empty', () => {
     editor.createShape({
       id: sid('b1'), type: 'box', x: 100, y: 100, index: 'a1', rotation: 0, meta: {},
-      props: { w: 100, h: 100, cornerRadius: 0, color: '#fff', label: '' }
+      props: { ...new BoxUtil().getDefaultProps(), w: 100, h: 100, cornerRadius: 0, color: '#fff', label: '' }
     });
 
     const shapes = editor.getShapesAtPoint({ x: 50, y: 50 });
@@ -34,7 +34,7 @@ describe('Story 2.4: Spatial Index Integration (RBush)', () => {
   it('T2.4-03: Index updated after move', () => {
     editor.createShape({
       id: sid('b1'), type: 'box', x: 100, y: 100, index: 'a1', rotation: 0, meta: {},
-      props: { w: 100, h: 100, cornerRadius: 0, color: '#fff', label: '' }
+      props: { ...new BoxUtil().getDefaultProps(), w: 100, h: 100, cornerRadius: 0, color: '#fff', label: '' }
     });
 
     // Move to 300, 300
@@ -49,7 +49,7 @@ describe('Story 2.4: Spatial Index Integration (RBush)', () => {
   it('T2.4-04: Index cleared after delete', () => {
     editor.createShape({
       id: sid('b1'), type: 'box', x: 100, y: 100, index: 'a1', rotation: 0, meta: {},
-      props: { w: 100, h: 100, cornerRadius: 0, color: '#fff', label: '' }
+      props: { ...new BoxUtil().getDefaultProps(), w: 100, h: 100, cornerRadius: 0, color: '#fff', label: '' }
     });
 
     editor.deleteShapes([sid('b1')]);
@@ -64,7 +64,7 @@ describe('Story 2.4: Spatial Index Integration (RBush)', () => {
       shapes.push({
         id: sid(`b${i}`), type: 'box', x: (i % 100) * 10, y: Math.floor(i / 100) * 10,
         index: 'a1', rotation: 0, meta: {},
-        props: { w: 8, h: 8, cornerRadius: 0, color: '#fff', label: '' }
+        props: { ...new BoxUtil().getDefaultProps(), w: 8, h: 8, cornerRadius: 0, color: '#fff', label: '' }
       });
     }
     editor.store.put(shapes); // Bulk insert
@@ -83,7 +83,7 @@ describe('Story 2.4: Spatial Index Integration (RBush)', () => {
       shapes.push({
         id: sid(`b${i}`), type: 'box', x: (i % 100) * 10, y: Math.floor(i / 100) * 10,
         index: 'a1', rotation: 0, meta: {},
-        props: { w: 8, h: 8, cornerRadius: 0, color: '#fff', label: '' }
+        props: { ...new BoxUtil().getDefaultProps(), w: 8, h: 8, cornerRadius: 0, color: '#fff', label: '' }
       });
     }
     editor.store.put(shapes);

@@ -17,6 +17,7 @@ import type {
   ShapeId, BindingId, PageId,
   GlideShape, GlideBinding, GlideDocument, AnyRecord,
 } from './types';
+import type { Geometry2d } from './geometry';
 import { isGlideBinding } from './types';
 import { GlideSchema } from './schema';
 
@@ -59,8 +60,8 @@ export class GlideStore {
    */
   private _batchChanges: Map<string, AnyRecord | null> | null = null;
 
-  /** Hook injected by GlideEditor to compute bounding boxes for the spatial index. */
-  public getGeometry?: (shape: AnyRecord) => { minX: number; minY: number; maxX: number; maxY: number } | undefined;
+  /** Optional callback to get shape bounds for spatial indexing */
+  public getGeometry?: (shape: AnyRecord) => Geometry2d | undefined;
 
   /** Hook injected by GlideEditor to filter point queries. */
   public hitTestPoint?: (shape: AnyRecord, x: number, y: number) => boolean;
@@ -300,7 +301,8 @@ export class GlideStore {
       let entryBox: { minX: number; minY: number; maxX: number; maxY: number } | undefined;
 
       if (this.getGeometry) {
-        entryBox = this.getGeometry(record);
+        const geom = this.getGeometry(record);
+        if (geom) entryBox = geom.getBounds();
       } else {
         // Fallback for Phase 1 tests without ShapeUtils
         const x = record['x'] as number | undefined;
