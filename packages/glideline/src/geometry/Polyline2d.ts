@@ -1,9 +1,19 @@
 import { Box2d, Vec2, makeBox } from '../types';
 import { Geometry2d } from './Geometry2d';
 
+interface Polyline2dOptions {
+  boundsPadding?: number;
+  hitThreshold?: number;
+}
+
 export class Polyline2d extends Geometry2d {
-  constructor(public points: Vec2[]) {
+  private readonly boundsPadding: number;
+  private readonly hitThreshold: number;
+
+  constructor(public points: Vec2[], options: Polyline2dOptions = {}) {
     super();
+    this.boundsPadding = options.boundsPadding ?? 0;
+    this.hitThreshold = options.hitThreshold ?? 5;
   }
 
   getBounds(): Box2d {
@@ -20,23 +30,23 @@ export class Polyline2d extends Geometry2d {
       if (p.x > maxX) maxX = p.x;
       if (p.y > maxY) maxY = p.y;
     }
-    
-    return makeBox(minX, minY, maxX - minX, maxY - minY);
+
+    const pad = this.boundsPadding;
+    return makeBox(minX - pad, minY - pad, maxX - minX + pad * 2, maxY - minY + pad * 2);
   }
 
   hitTestPoint(p: Vec2): boolean {
     if (this.points.length === 0) return false;
     if (this.points.length === 1) {
       const dist = Math.hypot(p.x - this.points[0].x, p.y - this.points[0].y);
-      return dist <= 5;
+      return dist <= this.hitThreshold;
     }
 
-    const threshold = 5;
     for (let i = 0; i < this.points.length - 1; i++) {
       const a = this.points[i];
       const b = this.points[i + 1];
       const dist = this.distToSegment(p, a, b);
-      if (dist <= threshold) return true;
+      if (dist <= this.hitThreshold) return true;
     }
     return false;
   }

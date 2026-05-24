@@ -4,13 +4,55 @@ import type { PointerDownEvent, PointerMoveEvent, PointerUpEvent, KeyDownEvent, 
 import type { ShapeId, Vec2, AnyRecord } from '../types';
 import { makeBox, bid } from '../types';
 import type { ArrowShape, ArrowProps } from '../shapes/ArrowUtil';
-import { getClosestConnectionPoint, anchorToEdge } from '../shapes/ArrowUtil';
+import { getClosestConnectionPoint, getConnectionPoints, anchorToEdge } from '../shapes/ArrowUtil';
+import type { BindingPreview, BindingPreviewCandidate } from '../editor';
 import type { ResizeHandle, ResizeInfo } from '../shapes/ShapeUtil';
 
 const DRAG_THRESHOLD = 4;
 
 function dist(a: Vec2, b: Vec2): number {
   return Math.sqrt((b.x - a.x) ** 2 + (b.y - a.y) ** 2);
+}
+
+function toWorldBounds(
+  localBounds: { minX: number; minY: number; maxX: number; maxY: number; w: number; h: number; x?: number; y?: number },
+  shape: { x: number; y: number }
+) {
+  return {
+    ...localBounds,
+    x: localBounds.minX + shape.x,
+    y: localBounds.minY + shape.y,
+    minX: localBounds.minX + shape.x,
+    minY: localBounds.minY + shape.y,
+    maxX: localBounds.maxX + shape.x,
+    maxY: localBounds.maxY + shape.y,
+  };
+}
+
+function buildBindingPreview(editor: StateNode['editor'], targetShape: { id: ShapeId; type: string; x: number; y: number }, point: Vec2, terminal: 'start' | 'end') {
+  const util = editor.getShapeUtil(targetShape.type);
+  const localBounds = util.getGeometry(targetShape as any).getBounds();
+  const worldBounds = toWorldBounds(localBounds, targetShape);
+  const snapped = getClosestConnectionPoint(point, worldBounds);
+
+  return {
+    terminal,
+    targetId: targetShape.id,
+    targetType: targetShape.type,
+    normalizedAnchor: snapped.normalizedAnchor,
+    point: snapped.point,
+    candidateAnchors: getConnectionPoints(worldBounds),
+  };
+}
+
+function matchingPreview(
+  preview: BindingPreview | null,
+  terminal: 'start' | 'end',
+  targetId: ShapeId | null
+): BindingPreviewCandidate | null {
+  if (!preview || !targetId) return null;
+  if (preview.terminal === terminal && preview.targetId === targetId) return preview;
+  return null;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -159,7 +201,7 @@ class Idle extends StateNode {
     if (e.shapeId) {
       const shape = this.editor.getShape(e.shapeId);
       if (!shape) return;
-      const labeledTypes = ['box', 'ellipse', 'sticky-note', 'text', 'frame'];
+      const labeledTypes = ['box', 'ellipse', 'triangle', 'diamond', 'hexagon', 'star', 'sticky-note', 'text', 'frame'];
       if (labeledTypes.includes(shape.type)) {
         this.editor.setSelectedShapeIds([e.shapeId]);
         this.editor.startEditing(e.shapeId);
@@ -344,6 +386,7 @@ class DraggingHandle extends StateNode {
     this._origin         = info.origin;
     this._initialProps   = info.initialProps;
     this._initialBinding = info.initialBinding;
+    this.editor.clearBindingPreview();
     // Capture initial world position of the arrow (= start terminal world pos)
     const arrow = this.editor.getShape(info.arrowId) as ArrowShape;
     this._initialArrowX = arrow?.x ?? 0;
@@ -357,7 +400,7 @@ class DraggingHandle extends StateNode {
     this.editor.history.batch('Drag Handle', () => {
       if (this._handleType === 'bend') {
         const { start, end, routeStyle } = this._initialProps;
-        if (routeStyle === 'ortho') {
+        if (routeStyle !== 'curve') {
           const fromShape = start.boundShapeId ? this.editor.getShape(start.boundShapeId) : null;
           const toShape   = end.boundShapeId   ? this.editor.getShape(end.boundShapeId)   : null;
           if (fromShape && toShape) {
@@ -478,22 +521,15 @@ class DraggingHandle extends StateNode {
 
           if (hits.length > 0) {
             const targetShape = hits[hits.length - 1];
-            const util = this.editor.getShapeUtil(targetShape.type);
-            const localBounds = util.getGeometry(targetShape as any).getBounds();
-            const worldBounds = {
-              ...localBounds,
-              x: localBounds.x + targetShape.x,
-              y: localBounds.y + targetShape.y,
-              minX: localBounds.minX + targetShape.x,
-              minY: localBounds.minY + targetShape.y,
-              maxX: localBounds.maxX + targetShape.x,
-              maxY: localBounds.maxY + targetShape.y,
-            };
-            const snapped = getClosestConnectionPoint(e.point, worldBounds);
+            const preview = buildBindingPreview(this.editor, targetShape as any, e.point, 'start');
+            const snapped = { normalizedAnchor: preview.normalizedAnchor, point: preview.point };
             finalStartX = snapped.point.x;
             finalStartY = snapped.point.y;
             boundShapeId = targetShape.id as ShapeId;
             normalizedAnchor = snapped.normalizedAnchor;
+            this.editor.setBindingPreview(preview);
+          } else {
+            this.editor.clearBindingPreview();
           }
 
           this.editor.updateShape(this._arrowId, {
@@ -535,22 +571,15 @@ class DraggingHandle extends StateNode {
 
           if (hits.length > 0) {
             const targetShape = hits[hits.length - 1];
-            const util = this.editor.getShapeUtil(targetShape.type);
-            const localBounds = util.getGeometry(targetShape as any).getBounds();
-            const worldBounds = {
-              ...localBounds,
-              x: localBounds.x + targetShape.x,
-              y: localBounds.y + targetShape.y,
-              minX: localBounds.minX + targetShape.x,
-              minY: localBounds.minY + targetShape.y,
-              maxX: localBounds.maxX + targetShape.x,
-              maxY: localBounds.maxY + targetShape.y,
-            };
-            const snapped = getClosestConnectionPoint(e.point, worldBounds);
+            const preview = buildBindingPreview(this.editor, targetShape as any, e.point, 'end');
+            const snapped = { normalizedAnchor: preview.normalizedAnchor, point: preview.point };
             finalEndLocalX = snapped.point.x - arrowX;
             finalEndLocalY = snapped.point.y - arrowY;
             boundShapeId = targetShape.id as ShapeId;
             normalizedAnchor = snapped.normalizedAnchor;
+            this.editor.setBindingPreview(preview);
+          } else {
+            this.editor.clearBindingPreview();
           }
 
           this.editor.updateShape(this._arrowId, {
@@ -570,6 +599,8 @@ class DraggingHandle extends StateNode {
   }
 
   override onPointerUp(e: PointerUpEvent): void {
+    const activePreview = this.editor.bindingPreview.peek();
+    this.editor.clearBindingPreview();
     const arrow = this.editor.getShape(this._arrowId) as ArrowShape;
     if (!arrow) {
       this.parent!.transition('idle');
@@ -609,17 +640,21 @@ class DraggingHandle extends StateNode {
 
           if (hits.length > 0) {
             const targetShape = hits[hits.length - 1];
-            const util = this.editor.getShapeUtil(targetShape.type);
-            // getGeometry returns local bounds; convert to world for connection point snap
-            const localBounds = util.getGeometry(targetShape as any).getBounds();
-            const worldBounds = {
-              ...localBounds,
-              minX: localBounds.minX + targetShape.x,
-              minY: localBounds.minY + targetShape.y,
-              maxX: localBounds.maxX + targetShape.x,
-              maxY: localBounds.maxY + targetShape.y,
-            };
-            const snapped = getClosestConnectionPoint(e.point, worldBounds);
+            const previewCandidate = matchingPreview(activePreview, term, targetShape.id as ShapeId);
+            const snapped = previewCandidate
+              ? { normalizedAnchor: previewCandidate.normalizedAnchor, point: previewCandidate.point }
+              : (() => {
+                  const util = this.editor.getShapeUtil(targetShape.type);
+                  const localBounds = util.getGeometry(targetShape as any).getBounds();
+                  const worldBounds = {
+                    ...localBounds,
+                    minX: localBounds.minX + targetShape.x,
+                    minY: localBounds.minY + targetShape.y,
+                    maxX: localBounds.maxX + targetShape.x,
+                    maxY: localBounds.maxY + targetShape.y,
+                  };
+                  return getClosestConnectionPoint(e.point, worldBounds);
+                })();
 
             if (term === 'start') {
               // World end = arrow.x + end.point (local)
@@ -687,6 +722,7 @@ class DraggingHandle extends StateNode {
 
   override onKeyDown(e: KeyDownEvent): void {
     if (e.key === 'Escape') {
+      this.editor.clearBindingPreview();
       this.editor.history.batch('Cancel Drag Handle', () => {
         this.editor.updateShape(this._arrowId, {
           props: {
@@ -700,6 +736,10 @@ class DraggingHandle extends StateNode {
 
       this.parent!.transition('idle');
     }
+  }
+
+  override onExit(): void {
+    this.editor.clearBindingPreview();
   }
 }
 

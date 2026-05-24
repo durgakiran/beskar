@@ -4,6 +4,7 @@ import { effect } from '@preact/signals';
 import type { GlideShape } from '../../../glideline/src/types';
 import type { ResizeHandle } from '../../../glideline/src/tools/SelectTool';
 import type { ArrowShape } from '../../../glideline/src/shapes/ArrowUtil';
+import { getArrowBendHandlePoint } from '../../../glideline/src/arrow-routing';
 import { wbEditor } from './editor';
 
 const HANDLE_SIZE = 8;
@@ -64,6 +65,7 @@ export function SelectionLayer() {
     const arrow = shapes[0] as unknown as ArrowShape;
     const { start, end } = arrow.props;
     const hs = HANDLE_SIZE / camera.z;
+    const bendPoint = getArrowBendHandlePoint(wbEditor as any, arrow);
     // Convert local arrow terminal coords to world space
     const startWorldX = arrow.x + start.point.x;
     const startWorldY = arrow.y + start.point.y;
@@ -89,6 +91,18 @@ export function SelectionLayer() {
           transform={`rotate(45, ${endWorldX}, ${endWorldY})`}
           style={{ cursor: 'crosshair' }}
         />
+        {bendPoint ? (
+          <circle
+            data-handle="bend"
+            cx={bendPoint.x}
+            cy={bendPoint.y}
+            r={5 / camera.z}
+            fill="#89b4fa"
+            stroke="#1e1e2e"
+            strokeWidth={1 / camera.z}
+            style={{ cursor: 'grab' }}
+          />
+        ) : null}
       </g>
     );
   }

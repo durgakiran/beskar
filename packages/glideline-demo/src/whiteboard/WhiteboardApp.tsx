@@ -58,8 +58,8 @@ export default function WhiteboardApp() {
 
     // Undo / Redo
     if (e.key === 'z' && (e.metaKey || e.ctrlKey)) {
-      if (e.shiftKey) wbEditor.history.redo();
-      else wbEditor.history.undo();
+      if (e.shiftKey) wbEditor.redo();
+      else wbEditor.undo();
     }
 
     // Delete / Backspace

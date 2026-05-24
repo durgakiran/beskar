@@ -20,14 +20,71 @@ import { preventFocusStealRef } from './WhiteboardApp';
 import { wbEditor } from './editor';
 import { useSignalValue } from '../useSignalValue';
 import type { ShapeId, GlideShape } from '../../../glideline/src/types';
-import type { ResizeHandle } from '../../../glideline/src/tools/SelectTool';
 import { STICKY_COLORS } from '../../../glideline/src/shapes/StickyNoteUtil';
 import { FONT_SIZES, FONT_FAMILIES } from '../../../glideline/src/styles';
+import { Rectangle2d, Ellipse2d, Polygon2d, Polyline2d } from '../../../glideline/src/geometry';
 
 // ── Constants ────────────────────────────────────────────────
 
 const HANDLE_SIZE = 8;
-const ROTATION_HANDLE_OFFSET = 28; // px above top edge
+const SELECTION_HIGHLIGHT_STROKE = '#89b4fa';
+const BINDING_PREVIEW_STROKE = '#a6e3a1';
+const BINDING_SOURCE_PREVIEW_STROKE = '#74c7ec';
+
+function renderGeometryOutline(
+  shape: GlideShape,
+  stroke: string,
+  fill: string,
+  strokeWidth: number,
+  opacity: number
+) {
+  const geometry = wbEditor.getShapeUtil(shape.type).getGeometry(shape as any);
+  const sharedProps = {
+    fill,
+    stroke,
+    strokeWidth,
+    vectorEffect: 'non-scaling-stroke' as const,
+    pointerEvents: 'none' as const,
+    opacity,
+    strokeLinejoin: 'round' as const,
+    strokeLinecap: 'round' as const,
+  };
+
+  if (geometry instanceof Rectangle2d) {
+    const { x, y, w, h } = geometry.getBounds();
+    return <rect {...sharedProps} x={x} y={y} width={w} height={h} rx={2} />;
+  }
+
+  if (geometry instanceof Ellipse2d) {
+    return <ellipse {...sharedProps} cx={geometry.cx} cy={geometry.cy} rx={geometry.rx} ry={geometry.ry} />;
+  }
+
+  if (geometry instanceof Polyline2d) {
+    return <path {...sharedProps} d={pointsToSvgPath(geometry.getOutline(), false)} />;
+  }
+
+  if (geometry instanceof Polygon2d) {
+    return <path {...sharedProps} d={pointsToSvgPath(geometry.getOutline(), true)} />;
+  }
+
+  return <path {...sharedProps} d={pointsToSvgPath(geometry.getOutline(), true)} />;
+}
+
+function pointsToSvgPath(points: { x: number; y: number }[], closed = false): string {
+  if (points.length === 0) return '';
+  const [first, ...rest] = points;
+  let path = `M ${first.x} ${first.y}`;
+  for (const p of rest) {
+    path += ` L ${p.x} ${p.y}`;
+  }
+  if (closed) path += ' Z';
+  return path;
+}
+
+function renderSelectionHighlight(shape: GlideShape, isSelected: boolean) {
+  if (!isSelected) return null;
+  return renderGeometryOutline(shape, SELECTION_HIGHLIGHT_STROKE, 'none', 2, 0.95);
+}
 
 // ── Grid background ──────────────────────────────────────────
 
@@ -62,7 +119,9 @@ const ShapeLayer = memo(({ id }: { id: ShapeId }) => {
   const contentRef = useRef<SVGGElement>(null);
   const editingId = useSignalValue(wbEditor.editingShapeId);
   const erasingIds = useSignalValue(wbEditor.erasingShapeIds);
+  const selectedIds = useSignalValue(wbEditor.getSelectionSignal()) ?? [];
   const isErasing = erasingIds ? erasingIds.has(id) : false;
+  const isSelected = selectedIds.includes(id);
 
   // Visibility culling via effect
   useEffect(() => {
@@ -127,6 +186,7 @@ const ShapeLayer = memo(({ id }: { id: ShapeId }) => {
       transform={`translate(${shape.x}, ${shape.y}) rotate(${angleDeg}, ${cx}, ${cy})`}
     >
       <g ref={contentRef} />
+      {renderSelectionHighlight(shape, isSelected)}
       {/* Red tint overlay shown while the eraser is dragging over this shape */}
       {isErasing && localBounds && (
         <rect
@@ -144,6 +204,98 @@ const ShapeLayer = memo(({ id }: { id: ShapeId }) => {
     </g>
   );
 });
+
+export function BindingPreviewOverlay() {
+  const preview = useSignalValue(wbEditor.bindingPreview);
+  const activeSig = preview ? wbEditor.store.getSignal(preview.targetId) : undefined;
+  const sourceSig = preview?.sourceCandidate ? wbEditor.store.getSignal(preview.sourceCandidate.targetId) : undefined;
+  const activeShape = useSignalValue(activeSig as any) as GlideShape | null;
+  const sourceShape = useSignalValue(sourceSig as any) as GlideShape | null;
+
+  if (!preview || !activeShape) return null;
+
+  const renderCandidate = (
+    shape: GlideShape,
+    candidate: NonNullable<typeof preview.sourceCandidate> | typeof preview,
+    id: string,
+    stroke: string,
+    fill: string,
+    strokeWidth: number,
+    anchorRadius: number,
+    activeRadius: number,
+  ) => {
+    const util = wbEditor.getShapeUtil(shape.type);
+    const localBounds = util.getGeometry(shape as any).getBounds();
+    const cx = localBounds.minX + localBounds.w / 2;
+    const cy = localBounds.minY + localBounds.h / 2;
+    const angleDeg = ((shape.rotation || 0) * 180) / Math.PI;
+
+    return (
+      <>
+        <g
+          id={id}
+          transform={`translate(${shape.x}, ${shape.y}) rotate(${angleDeg}, ${cx}, ${cy})`}
+          pointerEvents="none"
+        >
+          {renderGeometryOutline(shape, stroke, fill, strokeWidth, 1)}
+        </g>
+        {candidate.candidateAnchors.map(anchor => (
+          <circle
+            key={`${id}-${anchor.normalizedAnchor.x}-${anchor.normalizedAnchor.y}`}
+            cx={anchor.point.x}
+            cy={anchor.point.y}
+            r={anchorRadius}
+            fill="#181825"
+            stroke={stroke}
+            strokeWidth={2}
+            vectorEffect="non-scaling-stroke"
+            pointerEvents="none"
+          />
+        ))}
+        <circle
+          id={`${id}-active-anchor`}
+          cx={candidate.point.x}
+          cy={candidate.point.y}
+          r={activeRadius}
+          fill={stroke}
+          stroke="#181825"
+          strokeWidth={2}
+          vectorEffect="non-scaling-stroke"
+          pointerEvents="none"
+        />
+      </>
+    );
+  };
+
+  const showSourceAsPrimary = preview.terminal === 'start' || !preview.sourceCandidate;
+
+  return (
+    <>
+      {preview.sourceCandidate && sourceShape && preview.sourceCandidate.targetId !== preview.targetId
+        ? renderCandidate(
+            sourceShape,
+            preview.sourceCandidate,
+            'wb-binding-preview-source',
+            BINDING_SOURCE_PREVIEW_STROKE,
+            '#74c7ec14',
+            2,
+            4,
+            5,
+          )
+        : null}
+      {renderCandidate(
+        activeShape,
+        preview,
+        showSourceAsPrimary ? 'wb-binding-preview-source' : 'wb-binding-preview-target',
+        showSourceAsPrimary ? BINDING_SOURCE_PREVIEW_STROKE : BINDING_PREVIEW_STROKE,
+        showSourceAsPrimary ? '#74c7ec14' : '#a6e3a11a',
+        showSourceAsPrimary ? 2 : 2.5,
+        showSourceAsPrimary ? 4 : 5,
+        showSourceAsPrimary ? 5 : 6,
+      )}
+    </>
+  );
+}
 
 // Removed SelectionOverlay and MarqueeOverlay (moved to SelectionLayer.tsx)
 
@@ -465,6 +617,7 @@ export function Canvas() {
           {(shapeIds ?? []).map((id: ShapeId) => (
             <ShapeLayer key={id} id={id} />
           ))}
+          <BindingPreviewOverlay />
           <MarqueeOverlay />
         </g>
 

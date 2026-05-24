@@ -44,11 +44,43 @@ export type { GlidePlugin, CreateEditorOptions } from './editor';
 export { computeArcPath, parseArcControlPoint } from './arc-router';
 export { computeElbowPath, parseElbowPoints, countElbowSegments } from './elbow-router';
 export {
+  buildArrowShapeRecord,
+  buildArrowBindingRecord,
+  resolveConnectionTerminal,
+  createCanvasShapeId,
+  createTopIndex,
+} from './arrow-records';
+export { resolveArrowRoute, getArrowBendHandlePoint, pointsToPath, sampleCurvePoints } from './arrow-routing';
+export {
   ArrowUtil, ArrowBindingUtil, ArrowPlugin,
   anchorToEdge, anchorToPoint,
 } from './shapes/ArrowUtil';
-export type { ArrowProps, ArrowShape, ArrowTerminal, ArrowBindingProps, ArrowBinding } from './shapes/ArrowUtil';
+export type { ArrowProps, ArrowShape, ArrowTerminal, ArrowBindingProps, ArrowBinding, ArrowRouteStyle } from './shapes/ArrowUtil';
 export { ArrowTool, ArrowIdle } from './tools/ArrowTool';
+export {
+  SmartRouterCache,
+  getWorldBounds,
+  getArrowBindingEdge,
+  getFallbackElbowPoints,
+  computeFallbackLocalElbowPoints,
+  offsetOrthogonalPolyline,
+  routeSignature,
+  simplifyCollinear,
+} from './smart-router';
+export type { SmartRoutingSnapshot, SmartRouteResolution } from './smart-router';
+
+// Phase 6 / Infinity — AI + MCP
+export { buildAIContext } from './ai-context';
+export type { AIShapeContext, AIConnectionContext, AIContextSnapshot } from './ai-context';
+export {
+  createCanvasToolServer,
+  createShapeInputSchema,
+  updateShapeInputSchema,
+  deleteShapesInputSchema,
+  createConnectionInputSchema,
+  getCanvasStateInputSchema,
+} from './mcp';
+export type { CanvasToolName, CanvasToolResult, CanvasToolError, CanvasToolManifestEntry } from './mcp';
 
 // Phase A — Style system
 export {
@@ -87,6 +119,15 @@ export { TextTool } from './tools/TextTool';
 export { StickyNoteTool } from './tools/StickyNoteTool';
 export { DrawTool } from './tools/DrawTool';
 export { EraserTool } from './tools/EraserTool';
+export { TriangleTool, DiamondTool, HexagonTool, StarTool } from './tools/GeoShapeTools';
+
+// Phase C — Additional geo shapes
+export {
+  TriangleUtil, DiamondUtil, HexagonUtil, StarUtil, GeoShapePlugin,
+} from './shapes/GeoShapeUtil';
+export type {
+  GeoShapeProps, TriangleShape, DiamondShape, HexagonShape, StarShape,
+} from './shapes/GeoShapeUtil';
 
 // Phase B — SelectTool extensions (resize + rotation types)
 export type { ResizeHandle, ResizeInfo, RotationInfo } from './tools/SelectTool';

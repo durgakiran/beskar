@@ -1,8 +1,9 @@
 import React, { useMemo } from 'react';
 import { useSelectedShapes } from './hooks/useSelectedShapes';
-import { wbEditor } from './editor';
+import { setArrowRouteStyle, setArrowheadEnd, setArrowheadStart, wbEditor } from './editor';
 import { TLDRAW_COLORS } from '../../../glideline/src/styles';
 import type { ShapeId } from '../../../glideline/src/types';
+import type { ArrowheadStyle, ArrowRouteStyle } from '../../../glideline/src/shapes/ArrowUtil';
 
 const PANEL_STYLE: React.CSSProperties = {
   position: 'absolute',
@@ -110,6 +111,20 @@ export function StylePanel() {
   const fontSize = getCommonValue('fontSize');
   const textAlign = getCommonValue('textAlign');
   const labelColor = getCommonValue('labelColor');
+  const routeStyle = getCommonValue('routeStyle');
+  const arrowheadStart = getCommonValue('arrowheadStart');
+  const arrowheadEnd = getCommonValue('arrowheadEnd');
+
+  const updateArrowRouteStyle = (value: ArrowRouteStyle) => {
+    setArrowRouteStyle(value);
+    updateProp('routeStyle', value);
+  };
+
+  const updateArrowhead = (terminal: 'start' | 'end', value: ArrowheadStyle) => {
+    if (terminal === 'start') setArrowheadStart(value);
+    else setArrowheadEnd(value);
+    updateProp(terminal === 'start' ? 'arrowheadStart' : 'arrowheadEnd', value);
+  };
 
   return (
     <div style={PANEL_STYLE} onPointerDown={e => e.stopPropagation()}>
@@ -198,6 +213,37 @@ export function StylePanel() {
             <IconButton active={strokeStyle === 'solid'} onClick={() => updateProp('strokeStyle', 'solid')}>Solid</IconButton>
             <IconButton active={strokeStyle === 'dashed'} onClick={() => updateProp('strokeStyle', 'dashed')}>Dash</IconButton>
             <IconButton active={strokeStyle === 'dotted'} onClick={() => updateProp('strokeStyle', 'dotted')}>Dot</IconButton>
+          </div>
+        </div>
+      )}
+
+      {supportedKeys.has('routeStyle') && (
+        <div>
+          <div style={SECTION_TITLE_STYLE}>Arrow Route</div>
+          <div style={ROW_STYLE}>
+            <IconButton active={routeStyle === 'curve'} onClick={() => updateArrowRouteStyle('curve')}>Curve</IconButton>
+            <IconButton active={routeStyle === 'ortho'} onClick={() => updateArrowRouteStyle('ortho')}>Ortho</IconButton>
+            <IconButton active={routeStyle === 'smart'} onClick={() => updateArrowRouteStyle('smart')}>Smart</IconButton>
+          </div>
+        </div>
+      )}
+
+      {supportedKeys.has('arrowheadStart') && (
+        <div>
+          <div style={SECTION_TITLE_STYLE}>Start Arrowhead</div>
+          <div style={ROW_STYLE}>
+            <IconButton active={arrowheadStart === 'none'} onClick={() => updateArrowhead('start', 'none')}>None</IconButton>
+            <IconButton active={arrowheadStart === 'arrow'} onClick={() => updateArrowhead('start', 'arrow')}>Arrow</IconButton>
+          </div>
+        </div>
+      )}
+
+      {supportedKeys.has('arrowheadEnd') && (
+        <div>
+          <div style={SECTION_TITLE_STYLE}>End Arrowhead</div>
+          <div style={ROW_STYLE}>
+            <IconButton active={arrowheadEnd === 'none'} onClick={() => updateArrowhead('end', 'none')}>None</IconButton>
+            <IconButton active={arrowheadEnd === 'arrow'} onClick={() => updateArrowhead('end', 'arrow')}>Arrow</IconButton>
           </div>
         </div>
       )}

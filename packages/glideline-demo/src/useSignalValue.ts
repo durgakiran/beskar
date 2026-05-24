@@ -5,7 +5,11 @@ export function useSignalValue<T>(sig?: Signal<T>): T | undefined {
   const [val, setVal] = useState(() => sig?.peek());
 
   useEffect(() => {
-    if (!sig) return;
+    if (!sig) {
+      setVal(undefined);
+      return;
+    }
+    setVal(sig.peek());
     return sig.subscribe(newVal => {
       setVal(newVal);
     });

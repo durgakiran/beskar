@@ -27,11 +27,11 @@ function boxShape(id: string, x = 0, y = 0) {
 describe('T3.4-01: undo removes created shape', () => {
   it('shape absent from store after undo', () => {
     const editor = makeEditor();
-    editor.history.batch('Create', () => {
+    editor.batch('Create', () => {
       editor.createShape(boxShape('b1'));
     });
     expect(editor.getShape(sid('b1'))).toBeDefined();
-    editor.history.undo();
+    editor.undo();
     expect(editor.getShape(sid('b1'))).toBeUndefined();
   });
 });
@@ -43,11 +43,11 @@ describe('T3.4-01: undo removes created shape', () => {
 describe('T3.4-02: redo re-creates shape', () => {
   it('shape back in store with same props after redo', () => {
     const editor = makeEditor();
-    editor.history.batch('Create', () => {
+    editor.batch('Create', () => {
       editor.createShape(boxShape('b2', 10, 20));
     });
-    editor.history.undo();
-    editor.history.redo();
+    editor.undo();
+    editor.redo();
     const shape = editor.getShape(sid('b2'));
     expect(shape).toBeDefined();
     expect(shape!.x).toBe(10);
@@ -63,11 +63,11 @@ describe('T3.4-03: batch = single undo entry', () => {
   it('undo once restores both shapes', () => {
     const editor = makeEditor();
     // Create both shapes first (separately so they exist)
-    editor.history.batch('Create A', () => editor.createShape(boxShape('a', 0, 0)));
-    editor.history.batch('Create B', () => editor.createShape(boxShape('b', 0, 0)));
+    editor.batch('Create A', () => editor.createShape(boxShape('a', 0, 0)));
+    editor.batch('Create B', () => editor.createShape(boxShape('b', 0, 0)));
 
     // Move both in one batch
-    editor.history.batch('Move Both', () => {
+    editor.batch('Move Both', () => {
       editor.updateShape(sid('a'), { x: 100 });
       editor.updateShape(sid('b'), { x: 200 });
     });
@@ -75,7 +75,7 @@ describe('T3.4-03: batch = single undo entry', () => {
     expect(editor.getShape(sid('a'))!.x).toBe(100);
     expect(editor.getShape(sid('b'))!.x).toBe(200);
 
-    editor.history.undo(); // undo the move batch only
+    editor.undo(); // undo the move batch only
     expect(editor.getShape(sid('a'))!.x).toBe(0);
     expect(editor.getShape(sid('b'))!.x).toBe(0);
   });
@@ -88,12 +88,12 @@ describe('T3.4-03: batch = single undo entry', () => {
 describe('T3.4-04: history:ignore not undoable', () => {
   it('undo does not reverse an ignored mutation', () => {
     const editor = makeEditor();
-    editor.history.batch('AI', () => {
+    editor.run(() => {
       editor.createShape(boxShape('ai1'));
     }, { history: 'ignore' });
 
     expect(editor.getShape(sid('ai1'))).toBeDefined();
-    editor.history.undo(); // nothing on stack
+    editor.undo(); // nothing on stack
     // Shape must still be there
     expect(editor.getShape(sid('ai1'))).toBeDefined();
   });
@@ -106,7 +106,7 @@ describe('T3.4-04: history:ignore not undoable', () => {
 describe('T3.4-05: empty undo stack no-op', () => {
   it('does not throw on empty stack', () => {
     const editor = makeEditor();
-    expect(() => editor.history.undo()).not.toThrow();
+    expect(() => editor.undo()).not.toThrow();
   });
 });
 
@@ -118,10 +118,26 @@ describe('T3.4-06: stack capped at 100', () => {
   it('undoStack.length === 100 after 101 mutations', () => {
     const editor = makeEditor();
     for (let i = 0; i < 101; i++) {
-      editor.history.batch(`op-${i}`, () => {
+      editor.batch(`op-${i}`, () => {
         editor.createShape(boxShape(`cap${i}`, i, 0));
       });
     }
     expect(editor.history.undoStack.length).toBe(100);
+  });
+});
+
+describe('editor.run()', () => {
+  it('records history by default', () => {
+    const editor = makeEditor();
+
+    editor.run(() => {
+      editor.createShape(boxShape('run1', 40, 50));
+    });
+
+    expect(editor.getShape(sid('run1'))).toBeDefined();
+    expect(editor.history.undoStack).toHaveLength(1);
+
+    editor.undo();
+    expect(editor.getShape(sid('run1'))).toBeUndefined();
   });
 });

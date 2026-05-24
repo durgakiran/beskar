@@ -50,7 +50,7 @@ function runPhase4Specs(): { id: string; ok: boolean; msg: string }[] {
     return { id: sid(id), type: 'box', x, y, index: 'a1', rotation: 0, meta: {}, props: { w, h, cornerRadius: 0, color: '#6366f1', label: '' } };
   }
   function arrow(id: string) {
-    return { id: sid(id), type: 'arrow', x: 0, y: 0, index: 'a1', rotation: 0, meta: {}, props: { start: { boundShapeId: null, normalizedAnchor: { x: 0.5, y: 0.5 }, point: { x: 0, y: 0 } }, end: { boundShapeId: null, normalizedAnchor: { x: 0.5, y: 0.5 }, point: { x: 100, y: 0 } }, routeStyle: 'curve', bend: 0 } };
+    return { id: sid(id), type: 'arrow', x: 0, y: 0, index: 'a1', rotation: 0, meta: {}, props: { start: { boundShapeId: null, normalizedAnchor: { x: 0.5, y: 0.5 }, point: { x: 0, y: 0 } }, end: { boundShapeId: null, normalizedAnchor: { x: 0.5, y: 0.5 }, point: { x: 100, y: 0 } }, routeStyle: 'curve', bend: 0, arrowheadStart: 'none', arrowheadEnd: 'arrow' } };
   }
   function binding(id: string, from: string, to: string, terminal: 'start' | 'end' = 'end') {
     return { id: bid(id), type: 'arrow', fromId: sid(from), toId: sid(to), meta: {}, props: { terminal, normalizedAnchor: { x: 0.5, y: 0.5 }, fromEdge: 'left' } };

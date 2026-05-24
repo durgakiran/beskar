@@ -169,6 +169,42 @@ describe('T4.4-06: routeStyle switch', () => {
   });
 });
 
+describe('T4.4-07: curved arrow spatial hit testing', () => {
+  it('selects when querying near the visible curve, not just the endpoint chord', () => {
+    const ed = makeEditor();
+    const curved = arrow('arrCurveHit', { x: 0, y: 0 }, { x: 300, y: 0 });
+    curved.props.bend = 0.3;
+    ed.store.put([curved]);
+
+    const hits = ed.getShapesAtPoint({ x: 150, y: -52 });
+
+    expect(hits.map(shape => shape.id)).toContain(sid('arrCurveHit'));
+  });
+});
+
+describe('T4.4-08: arrow preset defaults', () => {
+  it('uses editor arrowhead defaults for newly drawn connectors', () => {
+    const ed = makeEditor();
+    ed.arrowheadStart = 'arrow';
+    ed.arrowheadEnd = 'arrow';
+    ed.store.put([
+      box('bxPreset1', 0, 0, 100, 80),
+      box('bxPreset2', 300, 0, 100, 80),
+    ]);
+    ed.setCurrentTool('arrow');
+
+    ed.dispatchEvent({ type: 'pointerDown', point: { x: 50, y: 40 }, shiftKey: false, target: 'shape', shapeId: sid('bxPreset1') });
+    ed.dispatchEvent({ type: 'pointerMove', point: { x: 350, y: 40 } });
+    ed.dispatchEvent({ type: 'pointerUp', point: { x: 350, y: 40 } });
+
+    const all = ed.getShapesInBox({ x: -1000, y: -1000, w: 3000, h: 3000, minX: -1000, minY: -1000, maxX: 2000, maxY: 2000 });
+    const newArrow = all.find(s => s.type === 'arrow') as ArrowShape;
+
+    expect(newArrow.props.arrowheadStart).toBe('arrow');
+    expect(newArrow.props.arrowheadEnd).toBe('arrow');
+  });
+});
+
 // Dragging handles tests
 describe('Arrow handle dragging via SelectTool', () => {
   it('drags bend handle to update bend prop', () => {
@@ -290,6 +326,54 @@ describe('Arrow handle dragging via SelectTool', () => {
     expect(newArrow.props.routeStyle).toBe('ortho');
   });
 
+  it('publishes and clears binding preview while drawing over shapes', () => {
+    const ed = makeEditor();
+    ed.store.put([box('bxPreview', 300, 0, 100, 80)]);
+    ed.setCurrentTool('arrow');
+
+    ed.dispatchEvent({ type: 'pointerDown', point: { x: 50, y: 40 }, shiftKey: false, target: 'canvas' });
+    ed.dispatchEvent({ type: 'pointerMove', point: { x: 350, y: 40 } });
+
+    expect(ed.bindingPreview.peek()).toMatchObject({
+      terminal: 'end',
+      targetId: sid('bxPreview'),
+      targetType: 'box',
+    });
+    expect(ed.bindingPreview.peek()?.candidateAnchors).toHaveLength(4);
+
+    ed.dispatchEvent({ type: 'pointerMove', point: { x: 200, y: 200 } });
+    expect(ed.bindingPreview.peek()).toBeNull();
+  });
+
+  it('shows source binding preview immediately when starting from a shape', () => {
+    const ed = makeEditor();
+    ed.store.put([
+      box('bxSource', 0, 0, 100, 80),
+      box('bxTarget2', 300, 0, 100, 80),
+    ]);
+    ed.setCurrentTool('arrow');
+
+    ed.dispatchEvent({ type: 'pointerDown', point: { x: 50, y: 40 }, shiftKey: false, target: 'shape', shapeId: sid('bxSource') });
+
+    expect(ed.bindingPreview.peek()).toMatchObject({
+      terminal: 'start',
+      targetId: sid('bxSource'),
+      targetType: 'box',
+    });
+
+    ed.dispatchEvent({ type: 'pointerMove', point: { x: 350, y: 40 } });
+
+    expect(ed.bindingPreview.peek()).toMatchObject({
+      terminal: 'end',
+      targetId: sid('bxTarget2'),
+      targetType: 'box',
+      sourceCandidate: {
+        targetId: sid('bxSource'),
+        targetType: 'box',
+      },
+    });
+  });
+
   it('snaps bound terminals to predefined edge center connection points of target shapes', () => {
     const ed = makeEditor();
     ed.store.put([
@@ -306,15 +390,40 @@ describe('Arrow handle dragging via SelectTool', () => {
     const arr = all.find(s => s.type === 'arrow') as ArrowShape;
     expect(arr).toBeDefined();
 
-    expect(arr.x).toBe(90);
-    expect(arr.y).toBe(40);
+    expect(arr.x).toBe(100);
+    expect(arr.y).toBe(50);
     expect(arr.props.start.boundShapeId).toBe(sid('bxS'));
-    expect(arr.props.start.normalizedAnchor).toEqual({ x: 0.9, y: 0.4 });
+    expect(arr.props.start.normalizedAnchor).toEqual({ x: 1, y: 0.5 });
     expect(arr.props.start.point).toEqual({ x: 0, y: 0 });
 
     expect(arr.props.end.boundShapeId).toBe(sid('bxT'));
-    expect(arr.props.end.normalizedAnchor).toEqual({ x: 0.4, y: 0.1 });
-    expect(arr.props.end.point).toEqual({ x: 250, y: 270 });
+    expect(arr.props.end.normalizedAnchor).toEqual({ x: 0.5, y: 0 });
+    expect(arr.props.end.point).toEqual({ x: 250, y: 250 });
+  });
+
+  it('commits the previewed end anchor even if pointerUp drifts toward another edge', () => {
+    const ed = makeEditor();
+    ed.store.put([
+      box('bxSource3', 0, 0, 100, 100),
+      box('bxTarget3', 300, 300, 100, 100),
+    ]);
+
+    ed.setCurrentTool('arrow');
+    ed.dispatchEvent({ type: 'pointerDown', point: { x: 100, y: 50 }, shiftKey: false, target: 'shape', shapeId: sid('bxSource3') });
+    ed.dispatchEvent({ type: 'pointerMove', point: { x: 350, y: 300 } });
+    expect(ed.bindingPreview.peek()).toMatchObject({
+      terminal: 'end',
+      targetId: sid('bxTarget3'),
+      normalizedAnchor: { x: 0.5, y: 0 },
+      point: { x: 350, y: 300 },
+    });
+
+    ed.dispatchEvent({ type: 'pointerUp', point: { x: 400, y: 340 } });
+
+    const all = ed.getShapesInBox({ minX: -1000, minY: -1000, maxX: 1000, maxY: 1000 });
+    const arr = all.find(s => s.type === 'arrow') as ArrowShape;
+    expect(arr.props.end.normalizedAnchor).toEqual({ x: 0.5, y: 0 });
+    expect(arr.props.end.point).toEqual({ x: 250, y: 250 });
   });
 
   it('supports selecting and dragging bend handles of orthogonal (ortho) arrows', () => {
@@ -362,6 +471,50 @@ describe('Arrow handle dragging via SelectTool', () => {
     expect(updated?.props.bend).toBe(30);
   });
 
+  it('publishes binding preview while dragging an arrow endpoint over a shape', () => {
+    const ed = makeEditor();
+    ed.store.put([
+      box('bxTarget', 200, 200, 100, 100),
+      arrow('arrPreviewDrag', { x: 0, y: 0 }, { x: 100, y: 0 }),
+    ]);
+    ed.setSelectedShapeIds([sid('arrPreviewDrag')]);
+    ed.setCurrentTool('select');
+
+    ed.dispatchEvent({ type: 'pointerDown', point: { x: 100, y: 0 }, shiftKey: false, target: 'handle', handleId: 'end' });
+    ed.dispatchEvent({ type: 'pointerMove', point: { x: 250, y: 250 } });
+
+    expect(ed.bindingPreview.peek()).toMatchObject({
+      terminal: 'end',
+      targetId: sid('bxTarget'),
+      targetType: 'box',
+    });
+  });
+
+  it('commits the previewed handle anchor even if pointerUp drifts toward another edge', () => {
+    const ed = makeEditor();
+    ed.store.put([
+      box('bxHandleTarget', 200, 200, 100, 100),
+      arrow('arrHandlePreview', { x: 0, y: 0 }, { x: 100, y: 0 }),
+    ]);
+    ed.setSelectedShapeIds([sid('arrHandlePreview')]);
+    ed.setCurrentTool('select');
+
+    ed.dispatchEvent({ type: 'pointerDown', point: { x: 100, y: 0 }, shiftKey: false, target: 'handle', handleId: 'end' });
+    ed.dispatchEvent({ type: 'pointerMove', point: { x: 250, y: 200 } });
+    expect(ed.bindingPreview.peek()).toMatchObject({
+      terminal: 'end',
+      targetId: sid('bxHandleTarget'),
+      normalizedAnchor: { x: 0.5, y: 0 },
+      point: { x: 250, y: 200 },
+    });
+
+    ed.dispatchEvent({ type: 'pointerUp', point: { x: 300, y: 240 } });
+
+    const updated = ed.getShape<ArrowShape>(sid('arrHandlePreview'))!;
+    expect(updated.props.end.normalizedAnchor).toEqual({ x: 0.5, y: 0 });
+    expect(updated.props.end.point).toEqual({ x: 250, y: 200 });
+  });
+
   it('supports drawing arrows from canvas (no bound shapes)', () => {
     const ed = makeEditor();
     ed.setCurrentTool('arrow');
@@ -382,4 +535,3 @@ describe('Arrow handle dragging via SelectTool', () => {
     expect(arr.props.end.point).toEqual({ x: 100, y: 100 });
   });
 });
-

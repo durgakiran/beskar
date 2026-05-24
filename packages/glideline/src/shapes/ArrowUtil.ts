@@ -20,11 +20,11 @@ import type {
   GlideShape, GlideBinding, GlideProps,
   Box2d, Vec2, EdgeName, ShapeId,
 } from '../types';
-import { makeBox as makeBoxFn } from '../types';
 import { Geometry2d, Polyline2d } from '../geometry';
-import { computeArcPath, intersectBezierWithBox, getBezierSegment } from '../arc-router';
-import { computeElbowPath, parseElbowPoints } from '../elbow-router';
+import { resolveArrowRoute } from '../arrow-routing';
 import { StyleValidators, STROKE_WIDTHS, STROKE_DASH_ARRAYS, resolveColor, type StrokeStyle, type SizeStyle } from '../styles';
+
+const ARROW_HIT_TEST_PADDING = 8;
 
 // ─────────────────────────────────────────────────────────────
 // Arrow terminal type
@@ -39,6 +39,8 @@ export interface ArrowTerminal {
   point: Vec2;
 }
 
+export type ArrowheadStyle = 'none' | 'arrow';
+
 // ─────────────────────────────────────────────────────────────
 // ArrowProps
 // ─────────────────────────────────────────────────────────────
@@ -48,9 +50,11 @@ export interface ArrowProps {
   start: ArrowTerminal;
   end:   ArrowTerminal;
   /** 'curve' = quadratic Bézier arc, 'ortho' = rectilinear elbow */
-  routeStyle: 'curve' | 'ortho';
+  routeStyle: ArrowRouteStyle;
   /** Bend scalar for arc router. 0 = straight. */
   bend: number;
+  arrowheadStart: ArrowheadStyle;
+  arrowheadEnd: ArrowheadStyle;
   color: string;
   opacity: number;
   strokeStyle: StrokeStyle;
@@ -58,6 +62,7 @@ export interface ArrowProps {
 }
 
 export type ArrowShape = GlideShape<ArrowProps>;
+export type ArrowRouteStyle = 'curve' | 'ortho' | 'smart';
 
 // ─────────────────────────────────────────────────────────────
 // ArrowProps validators (nested object — validated top-level only)
@@ -77,9 +82,18 @@ const terminalValidator = {
 };
 
 const routeStyleValidator = {
-  validate(value: unknown): 'curve' | 'ortho' {
-    if (value !== 'curve' && value !== 'ortho') {
-      throw new Error(`Arrow routeStyle must be "curve" or "ortho", got "${value}"`);
+  validate(value: unknown): ArrowRouteStyle {
+    if (value !== 'curve' && value !== 'ortho' && value !== 'smart') {
+      throw new Error(`Arrow routeStyle must be "curve", "ortho", or "smart", got "${value}"`);
+    }
+    return value;
+  },
+};
+
+const arrowheadStyleValidator = {
+  validate(value: unknown): ArrowheadStyle {
+    if (value !== 'none' && value !== 'arrow') {
+      throw new Error(`Arrow arrowhead style must be "none" or "arrow", got "${value}"`);
     }
     return value;
   },
@@ -97,6 +111,8 @@ export class ArrowUtil extends ShapeUtil<ArrowShape> {
     end:         terminalValidator,
     routeStyle:  routeStyleValidator,
     bend:        T.number,
+    arrowheadStart: arrowheadStyleValidator,
+    arrowheadEnd: arrowheadStyleValidator,
     color:       T.string,
     opacity:     T.number,
     strokeStyle: StyleValidators.strokeStyle,
@@ -104,7 +120,7 @@ export class ArrowUtil extends ShapeUtil<ArrowShape> {
   };
 
   static override readonly migrations = defineMigrations({
-    currentVersion: 3,
+    currentVersion: 5,
     migrators: {
       1: {
         up:   r => ({
@@ -162,6 +178,27 @@ export class ArrowUtil extends ShapeUtil<ArrowShape> {
           };
         },
       },
+      4: {
+        up: r => ({
+          ...r,
+          props: {
+            arrowheadStart: 'none',
+            arrowheadEnd: 'arrow',
+            ...(r['props'] as object),
+          },
+        }),
+        down: r => r,
+      },
+      5: {
+        up: r => r,
+        down: (r: any) => ({
+          ...r,
+          props: {
+            ...r.props,
+            routeStyle: r.props?.routeStyle === 'smart' ? 'ortho' : r.props?.routeStyle,
+          },
+        }),
+      },
     },
   });
 
@@ -177,6 +214,8 @@ export class ArrowUtil extends ShapeUtil<ArrowShape> {
       end:        terminal,
       routeStyle: 'curve',
       bend:       0,
+      arrowheadStart: 'none',
+      arrowheadEnd: 'arrow',
       color:       '#f38ba8',
       opacity:     1,
       strokeStyle: 'solid',
@@ -188,8 +227,10 @@ export class ArrowUtil extends ShapeUtil<ArrowShape> {
    * Returns a Geometry2d in LOCAL space.
    */
   getGeometry(shape: ArrowShape): Geometry2d {
-    const { start, end } = shape.props;
-    return new Polyline2d([start.point, end.point]);
+    return new Polyline2d(this.getLocalPathPoints(shape), {
+      boundsPadding: ARROW_HIT_TEST_PADDING,
+      hitThreshold: ARROW_HIT_TEST_PADDING,
+    });
   }
 
   /** Arrows are resized via terminal handle drags, not the standard resize UI. */
@@ -216,6 +257,10 @@ export class ArrowUtil extends ShapeUtil<ArrowShape> {
     };
   }
 
+  private getLocalPathPoints(shape: ArrowShape): Vec2[] {
+    return resolveArrowRoute(this.editor as any, shape).localPoints;
+  }
+
 
   /**
    * Override: hit-test the arrow line, not just its AABB.
@@ -223,150 +268,7 @@ export class ArrowUtil extends ShapeUtil<ArrowShape> {
    * start.point = {0,0}, end.point = local offset.
    */
   override hitTestPoint(shape: ArrowShape, point: Vec2): boolean {
-    const { start, end, routeStyle, bend } = shape.props;
-
-    if (routeStyle === 'ortho') {
-      const editor = this.editor as any;
-      const fromShape = start.boundShapeId ? editor.getShape(start.boundShapeId) : null;
-      const toShape   = end.boundShapeId   ? editor.getShape(end.boundShapeId)   : null;
-      let pathStr: string;
-      if (fromShape && toShape) {
-        const fu = editor.getShapeUtil(fromShape.type);
-        const tu = editor.getShapeUtil(toShape.type);
-        // Convert world-space bounds of bound shapes to local space
-        const fwb = fu.getGeometry(fromShape as any).getBounds();
-        const twb = tu.getGeometry(toShape as any).getBounds();
-        const fromBounds = {
-          ...fwb,
-          x: fwb.minX + fromShape.x - shape.x, y: fwb.minY + fromShape.y - shape.y,
-          minX: fwb.minX + fromShape.x - shape.x, minY: fwb.minY + fromShape.y - shape.y,
-          maxX: fwb.maxX + fromShape.x - shape.x, maxY: fwb.maxY + fromShape.y - shape.y,
-        };
-        const toBounds = {
-          ...twb,
-          x: twb.minX + toShape.x - shape.x, y: twb.minY + toShape.y - shape.y,
-          minX: twb.minX + toShape.x - shape.x, minY: twb.minY + toShape.y - shape.y,
-          maxX: twb.maxX + toShape.x - shape.x, maxY: twb.maxY + toShape.y - shape.y,
-        };
-        const bindings = editor.getBindingsFromShape(shape.id);
-        const startBind = bindings.find((b: any) => b.props.terminal === 'start');
-        const endBind   = bindings.find((b: any) => b.props.terminal === 'end');
-        const fromEdge = startBind?.props.fromEdge ?? 'right';
-        const toEdge   = endBind?.props.fromEdge ?? 'left';
-        pathStr = computeElbowPath(fromBounds, toBounds, fromEdge, toEdge, bend);
-      } else {
-        pathStr = computeArcPath(start.point, end.point, 0);
-      }
-      const pts = parseElbowPoints(pathStr);
-      let minDist = Infinity;
-      for (let i = 0; i < pts.length - 1; i++) {
-        const d = pointToSegmentDist(point, pts[i], pts[i+1]);
-        if (d < minDist) minDist = d;
-      }
-      return minDist <= 8;
-    } else {
-      // Curve style hit test — all coords are local
-      const editor = this.editor as any;
-      let sourceBox: Box2d | null = null;
-      let destBox: Box2d | null = null;
-
-      if (start.boundShapeId) {
-        const s = editor.getShape(start.boundShapeId);
-        if (s) {
-          const u = editor.getShapeUtil(s.type);
-          const wb = u.getGeometry(s).getBounds();
-          sourceBox = {
-            ...wb,
-            x: wb.minX + s.x - shape.x, y: wb.minY + s.y - shape.y,
-            minX: wb.minX + s.x - shape.x, minY: wb.minY + s.y - shape.y,
-            maxX: wb.maxX + s.x - shape.x, maxY: wb.maxY + s.y - shape.y,
-          };
-        }
-      }
-      if (end.boundShapeId) {
-        const d = editor.getShape(end.boundShapeId);
-        if (d) {
-          const u = editor.getShapeUtil(d.type);
-          const wb = u.getGeometry(d).getBounds();
-          destBox = {
-            ...wb,
-            x: wb.minX + d.x - shape.x, y: wb.minY + d.y - shape.y,
-            minX: wb.minX + d.x - shape.x, minY: wb.minY + d.y - shape.y,
-            maxX: wb.maxX + d.x - shape.x, maxY: wb.maxY + d.y - shape.y,
-          };
-        }
-      }
-
-      // Local coords: start.point = {0,0}, end.point = local offset
-      const sx = start.point.x;
-      const sy = start.point.y;
-      const ex = end.point.x;
-      const ey = end.point.y;
-      const mx = (sx + ex) / 2;
-      const my = (sy + ey) / 2;
-      const dx = ex - sx;
-      const dy = ey - sy;
-      const chord = Math.sqrt(dx * dx + dy * dy);
-
-      let cpx = mx;
-      let cpy = my;
-      if (chord >= 1e-9 && bend !== 0) {
-        const perpX = dy / chord;
-        const perpY = -dx / chord;
-        const offset = chord * bend;
-        cpx = mx + perpX * offset;
-        cpy = my + perpY * offset;
-      }
-
-      const p0 = start.point;
-      const p1 = { x: cpx, y: cpy };
-      const p2 = end.point;
-
-      let tStart = 0;
-      let tEnd = 1;
-
-      if (sourceBox) {
-        const tStartIntersections = intersectBezierWithBox(p0, p1, p2, sourceBox);
-        const valid = tStartIntersections.filter(t => t > 0);
-        if (valid.length > 0) {
-          tStart = Math.min(...valid);
-        }
-      }
-
-      if (destBox) {
-        const tEndIntersections = intersectBezierWithBox(p0, p1, p2, destBox);
-        const valid = tEndIntersections.filter(t => t < 1);
-        if (valid.length > 0) {
-          tEnd = Math.max(...valid);
-        }
-      }
-
-      if (tStart >= tEnd) {
-        return pointToSegmentDist(point, start.point, end.point) <= 8;
-      }
-
-      const [q0, q1, q2] = getBezierSegment(p0, p1, p2, tStart, tEnd);
-
-      if (bend === 0) {
-        return pointToSegmentDist(point, q0, q2) <= 8;
-      }
-
-      const steps = 30;
-      let minDist = Infinity;
-      let prev = q0;
-      for (let i = 1; i <= steps; i++) {
-        const t = i / steps;
-        const mt = 1 - t;
-        const pt = {
-          x: mt * mt * q0.x + 2 * mt * t * q1.x + t * t * q2.x,
-          y: mt * mt * q0.y + 2 * mt * t * q1.y + t * t * q2.y,
-        };
-        const d = pointToSegmentDist(point, prev, pt);
-        if (d < minDist) minDist = d;
-        prev = pt;
-      }
-      return minDist <= 8;
-    }
+    return this.getGeometry(shape).hitTestPoint(point);
   }
 
   /**
@@ -376,54 +278,18 @@ export class ArrowUtil extends ShapeUtil<ArrowShape> {
    * provides world positioning.
    */
   toSvg(shape: ArrowShape): SVGElement {
-    const { start, end, routeStyle, bend, color, opacity, strokeStyle, strokeWidth } = shape.props;
-    let pathStr: string;
-
-    const editor = this.editor as any;
-
-    if (routeStyle === 'ortho') {
-      const fromShape = start.boundShapeId ? editor.getShape(start.boundShapeId) : null;
-      const toShape   = end.boundShapeId   ? editor.getShape(end.boundShapeId)   : null;
-
-      if (fromShape && toShape) {
-        const bindings = editor.getBindingsFromShape(shape.id) || [];
-        const startBind = bindings.find((b: any) => b.props.terminal === 'start');
-        const endBind   = bindings.find((b: any) => b.props.terminal === 'end');
-        const fromEdge = startBind?.props.fromEdge ?? 'right';
-        const toEdge   = endBind?.props.fromEdge ?? 'left';
-
-        const fu = editor.getShapeUtil(fromShape.type);
-        const tu = editor.getShapeUtil(toShape.type);
-        // Convert world-space bounds of bound shapes to local space for routing
-        const fwb = fu.getGeometry(fromShape as any).getBounds();
-        const twb = tu.getGeometry(toShape as any).getBounds();
-        const fromBounds = {
-          ...fwb,
-          x:    fwb.minX + fromShape.x - shape.x,
-          y:    fwb.minY + fromShape.y - shape.y,
-          minX: fwb.minX + fromShape.x - shape.x,
-          minY: fwb.minY + fromShape.y - shape.y,
-          maxX: fwb.maxX + fromShape.x - shape.x,
-          maxY: fwb.maxY + fromShape.y - shape.y,
-        };
-        const toBounds = {
-          ...twb,
-          x:    twb.minX + toShape.x - shape.x,
-          y:    twb.minY + toShape.y - shape.y,
-          minX: twb.minX + toShape.x - shape.x,
-          minY: twb.minY + toShape.y - shape.y,
-          maxX: twb.maxX + toShape.x - shape.x,
-          maxY: twb.maxY + toShape.y - shape.y,
-        };
-        pathStr = computeElbowPath(fromBounds, toBounds, fromEdge, toEdge, bend);
-      } else {
-        // Floating: draw from {0,0} to end.point local offset
-        pathStr = computeArcPath(start.point, end.point, 0);
-      }
-    } else {
-      // Draw from {0,0} (start) to end.point local offset
-      pathStr = computeArcPath(start.point, end.point, bend);
-    }
+    const {
+      arrowheadStart,
+      arrowheadEnd,
+      color,
+      opacity,
+      strokeStyle,
+      strokeWidth,
+    } = shape.props;
+    const route = resolveArrowRoute(this.editor as any, shape);
+    const pathStr = route.path;
+    const start = shape.props.start;
+    const end = shape.props.end;
 
     const strokeW = STROKE_WIDTHS[strokeWidth] ?? 2;
     const strokeC = resolveColor(color) ?? color;
@@ -443,14 +309,28 @@ export class ArrowUtil extends ShapeUtil<ArrowShape> {
     }
     g.appendChild(path);
 
-    const endPt = arrowEndPoint(pathStr, end.point);
-    const tangentFrom = arrowTangentFrom(pathStr, start.point);
-    const pts = getArrowheadPoints(tangentFrom, endPt);
-    if (pts) {
-      const polygon = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
-      polygon.setAttribute('points', pts);
-      polygon.setAttribute('fill', strokeC);
-      g.appendChild(polygon);
+    if (arrowheadStart === 'arrow') {
+      const startPt = arrowStartPoint(pathStr, start.point);
+      const tangentTo = arrowTangentTo(pathStr, end.point);
+      const pts = getArrowheadPoints(tangentTo, startPt);
+      if (pts) {
+        const polygon = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+        polygon.setAttribute('points', pts);
+        polygon.setAttribute('fill', strokeC);
+        g.appendChild(polygon);
+      }
+    }
+
+    if (arrowheadEnd === 'arrow') {
+      const endPt = arrowEndPoint(pathStr, end.point);
+      const tangentFrom = arrowTangentFrom(pathStr, start.point);
+      const pts = getArrowheadPoints(tangentFrom, endPt);
+      if (pts) {
+        const polygon = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+        polygon.setAttribute('points', pts);
+        polygon.setAttribute('fill', strokeC);
+        g.appendChild(polygon);
+      }
     }
 
     return g;
@@ -461,6 +341,20 @@ export class ArrowUtil extends ShapeUtil<ArrowShape> {
 // Arrow SVG Export Helpers
 // ─────────────────────────────────────────────────────────────
 
+function arrowStartPoint(pathStr: string, fallback: { x: number; y: number }): { x: number; y: number } {
+  const match = pathStr.match(/^M\s+([\d.\-eE+]+)\s+([\d.\-eE+]+)/);
+  if (match) return { x: parseFloat(match[1]), y: parseFloat(match[2]) };
+  return fallback;
+}
+
+function arrowTangentTo(pathStr: string, fallback: { x: number; y: number }): { x: number; y: number } {
+  const qMatch = pathStr.match(/^M\s+[\d.\-eE+]+\s+[\d.\-eE+]+\s+Q\s+([\d.\-eE+]+)\s+([\d.\-eE+]+)/);
+  if (qMatch) return { x: parseFloat(qMatch[1]), y: parseFloat(qMatch[2]) };
+  const pts = getPathPoints(pathStr);
+  if (pts.length >= 2) return pts[1];
+  return fallback;
+}
+
 function arrowEndPoint(pathStr: string, fallback: { x: number; y: number }): { x: number; y: number } {
   const match = pathStr.match(/(?:Q\s+[\d.\-eE+]+\s+[\d.\-eE+]+\s+|L\s+)([\d.\-eE+]+)\s+([\d.\-eE+]+)$/);
   if (match) return { x: parseFloat(match[1]), y: parseFloat(match[2]) };
@@ -470,12 +364,17 @@ function arrowEndPoint(pathStr: string, fallback: { x: number; y: number }): { x
 function arrowTangentFrom(pathStr: string, fallback: { x: number; y: number }): { x: number; y: number } {
   const qMatch = pathStr.match(/Q\s+([\d.\-eE+]+)\s+([\d.\-eE+]+)\s+[\d.\-eE+]+\s+[\d.\-eE+]+/);
   if (qMatch) return { x: parseFloat(qMatch[1]), y: parseFloat(qMatch[2]) };
+  const pts = getPathPoints(pathStr);
+  if (pts.length >= 2) return pts[pts.length - 2];
+  return fallback;
+}
+
+function getPathPoints(pathStr: string): { x: number; y: number }[] {
   const pts: { x: number; y: number }[] = [];
   const re = /[ML]\s+([\d.\-eE+]+)\s+([\d.\-eE+]+)/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(pathStr)) !== null) pts.push({ x: parseFloat(m[1]), y: parseFloat(m[2]) });
-  if (pts.length >= 2) return pts[pts.length - 2];
-  return fallback;
+  return pts;
 }
 
 function getArrowheadPoints(tangentFrom: Vec2, tip: Vec2) {
@@ -488,19 +387,6 @@ function getArrowheadPoints(tangentFrom: Vec2, tip: Vec2) {
   const p2 = `${tip.x - ux * 14 - uy * 6},${tip.y - uy * 14 + ux * 6}`;
   const p3 = `${tip.x - ux * 14 + uy * 6},${tip.y - uy * 14 - ux * 6}`;
   return `${p1} ${p2} ${p3}`;
-}
-
-// ─────────────────────────────────────────────────────────────
-// Helper: point-to-segment distance
-// ─────────────────────────────────────────────────────────────
-
-function pointToSegmentDist(p: Vec2, a: Vec2, b: Vec2): number {
-  const dx = b.x - a.x;
-  const dy = b.y - a.y;
-  const lenSq = dx * dx + dy * dy;
-  if (lenSq < 1e-9) return Math.hypot(p.x - a.x, p.y - a.y);
-  const t = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / lenSq));
-  return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -552,39 +438,36 @@ export function anchorToPoint(anchor: Vec2, bounds: Box2d): Vec2 {
   };
 }
 
+export function getConnectionPoints(bounds: Box2d): Array<{ normalizedAnchor: Vec2; point: Vec2 }> {
+  return [
+    { normalizedAnchor: { x: 0.5, y: 0.0 }, point: { x: bounds.x + bounds.w / 2, y: bounds.y } },
+    { normalizedAnchor: { x: 1.0, y: 0.5 }, point: { x: bounds.x + bounds.w, y: bounds.y + bounds.h / 2 } },
+    { normalizedAnchor: { x: 0.5, y: 1.0 }, point: { x: bounds.x + bounds.w / 2, y: bounds.y + bounds.h } },
+    { normalizedAnchor: { x: 0.0, y: 0.5 }, point: { x: bounds.x, y: bounds.y + bounds.h / 2 } },
+  ];
+}
+
 /**
  * Snaps a target page-space point to the closest predefined connection point
  * (centers of the four edges) of a shape's bounding box.
+ *
+ * Even when the pointer is inside the shape, we still resolve to one of the
+ * predefined anchors so preview and commit behavior stay predictable.
  */
 export function getClosestConnectionPoint(pt: Vec2, bounds: Box2d): { normalizedAnchor: Vec2; point: Vec2 } {
-  if (pt.x >= bounds.x && pt.x <= bounds.x + bounds.w && pt.y >= bounds.y && pt.y <= bounds.y + bounds.h) {
-    return {
-      normalizedAnchor: {
-        x: bounds.w > 0 ? (pt.x - bounds.x) / bounds.w : 0.5,
-        y: bounds.h > 0 ? (pt.y - bounds.y) / bounds.h : 0.5,
-      },
-      point: pt,
-    };
-  }
-
-  const points = [
-    { anchor: { x: 0.5, y: 0.0 }, pt: { x: bounds.x + bounds.w / 2, y: bounds.y } },
-    { anchor: { x: 1.0, y: 0.5 }, pt: { x: bounds.x + bounds.w,     y: bounds.y + bounds.h / 2 } },
-    { anchor: { x: 0.5, y: 1.0 }, pt: { x: bounds.x + bounds.w / 2, y: bounds.y + bounds.h } },
-    { anchor: { x: 0.0, y: 0.5 }, pt: { x: bounds.x,                y: bounds.y + bounds.h / 2 } },
-  ];
+  const points = getConnectionPoints(bounds);
   let minDistance = Infinity;
   let closest = points[0];
   for (const p of points) {
-    const d = Math.hypot(pt.x - p.pt.x, pt.y - p.pt.y);
+    const d = Math.hypot(pt.x - p.point.x, pt.y - p.point.y);
     if (d < minDistance) {
       minDistance = d;
       closest = p;
     }
   }
   return {
-    normalizedAnchor: closest.anchor,
-    point: closest.pt,
+    normalizedAnchor: closest.normalizedAnchor,
+    point: closest.point,
   };
 }
 

@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+
 import React from 'react';
 import { render } from '@testing-library/react';
 import { SelectionLayer } from '../SelectionLayer';
@@ -14,6 +16,7 @@ vi.mock('../editor', () => ({
     },
     getShape: vi.fn(),
     getShapeUtil: vi.fn(),
+    getBindingsFromShape: vi.fn(() => []),
     getCurrentTool: vi.fn(() => ({})),
   }
 }));
@@ -23,6 +26,36 @@ vi.mock('../../useSignalValue', () => ({
 }));
 
 describe('SelectionLayer', () => {
+  it('renders bend, start, and end handles for a selected arrow', () => {
+    (wbEditor.getSelectionSignal as any).mockReturnValue({ value: ['shape:arrow'] });
+    (wbEditor.store.getSignal as any).mockImplementation((id: string) => ({
+      value: {
+        id,
+        type: 'arrow',
+        x: 10,
+        y: 20,
+        rotation: 0,
+        props: {
+          routeStyle: 'curve',
+          bend: 0.5,
+          start: { point: { x: 0, y: 0 }, boundShapeId: null, normalizedAnchor: { x: 0.5, y: 0.5 } },
+          end: { point: { x: 100, y: 0 }, boundShapeId: null, normalizedAnchor: { x: 0.5, y: 0.5 } },
+        },
+      },
+    }));
+    (wbEditor.getShapeUtil as any).mockImplementation(() => ({
+      getGeometry: () => ({ getBounds: () => ({ minX: 0, minY: 0, maxX: 100, maxY: 50, w: 100, h: 50 }) })
+    }));
+
+    const { container } = render(
+      <svg><SelectionLayer /></svg>
+    );
+
+    expect(container.querySelector('rect[data-handle="start"]')).not.toBeNull();
+    expect(container.querySelector('rect[data-handle="end"]')).not.toBeNull();
+    expect(container.querySelector('circle[data-handle="bend"]')).not.toBeNull();
+  });
+
   it('renders nothing when no shapes are selected', () => {
     (wbEditor.getSelectionSignal as any).mockReturnValue({ value: [] });
     const { container } = render(
@@ -44,7 +77,7 @@ describe('SelectionLayer', () => {
     (wbEditor.getShape as any).mockImplementation(() => ({ type: 'box' }));
     
     (wbEditor.getShapeUtil as any).mockImplementation(() => ({
-      getGeometry: () => ({ minX: 10, minY: 10, maxX: 110, maxY: 60, w: 100, h: 50 })
+      getGeometry: () => ({ getBounds: () => ({ minX: 10, minY: 10, maxX: 110, maxY: 60, w: 100, h: 50 }) })
     }));
 
     const { container } = render(

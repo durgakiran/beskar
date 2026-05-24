@@ -16,17 +16,21 @@
  *  - updateShape calls onAfterChangeToShape for all bindings to the shape
  */
 
-import { signal, batch as preactBatch, type Signal } from '@preact/signals';
-import { sid, makeBox } from './types';
+import { signal, type Signal } from '@preact/signals';
+import { sid } from './types';
 import { GlideStore } from './store';
 import { GlideSchema } from './schema';
 import { GlideCamera } from './camera';
 import { HistoryManager } from './history';
+import type { BatchOptions } from './history';
 import { Rectangle2d } from './geometry';
 import { StateNode } from './state-node';
 import { SelectTool } from './tools/SelectTool';
 import { BoxTool } from './tools/BoxTool';
 import type { ShapeUtil, BindingUtil } from './shapes/ShapeUtil';
+import type { ArrowheadStyle, ArrowRouteStyle, ArrowShape } from './shapes/ArrowUtil';
+import { buildAIContext, type AIContextSnapshot } from './ai-context';
+import { getWorldBounds, SmartRouterCache, type SmartRouteResolution, type SmartRoutingSnapshot } from './smart-router';
 import type { GlideShape, GlideBinding, ShapeId, BindingId, Vec2, Box2d, AnyRecord } from './types';
 import type { GlideEvent } from './state-node';
 
@@ -48,6 +52,24 @@ interface ShapeUtilClass {
   migrations?: import('./types').GlideMigrations;
 }
 
+export interface BindingPreviewAnchor {
+  normalizedAnchor: Vec2;
+  point: Vec2;
+}
+
+export interface BindingPreviewCandidate {
+  targetId: ShapeId;
+  targetType: string;
+  normalizedAnchor: Vec2;
+  point: Vec2;
+  candidateAnchors: BindingPreviewAnchor[];
+}
+
+export interface BindingPreview extends BindingPreviewCandidate {
+  terminal: 'start' | 'end';
+  sourceCandidate?: BindingPreviewCandidate | null;
+}
+
 // ─────────────────────────────────────────────────────────────
 // GlideEditor
 // ─────────────────────────────────────────────────────────────
@@ -58,7 +80,10 @@ export class GlideEditor {
   readonly camera:  GlideCamera;
   readonly history: HistoryManager;
   private _clipboard: GlideShape[] = [];
-  arrowRouteStyle: 'curve' | 'ortho' = 'curve';
+  arrowRouteStyle: ArrowRouteStyle = 'curve';
+  arrowheadStart: ArrowheadStyle = 'none';
+  arrowheadEnd: ArrowheadStyle = 'arrow';
+  private _smartRouter = new SmartRouterCache();
 
   private _utils        = new Map<string, ShapeUtil<any>>();
   private _bindingUtils = new Map<string, BindingUtil<any>>();
@@ -75,6 +100,9 @@ export class GlideEditor {
   /** Signal carrying the set of shape IDs marked for erasure during an eraser drag.
    *  Empty set when the eraser is not active. EraserTool writes; ShapeLayer reads. */
   readonly erasingShapeIds: Signal<ReadonlySet<ShapeId>> = signal(new Set<ShapeId>());
+
+  /** Signal describing the current arrow-binding candidate under the pointer, if any. */
+  readonly bindingPreview: Signal<BindingPreview | null> = signal(null);
 
   constructor(store: GlideStore, schema: GlideSchema, camera: GlideCamera) {
     this.store   = store;
@@ -182,6 +210,9 @@ export class GlideEditor {
       partial['props'] = { ...defaultProps, ...userProps };
     }
     this.store.put([partial]);
+    if (type !== 'arrow') {
+      this._smartRouter.markDirty();
+    }
     return partial['id'] as ShapeId;
   }
 
@@ -193,6 +224,9 @@ export class GlideEditor {
       newShape.props = { ...existing.props, ...(partial.props as any) };
     }
     this.store.put([newShape]);
+    if ((existing['type'] as string) !== 'arrow') {
+      this._smartRouter.markDirty();
+    }
     // Fire onAfterChangeToShape for all bindings pointing to this shape
     const bindings = this.store.getBindingsToShape(id);
     for (const binding of bindings) {
@@ -202,7 +236,12 @@ export class GlideEditor {
   }
 
   deleteShapes(ids: ShapeId[]): void {
+    let shouldInvalidateSmartRoutes = false;
     for (const id of ids) {
+      const existing = this.store.get(id);
+      if (existing && existing['type'] !== 'arrow') {
+        shouldInvalidateSmartRoutes = true;
+      }
       // 1. Fire onBeforeDeleteToShape for bindings pointing to this shape
       const bindingsTo = this.store.getBindingsToShape(id);
       for (const binding of bindingsTo) {
@@ -222,6 +261,9 @@ export class GlideEditor {
     }
     // 4. Finally remove the shapes themselves
     this.store.remove(ids);
+    if (shouldInvalidateSmartRoutes) {
+      this._smartRouter.markDirty();
+    }
   }
 
   // ── Binding mutations ──────────────────────────────────────
@@ -450,10 +492,55 @@ export class GlideEditor {
     this.editingShapeId.value = null;
   }
 
-  // ── Batch / history (store-level) ──────────────────────────
+  setBindingPreview(preview: BindingPreview | null): void {
+    this.bindingPreview.value = preview;
+  }
 
-  batch(fn: () => void): void {
-    this.store.batch(fn);
+  clearBindingPreview(): void {
+    this.bindingPreview.value = null;
+  }
+
+  // ── Batch / history ────────────────────────────────────────
+
+  /**
+   * Execute a mutation block at the editor API level.
+   *
+   * - `batch(fn)` preserves the legacy transactional store batch.
+   * - `batch(label, fn, opts)` records a named undo entry, unless history is ignored.
+   */
+  batch(fn: () => void): void;
+  batch(label: string, fn: () => void, opts?: BatchOptions): void;
+  batch(
+    labelOrFn: string | (() => void),
+    fn?: (() => void),
+    opts?: BatchOptions,
+  ): void {
+    if (typeof labelOrFn === 'function') {
+      this.store.batch(labelOrFn);
+      return;
+    }
+
+    if (!fn) {
+      throw new Error('GlideEditor.batch(label, fn): missing callback');
+    }
+
+    this.history.batch(labelOrFn, fn, opts);
+  }
+
+  /**
+   * Execute a mutation block with optional history control.
+   * Used by AI/MCP and remote sync to bypass the local undo stack.
+   */
+  run(fn: () => void, opts?: BatchOptions): void {
+    this.history.batch('Run', fn, opts);
+  }
+
+  undo(): void {
+    this.history.undo();
+  }
+
+  redo(): void {
+    this.history.redo();
   }
 
   // ── Tool management (Phase 3) ──────────────────────────────
@@ -479,6 +566,7 @@ export class GlideEditor {
     if (!tool) throw new Error(`GlideEditor: unknown tool "${id}"`);
     const prev = this._currentToolSignal.peek();
     if (prev) prev.current?.onExit();
+    this.clearBindingPreview();
     this._currentToolSignal.value = tool;
     this.currentToolId.value = id;
     tool._reset();
@@ -500,62 +588,135 @@ export class GlideEditor {
   screenToPage(point: Vec2): Vec2  { return this.camera.screenToPage(point); }
   pageToScreen(point: Vec2): Vec2  { return this.camera.pageToScreen(point); }
   getViewportBounds(): Box2d       { return this.camera.getViewportBounds(); }
+  getSmartRoutingSnapshot(): SmartRoutingSnapshot { return this._smartRouter.getSnapshot(); }
+
+  getShapeWorldBounds(shapeOrId: GlideShape | ShapeId): Box2d {
+    const shape = typeof shapeOrId === 'string'
+      ? this.getShape(shapeOrId)
+      : shapeOrId;
+    if (!shape) {
+      throw new Error(`GlideEditor: shape "${shapeOrId}" not found`);
+    }
+    return getWorldBounds(this, shape);
+  }
+
+  resolveSmartRouteForArrow(
+    arrow: ArrowShape,
+    args: {
+      startWorld: Vec2;
+      endWorld: Vec2;
+      fromEdge: import('./types').EdgeName;
+      toEdge: import('./types').EdgeName;
+      fromShapeId: ShapeId | null;
+      toShapeId: ShapeId | null;
+      now?: () => number;
+      budgetMs?: number;
+    },
+  ): SmartRouteResolution {
+    return this._smartRouter.resolve(this, { arrow, ...args });
+  }
 
   // ── Persistence ────────────────────────────────────────────
 
   serialize()                                { return this.store.serialize(); }
-  deserialize(doc: ReturnType<GlideStore['serialize']>) { this.store.deserialize(doc); }
+  deserialize(doc: ReturnType<GlideStore['serialize']>) {
+    this.store.deserialize(doc);
+    this._smartRouter.markDirty();
+  }
+
+  // ── AI / MCP ───────────────────────────────────────────────
+
+  getAIContext(opts?: { viewport?: boolean }): AIContextSnapshot {
+    return buildAIContext(this, opts);
+  }
 
   // ── Export ─────────────────────────────────────────────────
 
   exportToSvg(shapeIds: ShapeId[]): string {
-    const shapes = shapeIds.map(id => this.getShape(id)).filter(Boolean) as GlideShape[];
-    if (shapes.length === 0) return '<svg></svg>';
+    const shapes = shapeIds
+      .map(id => this.getShape(id))
+      .filter(Boolean) as GlideShape[];
+    return this._renderShapesToSvg(shapes);
+  }
 
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  exportRegionToSvg(box: Box2d): string {
+    const shapes = this.getShapesInBox(box).sort((a, b) => (a.index < b.index ? -1 : a.index > b.index ? 1 : 0));
+    return this._renderShapesToSvg(shapes, box);
+  }
+
+  exportToPng(shapeIds: ShapeId[], opts?: { scale?: number }): Promise<Blob> {
+    return this._svgToPngBlob(this.exportToSvg(shapeIds), opts?.scale ?? 1);
+  }
+
+  exportRegionToPng(box: Box2d, opts?: { scale?: number }): Promise<Blob> {
+    return this._svgToPngBlob(this.exportRegionToSvg(box), opts?.scale ?? 1);
+  }
+
+  async takeScreenshot(box?: Box2d): Promise<string> {
+    const blob = await this.exportRegionToPng(box ?? this.getViewportBounds());
+    return blobToDataUrl(blob);
+  }
+
+  private _renderShapesToSvg(shapes: GlideShape[], explicitViewBox?: Box2d): string {
+    if (shapes.length === 0 && !explicitViewBox) return '<svg></svg>';
+
+    let minX = explicitViewBox?.minX ?? Infinity;
+    let minY = explicitViewBox?.minY ?? Infinity;
+    let maxX = explicitViewBox?.maxX ?? -Infinity;
+    let maxY = explicitViewBox?.maxY ?? -Infinity;
     const elements: string[] = [];
 
     for (const shape of shapes) {
       const util = this.getShapeUtil(shape.type);
-      const box = util.getGeometry(shape).getBounds();
-      if (box.minX < minX) minX = box.minX;
-      if (box.minY < minY) minY = box.minY;
-      if (box.maxX > maxX) maxX = box.maxX;
-      if (box.maxY > maxY) maxY = box.maxY;
+      const box = this.getShapeWorldBounds(shape);
+      if (!explicitViewBox) {
+        if (box.minX < minX) minX = box.minX;
+        if (box.minY < minY) minY = box.minY;
+        if (box.maxX > maxX) maxX = box.maxX;
+        if (box.maxY > maxY) maxY = box.maxY;
+      }
 
       if ((util as any).toSvg) {
         const svgEl = (util as any).toSvg(shape);
         if (svgEl) {
-          elements.push(svgEl.outerHTML);
+          this._prepareSvgElementForExport(svgEl);
+          const wrapper = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+          const localBounds = util.getGeometry(shape).getBounds();
+          const cx = localBounds.minX + localBounds.w / 2;
+          const cy = localBounds.minY + localBounds.h / 2;
+          const angleDeg = ((shape.rotation || 0) * 180) / Math.PI;
+          wrapper.setAttribute('transform', `translate(${shape.x}, ${shape.y}) rotate(${angleDeg}, ${cx}, ${cy})`);
+          wrapper.appendChild(svgEl);
+          elements.push(wrapper.outerHTML);
         }
       }
     }
 
-    if (minX === Infinity) {
-      minX = 0; minY = 0; maxX = 100; maxY = 100;
+    if (minX === Infinity || minY === Infinity || maxX === -Infinity || maxY === -Infinity) {
+      minX = explicitViewBox?.minX ?? 0;
+      minY = explicitViewBox?.minY ?? 0;
+      maxX = explicitViewBox?.maxX ?? 100;
+      maxY = explicitViewBox?.maxY ?? 100;
     }
 
-    const w = maxX - minX;
-    const h = maxY - minY;
+    const w = Math.max(1, maxX - minX);
+    const h = Math.max(1, maxY - minY);
 
     return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${minX} ${minY} ${w} ${h}" width="${w}" height="${h}">
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;display=swap');
-    text { font-family: 'Inter', system-ui, sans-serif; }
+    text { font-family: Inter, system-ui, sans-serif; }
   </style>
-  ${elements.join('\\n  ')}
+  ${elements.join('\n  ')}
 </svg>`;
   }
 
-  exportToPng(shapeIds: ShapeId[], opts?: { scale?: number }): Promise<Blob> {
+  private _svgToPngBlob(svgStr: string, scale = 1): Promise<Blob> {
     return new Promise((resolve, reject) => {
-      const svgStr = this.exportToSvg(shapeIds);
-      const svgMatch = svgStr.match(/width="([^"]+)"\\s+height="([^"]+)"/);
+      const svgMatch = svgStr.match(/width="([^"]+)"\s+height="([^"]+)"/);
       if (!svgMatch) return reject(new Error('Invalid SVG bounds'));
       
       const width = parseFloat(svgMatch[1]);
       const height = parseFloat(svgMatch[2]);
-      const scale = opts?.scale ?? 1;
 
       const img = new Image();
       const svgBlob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
@@ -584,6 +745,53 @@ export class GlideEditor {
       img.src = url;
     });
   }
+
+  private _prepareSvgElementForExport(root: SVGElement): void {
+    const foreignObjects = Array.from(root.querySelectorAll('foreignObject'));
+    for (const foreignObject of foreignObjects) {
+      const replacement = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      const x = parseFloat(foreignObject.getAttribute('x') ?? '0');
+      const y = parseFloat(foreignObject.getAttribute('y') ?? '0');
+      const width = parseFloat(foreignObject.getAttribute('width') ?? '0');
+      const height = parseFloat(foreignObject.getAttribute('height') ?? '0');
+      const content = foreignObject.textContent?.trim();
+      const div = foreignObject.querySelector('div');
+
+      replacement.setAttribute('x', String(x + width / 2));
+      replacement.setAttribute('y', String(y + height / 2));
+      replacement.setAttribute('text-anchor', 'middle');
+      replacement.setAttribute('dominant-baseline', 'middle');
+      replacement.setAttribute('font-family', div?.style.fontFamily || 'Inter, system-ui, sans-serif');
+      replacement.setAttribute('font-size', div?.style.fontSize || '14px');
+      replacement.setAttribute('fill', div?.style.color || '#111827');
+      replacement.textContent = content ? content.replace(/\s+/g, ' ') : '';
+
+      foreignObject.replaceWith(replacement);
+    }
+  }
+}
+
+async function blobToDataUrl(blob: Blob): Promise<string> {
+  if (typeof FileReader !== 'undefined') {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const result = reader.result;
+        if (typeof result === 'string') resolve(result);
+        else reject(new Error('Failed to convert blob to data URL'));
+      };
+      reader.onerror = () => reject(reader.error ?? new Error('Failed to convert blob to data URL'));
+      reader.readAsDataURL(blob);
+    });
+  }
+
+  const BufferCtor = (globalThis as { Buffer?: { from(data: ArrayBuffer): { toString(encoding: string): string } } }).Buffer;
+  if (typeof blob.arrayBuffer === 'function' && BufferCtor) {
+    const buffer = BufferCtor.from(await blob.arrayBuffer());
+    return `data:image/png;base64,${buffer.toString('base64')}`;
+  }
+
+  throw new Error('No available blob to data URL conversion path');
 }
 
 // ─────────────────────────────────────────────────────────────
