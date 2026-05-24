@@ -120,4 +120,23 @@ test.describe('glideboard browser automation', () => {
     await page.locator('#wb-zoom-pct').click();
     await expect(page.locator('#wb-zoom-pct')).toHaveText('100%');
   });
+
+  test('uses the light chrome palette instead of a dark theme', async ({ page }) => {
+    const styles = await page.evaluate(() => {
+      const app = window.getComputedStyle(document.getElementById('whiteboard-app')!);
+      const toolbar = window.getComputedStyle(document.getElementById('wb-toolbar')!);
+      const zoom = window.getComputedStyle(document.getElementById('wb-zoom-widget')!);
+      return {
+        appBackground: app.backgroundColor,
+        toolbarBackground: toolbar.backgroundColor,
+        toolbarBorder: toolbar.borderColor,
+        zoomBackground: zoom.backgroundColor,
+      };
+    });
+
+    expect(styles.appBackground).toBe('rgb(251, 250, 252)');
+    expect(styles.toolbarBackground).toBe('rgb(255, 255, 255)');
+    expect(styles.toolbarBorder).toBe('rgb(212, 209, 218)');
+    expect(styles.zoomBackground).toBe('rgb(255, 255, 255)');
+  });
 });

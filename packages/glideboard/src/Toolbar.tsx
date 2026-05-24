@@ -1,5 +1,6 @@
 import React from 'react';
 import { arrowPresetSignal, setConnectorPreset, wbEditor, type ConnectorPreset } from './editor';
+import { wbTheme } from './theme';
 import { useSignalValue } from './useSignalValue';
 
 interface ToolDef {
@@ -47,7 +48,7 @@ const buttonStyle: React.CSSProperties = {
   borderRadius: 10,
   border: '1.5px solid transparent',
   background: 'transparent',
-  color: '#6c7086',
+  color: wbTheme.textSoft,
   cursor: 'pointer',
   fontSize: 18,
   lineHeight: 1,
@@ -63,9 +64,9 @@ function ToolButton({ tool, active, onClick }: { tool: ToolDef; active: boolean;
       onClick={onClick}
       style={{
         ...buttonStyle,
-        border: active ? '1.5px solid #89b4fa' : '1.5px solid transparent',
-        background: active ? '#89b4fa22' : 'transparent',
-        color: active ? '#89b4fa' : '#6c7086',
+        border: active ? `1.5px solid ${wbTheme.accent}` : '1.5px solid transparent',
+        background: active ? wbTheme.accentSurface : 'transparent',
+        color: active ? wbTheme.accentText : wbTheme.textSoft,
       }}
     >
       <span style={{ fontSize: 18 }}>{tool.icon}</span>
@@ -97,9 +98,9 @@ function ShapePickerButton({
         onClick={onToggle}
         style={{
           ...buttonStyle,
-          border: active ? '1.5px solid #89b4fa' : '1.5px solid transparent',
-          background: active ? '#89b4fa22' : 'transparent',
-          color: active ? '#89b4fa' : '#6c7086',
+          border: active ? `1.5px solid ${wbTheme.accent}` : '1.5px solid transparent',
+          background: active ? wbTheme.accentSurface : 'transparent',
+          color: active ? wbTheme.accentText : wbTheme.textSoft,
         }}
       >
         <span style={{ fontSize: 18 }}>{currentShapeTool.icon}</span>
@@ -118,10 +119,10 @@ function ShapePickerButton({
             gridTemplateColumns: 'repeat(2, 48px)',
             gap: 8,
             padding: 10,
-            background: '#1e1e2e',
-            border: '1px solid #313244',
+            background: wbTheme.surface,
+            border: `1px solid ${wbTheme.border}`,
             borderRadius: 14,
-            boxShadow: '0 12px 36px rgba(0,0,0,0.45)',
+            boxShadow: wbTheme.shadow,
           }}
         >
           {SHAPE_TOOLS.map(tool => {
@@ -136,9 +137,9 @@ function ShapePickerButton({
                   width: 48,
                   height: 48,
                   borderRadius: 12,
-                  border: selected ? '1.5px solid #89b4fa' : '1px solid #313244',
-                  background: selected ? '#89b4fa22' : '#181825',
-                  color: selected ? '#89b4fa' : '#cdd6f4',
+                  border: selected ? `1.5px solid ${wbTheme.accent}` : `1px solid ${wbTheme.border}`,
+                  background: selected ? wbTheme.accentSurface : wbTheme.surfaceMuted,
+                  color: selected ? wbTheme.accentText : wbTheme.text,
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
@@ -177,9 +178,9 @@ function ArrowPickerButton({
         onClick={onToggle}
         style={{
           ...buttonStyle,
-          border: active ? '1.5px solid #89b4fa' : '1.5px solid transparent',
-          background: active ? '#89b4fa22' : 'transparent',
-          color: active ? '#89b4fa' : '#6c7086',
+          border: active ? `1.5px solid ${wbTheme.accent}` : '1.5px solid transparent',
+          background: active ? wbTheme.accentSurface : 'transparent',
+          color: active ? wbTheme.accentText : wbTheme.textSoft,
         }}
       >
         <span style={{ fontSize: 18 }}>{currentArrowTool.icon}</span>
@@ -198,10 +199,10 @@ function ArrowPickerButton({
             gridTemplateColumns: 'repeat(3, 56px)',
             gap: 8,
             padding: 10,
-            background: '#1e1e2e',
-            border: '1px solid #313244',
+            background: wbTheme.surface,
+            border: `1px solid ${wbTheme.border}`,
             borderRadius: 14,
-            boxShadow: '0 12px 36px rgba(0,0,0,0.45)',
+            boxShadow: wbTheme.shadow,
           }}
         >
           {ARROW_TOOLS.map(tool => {
@@ -216,9 +217,9 @@ function ArrowPickerButton({
                   width: 56,
                   height: 48,
                   borderRadius: 12,
-                  border: selected ? '1.5px solid #89b4fa' : '1px solid #313244',
-                  background: selected ? '#89b4fa22' : '#181825',
-                  color: selected ? '#89b4fa' : '#cdd6f4',
+                  border: selected ? `1.5px solid ${wbTheme.accent}` : `1px solid ${wbTheme.border}`,
+                  background: selected ? wbTheme.accentSurface : wbTheme.surfaceMuted,
+                  color: selected ? wbTheme.accentText : wbTheme.text,
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
@@ -288,10 +289,10 @@ export function Toolbar() {
         flexDirection: 'column',
         gap: 6,
         padding: 8,
-        background: '#1e1e2e',
-        border: '1px solid #313244',
+        background: wbTheme.surface,
+        border: `1px solid ${wbTheme.border}`,
         borderRadius: 14,
-        boxShadow: '0 12px 36px rgba(0,0,0,0.4)',
+        boxShadow: wbTheme.shadow,
       }}
     >
       {TOOLS.map(tool => {
@@ -348,7 +349,7 @@ export function Toolbar() {
         );
       })}
 
-      <div style={{ width: '100%', height: 1, background: '#313244', margin: '2px 0' }} />
+      <div style={{ width: '100%', height: 1, background: wbTheme.border, margin: '2px 0' }} />
 
       <ToolButton tool={{ id: 'undo', label: 'Undo', shortcut: '⌘Z', icon: '↶' }} active={false} onClick={() => wbEditor.undo()} />
       <ToolButton tool={{ id: 'redo', label: 'Redo', shortcut: '⌘⇧Z', icon: '↷' }} active={false} onClick={() => wbEditor.redo()} />

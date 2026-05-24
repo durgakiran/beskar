@@ -1,5 +1,6 @@
 import React from 'react';
 import { wbEditor } from './editor';
+import { wbTheme } from './theme';
 import { useSignalValue } from './useSignalValue';
 
 const MIN_ZOOM = 0.1;
@@ -50,7 +51,7 @@ const buttonStyle: React.CSSProperties = {
   justifyContent: 'center',
   background: 'transparent',
   border: 'none',
-  color: '#a6adc8',
+  color: wbTheme.textMuted,
   cursor: 'pointer',
   fontSize: 18,
   borderRadius: 8,
@@ -98,23 +99,23 @@ export function ZoomWidget() {
         display: 'flex',
         alignItems: 'center',
         gap: 2,
-        background: '#1e1e2e',
-        border: '1px solid #313244',
+        background: wbTheme.surface,
+        border: `1px solid ${wbTheme.border}`,
         borderRadius: 10,
         padding: '3px 6px',
-        boxShadow: '0 4px 16px rgba(0,0,0,0.3)',
+        boxShadow: wbTheme.statusShadow,
       }}
     >
       <button id="wb-fit" title="Fit to screen (⇧1)" onClick={fitToScreen} style={buttonStyle}>
         ⊞
       </button>
-      <div style={{ width: 1, height: 24, background: '#313244', margin: '0 2px' }} />
+      <div style={{ width: 1, height: 24, background: wbTheme.border, margin: '0 2px' }} />
       <button id="wb-zoom-out" title="Zoom out (−)" onClick={zoomOut} style={buttonStyle}>−</button>
       <button
         id="wb-zoom-pct"
         title="Reset zoom (1)"
         onClick={reset}
-        style={{ ...buttonStyle, width: 56, fontSize: 13, fontFamily: 'Inter, monospace', fontWeight: 600, color: '#cdd6f4' }}
+        style={{ ...buttonStyle, width: 56, fontSize: 13, fontFamily: 'ui-monospace, SFMono-Regular, monospace', fontWeight: 600, color: wbTheme.text }}
       >
         {pct}%
       </button>

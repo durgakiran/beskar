@@ -25,11 +25,13 @@ interface PageResponse {
 
 export default function AddPage({ isOpen, setIsOpen, spaceId, parentId, editPage, disabled = false, disabledMessage = "This space is archived and read-only." }: IAddPage) {
     const [name, setName] = useState("");
+    const [pageType, setPageType] = useState<"document" | "whiteboard">("document");
     const [pendingCreate, setPendingCreate] = useState(false);
     
     const [{ data: docData, isLoading: docLoading, errors: docErrors }, createDoc] = usePost<Response<PageResponse>, Page>(`editor/space/${spaceId}/page/create`);
+    const [{ data: whiteboardData, isLoading: whiteboardLoading, errors: whiteboardErrors }, createWhiteboard] = usePost<Response<PageResponse>, Page>(`editor/space/${spaceId}/whiteboard/create`);
 
-    const loading = docLoading;
+    const loading = docLoading || whiteboardLoading;
     const added = pendingCreate && !loading;
 
     const handleInput = useCallback((value: string) => {
@@ -42,29 +44,36 @@ export default function AddPage({ isOpen, setIsOpen, spaceId, parentId, editPage
             return;
         }
         setPendingCreate(true);
-        createDoc({ title: name, spaceId, parentId });
+        const payload = { title: name, spaceId, parentId };
+        if (pageType === "whiteboard") {
+            createWhiteboard(payload);
+            return;
+        }
+        createDoc(payload);
     };
 
     useEffect(() => {
         if (!pendingCreate) {
             return;
         }
-        if (docData?.data?.page) {
+        const createdPageId = docData?.data?.page || whiteboardData?.data?.page;
+        if (createdPageId) {
             setPendingCreate(false);
-            editPage(docData.data.page);
+            editPage(createdPageId);
         }
-    }, [docData, editPage, pendingCreate]);
+    }, [docData, editPage, pendingCreate, whiteboardData]);
 
     useEffect(() => {
-        if (!loading && pendingCreate && docErrors) {
+        if (!loading && pendingCreate && (docErrors || whiteboardErrors)) {
             setPendingCreate(false);
         }
-    }, [docErrors, loading, pendingCreate]);
+    }, [docErrors, loading, pendingCreate, whiteboardErrors]);
 
     useEffect(() => {
         if (!isOpen) {
             setName("");
             setPendingCreate(false);
+            setPageType("document");
         }
     }, [isOpen]);
 
@@ -73,7 +82,7 @@ export default function AddPage({ isOpen, setIsOpen, spaceId, parentId, editPage
             <Dialog.Content maxWidth="520px">
                 <Dialog.Title size="6">Create new page</Dialog.Title>
                 <Dialog.Description size="2" color="gray" mb="4">
-                    Add a title for the new document. It will be created under the current location.
+                    Choose a page type and title. The page will be created under the current location.
                 </Dialog.Description>
                 <Flex direction="column" gap="4">
                     {disabled ? (
@@ -83,12 +92,33 @@ export default function AddPage({ isOpen, setIsOpen, spaceId, parentId, editPage
                     ) : null}
                     <label>
                         <Text as="div" size="2" mb="1" weight="bold">
-                            Document Title
+                            Page Type
+                        </Text>
+                        <Flex gap="2">
+                            <Button
+                                type="button"
+                                variant={pageType === "document" ? "solid" : "soft"}
+                                onClick={() => setPageType("document")}
+                            >
+                                Document
+                            </Button>
+                            <Button
+                                type="button"
+                                variant={pageType === "whiteboard" ? "solid" : "soft"}
+                                onClick={() => setPageType("whiteboard")}
+                            >
+                                Whiteboard
+                            </Button>
+                        </Flex>
+                    </label>
+                    <label>
+                        <Text as="div" size="2" mb="1" weight="bold">
+                            Page Title
                         </Text>
                         <TextField.Root
                             value={name}
                             onChange={(ev) => handleInput(ev.target.value)}
-                            placeholder="Untitled page"
+                            placeholder={pageType === "whiteboard" ? "Untitled whiteboard" : "Untitled page"}
                         />
                     </label>
                     <Flex gap="3" mt="4" justify="end">

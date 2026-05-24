@@ -60,14 +60,14 @@ export class TextUtil extends ShapeUtil<TextShape> {
     currentVersion: 1,
     migrators: {
       1: {
-        up: record => ({ ...record, props: { fontSize: 16, color: '#cdd6f4', ...(record['props'] as object) } }),
+        up: record => ({ ...record, props: { fontSize: 16, color: '#221f26', ...(record['props'] as object) } }),
         down: record => record,
       },
     },
   });
 
   getDefaultProps(): TextProps {
-    return { text: '', fontSize: 16, color: '#cdd6f4' };
+    return { text: '', fontSize: 16, color: '#221f26' };
   }
 
   getGeometry(shape: TextShape) {

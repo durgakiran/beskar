@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { wbEditor } from './editor';
+import { wbTheme } from './theme';
 
 interface ContextMenuProps {
   position: { x: number; y: number } | null;
@@ -44,15 +45,15 @@ export function ContextMenu({ position, onClose }: ContextMenuProps) {
         position: 'fixed',
         left: position.x,
         top: position.y,
-        background: '#1e1e2e',
-        border: '1px solid #313244',
+        background: wbTheme.surface,
+        border: `1px solid ${wbTheme.border}`,
         borderRadius: 8,
-        boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
+        boxShadow: wbTheme.shadowStrong,
         padding: '8px 0',
         zIndex: 9999,
         minWidth: 180,
-        color: '#cdd6f4',
-        fontFamily: 'Inter, system-ui, sans-serif',
+        color: wbTheme.text,
+        fontFamily: 'inherit',
         fontSize: 13,
         userSelect: 'none',
       }}
@@ -61,13 +62,13 @@ export function ContextMenu({ position, onClose }: ContextMenuProps) {
       <MenuItem label="Copy" shortcut="Cmd+C" disabled={!hasSelection} onClick={() => { wbEditor.copy(selectedIds); onClose(); }} />
       <MenuItem label="Paste" shortcut="Cmd+V" disabled={false} onClick={handlePaste} />
       <MenuItem label="Duplicate" shortcut="Cmd+D" disabled={!hasSelection} onClick={() => { wbEditor.duplicateShapes(selectedIds, { x: 20, y: 20 }); onClose(); }} />
-      <div style={{ height: 1, background: '#313244', margin: '6px 0' }} />
+      <div style={{ height: 1, background: wbTheme.border, margin: '6px 0' }} />
       <MenuItem label="Bring to front" shortcut="Cmd+Shift+]" disabled={!hasSelection} onClick={() => { wbEditor.reorderShapes(selectedIds, 'front'); onClose(); }} />
       <MenuItem label="Bring forward" shortcut="Cmd+]" disabled={!hasSelection} onClick={() => { wbEditor.reorderShapes(selectedIds, 'forward'); onClose(); }} />
       <MenuItem label="Send backward" shortcut="Cmd+[" disabled={!hasSelection} onClick={() => { wbEditor.reorderShapes(selectedIds, 'backward'); onClose(); }} />
       <MenuItem label="Send to back" shortcut="Cmd+Shift+[" disabled={!hasSelection} onClick={() => { wbEditor.reorderShapes(selectedIds, 'back'); onClose(); }} />
-      <div style={{ height: 1, background: '#313244', margin: '6px 0' }} />
-      <MenuItem label="Delete" shortcut="Backspace" disabled={!hasSelection} color="#f38ba8" onClick={() => { wbEditor.deleteShapes(selectedIds); onClose(); }} />
+      <div style={{ height: 1, background: wbTheme.border, margin: '6px 0' }} />
+      <MenuItem label="Delete" shortcut="Backspace" disabled={!hasSelection} color={wbTheme.dangerText} onClick={() => { wbEditor.deleteShapes(selectedIds); onClose(); }} />
     </div>
   );
 }
@@ -99,7 +100,7 @@ function MenuItem({
         background: 'transparent',
       }}
       onPointerEnter={event => {
-        if (!disabled) event.currentTarget.style.background = '#313244';
+        if (!disabled) event.currentTarget.style.background = wbTheme.surfaceInset;
       }}
       onPointerLeave={event => {
         if (!disabled) event.currentTarget.style.background = 'transparent';

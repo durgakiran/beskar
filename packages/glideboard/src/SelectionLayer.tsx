@@ -5,6 +5,7 @@ import {
   type GlideShape,
   type ResizeHandle,
 } from '@durgakiran/glideline';
+import { wbTheme } from './theme';
 import { useSignalValue } from './useSignalValue';
 import { wbEditor } from './editor';
 
@@ -77,8 +78,8 @@ export function SelectionLayer() {
           y={startWorldY - hs / 2}
           width={hs}
           height={hs}
-          fill="#1e1e2e"
-          stroke="#89b4fa"
+          fill={wbTheme.selectionFill}
+          stroke={wbTheme.accent}
           strokeWidth={1 / camera.z}
           transform={`rotate(45, ${startWorldX}, ${startWorldY})`}
           style={{ cursor: 'crosshair' }}
@@ -89,8 +90,8 @@ export function SelectionLayer() {
           y={endWorldY - hs / 2}
           width={hs}
           height={hs}
-          fill="#1e1e2e"
-          stroke="#89b4fa"
+          fill={wbTheme.selectionFill}
+          stroke={wbTheme.accent}
           strokeWidth={1 / camera.z}
           transform={`rotate(45, ${endWorldX}, ${endWorldY})`}
           style={{ cursor: 'crosshair' }}
@@ -101,8 +102,8 @@ export function SelectionLayer() {
             cx={bendPoint.x}
             cy={bendPoint.y}
             r={5 / camera.z}
-            fill="#89b4fa"
-            stroke="#1e1e2e"
+            fill={wbTheme.accent}
+            stroke={wbTheme.selectionFill}
             strokeWidth={1 / camera.z}
             style={{ cursor: 'grab' }}
           />
@@ -142,7 +143,7 @@ export function SelectionLayer() {
         width={width}
         height={height}
         fill="none"
-        stroke="#89b4fa"
+        stroke={wbTheme.accent}
         strokeWidth={1 / camera.z}
         strokeDasharray={`${4 / camera.z} ${2 / camera.z}`}
         pointerEvents="none"
@@ -158,8 +159,8 @@ export function SelectionLayer() {
               y={handle.py - hs / 2}
               width={hs}
               height={hs}
-              fill="#1e1e2e"
-              stroke="#89b4fa"
+              fill={wbTheme.selectionFill}
+              stroke={wbTheme.accent}
               strokeWidth={1 / camera.z}
               rx={1 / camera.z}
               style={{ cursor: handleCursor(handle.id) }}
@@ -170,8 +171,8 @@ export function SelectionLayer() {
             cx={minX + width / 2}
             cy={minY - ROTATION_HANDLE_OFFSET / camera.z}
             r={5 / camera.z}
-            fill="#1e1e2e"
-            stroke="#89b4fa"
+            fill={wbTheme.selectionFill}
+            stroke={wbTheme.accent}
             strokeWidth={1 / camera.z}
             style={{ cursor: 'grab' }}
           />
@@ -180,7 +181,7 @@ export function SelectionLayer() {
             y1={minY}
             x2={minX + width / 2}
             y2={minY - ROTATION_HANDLE_OFFSET / camera.z}
-            stroke="#89b4fa"
+            stroke={wbTheme.accent}
             strokeWidth={1 / camera.z}
             pointerEvents="none"
           />
@@ -220,8 +221,8 @@ export function MarqueeOverlay() {
       y={rect.minY}
       width={rect.w}
       height={rect.h}
-      fill="#89b4fa11"
-      stroke="#89b4fa"
+      fill={wbTheme.accentSurface}
+      stroke={wbTheme.accent}
       strokeWidth={1 / camera.z}
       strokeDasharray={`${3 / camera.z} ${2 / camera.z}`}
       pointerEvents="none"

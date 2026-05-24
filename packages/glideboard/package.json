@@ -1,6 +1,6 @@
 {
   "name": "@durgakiran/glideboard",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Reusable React whiteboard UI built on @durgakiran/glideline",
   "type": "module",
   "main": "./dist/index.js",

@@ -6,6 +6,7 @@ import {
   wbEditor,
 } from './editor';
 import { StylePanel } from './StylePanel';
+import { wbTheme } from './theme';
 import { Toolbar } from './Toolbar';
 import { ZoomWidget, fitToScreen } from './ZoomWidget';
 import { useSignalValue } from './useSignalValue';
@@ -97,7 +98,7 @@ export function WhiteboardApp() {
         position: 'relative',
         outline: 'none',
         overflow: 'hidden',
-        background: '#181825',
+        background: wbTheme.appBg,
       }}
       tabIndex={0}
       onKeyDown={onKeyDown}
@@ -119,21 +120,22 @@ export function WhiteboardApp() {
           left: '50%',
           transform: 'translateX(-50%)',
           zIndex: 50,
-          background: '#1e1e2e',
-          border: '1px solid #313244',
-          borderRadius: 8,
+          background: wbTheme.surface,
+          border: `1px solid ${wbTheme.border}`,
+          borderRadius: 10,
           padding: '4px 12px',
           fontSize: 11,
-          color: '#6c7086',
-          fontFamily: 'Inter, system-ui, sans-serif',
+          color: wbTheme.textSoft,
+          fontFamily: 'inherit',
           pointerEvents: 'none',
           userSelect: 'none',
+          boxShadow: wbTheme.statusShadow,
         }}
       >
         {shapeCount} shape{shapeCount !== 1 ? 's' : ''}
         {camera && ` · ${Math.round(camera.z * 100)}%`}
         {' · '}
-        <span style={{ color: '#89b4fa' }}>
+        <span style={{ color: wbTheme.accentText }}>
           {readOnly ? 'Read-only whiteboard' : 'Double-click to edit labels'}
         </span>
       </div>

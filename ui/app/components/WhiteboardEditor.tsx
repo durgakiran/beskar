@@ -5,32 +5,46 @@ import { usePUT } from "app/core/http/hooks/usePut";
 import { useEffect, useMemo, useState, useRef } from "react";
 import * as Y from "yjs";
 import { WebrtcProvider } from "y-webrtc";
-import { Whiteboard, useYjsStore } from "@durgakiran/whiteboard";
+import { Glideboard } from "@durgakiran/glideboard";
 import { Spinner, Flex, Button, IconButton } from "@radix-ui/themes";
 import { Buffer } from "buffer";
-import "@durgakiran/whiteboard/styles.css";
 import { useRouter } from "next/navigation";
 import { HiHome } from "react-icons/hi";
 import { getSignalingUrl } from "app/core/signaling";
 
-export default function WhiteboardEditor({ slug, readOnly = false }: { slug: string[]; readOnly?: boolean }) {
+export default function WhiteboardEditor({
+    slug,
+    readOnly = false,
+    fillParent = false,
+}: {
+    slug: string[];
+    readOnly?: boolean;
+    fillParent?: boolean;
+}) {
     const spaceId = slug[0];
     const pageId = slug[1];
     const router = useRouter();
+    const fetchPath = readOnly
+        ? `editor/space/${spaceId}/whiteboard/${pageId}`
+        : `editor/space/${spaceId}/whiteboard/${pageId}/edit`;
 
-    // Fetch initial state
-    const [{ data: fetchRes, isLoading: fetching, errors: fetchErr }, fetchWhiteboard] = useGet<Response<any>>(`editor/space/${spaceId}/whiteboard/${pageId}`);
-    // Update state API
+    const [{ data: fetchRes, isLoading: fetching, errors: fetchErr }, fetchWhiteboard] = useGet<Response<{
+        id: number;
+        docId: number;
+        data?: string | null;
+        title: string;
+        pageId: number;
+        spaceId: string;
+    }>>(fetchPath);
     const [{ isLoading: updating }, updateWhiteboard] = usePUT<Response<any>, { data: string }>(`editor/space/${spaceId}/whiteboard/${pageId}`);
-    // Fetch current user profile (for collaboration display name)
     const [{ data: profileData }, getProfile] = useGet<Response<{ id: string; name: string; email: string }>>(`profile/details`);
 
     const [isDbLoaded, setIsDbLoaded] = useState(false);
-    // Only create a provider in edit mode; view mode doesn't need real-time collaboration
     const [provider, setProvider] = useState<WebrtcProvider | null>(null);
     const dirtyRef = useRef(false);
+    const didApplyInitialDataRef = useRef(false);
+    const documentSessionKey = `${spaceId}:${pageId}`;
 
-    // Derive user object from profile for collaboration awareness
     const collaborationUser = useMemo(() => {
         if (!profileData?.data) return null;
         const r = Math.floor(Math.random() * 106) + 150;
@@ -40,10 +54,11 @@ export default function WhiteboardEditor({ slug, readOnly = false }: { slug: str
         return { id: profileData.data.id, name: profileData.data.name, color };
     }, [profileData]);
 
-    // 1. Initialize Yjs document
-    const yDoc = useMemo(() => new Y.Doc(), []);
+    const yDoc = useMemo(() => {
+        void documentSessionKey;
+        return new Y.Doc();
+    }, [documentSessionKey]);
 
-    // 2. Connect to WebRTC — only in edit mode
     useEffect(() => {
         if (readOnly) return; // no collaboration in view mode
         const _provider = new WebrtcProvider(pageId + "-space-" + spaceId, yDoc, {
@@ -58,22 +73,23 @@ export default function WhiteboardEditor({ slug, readOnly = false }: { slug: str
         };
     }, [yDoc, spaceId, pageId, readOnly]);
 
-    // 3. Fetch initial data and profile
     useEffect(() => {
+        didApplyInitialDataRef.current = false;
+        setIsDbLoaded(false);
         fetchWhiteboard();
         getProfile();
-    }, []);
+        return () => {
+            yDoc.destroy();
+        };
+    }, [fetchWhiteboard, getProfile, yDoc]);
 
-    // 4. Merge initial data into YDoc
     useEffect(() => {
-        if (!fetchRes) return;
-
-        // Data structure from FetchWhiteboard
-        const dbData = fetchRes.data?.data;
-        if (dbData) {
+        if (!fetchRes || didApplyInitialDataRef.current) return;
+        didApplyInitialDataRef.current = true;
+        const encodedData = fetchRes.data?.data;
+        if (encodedData) {
             try {
-                // If it is a fresh uninitialized page, data might be empty.
-                const update = Buffer.from(dbData, 'base64');
+                const update = Buffer.from(encodedData, 'base64');
                 Y.applyUpdate(yDoc, update);
             } catch (err) {
                 console.error("Error applying init dbData to yDoc", err);
@@ -85,7 +101,7 @@ export default function WhiteboardEditor({ slug, readOnly = false }: { slug: str
     useEffect(() => {
         if (readOnly) return;
 
-        const handleUpdate = (update: Uint8Array, origin: any) => {
+        const handleUpdate = () => {
             dirtyRef.current = true;
         };
         yDoc.on('update', handleUpdate);
@@ -105,7 +121,7 @@ export default function WhiteboardEditor({ slug, readOnly = false }: { slug: str
             yDoc.off('update', handleUpdate);
             clearInterval(syncInterval);
         };
-    }, [yDoc, isDbLoaded, readOnly]);
+    }, [isDbLoaded, readOnly, updateWhiteboard, yDoc]);
 
     // 5. Set awareness user from profile (edit mode only)
     useEffect(() => {
@@ -135,7 +151,18 @@ export default function WhiteboardEditor({ slug, readOnly = false }: { slug: str
     // View mode: the page already has a header, so render canvas directly.
     if (!readOnly) {
         return (
-            <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 57px)', marginTop: '-17px', marginLeft: '-1rem', marginRight: '-1rem' }}>
+            <div
+                style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    height: 'calc(100vh - 57px)',
+                    marginTop: '-17px',
+                    width: '100%',
+                    maxWidth: '100%',
+                    minWidth: 0,
+                    overflow: 'hidden',
+                }}
+            >
                 {/* Header — same visual language as FixedMenu in the document editor */}
                 <Flex
                     align="center"
@@ -145,6 +172,8 @@ export default function WhiteboardEditor({ slug, readOnly = false }: { slug: str
                     gap="4"
                     style={{
                         width: '100%',
+                        maxWidth: '100%',
+                        minWidth: 0,
                         borderBottom: '1px solid var(--gray-6)',
                         minHeight: '52px',
                         backgroundColor: 'white',
@@ -154,7 +183,7 @@ export default function WhiteboardEditor({ slug, readOnly = false }: { slug: str
                     }}
                 >
                     {/* Left: Home icon */}
-                    <Flex align="center" gap="2" pr="4" style={{ borderRight: '1px solid var(--gray-6)', height: '32px' }}>
+                    <Flex align="center" gap="2" pr="4" style={{ borderRight: '1px solid var(--gray-6)', height: '32px', flexShrink: 0 }}>
                         <IconButton
                             variant="ghost"
                             size="2"
@@ -167,21 +196,21 @@ export default function WhiteboardEditor({ slug, readOnly = false }: { slug: str
                     </Flex>
 
                     {/* Center: Page title */}
-                    <Flex style={{ flex: 1 }} align="center">
+                    <Flex style={{ flex: 1, minWidth: 0 }} align="center">
                         <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--gray-11)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                             {pageTitle}
                         </span>
                     </Flex>
 
                     {/* Right: Close button */}
-                    <Button size="2" variant="ghost" color="gray" onClick={handleClose}>
+                    <Button size="2" variant="ghost" color="gray" onClick={handleClose} style={{ flexShrink: 0 }}>
                         Close
                     </Button>
                 </Flex>
 
                 {/* Canvas */}
-                <div style={{ flex: 1, position: 'relative' }}>
-                    <WhiteboardCanvas yDoc={yDoc} provider={provider} fetchErr={fetchErr} readOnly={readOnly} userName={collaborationUser?.name} />
+                <div style={{ flex: 1, position: 'relative', minWidth: 0 }}>
+                    <WhiteboardCanvas yDoc={yDoc} provider={provider} fetchErr={fetchErr} readOnly={readOnly} collaborationUser={collaborationUser} />
                 </div>
             </div>
         );
@@ -189,35 +218,37 @@ export default function WhiteboardEditor({ slug, readOnly = false }: { slug: str
 
     // View mode: render canvas directly, no sub-header
     return (
-        <div style={{ width: '100%', height: 'calc(100vh - 120px)' }}>
-            <WhiteboardCanvas yDoc={yDoc} provider={provider} fetchErr={fetchErr} readOnly={readOnly} userName={collaborationUser?.name} />
+        <div style={{ width: '100%', height: fillParent ? '100%' : 'calc(100vh - 120px)' }}>
+            <WhiteboardCanvas yDoc={yDoc} provider={provider} fetchErr={fetchErr} readOnly={readOnly} collaborationUser={collaborationUser} />
         </div>
     );
 }
 
-function WhiteboardCanvas({ yDoc, provider, fetchErr, readOnly, userName }: { yDoc: Y.Doc, provider: WebrtcProvider | null, fetchErr: any, readOnly: boolean, userName?: string }) {
-    const storeWithStatus = useYjsStore({
-        yDoc: yDoc as any,
-        yProvider: provider as any,
-        userName,
-    });
-
-    if (storeWithStatus.status === "loading") {
-        return (
-            <Flex justify="center" style={{ marginTop: '20vh' }}>
-                <Spinner size="3" />
-            </Flex>
-        );
-    }
-
+function WhiteboardCanvas({
+    yDoc,
+    provider,
+    fetchErr,
+    readOnly,
+    collaborationUser,
+}: {
+    yDoc: Y.Doc;
+    provider: WebrtcProvider | null;
+    fetchErr: any;
+    readOnly: boolean;
+    collaborationUser: { id: string; name: string; color: string } | null;
+}) {
     if (fetchErr) {
         return <Flex>Error loading whiteboard.</Flex>;
     }
 
     return (
         <div style={{ width: "100%", height: "100%", position: "relative" }}>
-            <Whiteboard
-                store={storeWithStatus.store}
+            <Glideboard
+                collaboration={{
+                    doc: yDoc,
+                    provider: provider as any,
+                    user: collaborationUser,
+                }}
                 readOnly={readOnly}
             />
         </div>

@@ -73,7 +73,7 @@ export default function Page({ params }: { params: Promise<{ spaceId: string }> 
 
     const space = data?.data;
     const pages = useMemo(
-        () => (pagesData?.data || []).filter((page) => page.type !== "whiteboard"),
+        () => (pagesData?.data || []),
         [pagesData?.data],
     );
     const isArchived = Boolean(space?.archivedAt);

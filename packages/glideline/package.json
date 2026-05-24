@@ -1,9 +1,33 @@
 {
-  "name": "glideline",
+  "name": "@durgakiran/glideline",
   "version": "0.0.1",
   "description": "",
-  "main": "index.js",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/durgakiran/beskar.git"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
   "scripts": {
+    "clean": "rm -rf dist",
+    "build": "npm run clean && tsc -p tsconfig.build.json",
+    "prepublishOnly": "npm run build",
+    "publish:dry-run": "npm run build && npm pack --dry-run",
+    "publish:github": "npm run build && npm publish",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",

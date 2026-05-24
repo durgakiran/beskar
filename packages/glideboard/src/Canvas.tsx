@@ -10,10 +10,11 @@ import {
 } from '@durgakiran/glideline';
 import { readOnlySignal, wbEditor } from './editor';
 import { MarqueeOverlay, SelectionLayer } from './SelectionLayer';
+import { wbTheme } from './theme';
 import { useSignalValue } from './useSignalValue';
 
 const HANDLE_SIZE = 8;
-const SELECTION_HIGHLIGHT_STROKE = '#89b4fa';
+const SELECTION_HIGHLIGHT_STROKE = wbTheme.accent;
 const BINDING_PREVIEW_STROKE = '#a6e3a1';
 const BINDING_SOURCE_PREVIEW_STROKE = '#74c7ec';
 
@@ -75,7 +76,7 @@ function Grid() {
         height={spacing}
         patternUnits="userSpaceOnUse"
       >
-        <circle cx={dotR} cy={dotR} r={dotR} fill="#313244" />
+        <circle cx={dotR} cy={dotR} r={dotR} fill={wbTheme.grid} />
       </pattern>
     </defs>
   );
@@ -202,7 +203,7 @@ export function BindingPreviewOverlay() {
             cx={anchor.point.x}
             cy={anchor.point.y}
             r={anchorRadius}
-            fill="#181825"
+            fill={wbTheme.selectionFill}
             stroke={stroke}
             strokeWidth={2}
             vectorEffect="non-scaling-stroke"
@@ -215,7 +216,7 @@ export function BindingPreviewOverlay() {
           cy={candidate.point.y}
           r={activeRadius}
           fill={stroke}
-          stroke="#181825"
+          stroke={wbTheme.selectionFill}
           strokeWidth={2}
           vectorEffect="non-scaling-stroke"
           pointerEvents="none"
@@ -280,7 +281,7 @@ export function InlineEditor() {
     ? {
         fontFamily: FONT_FAMILIES[(shape.props.font as keyof typeof FONT_FAMILIES) ?? 'sans'],
         fontSize: FONT_SIZES[(shape.props.fontSize as keyof typeof FONT_SIZES) ?? 'md'] * camera.z,
-        color: String(shape.props.labelColor ?? '#1e1e2e'),
+        color: String(shape.props.labelColor ?? wbTheme.text),
         background: STICKY_COLORS[String(shape.props.color ?? 'yellow') as keyof typeof STICKY_COLORS] ?? '#f9e2af',
         textAlign: String(shape.props.textAlign ?? 'left') as React.CSSProperties['textAlign'],
       }
@@ -288,7 +289,7 @@ export function InlineEditor() {
       ? {
           fontFamily: 'Inter, system-ui, sans-serif',
           fontSize: Number(shape.props.fontSize ?? 16) * camera.z,
-          color: String(shape.props.color ?? '#cdd6f4'),
+          color: String(shape.props.color ?? wbTheme.text),
           background: 'transparent',
           textAlign: 'left' as React.CSSProperties['textAlign'],
         }
@@ -346,7 +347,7 @@ export function InlineEditor() {
         top: topLeft.y,
         width,
         height,
-        border: '1px solid #89b4fa',
+        border: `1px solid ${wbTheme.accent}`,
         outline: 'none',
         resize: 'none',
         padding: shape.type === 'sticky-note' ? 12 : 4,
@@ -494,7 +495,7 @@ export function Canvas() {
       style={{
         flex: 1,
         position: 'relative',
-        background: '#181825',
+        background: wbTheme.canvasBg,
         overflow: 'hidden',
         touchAction: 'none',
         outline: 'none',

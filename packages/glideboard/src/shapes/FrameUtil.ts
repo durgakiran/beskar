@@ -30,14 +30,14 @@ export class FrameUtil extends ShapeUtil<FrameShape> {
     currentVersion: 1,
     migrators: {
       1: {
-        up: record => ({ ...record, props: { label: 'Frame', color: '#313244', ...(record['props'] as object) } }),
+        up: record => ({ ...record, props: { label: 'Frame', color: '#605c67', ...(record['props'] as object) } }),
         down: record => record,
       },
     },
   });
 
   getDefaultProps(): FrameProps {
-    return { w: 400, h: 300, label: 'Frame', color: '#313244' };
+    return { w: 400, h: 300, label: 'Frame', color: '#605c67' };
   }
 
   getGeometry(shape: FrameShape) {

@@ -1,6 +1,7 @@
 "use client";
 import { TipTap } from "@editor";
 import { useGet } from "@http/hooks";
+import WhiteboardEditor from "@components/WhiteboardEditor";
 import { PageParams } from "app/space/types";
 import { use, useEffect, useRef, useState } from "react";
 
@@ -57,16 +58,16 @@ export default function Page({ params }: { params: Promise<PageParams> }) {
         }
     }, [errors]);
 
+    if (metaData?.data?.type === "whiteboard") {
+        return <WhiteboardEditor slug={[spaceId, page]} />;
+    }
+
     if (loadingMeta || isLoading || !workerInitiated) {
         return <div className="px-8 py-6 text-sm text-neutral-700">Loading data...</div>;
     }
 
     if (metaErrors || errors) {
         return <div className="px-8 py-6 text-sm text-neutral-700">Something went wrong...</div>;
-    }
-
-    if (metaData?.data?.type === "whiteboard") {
-        return <div className="px-8 py-6 text-sm text-neutral-700">Whiteboards are temporarily unavailable.</div>;
     }
 
     if (data) {

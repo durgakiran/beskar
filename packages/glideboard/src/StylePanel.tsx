@@ -12,21 +12,23 @@ import {
   type ArrowRouteStyle,
   type ArrowheadStyle,
 } from './editor';
+import { wbTheme } from './theme';
 
 const panelStyle: React.CSSProperties = {
   position: 'absolute',
   right: 12,
   top: 12,
   width: 240,
-  background: '#1e1e2e',
-  borderRadius: 8,
-  boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
+  background: wbTheme.surface,
+  borderRadius: 10,
+  border: `1px solid ${wbTheme.border}`,
+  boxShadow: wbTheme.shadow,
   padding: 12,
   display: 'flex',
   flexDirection: 'column',
   gap: 16,
-  color: '#cdd6f4',
-  fontFamily: 'sans-serif',
+  color: wbTheme.text,
+  fontFamily: 'inherit',
   zIndex: 100,
   userSelect: 'none',
   pointerEvents: 'auto',
@@ -36,7 +38,7 @@ const sectionTitleStyle: React.CSSProperties = {
   fontSize: 10,
   textTransform: 'uppercase',
   letterSpacing: 0.5,
-  color: '#6c7086',
+  color: wbTheme.textSoft,
   marginBottom: 8,
   fontWeight: 600,
 };
@@ -54,9 +56,9 @@ function IconButton({ active, onClick, children }: { active: boolean; onClick: (
         flex: 1,
         height: 28,
         borderRadius: 4,
-        border: `1px solid ${active ? '#89b4fa' : '#313244'}`,
-        background: active ? '#89b4fa22' : 'transparent',
-        color: active ? '#89b4fa' : '#bac2de',
+        border: `1px solid ${active ? wbTheme.accent : wbTheme.border}`,
+        background: active ? wbTheme.accentSurface : 'transparent',
+        color: active ? wbTheme.accentText : wbTheme.textMuted,
         cursor: 'pointer',
         fontSize: 12,
         display: 'flex',
@@ -150,10 +152,10 @@ export function StylePanel() {
                     width: 24,
                     height: 24,
                     borderRadius: 4,
-                    border: `2px solid ${active ? '#cba6f7' : 'transparent'}`,
+                    border: `2px solid ${active ? wbTheme.accent : 'transparent'}`,
                     background: hex,
                     cursor: 'pointer',
-                    boxShadow: active ? '0 0 0 1px #1e1e2e inset' : 'none',
+                    boxShadow: active ? `0 0 0 1px ${wbTheme.surface} inset` : 'none',
                   }}
                 />
               );
@@ -177,10 +179,10 @@ export function StylePanel() {
                     width: 24,
                     height: 24,
                     borderRadius: 4,
-                    border: `2px solid ${active ? '#cba6f7' : 'transparent'}`,
+                    border: `2px solid ${active ? wbTheme.accent : 'transparent'}`,
                     background: hex,
                     cursor: 'pointer',
-                    boxShadow: active ? '0 0 0 1px #1e1e2e inset' : 'none',
+                    boxShadow: active ? `0 0 0 1px ${wbTheme.surface} inset` : 'none',
                   }}
                 />
               );

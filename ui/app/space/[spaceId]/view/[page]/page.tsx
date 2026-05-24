@@ -2,6 +2,7 @@
 
 import ReadOnlyContentMain, { type ReadOnlyBreadcrumb, type ReadOnlyCapabilities, type ReadOnlyMeta } from "@components/ReadOnlyContentMain";
 import ToastComponent from "@components/ui/ToastComponent";
+import WhiteboardEditor from "@components/WhiteboardEditor";
 import { TipTap, AttachmentPanel } from "@editor";
 import type { AttachmentRef } from "@durgakiran/editor";
 import { useGet, useDelete } from "@http/hooks";
@@ -17,7 +18,7 @@ interface ViewSpaceState {
 interface ViewResponseData {
     pageId: number;
     spaceId: string;
-    pageType: "document";
+    pageType: "document" | "whiteboard";
     title: string;
     document: any | null;
     breadcrumbs: ReadOnlyBreadcrumb[];
@@ -34,7 +35,7 @@ interface PageMetadataResponse {
 
 export default function Page({ params }: { params: Promise<{ page: string; spaceId: string }> }) {
     const { page, spaceId } = use(params);
-    const workerRef = useRef<Worker>(null);
+    const workerRef = useRef<Worker | null>(null);
     const [workerInitiated, setWorkerInitiated] = useState(false);
     const [content, setContent] = useState();
     const [isSidePanelOpen, setIsSidePanelOpen] = useState(false);
@@ -52,6 +53,14 @@ export default function Page({ params }: { params: Promise<{ page: string; space
     const title = viewData?.title || viewData?.document?.title || "";
     const attachments = viewData?.attachments ?? [];
     const commentPresentation = isMobileViewport || isTabletViewport ? "bottom-sheet" : "docked";
+    const shellCapabilities = useMemo<ReadOnlyCapabilities | null>(() => {
+        if (!viewData) return null;
+        if (pageType !== "whiteboard") return viewData.capabilities;
+        return {
+            ...viewData.capabilities,
+            canComment: false,
+        };
+    }, [pageType, viewData]);
 
     useEffect(() => {
         const syncViewport = () => {
@@ -66,6 +75,13 @@ export default function Page({ params }: { params: Promise<{ page: string; space
     }, []);
 
     useEffect(() => {
+        if (pageType !== "document") {
+            setWorkerInitiated(false);
+            workerRef.current?.terminate();
+            workerRef.current = null;
+            return;
+        }
+
         workerRef.current = new Worker("/workers/editor.js", { type: "module" });
         workerRef.current.onmessage = (e) => {
             switch (e.data.type) {
@@ -86,16 +102,20 @@ export default function Page({ params }: { params: Promise<{ page: string; space
         return () => {
             workerRef.current?.terminate();
         };
-    }, []);
+    }, [pageType]);
 
     useEffect(() => {
         getMetadata();
     }, [getMetadata]);
 
     useEffect(() => {
-        if (workerInitiated && pageType === "document") {
+        if (!pageType) return;
+        if (pageType === "document") {
+            if (!workerInitiated) return;
             fetchDocument();
+            return;
         }
+        fetchDocument();
     }, [fetchDocument, pageType, workerInitiated]);
 
     useEffect(() => {
@@ -126,8 +146,8 @@ export default function Page({ params }: { params: Promise<{ page: string; space
     };
 
     const hasMainErrors = Boolean(metaErrors || documentErrors);
-    const isDocumentLoading = pageType === "document" && (!workerInitiated || loadingDocument);
-    const showShell = pageType === "document" && !loadingMetadata && !isDocumentLoading && !hasMainErrors;
+    const isPageLoading = pageType === "document" ? (!workerInitiated || loadingDocument) : loadingDocument;
+    const showShell = Boolean(pageType && !loadingMetadata && !isPageLoading && !hasMainErrors && viewData && shellCapabilities);
     const readOnlyContent = useMemo(() => {
         if (!viewData?.document || !content) return null;
         return (
@@ -146,9 +166,9 @@ export default function Page({ params }: { params: Promise<{ page: string; space
                 commentPresentation={commentPresentation}
             />
         );
-    }, [commentPresentation, content, isSidePanelOpen, page, title, viewData?.document]);
+    }, [commentPresentation, content, isSidePanelOpen, page, spaceId, title, viewData?.document]);
 
-    if (loadingMetadata || isDocumentLoading) {
+    if (loadingMetadata || isPageLoading) {
         return (
             <Flex align="center" justify="center" p="4">
                 <Spinner size="3" />
@@ -161,16 +181,6 @@ export default function Page({ params }: { params: Promise<{ page: string; space
             <Flex align="center" justify="center" className="min-h-[40vh] px-6">
                 <Text size="3" className="text-neutral-700">
                     Something went wrong while loading this page.
-                </Text>
-            </Flex>
-        );
-    }
-
-    if (pageType === "whiteboard") {
-        return (
-            <Flex align="center" justify="center" className="min-h-[40vh] px-6">
-                <Text size="3" className="text-neutral-700">
-                    Whiteboards are temporarily unavailable.
                 </Text>
             </Flex>
         );
@@ -195,11 +205,11 @@ export default function Page({ params }: { params: Promise<{ page: string; space
                     title={title}
                     breadcrumbs={viewData.breadcrumbs}
                     archived={Boolean(viewData.space?.archivedAt)}
-                    capabilities={viewData.capabilities}
+                    capabilities={shellCapabilities!}
                     meta={viewData.meta}
                     spaceName={viewData.space?.name ?? null}
                     attachments={
-                        attachments.length ? (
+                        pageType === "document" && attachments.length ? (
                             <AttachmentPanel
                                 attachments={attachments}
                                 pageId={Number(page)}
@@ -208,13 +218,24 @@ export default function Page({ params }: { params: Promise<{ page: string; space
                             />
                         ) : undefined
                     }
-                    isCommentsOpen={isSidePanelOpen}
+                    isCommentsOpen={pageType === "document" ? isSidePanelOpen : false}
                     commentPresentation={commentPresentation}
-                    onOpenComments={() => setIsSidePanelOpen((current) => !current)}
+                    onOpenComments={() => {
+                        if (pageType === "document") {
+                            setIsSidePanelOpen((current) => !current);
+                        }
+                    }}
                     onEdit={onEdit}
                     onDelete={onDelete}
                 >
-                    {readOnlyContent ?? (
+                    {pageType === "whiteboard" ? (
+                        <Box
+                            className="overflow-hidden rounded-[18px] border border-[#d4d1da] bg-white shadow-[0_10px_30px_rgba(11,10,42,0.04)]"
+                            style={{ height: "72vh", minHeight: "540px" }}
+                        >
+                            <WhiteboardEditor slug={[spaceId, page]} readOnly fillParent />
+                        </Box>
+                    ) : readOnlyContent ?? (
                         <Box className="rounded-[18px] border border-[#d4d1da] bg-white px-5 py-6 text-[#605c67] shadow-[0_10px_30px_rgba(11,10,42,0.04)] md:px-8">
                             <Text size="3">
                                 This document has no published content yet.
