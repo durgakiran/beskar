@@ -1,6 +1,6 @@
 {
   "name": "glideline",
-  "version": "1.0.0",
+  "version": "0.0.1",
   "description": "",
   "main": "index.js",
   "scripts": {
@@ -21,6 +21,7 @@
   "devDependencies": {
     "@playwright/test": "^1.60.0",
     "@types/node": "^25.7.0",
+    "@types/rbush": "^4.0.0",
     "happy-dom": "^20.9.0",
     "ts-node": "^10.9.2",
     "tsx": "^4.21.0",

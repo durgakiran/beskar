@@ -130,4 +130,5 @@ export type {
 } from './shapes/GeoShapeUtil';
 
 // Phase B — SelectTool extensions (resize + rotation types)
-export type { ResizeHandle, ResizeInfo, RotationInfo } from './tools/SelectTool';
+export type { ResizeHandle, ResizeInfo } from './shapes/ShapeUtil';
+export type { RotationInfo } from './tools/SelectTool';

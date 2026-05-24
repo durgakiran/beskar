@@ -1,8 +1,12 @@
-
-import { GlideRecord, ShapeUtil } from "./types";
+import type { BaseRecord } from "./types";
 import { Box } from "./math";
 
-export interface BoxRecord extends GlideRecord {
+interface LegacyShapeUtil<T extends BaseRecord> {
+    getBounds(shape: T): Box;
+    render(shape: T): string;
+}
+
+export interface BoxRecord extends BaseRecord {
     type: 'box';
     x: number;
     y: number;
@@ -14,7 +18,7 @@ export interface BoxRecord extends GlideRecord {
     }
 }
 
-export class BoxShapeUtil implements ShapeUtil<BoxRecord> {
+export class BoxShapeUtil implements LegacyShapeUtil<BoxRecord> {
     static type = 'box' as const;
     type = 'box' as const;
 
@@ -34,7 +38,7 @@ export class BoxShapeUtil implements ShapeUtil<BoxRecord> {
     }
 }
 
-export interface EllipseRecord extends GlideRecord {
+export interface EllipseRecord extends BaseRecord {
     type: 'ellipse';
     x: number;
     y: number;
@@ -46,7 +50,7 @@ export interface EllipseRecord extends GlideRecord {
     }
 }
 
-export class EllipseShapeUtil implements ShapeUtil<EllipseRecord> {
+export class EllipseShapeUtil implements LegacyShapeUtil<EllipseRecord> {
     static type = 'ellipse' as const;
     type = 'ellipse' as const;
 
