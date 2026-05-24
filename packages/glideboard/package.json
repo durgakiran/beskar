@@ -1,0 +1,60 @@
+{
+  "name": "@durgakiran/glideboard",
+  "version": "0.0.1",
+  "description": "Reusable React whiteboard UI built on @durgakiran/glideline",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/durgakiran/beskar.git"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
+  "scripts": {
+    "clean": "rm -rf dist",
+    "build": "npm run clean && tsc -p tsconfig.build.json",
+    "prepublishOnly": "npm run build",
+    "publish:dry-run": "npm run build && npm pack --dry-run",
+    "publish:github": "npm run build && npm publish",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "test:all": "vitest run && playwright test"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@durgakiran/glideline": "0.0.1",
+    "@preact/signals": "^2.9.0",
+    "yjs": "^13.6.27"
+  },
+  "peerDependencies": {
+    "react": ">=18",
+    "react-dom": ">=18"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.60.0",
+    "@testing-library/react": "^16.3.2",
+    "@types/node": "^25.7.0",
+    "@types/react": "^19.2.2",
+    "@types/react-dom": "^19.2.2",
+    "happy-dom": "^20.9.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.6"
+  }
+}
