@@ -251,6 +251,15 @@ func getDocumentList(spaceId uuid.UUID, userId uuid.UUID) ([]PageList, error) {
 	if len(pageIds) == 0 {
 		return pageList, nil
 	}
+	deleteablePageIDs, err := core.GetEntitiesWithPermission("page", "user", userId.String(), core.PAGE_DELETE)
+	if err != nil {
+		logger().Error(err.Error())
+		return pageList, errors.New(core.ErrorCode_name[core.ErrorCode_ERROR_CODE_PERMISSION_SERVER_ISSUE])
+	}
+	deleteablePages := make(map[string]struct{}, len(deleteablePageIDs))
+	for _, pageID := range deleteablePageIDs {
+		deleteablePages[pageID] = struct{}{}
+	}
 	connPool := core.GetPool()
 	ctx := context.Background()
 	conn, err := connPool.Acquire(ctx)
@@ -269,6 +278,10 @@ func getDocumentList(spaceId uuid.UUID, userId uuid.UUID) ([]PageList, error) {
 	if err != nil {
 		logger().Error(err.Error())
 		return pageList, errors.New(core.ErrorCode_name[core.ErrorCode_ERROR_WHILE_READING_ROWS])
+	}
+	for i := range pageList {
+		_, canDelete := deleteablePages[fmt.Sprintf("%d", pageList[i].PageId)]
+		pageList[i].CanDelete = canDelete
 	}
 	return pageList, nil
 }

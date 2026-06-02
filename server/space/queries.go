@@ -19,17 +19,24 @@ const (
 							WHERE
 								p.space_id = ANY($1)
 							GROUP BY p.space_id`
-	GET_PAGE_LIST_QUERY = `SELECT 
-								DISTINCT ON (p.id)
+	GET_PAGE_LIST_QUERY = `SELECT
 								p.id,
-								p.owner_id, 
-								p.parent_id, 
-								COALESCE(p.type, 'document') as type,
-								d.title, 
-								d.draft 
-							FROM 
-								core.page p  LEFT JOIN core.page_doc_map d ON ( p.id = d.page_id ) 
-							WHERE 
-								p.space_id = $1 and p.id = ANY($2)
-							ORDER BY p.id, d.version DESC`
+								p.owner_id,
+								p.parent_id,
+								COALESCE(p.type, 'document') AS type,
+								COALESCE(pr.title, d.title, 'Untitled') AS title,
+								COALESCE(d.draft, 0) AS draft
+							FROM
+								core.page p
+								LEFT JOIN LATERAL (
+									SELECT title, draft
+									FROM core.page_doc_map
+									WHERE page_id = p.id
+									ORDER BY version DESC
+									LIMIT 1
+								) d ON TRUE
+								LEFT JOIN project.projects pr ON pr.page_id = p.id
+							WHERE
+								p.space_id = $1 AND p.id = ANY($2)
+							ORDER BY p.id`
 )

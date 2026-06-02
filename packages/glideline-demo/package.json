@@ -10,8 +10,9 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@durgakiran/glideboard": "file:../glideboard",
     "@preact/signals": "^2.9.0",
-    "glideline": "file:../glideline",
+    "@durgakiran/glideline": "file:../glideline",
     "react": "^18.2.0",
     "react-dom": "^18.2.0"
   },

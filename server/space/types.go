@@ -44,6 +44,7 @@ type PageList struct {
 	ParentId int64     `json:"parentId" db:"parent_id"`
 	Draft    int8      `json:"draft" db:"draft"`
 	Type     string    `json:"type" db:"type"`
+	CanDelete bool     `json:"canDelete"`
 }
 
 type PageDescendant struct {

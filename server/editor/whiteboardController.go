@@ -1,6 +1,7 @@
 package editor
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -9,6 +10,7 @@ import (
 	"github.com/durgakiran/beskar/core"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 )
 
 func createWhiteboard(w http.ResponseWriter, r *http.Request) {
@@ -109,7 +111,65 @@ func getWhiteboard(w http.ResponseWriter, r *http.Request) {
 
 	outputDoc, err := FetchWhiteboard(inputDoc)
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			core.SendFailedReponse(w, r, http.StatusNotFound, "Whiteboard not found")
+			return
+		}
 		logger().Error(fmt.Sprintf("getWhiteboard: %s", err.Error()))
+		core.SendFailedReponse(w, r, http.StatusInternalServerError, "Could not get Whiteboard")
+		return
+	}
+
+	core.SendSuccessResponse(w, r, http.StatusOK, outputDoc)
+}
+
+func getWhiteboardToEdit(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	user, err := core.GetUserInfo(ctx)
+	if err != nil || user.Id == "" {
+		core.SendFailedReponse(w, r, http.StatusUnauthorized, "Unauthorized")
+		return
+	}
+	userIdStr := user.AId
+	userId, err := uuid.Parse(userIdStr)
+	if err != nil {
+		core.SendFailedReponse(w, r, http.StatusBadRequest, "Invalid user ID Format")
+		return
+	}
+	spaceId, err := uuid.Parse(chi.URLParam(r, "spaceId"))
+	if err != nil {
+		core.SendFailedReponse(w, r, http.StatusBadRequest, "Invalid space UUID")
+		return
+	}
+
+	pageIdStr := chi.URLParam(r, "pageId")
+	pageId, err := strconv.ParseInt(pageIdStr, 10, 64)
+	if err != nil {
+		core.SendFailedReponse(w, r, http.StatusBadRequest, "Invalid page ID")
+		return
+	}
+
+	hasPermission := core.ValidateUserPagePermission(pageIdStr, userId, "edit")
+	if !hasPermission {
+		core.SendFailedReponse(w, r, http.StatusForbidden, "Permission Denied: User cannot edit whiteboard")
+		return
+	}
+	if !ensureMutableSpace(w, r, spaceId) {
+		return
+	}
+
+	inputDoc := WhiteboardInput{
+		Id:      pageId,
+		SpaceId: spaceId,
+	}
+
+	outputDoc, err := FetchWhiteboard(inputDoc)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			core.SendFailedReponse(w, r, http.StatusNotFound, "Whiteboard not found")
+			return
+		}
+		logger().Error(fmt.Sprintf("getWhiteboardToEdit: %s", err.Error()))
 		core.SendFailedReponse(w, r, http.StatusInternalServerError, "Could not get Whiteboard")
 		return
 	}

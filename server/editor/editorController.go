@@ -568,6 +568,7 @@ func Router() *chi.Mux {
 	// Whiteboard endpoints
 	r.Post("/space/{spaceId}/whiteboard/create", createWhiteboard)
 	r.Get("/space/{spaceId}/whiteboard/{pageId}", getWhiteboard)
+	r.Get("/space/{spaceId}/whiteboard/{pageId}/edit", getWhiteboardToEdit)
 	r.Put("/space/{spaceId}/whiteboard/{pageId}", updateWhiteboard)
 	r.Delete("/space/{spaceId}/whiteboard/{pageId}", deleteWhiteboard)
 

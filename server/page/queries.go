@@ -16,11 +16,19 @@ const (
 								FROM
 									core.page p INNER JOIN pages p1 ON (p.id = p1.parent_id)
 							)
-							SELECT DISTINCT ON (p.id) 
-								p.id, p.parent_id, d.title 
+							SELECT
+								p.id,
+								p.parent_id,
+								COALESCE(pr.title, d.title, 'Untitled') AS title
 							FROM 
-								pages p LEFT JOIN 
-								core.page_doc_map d ON (p.id = d.page_id)
-							WHERE d.draft = 0
-							ORDER BY p.id, d.version desc`
+								pages p
+								LEFT JOIN LATERAL (
+									SELECT title
+									FROM core.page_doc_map
+									WHERE page_id = p.id AND draft = 0
+									ORDER BY version DESC
+									LIMIT 1
+								) d ON TRUE
+								LEFT JOIN project.projects pr ON pr.page_id = p.id
+							ORDER BY p.id`
 )

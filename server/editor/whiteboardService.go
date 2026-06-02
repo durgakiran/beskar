@@ -8,7 +8,15 @@ import (
 
 	"github.com/durgakiran/beskar/core"
 	"github.com/durgakiran/beskar/quota"
+	"github.com/jackc/pgx/v5"
 )
+
+func normalizeWhiteboardParentId(parentId int64) int64 {
+	if parentId <= 0 {
+		return -1
+	}
+	return parentId
+}
 
 func CreateWhiteboard(d WhiteboardInput) (int64, error) {
 	ctx := context.Background()
@@ -21,7 +29,7 @@ func CreateWhiteboard(d WhiteboardInput) (int64, error) {
 
 	var pgId int64
 	// Insert into core.page with type = 'whiteboard'
-	err = tx.QueryRow(ctx, newPageWithType, d.SpaceId, d.OwnerId, -1, time.Now(), 1, "whiteboard").Scan(&pgId)
+	err = tx.QueryRow(ctx, newPageWithType, d.SpaceId, d.OwnerId, normalizeWhiteboardParentId(d.ParentId), time.Now(), 1, "whiteboard").Scan(&pgId)
 	if err != nil {
 		logger().Error(fmt.Sprintf("CreateWhiteboard newPage err: %s", err.Error()))
 		return 0, err
@@ -50,13 +58,11 @@ func FetchWhiteboard(d WhiteboardInput) (WhiteboardData, error) {
 	ctx := context.Background()
 
 	var output WhiteboardData
-	// Query core.whiteboard_data + page_doc_map using getWhiteboardData query
 	row := core.GetPool().QueryRow(ctx, getWhiteboardData, d.Id, d.SpaceId)
 	err := row.Scan(&output.Id, &output.DocId, &output.Data, &output.Title, &output.PageId, &output.SpaceId)
 	if err != nil {
-		if err.Error() == "no rows in result set" {
-			// A whiteboard page exists but no data state was saved yet (fresh canvas)
-			return WhiteboardData{}, nil
+		if err == pgx.ErrNoRows {
+			return WhiteboardData{}, err
 		}
 		logger().Error(fmt.Sprintf("FetchWhiteboard queries err: %s", err.Error()))
 		return WhiteboardData{}, err

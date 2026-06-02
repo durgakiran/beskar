@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import WhiteboardApp from './whiteboard/WhiteboardApp';
+import GlideboardDemo from './GlideboardDemo';
 import Phase5Demo from './Phase5Demo';
 import Phase4Demo from './Phase4Demo';
 import Phase1Demo from './Phase1Demo';
@@ -10,7 +10,7 @@ import ShapesDemo from './ShapesDemo';
 import Phase3Demo from './Phase3Demo';
 
 const TABS = [
-  { id: 'whiteboard', label: '🎨 Whiteboard',         component: WhiteboardApp },
+  { id: 'whiteboard', label: '🎨 Whiteboard',         component: GlideboardDemo },
   { id: 'phase5',     label: 'Phase 5 — Performance', component: Phase5Demo },
   { id: 'phase4',     label: 'Phase 4 — Arrows',      component: Phase4Demo  },
   { id: 'phase3',     label: 'Phase 3 — Tools',       component: Phase3Demo  },
