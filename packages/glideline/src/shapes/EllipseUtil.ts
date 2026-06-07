@@ -60,8 +60,8 @@ export type EllipseShape = GlideShape<EllipseProps>;
 
 const fillStyleValidator = {
   validate(v: unknown): FillStyle {
-    if (!['none', 'semi', 'solid', 'pattern'].includes(v as string)) {
-      throw new Error(`fillStyle must be none|semi|solid|pattern, got "${v}"`);
+    if (!['none', 'semi', 'solid', 'pattern', 'lined'].includes(v as string)) {
+      throw new Error(`fillStyle must be none|semi|solid|pattern|lined, got "${v}"`);
     }
     return v as FillStyle;
   },
@@ -167,7 +167,7 @@ export class EllipseUtil extends ShapeUtil<EllipseShape> {
       h:           80,
       color:       'violet',
       opacity:     1,
-      fillStyle:   'solid',
+      fillStyle:   'none',
       strokeStyle: 'solid',
       strokeWidth: 'medium',
       label:       '',

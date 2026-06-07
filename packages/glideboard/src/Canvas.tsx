@@ -4,6 +4,7 @@ import {
   FONT_FAMILIES,
   FONT_SIZES,
   STICKY_COLORS,
+  TLDRAW_COLORS,
   type GlideShape,
   type ShapeId,
   type Vec2,
@@ -59,6 +60,37 @@ function renderSelectionHighlight(shape: GlideShape, isSelected: boolean) {
   return renderGeometryOutline(shape, SELECTION_HIGHLIGHT_STROKE, 'none', 2, 0.95);
 }
 
+function WhiteboardPatterns() {
+  return (
+    <>
+      {Object.entries(TLDRAW_COLORS).map(([name, hex]) => {
+        const dotId = `pattern-dot-${name}`;
+        const dotIdHex = `pattern-dot-${hex.replace('#', '')}`;
+        const linedId = `pattern-lined-${name}`;
+        const linedIdHex = `pattern-lined-${hex.replace('#', '')}`;
+
+        return (
+          <React.Fragment key={name}>
+            <pattern id={dotId} width="12" height="12" patternUnits="userSpaceOnUse">
+              <circle cx="6" cy="6" r="1.5" fill={hex} />
+            </pattern>
+            <pattern id={dotIdHex} width="12" height="12" patternUnits="userSpaceOnUse">
+              <circle cx="6" cy="6" r="1.5" fill={hex} />
+            </pattern>
+
+            <pattern id={linedId} width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+              <line x1="0" y1="0" x2="0" y2="8" stroke={hex} strokeWidth="1.2" />
+            </pattern>
+            <pattern id={linedIdHex} width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+              <line x1="0" y1="0" x2="0" y2="8" stroke={hex} strokeWidth="1.2" />
+            </pattern>
+          </React.Fragment>
+        );
+      })}
+    </>
+  );
+}
+
 function Grid() {
   const camera = useSignalValue(wbEditor.camera.signal)!;
   const spacing = 24 * camera.z;
@@ -78,6 +110,7 @@ function Grid() {
       >
         <circle cx={dotR} cy={dotR} r={dotR} fill={wbTheme.grid} />
       </pattern>
+      <WhiteboardPatterns />
     </defs>
   );
 }

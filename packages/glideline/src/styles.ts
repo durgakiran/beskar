@@ -39,7 +39,7 @@ export function resolveColor(color: string): string {
 // Enum types
 // ─────────────────────────────────────────────────────────────
 
-export type FillStyle   = 'none' | 'semi' | 'solid' | 'pattern';
+export type FillStyle   = 'none' | 'semi' | 'solid' | 'pattern' | 'lined';
 export type StrokeStyle = 'solid' | 'dashed' | 'dotted';
 export type SizeStyle   = 'thin' | 'medium' | 'thick' | 'xl';
 export type FontSize    = 'sm' | 'md' | 'lg' | 'xl';
@@ -84,6 +84,7 @@ export const FILL_OPACITIES: Record<FillStyle, number> = {
   semi:    0.3,
   solid:   1,
   pattern: 1,   // pattern is rendered separately
+  lined:   1,   // lined pattern is rendered separately
 };
 
 // ─────────────────────────────────────────────────────────────
@@ -93,7 +94,7 @@ export const FILL_OPACITIES: Record<FillStyle, number> = {
 export const StyleValidators = {
   fillStyle: {
     validate(v: unknown): FillStyle {
-      if (!['none', 'semi', 'solid', 'pattern'].includes(v as string)) throw new Error(`fillStyle must be none|semi|solid|pattern, got "${v}"`);
+      if (!['none', 'semi', 'solid', 'pattern', 'lined'].includes(v as string)) throw new Error(`fillStyle must be none|semi|solid|pattern|lined, got "${v}"`);
       return v as FillStyle;
     },
   },
@@ -191,16 +192,22 @@ export function hexWithOpacity(hex: string, opacity: number): string {
  * Pattern fills return a reference string — the caller must render the
  * <pattern> element separately with id = patternId.
  */
+export function getPatternId(type: 'dot' | 'lined', color: string): string {
+  const cleanColor = color.replace('#', '');
+  return `pattern-${type}-${cleanColor}`;
+}
+
 export function svgFill(
   fillStyle: FillStyle,
   color: string,
-  patternId?: string,
 ): string {
+  const colorHex = resolveColor(color);
   switch (fillStyle) {
     case 'none':    return 'none';
-    case 'semi':    return hexWithOpacity(resolveColor(color), FILL_OPACITIES.semi);
-    case 'solid':   return resolveColor(color);
-    case 'pattern': return patternId ? `url(#${patternId})` : resolveColor(color);
+    case 'semi':    return hexWithOpacity(colorHex, FILL_OPACITIES.semi);
+    case 'solid':   return colorHex;
+    case 'pattern': return `url(#${getPatternId('dot', color)})`;
+    case 'lined':   return `url(#${getPatternId('lined', color)})`;
   }
 }
 

@@ -42,5 +42,6 @@ docker/env/*.env
 .playwright-cli
 .DS_Store
 .agents
-packages/glideboard/dist
-packages/glideline/dist
+packages/glideboard/dist/*
+packages/glideline/dist/*
+packages/glideboard/dist/*

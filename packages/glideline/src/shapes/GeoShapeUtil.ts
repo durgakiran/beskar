@@ -79,7 +79,7 @@ function getDefaultGeoShapeProps(): GeoShapeProps {
     h: 100,
     color: 'blue',
     opacity: 1,
-    fillStyle: 'solid',
+    fillStyle: 'none',
     strokeStyle: 'solid',
     strokeWidth: 'medium',
     label: '',

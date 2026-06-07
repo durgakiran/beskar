@@ -94,7 +94,7 @@ export class BoxUtil extends ShapeUtil<BoxShape> {
       cornerRadius:0,
       color:       'blue',
       opacity:     1,
-      fillStyle:   'solid',
+      fillStyle:   'none',
       strokeStyle: 'solid',
       strokeWidth: 'medium',
       label:       '',

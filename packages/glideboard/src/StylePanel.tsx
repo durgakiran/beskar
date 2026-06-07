@@ -198,6 +198,8 @@ export function StylePanel() {
             <IconButton active={fillStyle === 'none'} onClick={() => updateProp('fillStyle', 'none')}>None</IconButton>
             <IconButton active={fillStyle === 'semi'} onClick={() => updateProp('fillStyle', 'semi')}>Semi</IconButton>
             <IconButton active={fillStyle === 'solid'} onClick={() => updateProp('fillStyle', 'solid')}>Solid</IconButton>
+            <IconButton active={fillStyle === 'pattern'} onClick={() => updateProp('fillStyle', 'pattern')}>Pattern</IconButton>
+            <IconButton active={fillStyle === 'lined'} onClick={() => updateProp('fillStyle', 'lined')}>Lined</IconButton>
           </div>
         </div>
       ) : null}

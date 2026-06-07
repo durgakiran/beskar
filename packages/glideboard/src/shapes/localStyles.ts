@@ -13,8 +13,8 @@ import {
 export const StyleValidators = {
   fillStyle: {
     validate(value: unknown): FillStyle {
-      if (!['none', 'semi', 'solid', 'pattern'].includes(value as string)) {
-        throw new Error(`fillStyle must be none|semi|solid|pattern, got "${value}"`);
+      if (!['none', 'semi', 'solid', 'pattern', 'lined'].includes(value as string)) {
+        throw new Error(`fillStyle must be none|semi|solid|pattern|lined, got "${value}"`);
       }
       return value as FillStyle;
     },
