@@ -5,9 +5,10 @@ import type { GlideShape, GlideProps, Vec2 } from '../types';
 import { Geometry2d, Polygon2d } from '../geometry';
 import {
   StyleValidators, STROKE_WIDTHS, STROKE_DASH_ARRAYS,
-  svgFill, resolveColor, createTextForeignObject,
+  svgFill, resolveColor, inlinePatternDefs, createTextForeignObjectForExport,
+  FONT_FAMILIES, FONT_SIZES,
   type FillStyle, type StrokeStyle, type SizeStyle, type FontSize,
-  type TextAlign, type Font,
+  type TextAlign, type Font, type LabelProps,
 } from '../styles';
 
 export interface GeoShapeProps {
@@ -77,7 +78,7 @@ function getDefaultGeoShapeProps(): GeoShapeProps {
   return {
     w: 120,
     h: 100,
-    color: 'blue',
+    color: 'black',
     opacity: 1,
     fillStyle: 'none',
     strokeStyle: 'solid',
@@ -108,16 +109,20 @@ abstract class BaseGeoShapeUtil<S extends GlideShape<GeoShapeProps>> extends Sha
     return new Polygon2d(this.getVertices(shape));
   }
 
+  /** Geometry-only SVG — no text labels. For interactive canvas rendering. */
   toSvg(shape: S): SVGElement {
     const { props } = shape;
     const points = this.getVertices(shape);
     const strokeW = STROKE_WIDTHS[props.strokeWidth];
-    const fillColor = svgFill(props.fillStyle, resolveColor(props.color));
+    const fillColor = svgFill(props.fillStyle, resolveColor(props.color), shape.id);
     const strokeColor = resolveColor(props.color);
     const dashArray = STROKE_DASH_ARRAYS[props.strokeStyle];
 
     const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
     if (props.opacity < 1) g.setAttribute('opacity', String(props.opacity));
+
+    const defs = inlinePatternDefs(props.fillStyle, props.color, shape.id);
+    if (defs) g.appendChild(defs);
 
     const polygon = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
     polygon.setAttribute('points', pointsToSvg(points));
@@ -132,13 +137,30 @@ abstract class BaseGeoShapeUtil<S extends GlideShape<GeoShapeProps>> extends Sha
       }
     }
     g.appendChild(polygon);
+    return g;
+  }
 
+  /** CSS label properties for the HTML overlay div. */
+  override getLabelProps(shape: S): LabelProps | null {
+    const { props } = shape;
+    return {
+      text:          props.label || '',
+      fontFamily:    FONT_FAMILIES[props.font] ?? FONT_FAMILIES.sans,
+      fontSize:      FONT_SIZES[props.fontSize] ?? FONT_SIZES.md,
+      color:         resolveColor(props.labelColor),
+      textAlign:     props.textAlign,
+      verticalAlign: 'center',
+      padding:       8,
+    };
+  }
+
+  /** Full SVG for export — includes foreignObject text label. */
+  override toSvgExport(shape: S): SVGElement {
+    const g = this.toSvg(shape) as SVGGElement;
+    const { props } = shape;
     if (props.label) {
-      const fo = createTextForeignObject({
-        x: 0,
-        y: 0,
-        w: props.w,
-        h: props.h,
+      const fo = createTextForeignObjectForExport({
+        x: 0, y: 0, w: props.w, h: props.h,
         text: props.label,
         font: props.font,
         fontSize: props.fontSize,
@@ -148,7 +170,6 @@ abstract class BaseGeoShapeUtil<S extends GlideShape<GeoShapeProps>> extends Sha
       });
       g.appendChild(fo);
     }
-
     return g;
   }
 }

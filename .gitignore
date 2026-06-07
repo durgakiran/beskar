@@ -44,4 +44,4 @@ docker/env/*.env
 .agents
 packages/glideboard/dist/*
 packages/glideline/dist/*
-packages/glideboard/dist/*
+packages/glideline/test-results/*

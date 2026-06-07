@@ -216,7 +216,7 @@ export class ArrowUtil extends ShapeUtil<ArrowShape> {
       bend:       0,
       arrowheadStart: 'none',
       arrowheadEnd: 'arrow',
-      color:       '#f38ba8',
+      color:       'black',
       opacity:     1,
       strokeStyle: 'solid',
       strokeWidth: 'medium',

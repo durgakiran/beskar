@@ -33,10 +33,12 @@ import { buildAIContext, type AIContextSnapshot } from './ai-context';
 import { getWorldBounds, SmartRouterCache, type SmartRouteResolution, type SmartRoutingSnapshot } from './smart-router';
 import type { GlideShape, GlideBinding, ShapeId, BindingId, Vec2, Box2d, AnyRecord } from './types';
 import type { GlideEvent } from './state-node';
+import { getMinHeightForShape } from './styles';
 
 // ─────────────────────────────────────────────────────────────
 // GlidePlugin — unit of extension
 // ─────────────────────────────────────────────────────────────
+
 
 export interface GlidePlugin {
   id: string;
@@ -104,12 +106,45 @@ export class GlideEditor {
   /** Signal describing the current arrow-binding candidate under the pointer, if any. */
   readonly bindingPreview: Signal<BindingPreview | null> = signal(null);
 
+  /** Signal carrying the active/last-selected styles. */
+  readonly activeStyles = signal<Record<string, any>>({
+    color: 'black',
+    labelColor: 'black',
+    fillStyle: 'none',
+    strokeStyle: 'solid',
+    strokeWidth: 'medium',
+    font: 'sans',
+    fontSize: 'md',
+    textAlign: 'center',
+  });
+
   constructor(store: GlideStore, schema: GlideSchema, camera: GlideCamera) {
     this.store   = store;
     this.schema  = schema;
     this.camera  = camera;
     this.history = new HistoryManager(store);
     this._selection = signal(new Set<ShapeId>());
+
+    // Update activeStyles based on the newly selected shape's props
+    this._selection.subscribe(set => {
+      if (set.size === 1) {
+        const shapeId = Array.from(set)[0]!;
+        const shape = this.store.get(shapeId) as GlideShape | undefined;
+        if (shape && shape.props) {
+          const nextActive = { ...this.activeStyles.peek() };
+          let changed = false;
+          for (const key of Object.keys(nextActive)) {
+            if (key in shape.props && shape.props[key] !== nextActive[key]) {
+              nextActive[key] = shape.props[key];
+              changed = true;
+            }
+          }
+          if (changed) {
+            this.activeStyles.value = nextActive;
+          }
+        }
+      }
+    });
   }
 
   // ── Shape util resolution ──────────────────────────────────
@@ -206,8 +241,32 @@ export class GlideEditor {
     const util = this._utils.get(type);
     if (util) {
       const defaultProps = util.getDefaultProps();
+      const activeStyles = this.activeStyles.peek();
       const userProps = partial['props'] as AnyRecord || {};
-      partial['props'] = { ...defaultProps, ...userProps };
+      
+      const mergedProps = { ...defaultProps, ...userProps };
+      const shapePropsSchema = (util.constructor as any).props || {};
+      for (const [key, val] of Object.entries(activeStyles)) {
+        if (key in defaultProps) {
+          // Special case: do not force 'black' color on sticky-note when it's the initial default active style
+          if (type === 'sticky-note' && key === 'color' && val === 'black' && !userProps.color) {
+            continue;
+          }
+          // Validate styling values before merging to prevent conflicts (e.g., fontSize number vs enum)
+          const validator = shapePropsSchema[key];
+          if (validator) {
+            try {
+              validator.validate(val);
+              mergedProps[key] = val;
+            } catch {
+              // Ignore invalid styling values for this shape type
+            }
+          } else {
+            mergedProps[key] = val;
+          }
+        }
+      }
+      partial['props'] = mergedProps;
     }
     this.store.put([partial]);
     if (type !== 'arrow') {
@@ -223,6 +282,15 @@ export class GlideEditor {
     if (partial.props && existing.props) {
       newShape.props = { ...existing.props, ...(partial.props as any) };
     }
+
+    // Auto-expand/clamp height based on text content
+    if (newShape.props && typeof newShape.props.h === 'number') {
+      const minH = getMinHeightForShape(newShape);
+      if (newShape.props.h < minH) {
+        newShape.props.h = minH;
+      }
+    }
+
     this.store.put([newShape]);
     if ((existing['type'] as string) !== 'arrow') {
       this._smartRouter.markDirty();
@@ -485,11 +553,16 @@ export class GlideEditor {
    */
   startEditing(id: ShapeId): void {
     this.editingShapeId.value = id;
+    this.setSelectedShapeIds([]);
   }
 
   /** Clear the inline-editing state. */
-  stopEditing(): void {
+  stopEditing(selectAgain = false): void {
+    const id = this.editingShapeId.peek();
     this.editingShapeId.value = null;
+    if (selectAgain && id && this.store.get(id)) {
+      this.setSelectedShapeIds([id]);
+    }
   }
 
   setBindingPreview(preview: BindingPreview | null): void {

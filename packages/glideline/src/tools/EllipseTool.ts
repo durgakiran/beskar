@@ -32,16 +32,6 @@ function makeEllipseShape(id: ShapeId, x: number, y: number, w: number, h: numbe
     props: {
       w:           Math.max(1, Math.abs(w)),
       h:           Math.max(1, Math.abs(h)),
-      color:       'violet',
-      opacity:     1,
-      fillStyle:   'none',
-      strokeStyle: 'solid',
-      strokeWidth: 'medium',
-      label:       '',
-      labelColor:  'black',
-      font:        'sans',
-      fontSize:    'md',
-      textAlign:   'center',
     },
   };
 }
@@ -122,16 +112,6 @@ class Drawing extends StateNode {
         props: {
           w:           Math.max(1, Math.abs(w)),
           h:           Math.max(1, Math.abs(h)),
-          color:       'violet',
-          opacity:     1,
-          fillStyle:   'none',
-          strokeStyle: 'solid',
-          strokeWidth: 'medium',
-          label:       '',
-          labelColor:  'black',
-          font:        'sans',
-          fontSize:    'md',
-          textAlign:   'center',
         },
       });
     }, { history: 'ignore' });

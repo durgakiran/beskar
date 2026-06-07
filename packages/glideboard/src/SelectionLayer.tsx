@@ -58,7 +58,6 @@ export function SelectionLayer() {
 
   if (!selectedIds || selectedIds.length === 0 || boxes.length === 0) return null;
 
-  const allText = shapes.every(shape => shape.type === 'text');
 
   if (shapes.length === 1 && shapes[0]?.type === 'arrow') {
     const arrow = shapes[0] as ArrowShape;
@@ -134,6 +133,8 @@ export function SelectionLayer() {
   ];
 
   const hs = HANDLE_SIZE / camera.z;
+
+  const allText = shapes.every(shape => shape.type === 'text');
 
   return (
     <g id="wb-selection-overlay" transform={transform}>

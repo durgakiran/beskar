@@ -32,9 +32,6 @@ function makeBoxShape(id: ShapeId, x: number, y: number, w: number, h: number) {
     props: {
       w: Math.abs(w),
       h: Math.abs(h),
-      cornerRadius: 0,
-      color: '#6366f1',
-      label: '',
     },
   };
 }
@@ -110,9 +107,6 @@ class Drawing extends StateNode {
         props: {
           w: Math.abs(w),
           h: Math.abs(h),
-          cornerRadius: 0,
-          color: '#6366f1',
-          label: '',
         },
       });
     }, { history: 'ignore' });

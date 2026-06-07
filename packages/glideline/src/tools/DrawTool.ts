@@ -71,7 +71,6 @@ class Drawing extends StateNode {
         meta:     {},
         props: {
           points:     [firstPt],
-          color:      'black',
           size:       'medium',
           opacity:    1,
           isClosed:   false,
@@ -97,7 +96,6 @@ class Drawing extends StateNode {
       this.editor.updateShape(PREVIEW_ID, {
         props: {
           points:     this._points,
-          color:      'black',
           size:       'medium',
           opacity:    1,
           isClosed:   false,
@@ -136,7 +134,6 @@ class Drawing extends StateNode {
           meta:     {},
           props: {
             points:     pts,
-            color:      'black',
             size:       'medium',
             opacity:    1,
             isClosed:   false,

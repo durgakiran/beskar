@@ -28,8 +28,7 @@ export function fitToScreen() {
 
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
   for (const shape of shapes) {
-    const util = wbEditor.getShapeUtil(shape.type);
-    const b = util.getGeometry(shape as any);
+    const b = wbEditor.getShapeWorldBounds(shape);
     if (b.minX < minX) minX = b.minX;
     if (b.minY < minY) minY = b.minY;
     if (b.maxX > maxX) maxX = b.maxX;

@@ -21,14 +21,14 @@ import {
   createCanvasToolServer,
   createEditor,
   resolveArrowRoute,
+  BoxUtil,
+  FrameUtil,
+  TextUtil,
   type Box2d,
   type CanvasToolName,
   type GlideDocument,
   type Vec2,
 } from '@durgakiran/glideline';
-import { BoxUtil } from './shapes/BoxUtil';
-import { FrameUtil } from './shapes/FrameUtil';
-import { TextUtil } from './shapes/TextUtil';
 import { bindGlideboardCollaboration } from './collaboration';
 import type { GlideboardCollaborationConfig } from './types';
 

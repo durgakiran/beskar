@@ -1,23 +1,20 @@
-import React, { memo, useCallback, useEffect, useRef, useState } from 'react';
+import React, { memo, useCallback, useEffect, useRef } from 'react';
 import { effect } from '@preact/signals';
-import {
-  FONT_FAMILIES,
-  FONT_SIZES,
-  STICKY_COLORS,
-  TLDRAW_COLORS,
-  type GlideShape,
-  type ShapeId,
-  type Vec2,
+import type {
+  GlideShape,
+  ShapeId,
+  Vec2,
+  LabelProps,
 } from '@durgakiran/glideline';
+import { FONT_FAMILIES } from '@durgakiran/glideline';
 import { readOnlySignal, wbEditor } from './editor';
 import { MarqueeOverlay, SelectionLayer } from './SelectionLayer';
 import { wbTheme } from './theme';
 import { useSignalValue } from './useSignalValue';
 
-const HANDLE_SIZE = 8;
-const SELECTION_HIGHLIGHT_STROKE = wbTheme.accent;
-const BINDING_PREVIEW_STROKE = '#a6e3a1';
-const BINDING_SOURCE_PREVIEW_STROKE = '#74c7ec';
+// ─────────────────────────────────────────────────────────────
+// Shared helpers
+// ─────────────────────────────────────────────────────────────
 
 function pointsToSvgPath(points: Vec2[], closed = false): string {
   if (points.length === 0) return '';
@@ -29,6 +26,40 @@ function pointsToSvgPath(points: Vec2[], closed = false): string {
   if (closed) path += ' Z';
   return path;
 }
+
+// ─────────────────────────────────────────────────────────────
+// Grid (background SVG only)
+// ─────────────────────────────────────────────────────────────
+
+function Grid() {
+  const camera = useSignalValue(wbEditor.camera.signal)!;
+  const spacing = 24 * camera.z;
+  const dotR = 1;
+  const ox = ((-camera.x * camera.z) % spacing + spacing) % spacing;
+  const oy = ((-camera.y * camera.z) % spacing + spacing) % spacing;
+
+  return (
+    <defs>
+      <pattern
+        id="wb-grid-pattern"
+        x={ox}
+        y={oy}
+        width={spacing}
+        height={spacing}
+        patternUnits="userSpaceOnUse"
+      >
+        <circle cx={dotR} cy={dotR} r={dotR} fill={wbTheme.grid} />
+      </pattern>
+    </defs>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// Binding Preview Overlay (now in overlay SVG, world coords)
+// ─────────────────────────────────────────────────────────────
+
+const BINDING_PREVIEW_STROKE = '#a6e3a1';
+const BINDING_SOURCE_PREVIEW_STROKE = '#74c7ec';
 
 function renderGeometryOutline(
   shape: GlideShape,
@@ -54,148 +85,6 @@ function renderGeometryOutline(
     />
   );
 }
-
-function renderSelectionHighlight(shape: GlideShape, isSelected: boolean) {
-  if (!isSelected) return null;
-  return renderGeometryOutline(shape, SELECTION_HIGHLIGHT_STROKE, 'none', 2, 0.95);
-}
-
-function WhiteboardPatterns() {
-  return (
-    <>
-      {Object.entries(TLDRAW_COLORS).map(([name, hex]) => {
-        const dotId = `pattern-dot-${name}`;
-        const dotIdHex = `pattern-dot-${hex.replace('#', '')}`;
-        const linedId = `pattern-lined-${name}`;
-        const linedIdHex = `pattern-lined-${hex.replace('#', '')}`;
-
-        return (
-          <React.Fragment key={name}>
-            <pattern id={dotId} width="12" height="12" patternUnits="userSpaceOnUse">
-              <circle cx="6" cy="6" r="1.5" fill={hex} />
-            </pattern>
-            <pattern id={dotIdHex} width="12" height="12" patternUnits="userSpaceOnUse">
-              <circle cx="6" cy="6" r="1.5" fill={hex} />
-            </pattern>
-
-            <pattern id={linedId} width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
-              <line x1="0" y1="0" x2="0" y2="8" stroke={hex} strokeWidth="1.2" />
-            </pattern>
-            <pattern id={linedIdHex} width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
-              <line x1="0" y1="0" x2="0" y2="8" stroke={hex} strokeWidth="1.2" />
-            </pattern>
-          </React.Fragment>
-        );
-      })}
-    </>
-  );
-}
-
-function Grid() {
-  const camera = useSignalValue(wbEditor.camera.signal)!;
-  const spacing = 24 * camera.z;
-  const dotR = 1;
-  const ox = ((-camera.x * camera.z) % spacing + spacing) % spacing;
-  const oy = ((-camera.y * camera.z) % spacing + spacing) % spacing;
-
-  return (
-    <defs>
-      <pattern
-        id="wb-grid-pattern"
-        x={ox}
-        y={oy}
-        width={spacing}
-        height={spacing}
-        patternUnits="userSpaceOnUse"
-      >
-        <circle cx={dotR} cy={dotR} r={dotR} fill={wbTheme.grid} />
-      </pattern>
-      <WhiteboardPatterns />
-    </defs>
-  );
-}
-
-const ShapeLayer = memo(({ id }: { id: ShapeId }) => {
-  const sig = wbEditor.store.getSignal(id);
-  const shape = useSignalValue(sig as any) as GlideShape | null;
-  const gRef = useRef<SVGGElement>(null);
-  const contentRef = useRef<SVGGElement>(null);
-  const editingId = useSignalValue(wbEditor.editingShapeId);
-  const erasingIds = useSignalValue(wbEditor.erasingShapeIds);
-  const selectedIds = useSignalValue(wbEditor.getSelectionSignal()) ?? [];
-  const isErasing = erasingIds ? erasingIds.has(id) : false;
-  const isSelected = selectedIds.includes(id);
-
-  useEffect(() => {
-    return effect(() => {
-      if (!shape) return;
-      const localBounds = wbEditor.getShapeUtil(shape.type).getGeometry(shape as any).getBounds();
-      const viewport = wbEditor.getViewportBounds();
-      const worldMinX = localBounds.minX + shape.x;
-      const worldMinY = localBounds.minY + shape.y;
-      const worldMaxX = localBounds.maxX + shape.x;
-      const worldMaxY = localBounds.maxY + shape.y;
-      const visible =
-        worldMaxX >= viewport.minX &&
-        worldMinX <= viewport.maxX &&
-        worldMaxY >= viewport.minY &&
-        worldMinY <= viewport.maxY;
-      if (gRef.current) gRef.current.style.display = visible ? '' : 'none';
-    });
-  }, [shape?.id]);
-
-  useEffect(() => {
-    if (!contentRef.current || !shape) return;
-    contentRef.current.style.opacity = '1';
-    const util = wbEditor.getShapeUtil(shape.type);
-    if ((util as any).toSvg) {
-      const el = (util as any).toSvg(shape);
-      contentRef.current.innerHTML = '';
-      if (el) contentRef.current.appendChild(el);
-      if (editingId === id) {
-        const foreignObjects = contentRef.current.querySelectorAll('foreignObject');
-        foreignObjects.forEach(node => {
-          (node as unknown as SVGElement).style.opacity = '0';
-        });
-      }
-    }
-  });
-
-  if (!shape) return null;
-
-  const localBounds = wbEditor.getShapeUtil(shape.type).getGeometry(shape as any).getBounds();
-  const cx = localBounds.minX + localBounds.w / 2;
-  const cy = localBounds.minY + localBounds.h / 2;
-  const angleDeg = ((shape.rotation || 0) * 180) / Math.PI;
-
-  return (
-    <g
-      ref={gRef}
-      id={`wb-shape-${id}`}
-      data-shape-id={id}
-      style={{ opacity: isErasing ? 0.4 : 1 }}
-      transform={`translate(${shape.x}, ${shape.y}) rotate(${angleDeg}, ${cx}, ${cy})`}
-    >
-      <g ref={contentRef} />
-      {renderSelectionHighlight(shape, isSelected)}
-      {isErasing ? (
-        <rect
-          x={localBounds.minX}
-          y={localBounds.minY}
-          width={localBounds.w}
-          height={localBounds.h}
-          fill="#f38ba8"
-          fillOpacity={0.35}
-          stroke="#f38ba8"
-          strokeWidth={2}
-          strokeOpacity={0.8}
-          pointerEvents="none"
-          rx={2}
-        />
-      ) : null}
-    </g>
-  );
-});
 
 export function BindingPreviewOverlay() {
   const preview = useSignalValue(wbEditor.bindingPreview);
@@ -286,113 +175,213 @@ export function BindingPreviewOverlay() {
   );
 }
 
-export function InlineEditor() {
+// ─────────────────────────────────────────────────────────────
+// ShapeLayer — one HTML div per shape
+// ─────────────────────────────────────────────────────────────
+
+const ShapeLayer = memo(({ id, zIndex }: { id: ShapeId; zIndex: number }) => {
+  const sig = wbEditor.store.getSignal(id);
+  const shape = useSignalValue(sig as any) as GlideShape | null;
+  const divRef = useRef<HTMLDivElement>(null);
+  const svgRef = useRef<SVGSVGElement>(null);
+  const labelRef = useRef<HTMLDivElement>(null);
   const editingId = useSignalValue(wbEditor.editingShapeId);
+  const erasingIds = useSignalValue(wbEditor.erasingShapeIds);
   const camera = useSignalValue(wbEditor.camera.signal)!;
   const readOnly = useSignalValue(readOnlySignal) ?? false;
-  const sig = editingId ? wbEditor.store.getSignal(editingId) : undefined;
-  const shape = useSignalValue(sig as any) as GlideShape | null;
-  const [text, setText] = useState('');
+  const isErasing = erasingIds ? erasingIds.has(id) : false;
+  const isEditing = editingId === id;
 
+  // Visibility culling
   useEffect(() => {
-    if (!shape) return;
-    const key = shape.type === 'text' ? 'text' : 'label';
-    setText(String(shape.props[key] ?? ''));
+    if (!shape || !divRef.current) return;
+    const localBounds = wbEditor.getShapeUtil(shape.type).getGeometry(shape as any).getBounds();
+    const viewport = wbEditor.getViewportBounds();
+    const worldMinX = localBounds.minX + shape.x;
+    const worldMinY = localBounds.minY + shape.y;
+    const worldMaxX = localBounds.maxX + shape.x;
+    const worldMaxY = localBounds.maxY + shape.y;
+    const visible =
+      worldMaxX >= viewport.minX &&
+      worldMinX <= viewport.maxX &&
+      worldMaxY >= viewport.minY &&
+      worldMinY <= viewport.maxY;
+    divRef.current.style.display = visible ? '' : 'none';
+  }, [shape, camera]);
+
+  // Inject toSvg() geometry output into the per-shape <svg>
+  useEffect(() => {
+    if (!svgRef.current || !shape) return;
+    const util = wbEditor.getShapeUtil(shape.type);
+    if ((util as any).toSvg) {
+      const el = (util as any).toSvg(shape);
+      svgRef.current.innerHTML = '';
+      if (el) {
+        const defs = el.querySelector('defs');
+        if (defs) {
+          svgRef.current.appendChild(defs);
+        }
+        svgRef.current.appendChild(el);
+      }
+    }
   }, [shape]);
 
-  if (readOnly || !editingId || !shape) return null;
+  // Auto-focus label div when editing starts
+  useEffect(() => {
+    if (isEditing && labelRef.current) {
+      labelRef.current.focus();
+      // Move cursor to end
+      const range = document.createRange();
+      const sel = window.getSelection();
+      range.selectNodeContents(labelRef.current);
+      range.collapse(false);
+      sel?.removeAllRanges();
+      sel?.addRange(range);
+    }
+  }, [isEditing]);
 
-  const key = shape.type === 'text' ? 'text' : 'label';
-  const localBounds = wbEditor.getShapeUtil(shape.type).getGeometry(shape as any).getBounds();
-  const worldMinX = shape.x + localBounds.minX;
-  const worldMinY = shape.y + localBounds.minY;
-  const topLeft = wbEditor.pageToScreen({ x: worldMinX, y: worldMinY });
-  const width = localBounds.w * camera.z;
-  const height = Math.max(localBounds.h * camera.z, 32);
+  const util = shape ? wbEditor.getShapeUtil(shape.type) : null;
+  const labelProps: LabelProps | null = (shape && util) ? ((util as any).getLabelProps?.(shape) ?? null) : null;
 
-  const style = shape.type === 'sticky-note'
-    ? {
-        fontFamily: FONT_FAMILIES[(shape.props.font as keyof typeof FONT_FAMILIES) ?? 'sans'],
-        fontSize: FONT_SIZES[(shape.props.fontSize as keyof typeof FONT_SIZES) ?? 'md'] * camera.z,
-        color: String(shape.props.labelColor ?? wbTheme.text),
-        background: STICKY_COLORS[String(shape.props.color ?? 'yellow') as keyof typeof STICKY_COLORS] ?? '#f9e2af',
-        textAlign: String(shape.props.textAlign ?? 'left') as React.CSSProperties['textAlign'],
+  // Keep contenteditable text content in sync manually (prevents React conflicts on re-render)
+  const lastTextRef = useRef<string | undefined>(labelProps?.text);
+  useEffect(() => {
+    if (labelRef.current && labelProps) {
+      if (!isEditing || lastTextRef.current !== labelProps.text) {
+        labelRef.current.textContent = labelProps.text;
+        lastTextRef.current = labelProps.text;
       }
-    : shape.type === 'text'
-      ? {
-          fontFamily: 'Inter, system-ui, sans-serif',
-          fontSize: Number(shape.props.fontSize ?? 16) * camera.z,
-          color: String(shape.props.color ?? wbTheme.text),
-          background: 'transparent',
-          textAlign: 'left' as React.CSSProperties['textAlign'],
-        }
-      : {
-          fontFamily: FONT_FAMILIES[(shape.props.font as keyof typeof FONT_FAMILIES) ?? 'sans'],
-          fontSize: FONT_SIZES[(shape.props.fontSize as keyof typeof FONT_SIZES) ?? 'md'] * camera.z,
-          color: String(shape.props.labelColor ?? '#111827'),
-          background: 'transparent',
-          textAlign: String(shape.props.textAlign ?? 'center') as React.CSSProperties['textAlign'],
-        };
+    }
+  }, [labelProps?.text, isEditing]);
 
-  const commit = (nextText: string) => {
-    if (shape.type === 'text' && nextText.trim() === '') {
+  if (!shape || !util) return null;
+
+  const isTextType = shape.type === 'text';
+  const hasFixedWidth = isTextType && typeof (shape.props as any).w === 'number';
+
+  const localBounds = util.getGeometry(shape as any).getBounds();
+  const cx = localBounds.minX + localBounds.w / 2;
+  const cy = localBounds.minY + localBounds.h / 2;
+  const angleDeg = ((shape.rotation || 0) * 180) / Math.PI;
+  const screenX = (shape.x - camera.x) * camera.z;
+  const screenY = (shape.y - camera.y) * camera.z;
+
+  const commitEdit = (text: string) => {
+    const key = shape.type === 'sticky-note' ? 'text' : shape.type === 'text' ? 'text' : 'label';
+    if (shape.type === 'text' && text.trim() === '') {
       wbEditor.history.batch('Delete Empty Text', () => {
-        wbEditor.deleteShapes([editingId]);
+        wbEditor.deleteShapes([id]);
       });
     } else {
       wbEditor.history.batch('Edit Text', () => {
-        wbEditor.updateShape(editingId, {
-          props: { ...shape.props, [key]: nextText },
-        });
+        wbEditor.updateShape(id, { props: { ...shape.props, [key]: text } });
       });
     }
-    wbEditor.stopEditing();
+    wbEditor.stopEditing(true);
+  };
+
+  const handleLabelKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
+      event.preventDefault();
+      commitEdit(event.currentTarget.textContent ?? '');
+    }
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      wbEditor.stopEditing(true);
+    }
   };
 
   return (
-    <textarea
-      autoFocus
-      value={text}
-      onChange={event => {
-        const nextText = event.target.value;
-        setText(nextText);
-        wbEditor.history.batch('Edit Text Preview', () => {
-          wbEditor.updateShape(editingId, {
-            props: { ...shape.props, [key]: nextText },
-          });
-        });
-      }}
-      onBlur={() => commit(text)}
-      onKeyDown={event => {
-        if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
-          event.preventDefault();
-          commit(text);
-          return;
-        }
-        if (event.key === 'Escape') {
-          event.preventDefault();
-          wbEditor.stopEditing();
-        }
-      }}
+    <div
+      ref={divRef}
+      id={`wb-shape-${id}`}
+      data-shape-id={id}
       style={{
         position: 'absolute',
-        left: topLeft.x,
-        top: topLeft.y,
-        width,
-        height,
-        border: `1px solid ${wbTheme.accent}`,
-        outline: 'none',
-        resize: 'none',
-        padding: shape.type === 'sticky-note' ? 12 : 4,
-        boxSizing: 'border-box',
-        borderRadius: shape.type === 'sticky-note' ? 10 : 4,
-        lineHeight: 1.35,
-        zIndex: 200,
-        ...style,
+        left: 0,
+        top: 0,
+        width: localBounds.w,
+        height: localBounds.h,
+        transform: `translate(${screenX}px, ${screenY}px) scale(${camera.z}) translate(${cx}px, ${cy}px) rotate(${angleDeg}deg) translate(${-cx}px, ${-cy}px)`,
+        transformOrigin: '0 0',
+        zIndex,
+        pointerEvents: 'none',
+        opacity: isErasing ? 0.4 : 1,
       }}
-    />
+    >
+      {/* Geometry: 1×1px SVG with overflow:visible — contains toSvg() output */}
+      <svg
+        ref={svgRef}
+        style={{
+          overflow: 'visible',
+          width: 1,
+          height: 1,
+          position: 'absolute',
+          top: 0,
+          left: 0,
+        }}
+      />
+
+      {/* Erase overlay */}
+      {isErasing && (
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            background: '#f38ba8',
+            opacity: 0.35,
+            borderRadius: 2,
+            pointerEvents: 'none',
+          }}
+        />
+      )}
+
+      {/* Label: native HTML div */}
+      {labelProps && (
+        <div
+          ref={labelRef}
+          contentEditable={isEditing && !readOnly ? true : undefined}
+          suppressContentEditableWarning
+          onBlur={isEditing ? (e) => commitEdit(e.currentTarget.textContent ?? '') : undefined}
+          onKeyDown={isEditing ? handleLabelKeyDown : undefined}
+          style={{
+            position: 'absolute',
+            left: labelProps.padding,
+            top: labelProps.padding,
+            right: (isTextType && isEditing && !hasFixedWidth) ? undefined : labelProps.padding,
+            bottom: (isTextType && isEditing) ? undefined : labelProps.padding,
+            width: (isTextType && isEditing && !hasFixedWidth) ? 'max-content' : '100%',
+            height: (isTextType && isEditing) ? 'auto' : '100%',
+            fontFamily: labelProps.fontFamily,
+            fontSize: labelProps.fontSize,
+            color: labelProps.color,
+            background: labelProps.background ?? 'transparent',
+            textAlign: labelProps.textAlign,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: labelProps.textAlign === 'left' ? 'flex-start' : labelProps.textAlign === 'right' ? 'flex-end' : 'center',
+            justifyContent: labelProps.verticalAlign === 'center' ? 'center' : 'flex-start',
+            pointerEvents: isEditing && !readOnly ? 'auto' : 'none',
+            userSelect: isEditing ? 'text' : 'none',
+            overflow: isEditing ? 'visible' : 'hidden',
+            whiteSpace: (isTextType && !hasFixedWidth) ? 'pre' : 'pre-wrap',
+            wordBreak: 'break-word',
+            outline: 'none',
+            cursor: isEditing ? 'text' : 'inherit',
+            boxSizing: 'border-box',
+            lineHeight: 1.35,
+            minHeight: isEditing ? '1.35em' : undefined,
+            minWidth: isEditing ? (isTextType ? '150px' : '2ch') : undefined,
+          }}
+        />
+      )}
+    </div>
   );
-}
+});
+
+// ─────────────────────────────────────────────────────────────
+// Canvas
+// ─────────────────────────────────────────────────────────────
 
 export function Canvas() {
   const shapeIds = useSignalValue(wbEditor.store.getShapeIdsSignal())!;
@@ -520,6 +509,8 @@ export function Canvas() {
     wbEditor.dispatchEvent({ type: 'keyDown', key: event.key } as any);
   }, [readOnly]);
 
+  const cameraTransform = `scale(${camera.z}) translate(${-camera.x}px, ${-camera.y}px)`;
+
   return (
     <div
       ref={containerRef}
@@ -546,8 +537,9 @@ export function Canvas() {
         }
       }}
     >
+      {/* 1. Background grid SVG — no shapes */}
       <svg
-        id="wb-svg"
+        id="wb-bg"
         style={{
           position: 'absolute',
           inset: 0,
@@ -559,21 +551,44 @@ export function Canvas() {
       >
         <Grid />
         <rect x="0" y="0" width="100%" height="100%" fill="url(#wb-grid-pattern)" />
-        <g id="wb-shapes" style={{ transform: `scale(${camera.z}) translate(${-camera.x}px, ${-camera.y}px)` }}>
-          {(shapeIds ?? []).map((id: ShapeId) => (
-            <ShapeLayer key={id} id={id} />
-          ))}
-          <BindingPreviewOverlay />
-          <MarqueeOverlay />
-        </g>
+      </svg>
+
+      {/* 2. HTML shape layer — one div per shape */}
+      <div
+        id="wb-shapes"
+        style={{
+          position: 'absolute',
+          inset: 0,
+          overflow: 'hidden',
+        }}
+      >
+        {(shapeIds ?? []).map((id: ShapeId, index: number) => (
+          <ShapeLayer key={id} id={id} zIndex={index + 1} />
+        ))}
+      </div>
+
+      {/* 3. Overlay SVG — selection handles, marquee, binding preview */}
+      <svg
+        id="wb-overlay"
+        style={{
+          position: 'absolute',
+          inset: 0,
+          width: '100%',
+          height: '100%',
+          overflow: 'visible',
+          pointerEvents: 'none',
+        }}
+      >
         <g
           id="wb-selection-group"
           style={{
-            transform: `scale(${camera.z}) translate(${-camera.x}px, ${-camera.y}px)`,
+            transform: cameraTransform,
             pointerEvents: 'auto',
           }}
         >
           <SelectionLayer />
+          <BindingPreviewOverlay />
+          <MarqueeOverlay />
         </g>
       </svg>
     </div>

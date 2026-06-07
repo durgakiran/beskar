@@ -27,9 +27,10 @@ import type { GlideShape, Vec2, GlideProps } from '../types';
 import { Geometry2d, Ellipse2d } from '../geometry';
 import {
   STROKE_WIDTHS, STROKE_DASH_ARRAYS,
-  svgFill, resolveColor, createTextForeignObject,
+  svgFill, resolveColor, inlinePatternDefs, createTextForeignObjectForExport,
+  FONT_FAMILIES, FONT_SIZES,
   type FillStyle, type StrokeStyle, type SizeStyle, type FontSize,
-  type TextAlign, type Font,
+  type TextAlign, type Font, type LabelProps,
 } from '../styles';
 
 // ─────────────────────────────────────────────────────────────
@@ -165,7 +166,7 @@ export class EllipseUtil extends ShapeUtil<EllipseShape> {
     return {
       w:           120,
       h:           80,
-      color:       'violet',
+      color:       'black',
       opacity:     1,
       fillStyle:   'none',
       strokeStyle: 'solid',
@@ -185,21 +186,23 @@ export class EllipseUtil extends ShapeUtil<EllipseShape> {
     return new Ellipse2d(rx, ry, rx, ry);
   }
 
-  /** SVG: <ellipse> + centred label (local coords, centred at rx/ry). */
+  /** Geometry-only SVG — no text labels. For interactive canvas rendering. */
   toSvg(shape: EllipseShape): SVGElement {
     const { props } = shape;
     const rx = props.w / 2;
     const ry = props.h / 2;
-    // Local space: ellipse centre = (rx, ry)
     const cx = rx;
     const cy = ry;
     const strokeW = STROKE_WIDTHS[props.strokeWidth];
-    const fillColor = svgFill(props.fillStyle, resolveColor(props.color));
-    const strokeColor = props.fillStyle === 'none' ? resolveColor(props.color) : resolveColor(props.color);
+    const fillColor = svgFill(props.fillStyle, resolveColor(props.color), shape.id);
+    const strokeColor = resolveColor(props.color);
     const dashArray = STROKE_DASH_ARRAYS[props.strokeStyle];
 
     const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
     if (props.opacity < 1) g.setAttribute('opacity', String(props.opacity));
+
+    const defs = inlinePatternDefs(props.fillStyle, props.color, shape.id);
+    if (defs) g.appendChild(defs);
 
     const ellipse = document.createElementNS('http://www.w3.org/2000/svg', 'ellipse');
     ellipse.setAttribute('cx', String(cx));
@@ -216,9 +219,29 @@ export class EllipseUtil extends ShapeUtil<EllipseShape> {
       }
     }
     g.appendChild(ellipse);
+    return g;
+  }
 
+  /** CSS label properties for the HTML overlay div. */
+  override getLabelProps(shape: EllipseShape): LabelProps | null {
+    const { props } = shape;
+    return {
+      text:          props.label || '',
+      fontFamily:    FONT_FAMILIES[props.font] ?? FONT_FAMILIES.sans,
+      fontSize:      FONT_SIZES[props.fontSize] ?? FONT_SIZES.md,
+      color:         resolveColor(props.labelColor),
+      textAlign:     props.textAlign,
+      verticalAlign: 'center',
+      padding:       8,
+    };
+  }
+
+  /** Full SVG for export — includes foreignObject text label. */
+  override toSvgExport(shape: EllipseShape): SVGElement {
+    const g = this.toSvg(shape) as SVGGElement;
+    const { props } = shape;
     if (props.label) {
-      const fo = createTextForeignObject({
+      const fo = createTextForeignObjectForExport({
         x: 0, y: 0, w: props.w, h: props.h,
         text: props.label,
         font: props.font,
@@ -229,7 +252,6 @@ export class EllipseUtil extends ShapeUtil<EllipseShape> {
       });
       g.appendChild(fo);
     }
-
     return g;
   }
 }

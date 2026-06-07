@@ -38,7 +38,7 @@ const ROW_STYLE: React.CSSProperties = {
   gap: 4,
 };
 
-function IconButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+function IconButton({ active, onClick, style, children }: { active: boolean; onClick: () => void; style?: React.CSSProperties; children: React.ReactNode }) {
   return (
     <button
       onClick={onClick}
@@ -54,6 +54,7 @@ function IconButton({ active, onClick, children }: { active: boolean; onClick: (
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
+        ...style,
       }}
     >
       {children}
@@ -253,10 +254,10 @@ export function StylePanel() {
         <div>
           <div style={SECTION_TITLE_STYLE}>Font Family</div>
           <div style={ROW_STYLE}>
-            <IconButton active={font === 'draw'} onClick={() => updateProp('font', 'draw')}>Draw</IconButton>
-            <IconButton active={font === 'sans'} onClick={() => updateProp('font', 'sans')}>Sans</IconButton>
-            <IconButton active={font === 'serif'} onClick={() => updateProp('font', 'serif')}>Serif</IconButton>
-            <IconButton active={font === 'mono'} onClick={() => updateProp('font', 'mono')}>Mono</IconButton>
+            <IconButton active={font === 'draw'} onClick={() => updateProp('font', 'draw')} style={{ fontFamily: '"Shantell Sans", cursive' }}>Draw</IconButton>
+            <IconButton active={font === 'sans'} onClick={() => updateProp('font', 'sans')} style={{ fontFamily: 'Inter, system-ui, sans-serif' }}>Sans</IconButton>
+            <IconButton active={font === 'serif'} onClick={() => updateProp('font', 'serif')} style={{ fontFamily: 'Georgia, serif' }}>Serif</IconButton>
+            <IconButton active={font === 'mono'} onClick={() => updateProp('font', 'mono')} style={{ fontFamily: '"Fira Code", monospace' }}>Mono</IconButton>
           </div>
         </div>
       )}

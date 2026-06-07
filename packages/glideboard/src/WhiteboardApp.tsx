@@ -1,5 +1,5 @@
 import React from 'react';
-import { Canvas, InlineEditor } from './Canvas';
+import { Canvas } from './Canvas';
 import { ContextMenu } from './ContextMenu';
 import {
   readOnlySignal,
@@ -105,7 +105,6 @@ export function WhiteboardApp() {
       onContextMenu={onContextMenu}
     >
       <Canvas />
-      <InlineEditor />
       {!readOnly ? <Toolbar /> : null}
       <ZoomWidget />
       {!readOnly ? <StylePanel /> : null}

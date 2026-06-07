@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useSignalValue } from '../useSignalValue';
 import { effect } from '@preact/signals';
 import type { GlideShape } from '../../../glideline/src/types';
-import type { ResizeHandle } from '../../../glideline/src/tools/SelectTool';
+import type { ResizeHandle } from '../../../glideline/src/shapes/ShapeUtil';
 import type { ArrowShape } from '../../../glideline/src/shapes/ArrowUtil';
 import { getArrowBendHandlePoint } from '../../../glideline/src/arrow-routing';
 import { wbEditor } from './editor';

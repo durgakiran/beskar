@@ -197,25 +197,103 @@ export function getPatternId(type: 'dot' | 'lined', color: string): string {
   return `pattern-${type}-${cleanColor}`;
 }
 
+/** Returns the pattern fill id scoped to a specific shape (avoids cross-shape SVG collisions). */
+export function getShapePatternId(type: 'dot' | 'lined', shapeId: string): string {
+  const safeId = shapeId.replace(/:/g, '_');
+  return `pattern-${type}-${safeId}`;
+}
+
 export function svgFill(
   fillStyle: FillStyle,
   color: string,
+  shapeId?: string,
 ): string {
   const colorHex = resolveColor(color);
   switch (fillStyle) {
     case 'none':    return 'none';
     case 'semi':    return hexWithOpacity(colorHex, FILL_OPACITIES.semi);
     case 'solid':   return colorHex;
-    case 'pattern': return `url(#${getPatternId('dot', color)})`;
-    case 'lined':   return `url(#${getPatternId('lined', color)})`;
+    case 'pattern': return shapeId ? `url(#${getShapePatternId('dot', shapeId)})` : `url(#${getPatternId('dot', color)})`;
+    case 'lined':   return shapeId ? `url(#${getShapePatternId('lined', shapeId)})` : `url(#${getPatternId('lined', color)})`;
   }
 }
 
+/**
+ * Inlines SVG <pattern> definitions for dot/lined fills into a <defs> element
+ * scoped to this shape's own <svg>. Each pattern id is suffixed with shapeId
+ * to prevent collisions when multiple shapes use the same pattern.
+ *
+ * Usage: prepend the returned <defs> to the shape's root <g> before setting
+ * fill="url(#...)" on geometry elements.
+ */
+export function inlinePatternDefs(
+  fillStyle: FillStyle,
+  color: string,
+  shapeId: string,
+): SVGDefsElement | null {
+  if (fillStyle !== 'pattern' && fillStyle !== 'lined') return null;
+
+  const colorHex = resolveColor(color);
+  const type = fillStyle === 'pattern' ? 'dot' : 'lined';
+  const patternId = getShapePatternId(type, shapeId);
+
+  const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+  const pattern = document.createElementNS('http://www.w3.org/2000/svg', 'pattern');
+  pattern.setAttribute('id', patternId);
+  pattern.setAttribute('patternUnits', 'userSpaceOnUse');
+
+  if (type === 'dot') {
+    pattern.setAttribute('width', '12');
+    pattern.setAttribute('height', '12');
+    const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    dot.setAttribute('cx', '6');
+    dot.setAttribute('cy', '6');
+    dot.setAttribute('r', '1.5');
+    dot.setAttribute('fill', colorHex);
+    pattern.appendChild(dot);
+  } else {
+    pattern.setAttribute('width', '8');
+    pattern.setAttribute('height', '8');
+    pattern.setAttribute('patternTransform', 'rotate(45)');
+    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    line.setAttribute('x1', '0'); line.setAttribute('y1', '0');
+    line.setAttribute('x2', '0'); line.setAttribute('y2', '8');
+    line.setAttribute('stroke', colorHex);
+    line.setAttribute('stroke-width', '1.2');
+    pattern.appendChild(line);
+  }
+
+  defs.appendChild(pattern);
+  return defs;
+}
+
 // ─────────────────────────────────────────────────────────────
-// HTML Text rendering (WYSIWYG identical to InlineEditor)
+// Label props — for HTML overlay divs in the hybrid rendering model
 // ─────────────────────────────────────────────────────────────
 
-export function createTextForeignObject(opts: {
+/**
+ * CSS properties for a shape's HTML label overlay div.
+ * Returned by ShapeUtil.getLabelProps(); consumed by ShapeLayer in Canvas.tsx.
+ */
+export interface LabelProps {
+  text:          string;
+  fontFamily:    string;
+  /** Font size in page-space px (Canvas.tsx multiplies by camera.z for screen space). */
+  fontSize:      number;
+  color:         string;
+  textAlign:     'left' | 'center' | 'right';
+  verticalAlign: 'top' | 'center';
+  /** Inner padding in page-space px. */
+  padding:       number;
+  /** Optional background color (used by sticky-note to match shape fill on label div). */
+  background?:   string;
+}
+
+// ─────────────────────────────────────────────────────────────
+// SVG export text rendering (with foreignObject — for PNG/SVG export only)
+// ─────────────────────────────────────────────────────────────
+
+export function createTextForeignObjectForExport(opts: {
   x: number;
   y: number;
   w: number;
@@ -257,3 +335,124 @@ export function createTextForeignObject(opts: {
   fo.appendChild(div);
   return fo;
 }
+
+/** @deprecated Use createTextForeignObjectForExport (export path only). */
+export const createTextForeignObject = createTextForeignObjectForExport;
+
+let measurementContext: CanvasRenderingContext2D | null = null;
+function getMeasurementContext(): CanvasRenderingContext2D | null {
+  if (typeof document === 'undefined') return null;
+  if (!measurementContext) {
+    const canvas = document.createElement('canvas');
+    measurementContext = canvas.getContext('2d');
+  }
+  return measurementContext;
+}
+
+/**
+ * Estimate the wrapped height of a text block given a width, font, and font size.
+ */
+export function estimateTextHeight(opts: {
+  text: string;
+  w: number;
+  font: Font | string;
+  fontSize: FontSize | number;
+  padding?: number;
+}): number {
+  const text = opts.text;
+  if (!text) return 0;
+
+  const fontName = (FONT_FAMILIES as any)[opts.font] || opts.font;
+  const size = typeof opts.fontSize === 'number' ? opts.fontSize : FONT_SIZES[opts.fontSize as FontSize];
+  const padding = opts.padding || 0;
+  const usableWidth = Math.max(1, opts.w - padding * 2);
+
+  const ctx = getMeasurementContext();
+  const lineHeight = size * 1.4; // normal line-height ≈ 1.4×
+
+  if (!ctx) {
+    // Fallback if no DOM/Canvas (e.g. tests running in non-browser env)
+    const avgCharWidth = size * 0.6;
+    const charsPerLine = Math.max(1, Math.floor(usableWidth / avgCharWidth));
+    let totalLines = 0;
+    for (const rawLine of text.split('\n')) {
+      totalLines += Math.max(1, Math.ceil(rawLine.length / charsPerLine));
+    }
+    return totalLines * lineHeight + padding * 2;
+  }
+
+  ctx.font = `${size}px ${fontName}`;
+  const lines = text.split('\n');
+  let totalLines = 0;
+
+  for (const line of lines) {
+    if (line === '') {
+      totalLines += 1;
+      continue;
+    }
+
+    const words = line.split(' ');
+    let currentLine = '';
+
+    for (const word of words) {
+      const testLine = currentLine ? currentLine + ' ' + word : word;
+      const testWidth = ctx.measureText(testLine).width;
+
+      if (testWidth <= usableWidth) {
+        currentLine = testLine;
+      } else {
+        if (currentLine) {
+          totalLines += 1;
+        }
+        // Handle breaking a single very long word
+        let wordRest = word;
+        while (ctx.measureText(wordRest).width > usableWidth) {
+          let l = 1;
+          while (l < wordRest.length && ctx.measureText(wordRest.slice(0, l + 1)).width <= usableWidth) {
+            l++;
+          }
+          totalLines += 1;
+          wordRest = wordRest.slice(l);
+        }
+        currentLine = wordRest;
+      }
+    }
+    if (currentLine) {
+      totalLines += 1;
+    }
+  }
+
+  return totalLines * lineHeight + padding * 2;
+}
+
+/**
+ * Calculates the minimum height for a shape to display all its text content.
+ */
+export function getMinHeightForShape(shape: { type: string; props: Record<string, any> }, w?: number): number {
+  if (shape.type === 'text') {
+    return 0; // text shapes are fully auto-sized dynamically
+  }
+
+  let text = '';
+  let font = 'sans';
+  let fontSize: any = 'md';
+  let padding = 0;
+
+  if (shape.type === 'sticky-note') {
+    text = shape.props.text ?? '';
+    font = shape.props.font ?? 'sans';
+    fontSize = shape.props.fontSize ?? 'md';
+    padding = 12; // Sticky note PAD is 12
+  } else if (['box', 'ellipse', 'triangle', 'diamond', 'hexagon', 'star'].includes(shape.type)) {
+    text = shape.props.label ?? '';
+    font = shape.props.font ?? 'sans';
+    fontSize = shape.props.fontSize ?? 'md';
+    padding = 8; // Usable padding for textarea editing buffer is 4 on each side = 8 total
+  } else {
+    return 0;
+  }
+
+  const width = w ?? shape.props.w ?? 100;
+  return estimateTextHeight({ text, w: width, font, fontSize, padding });
+}
+
