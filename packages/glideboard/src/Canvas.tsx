@@ -7,8 +7,8 @@ import type {
   LabelProps,
 } from '@durgakiran/glideline';
 import { FONT_FAMILIES } from '@durgakiran/glideline';
-import { readOnlySignal, wbEditor } from './editor';
-import { MarqueeOverlay, SelectionLayer } from './SelectionLayer';
+import { readOnlySignal, wbEditor, isCanvasDraggingRef, deferredToolRestoreRef } from './editor';
+import { CanvasOverlays, getHandleAtPagePoint, getCursorForHandle } from './CanvasOverlays';
 import { wbTheme } from './theme';
 import { useSignalValue } from './useSignalValue';
 
@@ -51,127 +51,6 @@ function Grid() {
         <circle cx={dotR} cy={dotR} r={dotR} fill={wbTheme.grid} />
       </pattern>
     </defs>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────
-// Binding Preview Overlay (now in overlay SVG, world coords)
-// ─────────────────────────────────────────────────────────────
-
-const BINDING_PREVIEW_STROKE = '#a6e3a1';
-const BINDING_SOURCE_PREVIEW_STROKE = '#74c7ec';
-
-function renderGeometryOutline(
-  shape: GlideShape,
-  stroke: string,
-  fill: string,
-  strokeWidth: number,
-  opacity: number,
-) {
-  const geometry = wbEditor.getShapeUtil(shape.type).getGeometry(shape as any);
-  const outline = geometry.getOutline();
-
-  return (
-    <path
-      d={pointsToSvgPath(outline, shape.type !== 'arrow' && shape.type !== 'freehand')}
-      fill={fill}
-      stroke={stroke}
-      strokeWidth={strokeWidth}
-      vectorEffect="non-scaling-stroke"
-      pointerEvents="none"
-      opacity={opacity}
-      strokeLinejoin="round"
-      strokeLinecap="round"
-    />
-  );
-}
-
-export function BindingPreviewOverlay() {
-  const preview = useSignalValue(wbEditor.bindingPreview);
-  const activeSig = preview ? wbEditor.store.getSignal(preview.targetId) : undefined;
-  const sourceSig = preview?.sourceCandidate ? wbEditor.store.getSignal(preview.sourceCandidate.targetId) : undefined;
-  const activeShape = useSignalValue(activeSig as any) as GlideShape | null;
-  const sourceShape = useSignalValue(sourceSig as any) as GlideShape | null;
-
-  if (!preview || !activeShape) return null;
-
-  const renderCandidate = (
-    shape: GlideShape,
-    candidate: NonNullable<typeof preview.sourceCandidate> | typeof preview,
-    id: string,
-    stroke: string,
-    fill: string,
-    strokeWidth: number,
-    anchorRadius: number,
-    activeRadius: number,
-  ) => {
-    const localBounds = wbEditor.getShapeUtil(shape.type).getGeometry(shape as any).getBounds();
-    const cx = localBounds.minX + localBounds.w / 2;
-    const cy = localBounds.minY + localBounds.h / 2;
-    const angleDeg = ((shape.rotation || 0) * 180) / Math.PI;
-
-    return (
-      <>
-        <g
-          id={id}
-          transform={`translate(${shape.x}, ${shape.y}) rotate(${angleDeg}, ${cx}, ${cy})`}
-          pointerEvents="none"
-        >
-          {renderGeometryOutline(shape, stroke, fill, strokeWidth, 1)}
-        </g>
-        {candidate.candidateAnchors.map(anchor => (
-          <circle
-            key={`${id}-${anchor.normalizedAnchor.x}-${anchor.normalizedAnchor.y}`}
-            cx={anchor.point.x}
-            cy={anchor.point.y}
-            r={anchorRadius}
-            fill={wbTheme.selectionFill}
-            stroke={stroke}
-            strokeWidth={2}
-            vectorEffect="non-scaling-stroke"
-            pointerEvents="none"
-          />
-        ))}
-        <circle
-          id={`${id}-active-anchor`}
-          cx={candidate.point.x}
-          cy={candidate.point.y}
-          r={activeRadius}
-          fill={stroke}
-          stroke={wbTheme.selectionFill}
-          strokeWidth={2}
-          vectorEffect="non-scaling-stroke"
-          pointerEvents="none"
-        />
-      </>
-    );
-  };
-
-  return (
-    <>
-      {preview.sourceCandidate && sourceShape
-        ? renderCandidate(
-            sourceShape,
-            preview.sourceCandidate,
-            'wb-binding-preview-source',
-            BINDING_SOURCE_PREVIEW_STROKE,
-            'rgba(116, 199, 236, 0.1)',
-            2,
-            5,
-            7,
-          )
-        : null}
-      {renderCandidate(
-        activeShape,
-        preview,
-        'wb-binding-preview-target',
-        BINDING_PREVIEW_STROKE,
-        'rgba(166, 227, 161, 0.12)',
-        2,
-        5,
-        7,
-      )}
-    </>
   );
 }
 
@@ -389,6 +268,10 @@ export function Canvas() {
   const readOnly = useSignalValue(readOnlySignal) ?? false;
   const containerRef = useRef<HTMLDivElement>(null);
   const preventFocusStealRef = useRef(false);
+  const isMiddleDraggingRef = useRef(false);
+  const originalToolBeforeMiddleDragRef = useRef<string | null>(null);
+  const isPointerDownRef = useRef(false);
+  const activeTool = useSignalValue(wbEditor.currentToolId);
 
   useEffect(() => {
     const el = containerRef.current;
@@ -408,20 +291,32 @@ export function Canvas() {
       const screenPt = { x: event.clientX - box.left, y: event.clientY - box.top };
       const cam = wbEditor.camera.getCamera();
 
-      if (event.shiftKey && !event.ctrlKey && !event.metaKey) {
-        wbEditor.camera.setCamera({ x: cam.x + (event.deltaY + event.deltaX) / cam.z });
+      // Branch 1: Pinch-to-zoom — browsers set ctrlKey=true for trackpad pinch gestures
+      if (event.ctrlKey || event.metaKey) {
+        const factor = Math.exp(-event.deltaY * 0.01);
+        const newZ = Math.max(0.1, Math.min(8, cam.z * factor));
+        const pagePtX = screenPt.x / cam.z + cam.x;
+        const pagePtY = screenPt.y / cam.z + cam.y;
+        wbEditor.camera.setCamera({
+          x: pagePtX - screenPt.x / newZ,
+          y: pagePtY - screenPt.y / newZ,
+          z: newZ,
+        });
         return;
       }
 
-      const rawDelta = event.ctrlKey || event.metaKey ? event.deltaY : event.deltaY * 0.5;
-      const factor = Math.exp(-rawDelta * 0.01);
-      const newZ = Math.max(0.1, Math.min(8, cam.z * factor));
-      const pagePtX = screenPt.x / cam.z + cam.x;
-      const pagePtY = screenPt.y / cam.z + cam.y;
+      // Branch 2: Shift+scroll → horizontal pan only
+      if (event.shiftKey) {
+        wbEditor.camera.setCamera({
+          x: cam.x + (event.deltaY + event.deltaX) / cam.z,
+        });
+        return;
+      }
+
+      // Branch 3: Plain scroll / trackpad two-finger swipe → translate camera
       wbEditor.camera.setCamera({
-        x: pagePtX - screenPt.x / newZ,
-        y: pagePtY - screenPt.y / newZ,
-        z: newZ,
+        x: cam.x + event.deltaX / cam.z,
+        y: cam.y + event.deltaY / cam.z,
       });
     };
 
@@ -445,23 +340,35 @@ export function Canvas() {
   }, [getPagePoint]);
 
   const getHandleAtEvent = useCallback((event: React.PointerEvent) => {
-    const target = event.target as SVGElement;
-    return target.getAttribute('data-handle');
-  }, []);
+    const { page } = getPagePoint(event);
+    return getHandleAtPagePoint(page.x, page.y);
+  }, [getPagePoint]);
 
   const onPointerDown = useCallback((event: React.PointerEvent) => {
-    if (event.button !== 0) return;
+    if (event.button !== 0 && event.button !== 1) return;
+
+    if (event.button === 1) {
+      if (readOnly) return;
+      event.preventDefault();
+      isMiddleDraggingRef.current = true;
+      originalToolBeforeMiddleDragRef.current = wbEditor.currentToolId.peek();
+      wbEditor.setCurrentTool('hand');
+    }
+
+    isPointerDownRef.current = true;
+    isCanvasDraggingRef.current = true;
     containerRef.current!.setPointerCapture(event.pointerId);
 
-    const { page } = getPagePoint(event);
+    const { screen, page } = getPagePoint(event);
     const handleId = getHandleAtEvent(event);
 
-    if (handleId) {
+    if (handleId && event.button === 0) {
       if (readOnly) return;
       wbEditor.setCurrentTool('select');
       wbEditor.dispatchEvent({
         type: 'pointerDown',
         point: page,
+        screenPoint: screen,
         shiftKey: event.shiftKey,
         target: 'handle',
         handleId,
@@ -474,9 +381,10 @@ export function Canvas() {
     wbEditor.dispatchEvent({
       type: 'pointerDown',
       point: page,
+      screenPoint: screen,
       shiftKey: event.shiftKey,
-      target: hit ? 'shape' : 'canvas',
-      shapeId: hit?.id as ShapeId | undefined,
+      target: (hit && event.button === 0) ? 'shape' : 'canvas',
+      shapeId: (hit && event.button === 0) ? (hit.id as ShapeId) : undefined,
     } as any);
     if (!readOnly && wbEditor.editingShapeId.peek() !== editingBefore) {
       preventFocusStealRef.current = true;
@@ -484,14 +392,40 @@ export function Canvas() {
   }, [getHandleAtEvent, getPagePoint, getShapeAtEvent, readOnly]);
 
   const onPointerMove = useCallback((event: React.PointerEvent) => {
-    const { page } = getPagePoint(event);
-    wbEditor.dispatchEvent({ type: 'pointerMove', point: page, shiftKey: event.shiftKey, altKey: event.altKey } as any);
+    const { screen, page } = getPagePoint(event);
+    const handleId = getHandleAtPagePoint(page.x, page.y);
+    if (containerRef.current) {
+      const currentTool = wbEditor.currentToolId.peek();
+      if (currentTool === 'hand') {
+        containerRef.current.style.cursor = event.buttons === 1 ? 'grabbing' : 'grab';
+      } else {
+        containerRef.current.style.cursor = handleId ? getCursorForHandle(handleId) : 'default';
+      }
+    }
+    wbEditor.dispatchEvent({ type: 'pointerMove', point: page, screenPoint: screen, shiftKey: event.shiftKey, altKey: event.altKey } as any);
   }, [getPagePoint]);
 
   const onPointerUp = useCallback((event: React.PointerEvent) => {
     containerRef.current!.releasePointerCapture(event.pointerId);
-    const { page } = getPagePoint(event);
-    wbEditor.dispatchEvent({ type: 'pointerUp', point: page, shiftKey: event.shiftKey } as any);
+    const { screen, page } = getPagePoint(event);
+    wbEditor.dispatchEvent({ type: 'pointerUp', point: page, screenPoint: screen, shiftKey: event.shiftKey } as any);
+
+    isPointerDownRef.current = false;
+    isCanvasDraggingRef.current = false;
+
+    if (isMiddleDraggingRef.current) {
+      isMiddleDraggingRef.current = false;
+      if (originalToolBeforeMiddleDragRef.current) {
+        wbEditor.setCurrentTool(originalToolBeforeMiddleDragRef.current);
+        originalToolBeforeMiddleDragRef.current = null;
+      }
+    }
+
+    // Restore tool deferred from a spacebar release mid-drag
+    if (deferredToolRestoreRef.current) {
+      wbEditor.setCurrentTool(deferredToolRestoreRef.current);
+      deferredToolRestoreRef.current = null;
+    }
   }, [getPagePoint]);
 
   const onDoubleClick = useCallback((event: React.MouseEvent) => {
@@ -508,6 +442,16 @@ export function Canvas() {
     if (readOnly || wbEditor.editingShapeId.peek()) return;
     wbEditor.dispatchEvent({ type: 'keyDown', key: event.key } as any);
   }, [readOnly]);
+
+  // Sync canvas cursor when active tool changes (e.g. spacebar activates hand tool)
+  useEffect(() => {
+    if (!containerRef.current) return;
+    if (activeTool === 'hand') {
+      containerRef.current.style.cursor = 'grab';
+    } else {
+      containerRef.current.style.cursor = 'default';
+    }
+  }, [activeTool]);
 
   const cameraTransform = `scale(${camera.z}) translate(${-camera.x}px, ${-camera.y}px)`;
 
@@ -531,6 +475,9 @@ export function Canvas() {
       onDoubleClick={onDoubleClick}
       onKeyDown={onKeyDown}
       onMouseDown={event => {
+        if (event.button === 1) {
+          event.preventDefault();
+        }
         if (preventFocusStealRef.current) {
           preventFocusStealRef.current = false;
           event.preventDefault();
@@ -567,30 +514,8 @@ export function Canvas() {
         ))}
       </div>
 
-      {/* 3. Overlay SVG — selection handles, marquee, binding preview */}
-      <svg
-        id="wb-overlay"
-        style={{
-          position: 'absolute',
-          inset: 0,
-          width: '100%',
-          height: '100%',
-          overflow: 'visible',
-          pointerEvents: 'none',
-        }}
-      >
-        <g
-          id="wb-selection-group"
-          style={{
-            transform: cameraTransform,
-            pointerEvents: 'auto',
-          }}
-        >
-          <SelectionLayer />
-          <BindingPreviewOverlay />
-          <MarqueeOverlay />
-        </g>
-      </svg>
+      {/* 3. Overlay Canvas — selection handles, marquee, binding preview */}
+      <CanvasOverlays />
     </div>
   );
 }

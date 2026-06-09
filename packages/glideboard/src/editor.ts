@@ -70,6 +70,18 @@ export const wbEditor = createGlideboardEditorInstance();
 const wbToolServer = createCanvasToolServer(wbEditor);
 export const readOnlySignal = signal(false);
 
+/**
+ * Set to true while a pointer is captured on the canvas (pointerdown → pointerup).
+ * Read by WhiteboardApp's spacebar keyup handler to know whether to defer tool restoration.
+ */
+export const isCanvasDraggingRef = { current: false };
+
+/**
+ * When the spacebar is released while isCanvasDraggingRef is true, the previous tool id
+ * is stored here. Canvas.tsx clears it and restores the tool on the next pointerUp.
+ */
+export const deferredToolRestoreRef = { current: null as string | null };
+
 export type ConnectorPreset = 'line' | 'arrow' | 'double-arrow';
 export type ArrowheadStyle = 'none' | 'arrow';
 export type ArrowRouteStyle = 'curve' | 'ortho' | 'smart';

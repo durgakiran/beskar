@@ -2,6 +2,8 @@ import React from 'react';
 import { Canvas } from './Canvas';
 import { ContextMenu } from './ContextMenu';
 import {
+  isCanvasDraggingRef,
+  deferredToolRestoreRef,
   readOnlySignal,
   wbEditor,
 } from './editor';
@@ -28,6 +30,78 @@ export function WhiteboardApp() {
   const camera = useSignalValue(wbEditor.camera.signal);
   const readOnly = useSignalValue(readOnlySignal) ?? false;
   const [contextMenuPosition, setContextMenuPosition] = React.useState<{ x: number; y: number } | null>(null);
+
+  const isSpacebarHeldRef = React.useRef(false);
+  const previousToolRef = React.useRef<string | null>(null);
+
+  React.useEffect(() => {
+    if (readOnly) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (
+        event.target instanceof HTMLTextAreaElement ||
+        event.target instanceof HTMLInputElement ||
+        wbEditor.editingShapeId.peek()
+      ) {
+        return;
+      }
+
+      if (event.code === 'Space' || event.key === ' ') {
+        event.preventDefault();
+
+        if (isSpacebarHeldRef.current) return;
+        isSpacebarHeldRef.current = true;
+
+        const currentTool = wbEditor.currentToolId.peek();
+        if (currentTool !== 'hand') {
+          previousToolRef.current = currentTool;
+          wbEditor.setCurrentTool('hand');
+        }
+      }
+    };
+
+    const handleKeyUp = (event: KeyboardEvent) => {
+      if (event.code === 'Space' || event.key === ' ') {
+        if (isSpacebarHeldRef.current) {
+          event.preventDefault();
+          isSpacebarHeldRef.current = false;
+          if (previousToolRef.current) {
+            if (isCanvasDraggingRef.current) {
+              // Pointer is still captured — defer restoration until pointerUp fires
+              deferredToolRestoreRef.current = previousToolRef.current;
+            } else {
+              wbEditor.setCurrentTool(previousToolRef.current);
+            }
+            previousToolRef.current = null;
+          }
+        }
+      }
+    };
+
+    const handleBlur = () => {
+      if (isSpacebarHeldRef.current) {
+        isSpacebarHeldRef.current = false;
+        if (previousToolRef.current) {
+          if (isCanvasDraggingRef.current) {
+            deferredToolRestoreRef.current = previousToolRef.current;
+          } else {
+            wbEditor.setCurrentTool(previousToolRef.current);
+          }
+          previousToolRef.current = null;
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown, { capture: true });
+    window.addEventListener('keyup', handleKeyUp, { capture: true });
+    window.addEventListener('blur', handleBlur);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown, { capture: true });
+      window.removeEventListener('keyup', handleKeyUp, { capture: true });
+      window.removeEventListener('blur', handleBlur);
+    };
+  }, [readOnly]);
 
   const onContextMenu = (event: React.MouseEvent) => {
     if (readOnly) return;

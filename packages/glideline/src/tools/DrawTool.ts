@@ -71,7 +71,8 @@ class Drawing extends StateNode {
         meta:     {},
         props: {
           points:     [firstPt],
-          size:       'medium',
+          strokeWidth: this.editor.activeStyles.value.strokeWidth ?? 'medium',
+          strokeStyle: this.editor.activeStyles.value.strokeStyle ?? 'solid',
           opacity:    1,
           isClosed:   false,
           isComplete: false,
@@ -96,7 +97,8 @@ class Drawing extends StateNode {
       this.editor.updateShape(PREVIEW_ID, {
         props: {
           points:     this._points,
-          size:       'medium',
+          strokeWidth: this.editor.activeStyles.value.strokeWidth ?? 'medium',
+          strokeStyle: this.editor.activeStyles.value.strokeStyle ?? 'solid',
           opacity:    1,
           isClosed:   false,
           isComplete: false,
@@ -134,7 +136,8 @@ class Drawing extends StateNode {
           meta:     {},
           props: {
             points:     pts,
-            size:       'medium',
+            strokeWidth: this.editor.activeStyles.value.strokeWidth ?? 'medium',
+            strokeStyle: this.editor.activeStyles.value.strokeStyle ?? 'solid',
             opacity:    1,
             isClosed:   false,
             isComplete: true,
@@ -142,8 +145,6 @@ class Drawing extends StateNode {
         });
       });
 
-      this.editor.setCurrentTool('select');
-      this.editor.setSelectedShapeIds([finalId]);
     }
 
     this.parent!.transition('idle');

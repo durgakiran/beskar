@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import { useSelectedShapes } from './hooks/useSelectedShapes';
 import { setArrowRouteStyle, setArrowheadEnd, setArrowheadStart, wbEditor } from './editor';
+import { useSignalValue } from '../useSignalValue';
 import { TLDRAW_COLORS } from '../../../glideline/src/styles';
 import type { ShapeId } from '../../../glideline/src/types';
 import type { ArrowheadStyle, ArrowRouteStyle } from '../../../glideline/src/shapes/ArrowUtil';
@@ -64,6 +65,7 @@ function IconButton({ active, onClick, style, children }: { active: boolean; onC
 
 export function StylePanel() {
   const shapes = useSelectedShapes();
+  const activeStyles = useSignalValue(wbEditor.activeStyles);
 
   const supportedKeys = useMemo(() => {
     const keys = new Set<string>();
@@ -73,10 +75,11 @@ export function StylePanel() {
     return keys;
   }, [shapes]);
 
-  if (shapes.length === 0) return null;
-
   // Compute common values
   const getCommonValue = (key: string) => {
+    if (shapes.length === 0) {
+      return activeStyles ? activeStyles[key] : undefined;
+    }
     let val: any = undefined;
     let first = true;
     for (const s of shapes) {
@@ -93,15 +96,21 @@ export function StylePanel() {
   };
 
   const updateProp = (key: string, value: any) => {
-    wbEditor.history.batch('Style change', () => {
-      for (const s of shapes) {
-        if (key in s.props) {
-          wbEditor.updateShape(s.id as ShapeId, {
-            props: { ...s.props, [key]: value }
-          });
+    wbEditor.activeStyles.value = {
+      ...wbEditor.activeStyles.value,
+      [key]: value,
+    };
+    if (shapes.length > 0) {
+      wbEditor.history.batch('Style change', () => {
+        for (const s of shapes) {
+          if (key in s.props) {
+            wbEditor.updateShape(s.id as ShapeId, {
+              props: { ...s.props, [key]: value }
+            });
+          }
         }
-      }
-    });
+      });
+    }
   };
 
   const color = getCommonValue('color');
@@ -130,7 +139,7 @@ export function StylePanel() {
   return (
     <div style={PANEL_STYLE} onPointerDown={e => e.stopPropagation()}>
       {/* COLOR */}
-      {supportedKeys.has('color') && (
+      {(shapes.length === 0 || supportedKeys.has('color')) && (
         <div>
           <div style={SECTION_TITLE_STYLE}>Stroke / Fill Color</div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4 }}>
@@ -156,7 +165,7 @@ export function StylePanel() {
       )}
 
       {/* LABEL COLOR */}
-      {supportedKeys.has('labelColor') && (
+      {(shapes.length === 0 || supportedKeys.has('labelColor')) && (
         <div>
           <div style={SECTION_TITLE_STYLE}>Text Color</div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4 }}>
@@ -182,7 +191,7 @@ export function StylePanel() {
       )}
 
       {/* FILL */}
-      {supportedKeys.has('fillStyle') && (
+      {(shapes.length === 0 || supportedKeys.has('fillStyle')) && (
         <div>
           <div style={SECTION_TITLE_STYLE}>Fill</div>
           <div style={ROW_STYLE}>
@@ -194,7 +203,7 @@ export function StylePanel() {
       )}
 
       {/* STROKE WIDTH */}
-      {supportedKeys.has('strokeWidth') && (
+      {(shapes.length === 0 || supportedKeys.has('strokeWidth')) && (
         <div>
           <div style={SECTION_TITLE_STYLE}>Stroke Width</div>
           <div style={ROW_STYLE}>
@@ -207,7 +216,7 @@ export function StylePanel() {
       )}
 
       {/* STROKE STYLE */}
-      {supportedKeys.has('strokeStyle') && (
+      {(shapes.length === 0 || supportedKeys.has('strokeStyle')) && (
         <div>
           <div style={SECTION_TITLE_STYLE}>Stroke Style</div>
           <div style={ROW_STYLE}>

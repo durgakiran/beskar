@@ -13,6 +13,7 @@ import {
   type ArrowheadStyle,
 } from './editor';
 import { wbTheme } from './theme';
+import { useSignalValue } from './useSignalValue';
 
 const panelStyle: React.CSSProperties = {
   position: 'absolute',
@@ -74,6 +75,7 @@ function IconButton({ active, onClick, style, children }: { active: boolean; onC
 
 export function StylePanel() {
   const shapes = useSelectedShapes();
+  const activeStyles = useSignalValue(wbEditor.activeStyles);
 
   const supportedKeys = useMemo(() => {
     const keys = new Set<string>();
@@ -83,9 +85,10 @@ export function StylePanel() {
     return keys;
   }, [shapes]);
 
-  if (shapes.length === 0) return null;
-
   const getCommonValue = (key: string) => {
+    if (shapes.length === 0) {
+      return activeStyles ? activeStyles[key] : undefined;
+    }
     let value: unknown = undefined;
     let first = true;
     for (const shape of shapes) {
@@ -106,15 +109,17 @@ export function StylePanel() {
       ...wbEditor.activeStyles.value,
       [key]: value,
     };
-    wbEditor.history.batch('Style change', () => {
-      for (const shape of shapes) {
-        if (key in shape.props) {
-          wbEditor.updateShape(shape.id as ShapeId, {
-            props: { ...shape.props, [key]: value },
-          });
+    if (shapes.length > 0) {
+      wbEditor.history.batch('Style change', () => {
+        for (const shape of shapes) {
+          if (key in shape.props) {
+            wbEditor.updateShape(shape.id as ShapeId, {
+              props: { ...shape.props, [key]: value },
+            });
+          }
         }
-      }
-    });
+      });
+    }
   };
 
   const color = getCommonValue('color');
@@ -142,7 +147,7 @@ export function StylePanel() {
 
   return (
     <div style={panelStyle} onPointerDown={event => event.stopPropagation()}>
-      {supportedKeys.has('color') ? (
+      {(shapes.length === 0 || supportedKeys.has('color')) ? (
         <div>
           <div style={sectionTitleStyle}>Stroke / Fill Color</div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4 }}>
@@ -169,7 +174,7 @@ export function StylePanel() {
         </div>
       ) : null}
 
-      {supportedKeys.has('labelColor') ? (
+      {(shapes.length === 0 || supportedKeys.has('labelColor')) ? (
         <div>
           <div style={sectionTitleStyle}>Text Color</div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4 }}>
@@ -196,7 +201,7 @@ export function StylePanel() {
         </div>
       ) : null}
 
-      {supportedKeys.has('fillStyle') ? (
+      {(shapes.length === 0 || supportedKeys.has('fillStyle')) ? (
         <div>
           <div style={sectionTitleStyle}>Fill</div>
           <div style={rowStyle}>
@@ -209,7 +214,7 @@ export function StylePanel() {
         </div>
       ) : null}
 
-      {supportedKeys.has('strokeWidth') ? (
+      {(shapes.length === 0 || supportedKeys.has('strokeWidth')) ? (
         <div>
           <div style={sectionTitleStyle}>Stroke Width</div>
           <div style={rowStyle}>
@@ -221,7 +226,7 @@ export function StylePanel() {
         </div>
       ) : null}
 
-      {supportedKeys.has('strokeStyle') ? (
+      {(shapes.length === 0 || supportedKeys.has('strokeStyle')) ? (
         <div>
           <div style={sectionTitleStyle}>Stroke Style</div>
           <div style={rowStyle}>
