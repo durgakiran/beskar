@@ -281,7 +281,7 @@ Example for `beskar`:
 ```bash
 cat /tmp/beskar_20260420T023000Z.dump | \
 docker compose -f docker/.generated/compose.yml -p beskar-prod exec -T postgres \
-  pg_restore -h localhost -U admin -d beskar --clean --if-exists --no-owner --no-privileges
+  pg_restore -h localhost -U admin -d beskar --clean --if-exists
 ```
 
 Repeat for:

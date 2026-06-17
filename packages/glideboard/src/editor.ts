@@ -201,7 +201,7 @@ export function attachDebugApi(debugApiKey: string) {
     reset: clearWhiteboardState,
     setCurrentTool: (id: string) => wbEditor.setCurrentTool(id),
     getCurrentToolId: () => wbEditor.currentToolId.peek(),
-    callTool: (name: CanvasToolName, input: unknown) => wbToolServer.callTool(name, input),
+    callTool: async (name: CanvasToolName, input: unknown) => wbToolServer.callTool(name, input),
     getToolManifest: () => wbToolServer.generateToolManifest(),
     getAIContext: (opts?: { viewport?: boolean }) => wbEditor.getAIContext(opts),
     takeScreenshot: (box?: Box2d) => wbEditor.takeScreenshot(box),

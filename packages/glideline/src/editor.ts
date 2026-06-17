@@ -248,6 +248,9 @@ export class GlideEditor {
       const shapePropsSchema = (util.constructor as any).props || {};
       for (const [key, val] of Object.entries(activeStyles)) {
         if (key in defaultProps) {
+          if (key in userProps) {
+            continue;
+          }
           // Special case: do not force 'black' color on sticky-note when it's the initial default active style
           if (type === 'sticky-note' && key === 'color' && val === 'black' && !userProps.color) {
             continue;

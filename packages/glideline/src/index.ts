@@ -82,6 +82,9 @@ export {
   deleteShapesInputSchema,
   createConnectionInputSchema,
   getCanvasStateInputSchema,
+  createDiagramInputSchema,
+  layoutShapesInputSchema,
+  getCanvasImageInputSchema,
 } from './mcp';
 export type { CanvasToolName, CanvasToolResult, CanvasToolError, CanvasToolManifestEntry } from './mcp';
 
