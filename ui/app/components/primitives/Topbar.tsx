@@ -3,7 +3,7 @@
 import { cn } from "@/lib/utils";
 import * as Popover from "@radix-ui/react-popover";
 import { Box, Flex, Text } from "@radix-ui/themes";
-import Link from "next/link";
+import { Link } from "react-router-dom";
 import { Icon } from "@components/ui/Icon";
 import { NavItem, TopbarMenuItem, TopbarProps } from "./types";
 
@@ -41,7 +41,7 @@ function NavLink({ item }: { item: NavItem }) {
 
     if (item.href) {
         return (
-            <Link key={item.id} href={item.href}>
+            <Link key={item.id} to={item.href}>
                 {content}
             </Link>
         );
@@ -97,7 +97,7 @@ function MenuItem({ item }: { item: TopbarMenuItem }) {
     if (item.href) {
         return (
             <Popover.Close asChild key={item.id}>
-                <Link href={item.href} className={className}>
+                <Link to={item.href} className={className}>
                     {content}
                 </Link>
             </Popover.Close>
@@ -181,7 +181,7 @@ function MobileNavMenu({ items }: { items: NavItem[] }) {
                             if (item.href) {
                                 return (
                                     <Popover.Close asChild key={item.id}>
-                                        <Link href={item.href} className={className}>
+                                        <Link to={item.href} className={className}>
                                             {item.label}
                                         </Link>
                                     </Popover.Close>
@@ -223,7 +223,7 @@ export function Topbar({
             )}
         >
             <div className="mx-auto flex w-full max-w-[1440px] items-center justify-between px-4 py-3 sm:px-5 md:px-6 lg:px-8">
-                <Link href={brandHref} className="flex items-center gap-2.5">
+                <Link to={brandHref} className="flex items-center gap-2.5">
                     <div className="hidden md:block">
                         <BrandMark />
                     </div>

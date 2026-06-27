@@ -8,12 +8,12 @@ import { Response, useGet, usePost } from "@http/hooks";
 import { Button, Spinner, TextField } from "@radix-ui/themes";
 import { spaceSettingsPaths } from "../../../../core/queries/space/settings";
 import type { SpaceMember, SpaceSettingsState } from "../types";
-import { use, useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
+import {  useNavigate , useParams } from "react-router-dom";
 
-export default function Page({ params }: { params: Promise<{ spaceId: string }> }) {
-    const { spaceId } = use(params);
-    const router = useRouter();
+export default function Page() {
+    const { spaceId } = useParams() as any;
+    const navigate = useNavigate();
     const [{ isLoading, data, errors }, fetchSettings] = useGet<Response<SpaceSettingsState>>(spaceSettingsPaths.settings(spaceId));
     const [{ data: usersData }, fetchUsers] = useGet<Response<SpaceMember[]>>(spaceSettingsPaths.users(spaceId));
     const [{ data: archiveData, errors: archiveErrors, isLoading: archiveLoading }, archiveSpace] = usePost<Response<SpaceSettingsState>, Record<string, never>>(
@@ -52,9 +52,9 @@ export default function Page({ params }: { params: Promise<{ spaceId: string }> 
 
     useEffect(() => {
         if (deleteData?.data?.deleted) {
-            router.push("/space");
+            navigate("/space");
         }
-    }, [deleteData, router]);
+    }, [deleteData, navigate]);
 
     useEffect(() => {
         const err = archiveErrors || unarchiveErrors || transferErrors || deleteErrors;

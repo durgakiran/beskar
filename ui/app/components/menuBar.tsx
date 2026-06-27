@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo } from "react";
-import { useRouter, usePathname } from "next/navigation";
+import { useNavigate, useLocation } from "react-router-dom";
 import { useGetCall } from "@http";
 import { Response, useGet } from "@http/hooks";
 import { Icon } from "@components/ui/Icon";
@@ -20,7 +20,7 @@ interface NotificationCounts {
     actionRequired: number;
 }
 
-const USER_URI = process.env.NEXT_PUBLIC_USER_SERVER_URL;
+const USER_URI = import.meta.env.VITE_USER_SERVER_URL;
 
 function getInitials(name?: string) {
     if (!name) {
@@ -38,8 +38,8 @@ function getInitials(name?: string) {
 }
 
 export default function MenuBar() {
-    const router = useRouter();
-    const pathname = usePathname();
+    const navigate = useNavigate();
+    const pathname = useLocation().pathname;
     const [, res] = useGetCall<UserInfo>(USER_URI + "/profile/details");
     const [{ data: notificationsData }, fetchNotifications] = useGet<Response<NotificationCounts>>("notifications/unread-count");
 
@@ -98,7 +98,7 @@ export default function MenuBar() {
             user={user}
             userMenuItems={userMenuItems}
             notificationOpen={pathname === "/user/notifications"}
-            onNotificationsClick={() => router.push("/user/notifications")}
+            onNotificationsClick={() => navigate("/user/notifications")}
             notificationSlot={
                 <span className="relative inline-flex h-4 w-4 items-center justify-center">
                     <Icon name="Bell" className="h-4 w-4" strokeWidth={2} />

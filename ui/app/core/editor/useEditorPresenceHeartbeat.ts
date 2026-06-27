@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 
-const USER_URI = process.env.NEXT_PUBLIC_USER_SERVER_URL?.replace(/\/+$/, "") || "";
+const USER_URI = import.meta.env.VITE_USER_SERVER_URL?.replace(/\/+$/, "") || "";
 
 type Options = {
     spaceId: string;
@@ -24,7 +24,7 @@ export function useEditorPresenceHeartbeat({ spaceId, pageId, enabled, isDraftLe
 
     useEffect(() => {
         if (!enabled || !spaceId || !pageId) return;
-        if (process.env.NEXT_PUBLIC_EDITOR_PRESENCE === "0") return;
+        if (import.meta.env.VITE_EDITOR_PRESENCE === "0") return;
         if (!USER_URI) return;
 
         const path = `${USER_URI}/editor/space/${spaceId}/page/${pageId}/presence`;

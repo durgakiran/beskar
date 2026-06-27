@@ -11,7 +11,7 @@ export interface AttachmentUploadResponse {
 }
 
 function toAbsoluteAttachmentUrl(serverRelativePath: string): string {
-    const origin = getApiOrigin({ fallbackBase: process.env.NEXT_PUBLIC_IMAGE_SERVER_URL });
+    const origin = getApiOrigin({ fallbackBase: import.meta.env.VITE_IMAGE_SERVER_URL });
     if (!origin) {
         return serverRelativePath;
     }
@@ -27,7 +27,7 @@ function toAbsoluteAttachmentUrl(serverRelativePath: string): string {
  * Server: POST /api/v1/attachments/upload — multipart field `file`, form field `pageId`.
  */
 export async function uploadAttachmentData(file: File, pageId: number, options?: { signal?: AbortSignal }): Promise<AttachmentUploadResponse> {
-    const apiV1 = getApiV1Base({ fallbackBase: process.env.NEXT_PUBLIC_IMAGE_SERVER_URL });
+    const apiV1 = getApiV1Base({ fallbackBase: import.meta.env.VITE_IMAGE_SERVER_URL });
     const url = `${apiV1}/attachments/upload`;
     const formData = new FormData();
     formData.append("file", file);

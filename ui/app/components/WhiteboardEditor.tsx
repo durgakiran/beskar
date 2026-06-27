@@ -1,14 +1,14 @@
 "use client";
 
 import { useGet, Response } from "@http/hooks";
-import { usePUT } from "app/core/http/hooks/usePut";
+import { usePut as usePUT } from "@http/hooks";
 import { useEffect, useMemo, useState, useRef } from "react";
 import * as Y from "yjs";
 import { WebrtcProvider } from "y-webrtc";
 import { Glideboard } from "@durgakiran/glideboard";
 import { Spinner, Flex, Button, IconButton } from "@radix-ui/themes";
-import { Buffer } from "buffer";
-import { useRouter } from "next/navigation";
+import { base64ToUint8Array, uint8ArrayToBase64 } from "app/core/utils/base64";
+import { useNavigate } from "react-router-dom";
 import { HiHome } from "react-icons/hi";
 import { getSignalingUrl } from "app/core/signaling";
 
@@ -23,7 +23,7 @@ export default function WhiteboardEditor({
 }) {
     const spaceId = slug[0];
     const pageId = slug[1];
-    const router = useRouter();
+    const navigate = useNavigate();
     const fetchPath = readOnly
         ? `editor/space/${spaceId}/whiteboard/${pageId}`
         : `editor/space/${spaceId}/whiteboard/${pageId}/edit`;
@@ -89,7 +89,7 @@ export default function WhiteboardEditor({
         const encodedData = fetchRes.data?.data;
         if (encodedData) {
             try {
-                const update = Buffer.from(encodedData, 'base64');
+                const update = base64ToUint8Array(encodedData);
                 Y.applyUpdate(yDoc, update);
             } catch (err) {
                 console.error("Error applying init dbData to yDoc", err);
@@ -111,7 +111,7 @@ export default function WhiteboardEditor({
                 dirtyRef.current = false;
                 const encoded = Y.encodeStateAsUpdate(yDoc);
                 if (!encoded || encoded.length === 0) return; // skip empty state
-                const state = Buffer.from(encoded).toString('base64');
+                const state = uint8ArrayToBase64(encoded);
                 if (!state) return; // skip if base64 serialization failed
                 updateWhiteboard({ data: state });
             }
@@ -142,7 +142,7 @@ export default function WhiteboardEditor({
     }
 
     const handleClose = () => {
-        router.push(`/space/${spaceId}/view/${pageId}`);
+        navigate(`/space/${spaceId}/view/${pageId}`);
     };
 
     const pageTitle = fetchRes?.data?.title || 'Untitled Whiteboard';

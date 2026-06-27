@@ -13,7 +13,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as y from "yjs"
 import "./documentEditor.css";
 import { usePUT } from "app/core/http/hooks/usePut";
-import { useRouter } from "next/navigation";
+import { base64ToUint8Array, uint8ArrayToBase64 } from "app/core/utils/base64";
+import { useNavigate } from "react-router-dom";
 import { WebrtcProvider } from "y-webrtc";
 import { prosemirrorJSONToYDoc } from "@tiptap/y-tiptap";
 import { getSignalingUrl } from "app/core/signaling";
@@ -141,7 +142,7 @@ interface IPayloadPublish {
 
 export default function DocumentEditor({ slug }: { slug: string[] }) {
     const [provider, setProvider] = useState<WebrtcProvider>();
-    const router = useRouter();
+    const navigate = useNavigate();
 
     // profile of the current user
     const [{ data: profileData, errors: profileErrors, isLoading: profileLoading }, getProfile] = useGet<Response<User>>(`profile/details`);
@@ -283,7 +284,7 @@ export default function DocumentEditor({ slug }: { slug: string[] }) {
                 assetReferences: extractAssetReferences(content),
             };
             setUpdatedTitle(resolvedTitle);
-            updateDraftData({ ...payLoad, data: Buffer.from(y.encodeStateAsUpdate(ydoc)).toString("base64") });
+            updateDraftData({ ...payLoad, data: uint8ArrayToBase64(y.encodeStateAsUpdate(ydoc)) });
         },
         [
             isLeader,
@@ -299,7 +300,7 @@ export default function DocumentEditor({ slug }: { slug: string[] }) {
     );
 
     const handleClose = () => {
-        router.push(`/space/${slug[0]}/view/${slug[1]}`);
+        navigate(`/space/${slug[0]}/view/${slug[1]}`);
     };
 
     const applyServerMetaFromFetch = useCallback(
@@ -316,7 +317,7 @@ export default function DocumentEditor({ slug }: { slug: string[] }) {
                     typeof ev.draftGeneration === "number" ? ev.draftGeneration : 0,
                 );
             }
-            const base = (process.env.NEXT_PUBLIC_USER_SERVER_URL || "").replace(/\/+$/, "");
+            const base = (import.meta.env.VITE_USER_SERVER_URL || "").replace(/\/+$/, "");
             if (!base) return;
             const res = await fetch(`${base}/editor/space/${slug[0]}/page/${slug[1]}/edit/meta`, {
                 credentials: "include",
@@ -389,7 +390,7 @@ export default function DocumentEditor({ slug }: { slug: string[] }) {
         enabled: Boolean(profileData && provider),
         onPageEvent: handlePageEvent,
         onTransport: (transport) => {
-            if (process.env.NEXT_PUBLIC_PAGE_EVENTS_TRANSPORT_LOG === "1") {
+            if (import.meta.env.VITE_PAGE_EVENTS_TRANSPORT_LOG === "1") {
                 console.info("[page-events] transport", transport);
             }
         },
@@ -449,7 +450,7 @@ export default function DocumentEditor({ slug }: { slug: string[] }) {
     }, [provider, isLeader]);
 
     const safeMerge = (base64Update: string) => {
-        const dbUpdate = Buffer.from(base64Update, 'base64');
+        const dbUpdate = base64ToUint8Array(base64Update);
 
         // Decode DB state into a temp doc — never touch ydoc until we know what to apply
         const dbDoc = new y.Doc();
@@ -615,7 +616,9 @@ export default function DocumentEditor({ slug }: { slug: string[] }) {
         provider.on('synced', onSynced);
 
         return () => {
-            provider.off('synced', onSynced);
+            if (!fired) {
+                provider.off('synced', onSynced);
+            }
             clearTimeout(fallback);
         };
     }, [workerInitiated, documentData, editorContext, provider]);
@@ -623,7 +626,7 @@ export default function DocumentEditor({ slug }: { slug: string[] }) {
     // redirect to view page after publishing
     useEffect(() => {
         if (publishigData && !publishing) {
-            router.push(`/space/${slug[0]}/view/${slug[1]}`);
+            navigate(`/space/${slug[0]}/view/${slug[1]}`);
         }
     }, [publishigData, publishing]);
 

@@ -1,20 +1,24 @@
+import { useParams } from "react-router-dom";
 "use client";
 
-import { use } from "react";
+import {  } from "react";
+"use client";
+
+import {  } from "react";
 import { Response, useGet } from "@http/hooks";
 import { Spinner, Flex } from "@radix-ui/themes";
 import DocumentEditor from "@components/DocumentEditor";
 import WhiteboardEditor from "@components/WhiteboardEditor";
 import { useEffect } from "react";
 
-export default function Page({ params }: { params: Promise<{ slug: string[] }> }) {
-    const { slug } = use(params);
+export default function Page() {
+    const { spaceId, page } = useParams() as any;
 
-    const [{ data: metaData, isLoading, errors }, fetchMeta] = useGet<Response<{ type: string }>>(`editor/space/${slug[0]}/page/${slug[1]}/metadata`);
+    const [{ data: metaData, isLoading, errors }, fetchMeta] = useGet<Response<{ type: string }>>(`editor/space/${spaceId}/page/${page}/metadata`);
 
     useEffect(() => {
         fetchMeta();
-    }, [slug[0], slug[1]]);
+    }, [spaceId, page]);
 
     if (isLoading || (!metaData && !errors)) {
         return (
@@ -28,9 +32,11 @@ export default function Page({ params }: { params: Promise<{ slug: string[] }> }
         return <div>Error loading page metadata</div>;
     }
 
+    const slug = [spaceId, page];
+
     if (metaData.data.type === "whiteboard") {
-        return <WhiteboardEditor slug={slug} />;
+        return <WhiteboardEditor key={page} slug={slug} />;
     }
 
-    return <DocumentEditor slug={slug} />;
+    return <DocumentEditor key={page} slug={slug} />;
 }

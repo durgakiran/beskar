@@ -1,7 +1,7 @@
 "use client";
 
 import { cn } from "@/lib/utils";
-import Link from "next/link";
+import { Link } from "react-router-dom";
 import { SpaceCardProps } from "./types";
 
 function CardBody({ title, description, badge, badges = [], meta, leadingLabel, className }: Omit<SpaceCardProps, "href" | "onClick">) {
@@ -36,7 +36,7 @@ function CardBody({ title, description, badge, badges = [], meta, leadingLabel, 
 export function SpaceCard(props: SpaceCardProps) {
     if (props.href) {
         return (
-            <Link href={props.href} className="block transition-transform hover:-translate-y-0.5">
+            <Link to={props.href} className="block transition-transform hover:-translate-y-0.5">
                 <CardBody {...props} />
             </Link>
         );

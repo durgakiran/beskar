@@ -1,9 +1,8 @@
 "use client";
 
-import { use, useEffect, useState, useRef, useCallback } from "react";
-import { usePathname, useRouter } from "next/navigation";
-import Link from "next/link";
-import { FiHome, FiSettings, FiPlus } from "react-icons/fi";
+import { useEffect, useState, useRef, useCallback } from "react";
+import { useLocation, useNavigate, useParams, Link, Outlet } from "react-router-dom";
+import { FiHome, FiSettings, FiPlus, FiMenu } from "react-icons/fi";
 import { cn } from "@/lib/utils";
 import { PageTree, PageTreeNode } from "@components/primitives";
 import AddPage from "@components/addPage";
@@ -23,16 +22,17 @@ interface SpaceState {
     archivedAt?: string | null;
 }
 
-export default function Layout({ children, params }: { children: React.ReactNode, params: Promise<{ spaceId: string }> }) {
-    const { spaceId } = use(params);
-    const pathname = usePathname();
-    const router = useRouter();
+export default function Layout() {
+    const { spaceId } = useParams() as any;
+    const pathname = useLocation().pathname;
+    const navigate = useNavigate();
     
     // Sidebar Resize State
     const [sidebarWidth, setSidebarWidth] = useState(300);
     const isResizing = useRef(false);
     
     // Pages State
+    const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
     const [pages, setPages] = useState<PageTreeNode[]>([]);
     const [isAddPageOpen, setIsAddPageOpen] = useState(false);
     const [addPageParentId, setAddPageParentId] = useState<number | undefined>();
@@ -122,7 +122,8 @@ export default function Layout({ children, params }: { children: React.ReactNode
     const handlePageSelect = (id: string) => {
         const node = data?.data.find(p => p.pageId.toString() === id);
         if (node) {
-            router.push(`/space/${spaceId}/view/${id}`);
+            setIsMobileSidebarOpen(false);
+            navigate(`/space/${spaceId}/view/${id}`);
         }
     };
 
@@ -135,8 +136,8 @@ export default function Layout({ children, params }: { children: React.ReactNode
     const handleCreatedPage = useCallback((id: number) => {
         fetchPages();
         setIsAddPageOpen(false);
-        router.push(`/edit/${spaceId}/${id}`);
-    }, [fetchPages, router, spaceId]);
+        navigate(`/edit/${spaceId}/${id}`);
+    }, [fetchPages, navigate, spaceId]);
 
     const isActive = (path: string) => {
         if (path === `/space/${spaceId}`) return pathname === path;
@@ -145,20 +146,29 @@ export default function Layout({ children, params }: { children: React.ReactNode
 
     return (
         <SpaceAddPageProvider openAddPage={handleAddPage}>
-        <div className="flex h-full w-full overflow-hidden bg-white">
+        <div className="flex relative h-full w-full overflow-hidden bg-white">
+            {/* Mobile Sidebar Scrim */}
+            {isMobileSidebarOpen && (
+                <div 
+                    className="absolute inset-0 z-40 bg-black/40 md:hidden"
+                    onClick={() => setIsMobileSidebarOpen(false)}
+                />
+            )}
+
             {/* Sidebar */}
             <aside 
                 className={cn(
-                    "relative z-20 flex flex-shrink-0 flex-col border-r border-neutral-200 bg-white transition-[width] duration-75 ease-linear",
-                    "hidden md:flex"
+                    "relative z-50 flex flex-shrink-0 flex-col border-r border-neutral-200 bg-white transition-all duration-200 ease-in-out",
+                    isMobileSidebarOpen ? "absolute inset-y-0 left-0 flex w-[280px]" : "hidden md:flex"
                 )}
-                style={{ width: sidebarWidth }}
+                style={{ width: isMobileSidebarOpen ? 280 : sidebarWidth }}
             >
                 <div className="flex flex-1 flex-col gap-[14px] p-5 min-h-0">
                     {/* Navigation Menu */}
                     <nav className="flex flex-col gap-1.5">
                         <Link
-                            href={`/space/${spaceId}`}
+                            to={`/space/${spaceId}`}
+                            onClick={() => setIsMobileSidebarOpen(false)}
                             className={cn(
                                 "flex items-center gap-[10px] rounded-lg py-[9px] px-3 transition-colors",
                                 isActive(`/space/${spaceId}`) 
@@ -170,7 +180,8 @@ export default function Layout({ children, params }: { children: React.ReactNode
                             <span className="text-sm">Overview</span>
                         </Link>
                         <Link
-                            href={`/space/${spaceId}/settings/users`}
+                            to={`/space/${spaceId}/settings/users`}
+                            onClick={() => setIsMobileSidebarOpen(false)}
                             className={cn(
                                 "flex items-center gap-[10px] rounded-lg py-[9px] px-3 transition-colors",
                                 isActive(`/space/${spaceId}/settings`) 
@@ -232,8 +243,20 @@ export default function Layout({ children, params }: { children: React.ReactNode
             </div>
 
             {/* Main Content Area */}
-            <main className="relative z-0 min-w-0 flex-1 overflow-y-auto bg-[var(--background)]">
-                {children}
+            <main className="relative z-0 min-w-0 flex-1 flex flex-col overflow-y-auto bg-[var(--background)]">
+                {/* Mobile Header Toggle */}
+                <div className="flex md:hidden items-center px-4 py-3 border-b border-neutral-200 bg-white sticky top-0 z-30">
+                    <button 
+                        onClick={() => setIsMobileSidebarOpen(true)} 
+                        className="flex items-center gap-2 text-neutral-700 hover:text-neutral-900"
+                    >
+                        <FiMenu className="h-5 w-5" />
+                        <span className="text-sm font-semibold text-neutral-900">Pages</span>
+                    </button>
+                </div>
+                <div className="flex-1 overflow-y-auto relative z-0">
+                    <Outlet />
+                </div>
             </main>
 
             <AddPage 

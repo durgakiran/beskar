@@ -2,12 +2,11 @@
 
 import { Response, useGet, usePut } from "@http/hooks";
 import { Spinner, Flex } from "@radix-ui/themes";
-import { use, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
 import { SpaceSummaryStat, StatusNotice, PageTree, PageTreeNode, InlineEditable } from "@components/primitives";
 import { FiHome, FiSettings, FiPlus } from "react-icons/fi";
-import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { Link, useParams, useLocation, useNavigate } from "react-router-dom";
 import { useSpaceAddPage } from "./SpaceAddPageContext";
 
 interface SpaceDetails {
@@ -28,10 +27,10 @@ interface IPageList {
     type: "document" | "whiteboard";
 }
 
-export default function Page({ params }: { params: Promise<{ spaceId: string }> }) {
-    const { spaceId } = use(params);
-    const pathname = usePathname();
-    const router = useRouter();
+export default function Page() {
+    const { spaceId } = useParams() as any;
+    const pathname = useLocation().pathname;
+    const navigate = useNavigate();
 
     // Fetch Space Details
     const [{ isLoading, data, errors }, fetchDetails] = useGet<Response<SpaceDetails>>(`space/${spaceId}/details`);
@@ -145,7 +144,7 @@ export default function Page({ params }: { params: Promise<{ spaceId: string }> 
                 {/* Mobile Tab Bar */}
                 <div className="flex w-full min-h-[48px] items-center gap-2 rounded-lg border border-neutral-200 bg-white p-1 md:hidden">
                     <Link
-                        href={`/space/${spaceId}`}
+                        to={`/space/${spaceId}`}
                         className={cn(
                             "flex flex-1 items-center justify-center gap-2 rounded-md py-2 px-3 transition-colors",
                             isActive(`/space/${spaceId}`) ? "bg-primary-100 text-primary-700" : "text-neutral-500"
@@ -155,7 +154,7 @@ export default function Page({ params }: { params: Promise<{ spaceId: string }> 
                         <span className="text-[12px] font-semibold">Overview</span>
                     </Link>
                     <Link
-                        href={`/space/${spaceId}/settings/users`}
+                        to={`/space/${spaceId}/settings/users`}
                         className={cn(
                             "flex flex-1 items-center justify-center gap-2 rounded-md py-2 px-3 transition-colors",
                             isActive(`/space/${spaceId}/settings`) ? "bg-primary-100 text-primary-700" : "text-neutral-500"
@@ -245,7 +244,7 @@ export default function Page({ params }: { params: Promise<{ spaceId: string }> 
                         <PageTree
                             nodes={treeNodes}
                             onAddChild={(id) => openAddPage(id)}
-                            onSelect={(id) => router.push(`/space/${spaceId}/view/${id}`)}
+                            onSelect={(id) => navigate(`/space/${spaceId}/view/${id}`)}
                         />
                     ) : (
                         <p className="text-[13px] italic text-neutral-400 px-1 py-1">No pages yet</p>

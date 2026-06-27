@@ -1,13 +1,13 @@
+import { useParams } from "react-router-dom";
 "use client";
 import { TipTap } from "@editor";
 import { useGet } from "@http/hooks";
 import WhiteboardEditor from "@components/WhiteboardEditor";
-import { PageParams } from "app/space/types";
-import { use, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
-export default function Page({ params }: { params: Promise<PageParams> }) {
-    const { page, spaceId } = use(params);
-    const workerRef = useRef<Worker>(null);
+export default function Page() {
+    const { page, spaceId } = useParams() as any;
+    const workerRef = useRef<Worker | null>(null);
     const [{ isLoading, data, errors }, fetchData] = useGet<{ data: any; status: string }>(`editor/space/${spaceId}/page/${page}`);
     const [{ isLoading: loadingMeta, data: metaData, errors: metaErrors }, fetchMeta] = useGet<{ data: { type: string }; status: string }>(`editor/space/${spaceId}/page/${page}/metadata`);
     const [workerInitiated, setWorkerInitiated] = useState(false);
@@ -32,7 +32,7 @@ export default function Page({ params }: { params: Promise<PageParams> }) {
         };
         workerRef.current.postMessage({ type: "init" });
         return () => {
-            workerRef.current.terminate();
+            workerRef.current?.terminate();
         };
     }, []);
 
@@ -48,7 +48,7 @@ export default function Page({ params }: { params: Promise<PageParams> }) {
 
     useEffect(() => {
         if (data) {
-            workerRef.current.postMessage({ type: "doc", data: data.data });
+            workerRef.current?.postMessage({ type: "doc", data: data.data });
         }
     }, [data]);
 
@@ -59,7 +59,7 @@ export default function Page({ params }: { params: Promise<PageParams> }) {
     }, [errors]);
 
     if (metaData?.data?.type === "whiteboard") {
-        return <WhiteboardEditor slug={[spaceId, page]} />;
+        return <WhiteboardEditor key={page} slug={[spaceId, page]} />;
     }
 
     if (loadingMeta || isLoading || !workerInitiated) {
@@ -74,11 +74,12 @@ export default function Page({ params }: { params: Promise<PageParams> }) {
         return (
             <div>
                 <TipTap
+                    key={page}
                     content={content}
                     title={""}
-                    pageId="14"
+                    pageId={page}
                     spaceId={spaceId}
-                    id={14}
+                    id={Number(page)}
                     editable={false}
                     updateContent={(content, title) => console.log(content, title)}
                     setEditorContext={() => {}}

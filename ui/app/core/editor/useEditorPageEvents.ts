@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 
-const USER_URI = process.env.NEXT_PUBLIC_USER_SERVER_URL?.replace(/\/+$/, "") || "";
+const USER_URI = import.meta.env.VITE_USER_SERVER_URL?.replace(/\/+$/, "") || "";
 
 export type PageEventV1 = {
     schemaVersion: number;
@@ -39,7 +39,7 @@ export function useEditorPageEvents({ spaceId, pageId, enabled, onPageEvent, onT
     useEffect(() => {
         if (!enabled || !spaceId || !pageId) return;
 
-        const sseDisabled = process.env.NEXT_PUBLIC_PAGE_EVENTS_SSE === "0";
+        const sseDisabled = import.meta.env.VITE_PAGE_EVENTS_SSE === "0";
         const metaPath = `${USER_URI}/editor/space/${spaceId}/page/${pageId}/edit/meta`;
 
         if (sseDisabled) {

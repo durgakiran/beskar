@@ -1,7 +1,7 @@
 import MenuBar from "@components/menuBar";
 import { Box, Button, Flex, Heading, Text } from "@radix-ui/themes";
 import { FiArrowLeft, FiMail } from "react-icons/fi";
-import Link from "next/link";
+import { Link } from "react-router-dom";
 
 const contactEmail = "connect@durgakiran.in";
 const mailtoHref = `mailto:${contactEmail}?subject=Teddox%20support%20request`;
@@ -13,7 +13,7 @@ export default function ContactPage() {
             <Box className="mx-auto w-full max-w-5xl px-4 pb-12 pt-24 md:px-8">
                 <Flex direction="column" gap="6">
                     <Link
-                        href="/space"
+                        to="/space"
                         className="inline-flex w-fit items-center gap-2 text-sm font-medium text-[#605c67] transition-colors hover:text-[#221f26]"
                     >
                         <FiArrowLeft size={15} />

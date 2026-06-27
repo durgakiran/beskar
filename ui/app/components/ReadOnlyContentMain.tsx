@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import Link from "next/link";
+import { Link } from "react-router-dom";
 import { Box, Flex, IconButton, Text } from "@radix-ui/themes";
 import { FiCheck, FiEdit3, FiFileText, FiMessageSquare, FiMoreHorizontal, FiMoreVertical, FiShare2, FiTrash2 } from "react-icons/fi";
 import { copyTextToClipboard } from "../lib/clipboard";
@@ -303,7 +303,7 @@ export default function ReadOnlyContentMain({
                                             <Flex key={`${crumb.id}-${index}`} align="center" gap="2" className="min-w-0">
                                                 {crumb.href ? (
                                                     <Link
-                                                        href={crumb.href}
+                                                        to={crumb.href}
                                                         className="truncate font-medium text-[#898492] hover:text-[#605c67]"
                                                     >
                                                         {crumb.title}

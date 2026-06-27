@@ -154,7 +154,7 @@ export function TipTap({
                 }
 
                 return {
-                    url: `${getApiV1Base({ fallbackBase: process.env.NEXT_PUBLIC_IMAGE_SERVER_URL })}/media/image/${name}`,
+                    url: `${getApiV1Base({ fallbackBase: import.meta.env.VITE_IMAGE_SERVER_URL })}/media/image/${name}`,
                     width: adjustedWidth,
                     height: adjustedHeight,
                 };
@@ -209,7 +209,7 @@ export function TipTap({
     const internalResourceHandler: InternalResourceHandler | undefined = useMemo(() => {
         if (!spaceId) return undefined;
 
-        const baseUrl = process.env.NEXT_PUBLIC_USER_SERVER_URL?.replace(/\/+$/, "") || "";
+        const baseUrl = import.meta.env.VITE_USER_SERVER_URL?.replace(/\/+$/, "") || "";
         const appBaseUrl = typeof window !== "undefined" ? window.location.origin : "";
 
         const fetchJson = async <T,>(path: string): Promise<T> => {
@@ -309,7 +309,7 @@ export function TipTap({
     const externalLinkHandler: ExternalLinkHandler | undefined = useMemo(() => {
         if (!spaceId) return undefined;
 
-        const baseUrl = process.env.NEXT_PUBLIC_USER_SERVER_URL?.replace(/\/+$/, "") || "";
+        const baseUrl = import.meta.env.VITE_USER_SERVER_URL?.replace(/\/+$/, "") || "";
 
         const fetchJson = async <T,>(path: string): Promise<T> => {
             const response = await fetch(`${baseUrl}/${path}`, {
@@ -339,7 +339,7 @@ export function TipTap({
     const childPagesHandler: ChildPagesHandler | undefined = useMemo(() => {
         if (!spaceId || !Number.isFinite(id) || id < 1) return undefined;
 
-        const baseUrl = process.env.NEXT_PUBLIC_USER_SERVER_URL?.replace(/\/+$/, "") || "";
+        const baseUrl = import.meta.env.VITE_USER_SERVER_URL?.replace(/\/+$/, "") || "";
 
         const fetchJson = async <T,>(path: string): Promise<T> => {
             const response = await fetch(`${baseUrl}/${path}`, {

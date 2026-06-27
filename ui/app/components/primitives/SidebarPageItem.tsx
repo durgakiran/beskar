@@ -1,7 +1,7 @@
 "use client";
 
 import { cn } from "@/lib/utils";
-import Link from "next/link";
+import { Link } from "react-router-dom";
 import { SidebarPageItemProps } from "./types";
 import { FiChevronRight, FiChevronDown, FiFileText, FiEdit3, FiPlus, FiCornerDownRight } from "react-icons/fi";
 
@@ -111,7 +111,7 @@ export function SidebarPageItem({
 
     if (href) {
         return (
-            <Link href={href} onClick={() => onSelect?.(id)} className="block focus:outline-none">
+            <Link to={href} onClick={() => onSelect?.(id)} className="block focus:outline-none">
                 {content}
             </Link>
         );

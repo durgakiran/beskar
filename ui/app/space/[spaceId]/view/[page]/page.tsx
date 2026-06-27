@@ -7,8 +7,8 @@ import { TipTap, AttachmentPanel } from "@editor";
 import type { AttachmentRef } from "@durgakiran/editor";
 import { useGet, useDelete } from "@http/hooks";
 import { Button, Spinner, Flex, Box, Text, Dialog } from "@radix-ui/themes";
-import { useRouter } from "next/navigation";
-import { use, useEffect, useMemo, useRef, useState } from "react";
+import {  useNavigate , useParams } from "react-router-dom";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 interface ViewSpaceState {
     name: string;
@@ -33,8 +33,8 @@ interface PageMetadataResponse {
     status: string;
 }
 
-export default function Page({ params }: { params: Promise<{ page: string; spaceId: string }> }) {
-    const { page, spaceId } = use(params);
+export default function Page() {
+    const { page, spaceId } = useParams() as any;
     const workerRef = useRef<Worker | null>(null);
     const [workerInitiated, setWorkerInitiated] = useState(false);
     const [content, setContent] = useState();
@@ -42,7 +42,7 @@ export default function Page({ params }: { params: Promise<{ page: string; space
     const [showDeleteDialog, setShowDeleteDialog] = useState(false);
     const [isMobileViewport, setIsMobileViewport] = useState(false);
     const [isTabletViewport, setIsTabletViewport] = useState(false);
-    const router = useRouter();
+    const navigate = useNavigate();
 
     const [{ isLoading: loadingDocument, data: documentData, errors: documentErrors }, fetchDocument] = useGet<{ data: ViewResponseData | null; status: string }>(`editor/space/${spaceId}/page/${page}`);
     const [{ isLoading: loadingDelete, data: deleteData, errors: deleteErrors }, deletePageRequest] = useDelete<{ rowsAffected: number }, null>(`editor/space/${spaceId}/page/${page}/delete`);
@@ -128,12 +128,12 @@ export default function Page({ params }: { params: Promise<{ page: string; space
 
     useEffect(() => {
         if (deleteData) {
-            router.push(`/space/${spaceId}`);
+            navigate(`/space/${spaceId}`);
         }
-    }, [deleteData, router, spaceId]);
+    }, [deleteData, navigate, spaceId]);
 
     const onEdit = () => {
-        router.push(`/edit/${spaceId}/${page}`);
+        navigate(`/edit/${spaceId}/${page}`);
     };
 
     const onDelete = () => {
@@ -152,6 +152,7 @@ export default function Page({ params }: { params: Promise<{ page: string; space
         if (!viewData?.document || !content) return null;
         return (
             <TipTap
+                key={page}
                 updateContent={(nextContent, nextTitle) => console.log(nextContent, nextTitle)}
                 title={title}
                 setEditorContext={() => { }}
@@ -233,7 +234,7 @@ export default function Page({ params }: { params: Promise<{ page: string; space
                             className="overflow-hidden rounded-[18px] border border-[#d4d1da] bg-white shadow-[0_10px_30px_rgba(11,10,42,0.04)]"
                             style={{ height: "72vh", minHeight: "540px" }}
                         >
-                            <WhiteboardEditor slug={[spaceId, page]} readOnly fillParent />
+                            <WhiteboardEditor key={page} slug={[spaceId, page]} readOnly fillParent />
                         </Box>
                     ) : readOnlyContent ?? (
                         <Box className="rounded-[18px] border border-[#d4d1da] bg-white px-5 py-6 text-[#605c67] shadow-[0_10px_30px_rgba(11,10,42,0.04)] md:px-8">

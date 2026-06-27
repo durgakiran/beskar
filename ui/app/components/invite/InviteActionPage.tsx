@@ -3,8 +3,8 @@
 import { Icon } from "@components/ui/Icon";
 import { Response, useGet } from "@http/hooks";
 import { Spinner } from "@radix-ui/themes";
-import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { Link } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import type React from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { mapQuotaErrorMessage } from "../../core/queries/quota";
@@ -26,12 +26,12 @@ function InviteHeader() {
     return (
         <header className="border-b border-neutral-200 bg-white">
             <div className="mx-auto flex w-full max-w-[1200px] items-center justify-between px-4 py-[18px] sm:px-8 lg:px-10">
-                <Link href="/" className="flex items-center gap-2.5">
+                <Link to="/" className="flex items-center gap-2.5">
                     <BrandMark />
                     <span className="text-[22px] font-bold leading-none text-neutral-900">Teddox</span>
                 </Link>
                 <Link
-                    href="/user/notifications"
+                    to="/user/notifications"
                     className="inline-flex items-center gap-2 rounded-md border border-neutral-200 bg-neutral-50 px-3.5 py-2 text-sm font-semibold text-neutral-800 hover:bg-neutral-100"
                 >
                     <Icon name="Bell" className="h-[15px] w-[15px]" strokeWidth={2} />
@@ -68,7 +68,7 @@ function ActionButton({
 
     if (href && !disabled) {
         return (
-            <Link href={href} className={className}>
+            <Link to={href} className={className}>
                 {children}
             </Link>
         );

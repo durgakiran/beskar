@@ -1,3 +1,4 @@
+import { useParams } from "react-router-dom";
 "use client";
 
 import SettingsBreadcrumb from "@components/settings/SettingsBreadcrumb";
@@ -8,14 +9,14 @@ import { Response, useDelete, useGet } from "@http/hooks";
 import { Button, Spinner } from "@radix-ui/themes";
 import { spaceSettingsPaths } from "../../../../core/queries/space/settings";
 import type { PendingInvite } from "../types";
-import { use, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 
 type SpaceState = {
     archivedAt?: string | null;
 };
 
-export default function Page({ params }: { params: Promise<{ spaceId: string }> }) {
-    const { spaceId } = use(params);
+export default function Page() {
+    const { spaceId } = useParams() as any;
     const [{ isLoading, data, errors }, fetchInvites] = useGet<Response<PendingInvite[]>>(spaceSettingsPaths.invites(spaceId));
     const [{ data: spaceDetails }, fetchSpaceDetails] = useGet<Response<SpaceState>>(`space/${spaceId}/details`);
     const [{ data: removedData, errors: removeErrors, isLoading: removing }, removeInvite] = useDelete<Response<string>, PendingInvite>(

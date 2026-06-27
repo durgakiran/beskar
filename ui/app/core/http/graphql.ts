@@ -3,7 +3,7 @@ import { ApolloClient, from, HttpLink, InMemoryCache } from "@apollo/client";
 import { onError } from "@apollo/client/link/error"
 
 
-const URI = process.env.NEXT_PUBLIC_HASURA_PROJECT_ENDPOINT;
+const URI = import.meta.env.VITE_HASURA_PROJECT_ENDPOINT;
 
 const errorLink = onError(({ graphQLErrors }) => {
     if (graphQLErrors) {

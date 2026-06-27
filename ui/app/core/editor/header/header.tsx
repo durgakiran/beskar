@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useRef, useState } from "react";
-import Link from "next/link";
+import { Link } from "react-router-dom";
 import FixedMenu from "@editor/fixedMenu/FixedMenu";
 import { Avatar, Box, Button, Flex, HoverCard, IconButton, Text } from "@radix-ui/themes";
 import { FiCheck, FiFileText, FiShare2, FiStar } from "react-icons/fi";
@@ -107,7 +107,7 @@ export function Editorheader({
                     <FiFileText size={15} color="#605c67" />
                     <Flex align="center" gap="2" wrap="wrap" style={{ minWidth: 0 }}>
                         <Link
-                            href={`/space/${spaceId}`}
+                            to={`/space/${spaceId}`}
                             className="max-w-[220px] truncate text-[13px] font-medium text-[#898492] hover:text-[#605c67]"
                         >
                             {spaceName}

@@ -1,12 +1,12 @@
 "use client"
 import { get } from "@http";
 import { signIn, signOut, useSession } from "next-auth/react";
-import { useRouter } from "next/navigation";
+import { useNavigate } from "react-router-dom";
 import { useEffect } from "react";
 
 export default function Login() {
     const { data: session } = useSession()
-    const router = useRouter();
+    const navigate = useNavigate();
     
     useEffect(() => {
       (async () => {
@@ -14,7 +14,7 @@ export default function Login() {
           const data = await get('/api/protected');
           if (data && data.data && data.data.token) {
             localStorage.setItem('access_token', data.data.token);
-            router.push('/space');
+            navigate('/space');
           }
         } catch(e) {
           console.error(e);
