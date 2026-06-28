@@ -1,11 +1,4 @@
-import axios from "axios";
-
 export function extractRequestErrorMessage(error: unknown, fallback: string) {
-    if (axios.isAxiosError(error)) {
-        const detail = error.response?.data?.error?.detail;
-        const message = error.response?.data?.error?.message;
-        return detail || message || error.message || fallback;
-    }
     if (error instanceof Error && error.message) {
         return error.message;
     }

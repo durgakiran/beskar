@@ -1,4 +1,3 @@
-"use client";
 import React, { useCallback } from "react";
 import type { Editor, JSONContent } from "@tiptap/core";
 import { useDebounce } from "../hooks/debounce";

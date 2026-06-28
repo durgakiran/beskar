@@ -41,9 +41,7 @@ async function uploadImage(data: File, pageId: number) {
 export function useLoadImage(src: string) {
     const [dataUrl, setDataUrl] = useState(null);
     useEffect(() => {
-        const headers = new Headers();
-        headers.set("Authorization", `Bearer ${localStorage.getItem("access_token")}`);
-        const data = fetch(src, { headers });
+        const data = fetch(src, { credentials: 'include' });
         data.then((res) => {
             res.blob().then((value) => {
                 const image = URL.createObjectURL(value);

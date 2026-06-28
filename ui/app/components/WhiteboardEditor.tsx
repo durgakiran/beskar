@@ -1,4 +1,3 @@
-"use client";
 
 import { useGet, Response } from "@http/hooks";
 import { usePut as usePUT } from "@http/hooks";

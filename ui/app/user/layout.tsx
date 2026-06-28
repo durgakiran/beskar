@@ -1,4 +1,3 @@
-"use client";
 import MenuBar from "@components/menuBar";
 import { Box, Flex } from "@radix-ui/themes";
 import { Link } from "react-router-dom";

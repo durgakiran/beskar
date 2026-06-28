@@ -1,8 +1,6 @@
-"use client";
 
 import { useEffect, useMemo } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { useGetCall } from "@http";
 import { Response, useGet } from "@http/hooks";
 import { Icon } from "@components/ui/Icon";
 import { Topbar, TopbarMenuItem, TopbarUser } from "@components/primitives";
@@ -40,12 +38,13 @@ function getInitials(name?: string) {
 export default function MenuBar() {
     const navigate = useNavigate();
     const pathname = useLocation().pathname;
-    const [, res] = useGetCall<UserInfo>(USER_URI + "/profile/details");
+    const [{ data: res }, fetchUser] = useGet<Response<UserInfo>>("profile/details");
     const [{ data: notificationsData }, fetchNotifications] = useGet<Response<NotificationCounts>>("notifications/unread-count");
 
     useEffect(() => {
+        fetchUser();
         fetchNotifications();
-    }, [fetchNotifications, pathname]);
+    }, [fetchUser, fetchNotifications, pathname]);
 
     useEffect(() => {
         const handleNotificationsChanged = () => {

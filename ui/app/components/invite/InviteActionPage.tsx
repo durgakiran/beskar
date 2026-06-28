@@ -1,4 +1,3 @@
-"use client";
 
 import { Icon } from "@components/ui/Icon";
 import { Response, useGet } from "@http/hooks";

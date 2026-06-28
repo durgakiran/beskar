@@ -1,4 +1,3 @@
-'use client'
 import { Button, Flex, Heading } from "@radix-ui/themes";
 import { HiBookOpen } from "react-icons/hi";
 import React from "react";

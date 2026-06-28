@@ -1,4 +1,3 @@
-"use client";
 
 import SettingsBreadcrumb from "@components/settings/SettingsBreadcrumb";
 import SettingsPageHeader from "@components/settings/SettingsPageHeader";

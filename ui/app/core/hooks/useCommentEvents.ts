@@ -30,14 +30,12 @@ export function useCommentEvents(pageId: string) {
 
     const connect = async () => {
       try {
-        const token = localStorage.getItem('access_token');
         const response = await fetch(`${getApiV1Base()}/comment/documents/${pageId}/events`, {
           method: 'GET',
           headers: {
-            Accept: 'text/event-stream',
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            Accept: 'text/event-stream'
           },
-          credentials: token ? 'same-origin' : 'include',
+          credentials: 'include',
           signal: controller.signal,
         });
 

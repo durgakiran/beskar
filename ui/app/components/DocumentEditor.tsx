@@ -1,4 +1,3 @@
-"use client";
 
 import { TipTap, AttachmentPanel } from "@editor";
 import type { AttachmentRef } from "@durgakiran/editor";

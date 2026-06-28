@@ -1,4 +1,3 @@
-"use client";
 
 import ReadOnlyContentMain, { type ReadOnlyBreadcrumb, type ReadOnlyCapabilities, type ReadOnlyMeta } from "@components/ReadOnlyContentMain";
 import ToastComponent from "@components/ui/ToastComponent";

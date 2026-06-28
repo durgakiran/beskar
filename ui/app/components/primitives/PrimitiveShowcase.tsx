@@ -1,4 +1,3 @@
-"use client";
 
 import { useState } from "react";
 import { Box, Button, Text, IconButton } from "@radix-ui/themes";

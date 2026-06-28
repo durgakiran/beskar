@@ -68,8 +68,7 @@ export function makeCommentApiHandler(documentId: string): CommentAPIHandler {
       const res = await fetch(`${apiV1}/comment/threads/${threadId}/resolve`, {
         method: "PATCH",
         headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${localStorage.getItem("access_token")}`
+            "Content-Type": "application/json"
         },
         credentials: "include"
       });
@@ -82,8 +81,7 @@ export function makeCommentApiHandler(documentId: string): CommentAPIHandler {
       const res = await fetch(`${apiV1}/comment/threads/${threadId}/unresolve`, {
         method: "PATCH",
         headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${localStorage.getItem("access_token")}`
+            "Content-Type": "application/json"
         },
         credentials: "include"
       });
@@ -96,8 +94,7 @@ export function makeCommentApiHandler(documentId: string): CommentAPIHandler {
       const res = await fetch(`${apiV1}/comment/threads/${threadId}/orphan`, {
         method: "PATCH",
         headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${localStorage.getItem("access_token")}`
+            "Content-Type": "application/json"
         },
         credentials: "include"
       });
@@ -110,8 +107,7 @@ export function makeCommentApiHandler(documentId: string): CommentAPIHandler {
       const res = await fetch(`${apiV1}/comment/threads/${threadId}`, {
         method: "DELETE",
         headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${localStorage.getItem("access_token")}`
+            "Content-Type": "application/json"
         },
         credentials: "include", // Relies on session cookies for auth
       });
@@ -131,8 +127,7 @@ export function makeCommentApiHandler(documentId: string): CommentAPIHandler {
       const res = await fetch(`${apiV1}/comment/replies/${replyId}`, {
         method: "PATCH",
         headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${localStorage.getItem("access_token")}`
+            "Content-Type": "application/json"
         },
         body: JSON.stringify({ body, attachmentIds: (attachments || []).map((a) => a.attachmentId) }),
         credentials: "include"
@@ -146,8 +141,7 @@ export function makeCommentApiHandler(documentId: string): CommentAPIHandler {
       const res = await fetch(`${apiV1}/comment/replies/${replyId}`, {
         method: "DELETE",
         headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${localStorage.getItem("access_token")}`
+            "Content-Type": "application/json"
         },
         credentials: "include", // Relies on session cookies for auth
       });

@@ -1,4 +1,3 @@
-"use client";
 
 import { QuotaNotice, QuotaStatCard, QuotaUsageMeter } from "@components/quota/QuotaUI";
 import ToastComponent from "@components/ui/ToastComponent";

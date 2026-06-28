@@ -50,10 +50,6 @@ export async function uploadAttachmentData(file: File, pageId: number, options?:
 /** Authenticated download to a local file save (same pattern as editor chip). */
 export async function downloadAttachmentBlob(targetUrl: string, fileName: string): Promise<void> {
     const headers = new Headers();
-    const token = typeof window !== "undefined" ? localStorage.getItem("access_token") : null;
-    if (token) {
-        headers.set("Authorization", `Bearer ${token}`);
-    }
     const res = await fetch(targetUrl, { headers });
     if (!res.ok) {
         throw new Error(`Download failed (${res.status})`);

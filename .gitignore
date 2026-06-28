@@ -48,3 +48,4 @@ packages/glideline/test-results/*
 packages/glideboard-electron
 openssl-backup.key
 beskarpostgresdata
+ui/dist

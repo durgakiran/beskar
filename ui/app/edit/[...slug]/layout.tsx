@@ -1,4 +1,3 @@
-"use client";
 import { Spinner, Flex } from "@radix-ui/themes";
 import React, { Suspense, lazy } from "react";
 import { ReactNode } from "react";

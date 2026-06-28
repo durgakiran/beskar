@@ -1,4 +1,3 @@
-"use client";
 
 import { Response, useGet, usePut } from "@http/hooks";
 import { Spinner, Flex } from "@radix-ui/themes";

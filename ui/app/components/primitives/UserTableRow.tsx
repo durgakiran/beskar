@@ -1,4 +1,3 @@
-"use client";
 
 import { cn } from "@/lib/utils";
 import { Avatar, Flex, Text } from "@radix-ui/themes";

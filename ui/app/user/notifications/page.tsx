@@ -1,4 +1,3 @@
-"use client";
 
 import ToastComponent from "@components/ui/ToastComponent";
 import { Response, useGet } from "@http/hooks";

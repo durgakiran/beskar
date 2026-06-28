@@ -1,4 +1,3 @@
-"use client";
 import { CreateSpaceModal, SpaceCard, SpacesHeader } from "@components/primitives";
 import { Button } from "@components/ui/Button";
 import { Icon } from "@components/ui/Icon";

@@ -1,4 +1,3 @@
-"use client";
 
 import { HocuspocusProviderWebsocket } from "@hocuspocus/provider";
 import { createContext } from "react";

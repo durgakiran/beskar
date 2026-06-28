@@ -1,4 +1,3 @@
-"use client";
 
 import { Response, usePost } from "@http/hooks";
 import { useCallback, useState } from "react";
