@@ -12,6 +12,7 @@ import { wbTheme } from './theme';
 import { Toolbar } from './Toolbar';
 import { ZoomWidget, fitToScreen } from './ZoomWidget';
 import { useSignalValue } from './useSignalValue';
+import { BackToContentButton } from './BackToContentButton';
 
 const TOOL_KEYS: Record<string, string> = {
   v: 'select',
@@ -185,6 +186,7 @@ export function WhiteboardApp() {
       {!readOnly ? (
         <ContextMenu position={contextMenuPosition} onClose={() => setContextMenuPosition(null)} />
       ) : null}
+      <BackToContentButton />
       <div
         id="wb-statusbar"
         style={{

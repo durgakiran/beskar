@@ -49,3 +49,4 @@ packages/glideboard-electron
 openssl-backup.key
 beskarpostgresdata
 ui/dist
+.npmrc

@@ -22,7 +22,7 @@
     "license": "ISC",
     "dependencies": {
         "@durgakiran/editor": "0.1.8",
-        "@durgakiran/glideboard": "0.0.2",
+        "@durgakiran/glideboard": "0.0.4",
         "@floating-ui/react": "^0.26.16",
         "@hocuspocus/provider": "^3.0.8-rc.0",
         "@hocuspocus/transformer": "^3.0.8-rc.0",
