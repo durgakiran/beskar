@@ -1,4 +1,3 @@
-"use client";
 import { CreateSpaceModal, SpaceCard, SpacesHeader } from "@components/primitives";
 import { Button } from "@components/ui/Button";
 import { Icon } from "@components/ui/Icon";
@@ -172,7 +171,7 @@ export default function Page() {
 
     return (
         <>
-            <div className="flex w-full flex-col gap-6 px-8 py-6">
+            <div className="flex h-full w-full flex-col gap-6 overflow-y-auto px-8 py-6">
                 <SpacesHeader
                     title={PAGE_TITLE}
                     subtitle={PAGE_SUBTITLE}

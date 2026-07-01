@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext"
+    xmlns:pro="http://www.liquibase.org/xml/ns/pro"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd
+        http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd
+        http://www.liquibase.org/xml/ns/pro http://www.liquibase.org/xml/ns/pro/liquibase-pro-latest.xsd">
+
+    <changeSet id="whiteboard_versioning_1" author="Antigravity">
+        <comment>Backfill existing whiteboard pages to be in draft mode</comment>
+        <sql>
+            <![CDATA[
+                UPDATE core.page_doc_map pdm
+                SET draft = 1
+                FROM core.page p
+                WHERE p.id = pdm.page_id
+                  AND p.type = 'whiteboard'
+                  AND pdm.draft = 0;
+            ]]>
+        </sql>
+    </changeSet>
+
+    <changeSet id="whiteboard_versioning_2" author="Antigravity">
+        <comment>Add preview_asset_name to core.whiteboard_data</comment>
+        <addColumn schemaName="core" tableName="whiteboard_data">
+            <column name="preview_asset_name" type="TEXT" />
+        </addColumn>
+    </changeSet>
+
+    <changeSet id="whiteboard_versioning_3" author="Antigravity">
+        <comment>Create partial unique index for single draft per page</comment>
+        <sql>
+            <![CDATA[
+                CREATE UNIQUE INDEX IF NOT EXISTS page_doc_map_one_draft_per_page
+                ON core.page_doc_map (page_id)
+                WHERE draft = 1;
+            ]]>
+        </sql>
+    </changeSet>
+
+</databaseChangeLog>

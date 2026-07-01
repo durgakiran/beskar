@@ -50,7 +50,7 @@ export function buildArrowShapeRecord(args: {
       bend: routeStyle === 'curve' ? DEFAULT_CURVE_BEND : 0,
       arrowheadStart,
       arrowheadEnd,
-      color: '#f38ba8',
+      color: 'black',
       opacity: 1,
       strokeStyle: 'solid',
       strokeWidth: 'medium',

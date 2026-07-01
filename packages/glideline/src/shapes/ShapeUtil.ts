@@ -8,6 +8,10 @@
 
 import type { GlideShape, GlideBinding, Box2d, Vec2, GlideProps, GlideMigrations, ShapeId } from '../types';
 import type { Geometry2d } from '../geometry';
+import { getMinHeightForShape, type LabelProps } from '../styles';
+
+// Re-export LabelProps so consumers can import from ShapeUtil directly
+export type { LabelProps };
 
 export type ResizeHandle = 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w';
 
@@ -99,9 +103,20 @@ export abstract class ShapeUtil<S extends GlideShape = GlideShape> {
     const relH = ((initialShape.props as any).h ?? initialBounds.h) / initialBounds.h;
 
     const newX = bx + relX * bw;
-    const newY = by + relY * bh;
+    let newY = by + relY * bh;
     const newW = Math.max(1, relW * bw);
-    const newH = Math.max(1, relH * bh);
+    let newH = Math.max(1, relH * bh);
+
+    // Calculate minimum height required for text label
+    const minH = getMinHeightForShape(initialShape as any, newW);
+    if (newH < minH) {
+      if (info.handle.includes('n')) {
+        // Top edge is moving; keep bottom edge anchored
+        const oldBottom = initialShape.y + ((initialShape.props as any).h ?? initialBounds.h);
+        newY = oldBottom - minH;
+      }
+      newH = minH;
+    }
 
     return {
       x: newX,
@@ -113,6 +128,30 @@ export abstract class ShapeUtil<S extends GlideShape = GlideShape> {
       },
     } as Partial<S>;
   }
+
+  /**
+   * Return SVG elements for interactive canvas rendering.
+   * Geometry ONLY — no text labels, no foreignObject.
+   * Output goes into a per-shape <svg overflow:visible> in the HTML div layer.
+   * Default: returns an empty <g> (for shapes that have no visible SVG geometry).
+   */
+  toSvg(_shape: S): SVGElement {
+    return document.createElementNS('http://www.w3.org/2000/svg', 'g');
+  }
+
+  /**
+   * Return CSS label properties for the HTML label overlay div.
+   * Return null if this shape has no text label.
+   * Default: null.
+   */
+  getLabelProps(_shape: S): LabelProps | null { return null; }
+
+  /**
+   * Return SVG elements for SVG/PNG export.
+   * May include foreignObject for text labels.
+   * Default: delegates to toSvg() — shapes without labels get identical output.
+   */
+  toSvgExport(shape: S): SVGElement { return this.toSvg(shape); }
 }
 
 // ─────────────────────────────────────────────────────────────

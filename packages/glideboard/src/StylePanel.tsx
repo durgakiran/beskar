@@ -13,6 +13,7 @@ import {
   type ArrowheadStyle,
 } from './editor';
 import { wbTheme } from './theme';
+import { useSignalValue } from './useSignalValue';
 
 const panelStyle: React.CSSProperties = {
   position: 'absolute',
@@ -48,7 +49,7 @@ const rowStyle: React.CSSProperties = {
   gap: 4,
 };
 
-function IconButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+function IconButton({ active, onClick, style, children }: { active: boolean; onClick: () => void; style?: React.CSSProperties; children: React.ReactNode }) {
   return (
     <button
       onClick={onClick}
@@ -64,6 +65,7 @@ function IconButton({ active, onClick, children }: { active: boolean; onClick: (
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
+        ...style,
       }}
     >
       {children}
@@ -73,6 +75,7 @@ function IconButton({ active, onClick, children }: { active: boolean; onClick: (
 
 export function StylePanel() {
   const shapes = useSelectedShapes();
+  const activeStyles = useSignalValue(wbEditor.activeStyles);
 
   const supportedKeys = useMemo(() => {
     const keys = new Set<string>();
@@ -82,9 +85,10 @@ export function StylePanel() {
     return keys;
   }, [shapes]);
 
-  if (shapes.length === 0) return null;
-
   const getCommonValue = (key: string) => {
+    if (shapes.length === 0) {
+      return activeStyles ? activeStyles[key] : undefined;
+    }
     let value: unknown = undefined;
     let first = true;
     for (const shape of shapes) {
@@ -101,15 +105,21 @@ export function StylePanel() {
   };
 
   const updateProp = (key: string, value: unknown) => {
-    wbEditor.history.batch('Style change', () => {
-      for (const shape of shapes) {
-        if (key in shape.props) {
-          wbEditor.updateShape(shape.id as ShapeId, {
-            props: { ...shape.props, [key]: value },
-          });
+    wbEditor.activeStyles.value = {
+      ...wbEditor.activeStyles.value,
+      [key]: value,
+    };
+    if (shapes.length > 0) {
+      wbEditor.history.batch('Style change', () => {
+        for (const shape of shapes) {
+          if (key in shape.props) {
+            wbEditor.updateShape(shape.id as ShapeId, {
+              props: { ...shape.props, [key]: value },
+            });
+          }
         }
-      }
-    });
+      });
+    }
   };
 
   const color = getCommonValue('color');
@@ -137,7 +147,7 @@ export function StylePanel() {
 
   return (
     <div style={panelStyle} onPointerDown={event => event.stopPropagation()}>
-      {supportedKeys.has('color') ? (
+      {(shapes.length === 0 || supportedKeys.has('color')) ? (
         <div>
           <div style={sectionTitleStyle}>Stroke / Fill Color</div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4 }}>
@@ -164,7 +174,7 @@ export function StylePanel() {
         </div>
       ) : null}
 
-      {supportedKeys.has('labelColor') ? (
+      {(shapes.length === 0 || supportedKeys.has('labelColor')) ? (
         <div>
           <div style={sectionTitleStyle}>Text Color</div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4 }}>
@@ -191,18 +201,20 @@ export function StylePanel() {
         </div>
       ) : null}
 
-      {supportedKeys.has('fillStyle') ? (
+      {(shapes.length === 0 || supportedKeys.has('fillStyle')) ? (
         <div>
           <div style={sectionTitleStyle}>Fill</div>
           <div style={rowStyle}>
             <IconButton active={fillStyle === 'none'} onClick={() => updateProp('fillStyle', 'none')}>None</IconButton>
             <IconButton active={fillStyle === 'semi'} onClick={() => updateProp('fillStyle', 'semi')}>Semi</IconButton>
             <IconButton active={fillStyle === 'solid'} onClick={() => updateProp('fillStyle', 'solid')}>Solid</IconButton>
+            <IconButton active={fillStyle === 'pattern'} onClick={() => updateProp('fillStyle', 'pattern')}>Pattern</IconButton>
+            <IconButton active={fillStyle === 'lined'} onClick={() => updateProp('fillStyle', 'lined')}>Lined</IconButton>
           </div>
         </div>
       ) : null}
 
-      {supportedKeys.has('strokeWidth') ? (
+      {(shapes.length === 0 || supportedKeys.has('strokeWidth')) ? (
         <div>
           <div style={sectionTitleStyle}>Stroke Width</div>
           <div style={rowStyle}>
@@ -214,7 +226,7 @@ export function StylePanel() {
         </div>
       ) : null}
 
-      {supportedKeys.has('strokeStyle') ? (
+      {(shapes.length === 0 || supportedKeys.has('strokeStyle')) ? (
         <div>
           <div style={sectionTitleStyle}>Stroke Style</div>
           <div style={rowStyle}>
@@ -260,10 +272,10 @@ export function StylePanel() {
         <div>
           <div style={sectionTitleStyle}>Font Family</div>
           <div style={rowStyle}>
-            <IconButton active={font === 'draw'} onClick={() => updateProp('font', 'draw')}>Draw</IconButton>
-            <IconButton active={font === 'sans'} onClick={() => updateProp('font', 'sans')}>Sans</IconButton>
-            <IconButton active={font === 'serif'} onClick={() => updateProp('font', 'serif')}>Serif</IconButton>
-            <IconButton active={font === 'mono'} onClick={() => updateProp('font', 'mono')}>Mono</IconButton>
+            <IconButton active={font === 'draw'} onClick={() => updateProp('font', 'draw')} style={{ fontFamily: '"Shantell Sans", cursive' }}>Draw</IconButton>
+            <IconButton active={font === 'sans'} onClick={() => updateProp('font', 'sans')} style={{ fontFamily: 'Inter, system-ui, sans-serif' }}>Sans</IconButton>
+            <IconButton active={font === 'serif'} onClick={() => updateProp('font', 'serif')} style={{ fontFamily: 'Georgia, serif' }}>Serif</IconButton>
+            <IconButton active={font === 'mono'} onClick={() => updateProp('font', 'mono')} style={{ fontFamily: '"Fira Code", monospace' }}>Mono</IconButton>
           </div>
         </div>
       ) : null}

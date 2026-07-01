@@ -26,7 +26,7 @@ export function uploadImageData(data: File, pageId: number): Promise<[string, nu
 }
 
 async function uploadImage(data: File, pageId: number) {
-    const apiV1 = getApiV1Base({ fallbackBase: process.env.NEXT_PUBLIC_IMAGE_SERVER_URL });
+    const apiV1 = getApiV1Base({ fallbackBase: import.meta.env.VITE_IMAGE_SERVER_URL });
     const url = `${apiV1}/media/upload`;
     const formData = new FormData();
     formData.append("file", data);
@@ -41,9 +41,7 @@ async function uploadImage(data: File, pageId: number) {
 export function useLoadImage(src: string) {
     const [dataUrl, setDataUrl] = useState(null);
     useEffect(() => {
-        const headers = new Headers();
-        headers.set("Authorization", `Bearer ${localStorage.getItem("access_token")}`);
-        const data = fetch(src, { headers });
+        const data = fetch(src, { credentials: 'include' });
         data.then((res) => {
             res.blob().then((value) => {
                 const image = URL.createObjectURL(value);

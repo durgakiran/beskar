@@ -49,8 +49,6 @@ class Idle extends StateNode {
         meta:     {},
         props: {
           text:     '',
-          fontSize: 16,
-          color:    '#cdd6f4',
         },
       });
     });

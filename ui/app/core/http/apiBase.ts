@@ -10,8 +10,8 @@ export function normalizeApiV1Base(base?: string | null): string {
 
 export function getApiV1Base(options?: { fallbackBase?: string | null }): string {
     return normalizeApiV1Base(
-        process.env.NEXT_PUBLIC_API_BASE_URL ||
-            process.env.NEXT_PUBLIC_API_URL ||
+        import.meta.env.VITE_API_BASE_URL ||
+            import.meta.env.VITE_API_URL ||
             options?.fallbackBase ||
             "",
     );

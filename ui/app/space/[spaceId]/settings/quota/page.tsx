@@ -1,3 +1,4 @@
+import { useParams } from "react-router-dom";
 "use client";
 
 import { QuotaNotice, QuotaStatCard, QuotaUsageMeter } from "@components/quota/QuotaUI";
@@ -6,11 +7,11 @@ import SettingsPageHeader from "@components/settings/SettingsPageHeader";
 import ToastComponent from "@components/ui/ToastComponent";
 import { Response, useGet } from "@http/hooks";
 import { Spinner } from "@radix-ui/themes";
-import { use, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { SpaceUsageSummary, formatBytes, formatPercent, formatPlanLabel, getUsageTone, quotaPaths } from "../../../../core/queries/quota";
 
-export default function Page({ params }: { params: Promise<{ spaceId: string }> }) {
-    const { spaceId } = use(params);
+export default function Page() {
+    const { spaceId } = useParams() as any;
     const [{ isLoading, data, errors, response }, fetchQuota] = useGet<Response<SpaceUsageSummary>>(quotaPaths.space(spaceId));
     const [toast, setToast] = useState<{ type: "warning"; message: string } | null>(null);
 

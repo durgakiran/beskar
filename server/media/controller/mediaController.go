@@ -16,7 +16,7 @@ import (
 )
 
 type fileNameType struct {
-	Name string
+	Name string `json:"name"`
 }
 
 func getImage(w http.ResponseWriter, r *http.Request) {

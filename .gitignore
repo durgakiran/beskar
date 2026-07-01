@@ -42,5 +42,11 @@ docker/env/*.env
 .playwright-cli
 .DS_Store
 .agents
-packages/glideboard/dist
-packages/glideline/dist
+packages/glideboard/dist/*
+packages/glideline/dist/*
+packages/glideline/test-results/*
+packages/glideboard-electron
+openssl-backup.key
+beskarpostgresdata
+ui/dist
+.npmrc

@@ -1,4 +1,3 @@
-'use client'
 import { Response, usePost } from "@http/hooks";
 import { Button, Dialog, TextField, Flex, Text } from "@radix-ui/themes";
 import { MouseEvent, useCallback, useEffect, useState } from "react";

@@ -122,6 +122,7 @@ const ShapeLayer = memo(({ id }: { id: ShapeId }) => {
   const selectedIds = useSignalValue(wbEditor.getSelectionSignal()) ?? [];
   const isErasing = erasingIds ? erasingIds.has(id) : false;
   const isSelected = selectedIds.includes(id);
+  const isEditing = editingId === id;
 
   // Visibility culling via effect
   useEffect(() => {
@@ -186,7 +187,7 @@ const ShapeLayer = memo(({ id }: { id: ShapeId }) => {
       transform={`translate(${shape.x}, ${shape.y}) rotate(${angleDeg}, ${cx}, ${cy})`}
     >
       <g ref={contentRef} />
-      {renderSelectionHighlight(shape, isSelected)}
+      {renderSelectionHighlight(shape, isSelected || isEditing)}
       {/* Red tint overlay shown while the eraser is dragging over this shape */}
       {isErasing && localBounds && (
         <rect
@@ -339,7 +340,7 @@ export function InlineEditor() {
     }, { history: 'ignore' });
   };
 
-  const commit = (newText: string) => {
+  const commit = (newText: string, selectAgain = false) => {
     if (newText.trim() === '' && shape.type === 'text') {
       wbEditor.history.batch('Delete Empty Text', () => {
         wbEditor.deleteShapes([editingId]);
@@ -349,7 +350,7 @@ export function InlineEditor() {
         wbEditor.updateShape(editingId, { props: { ...(shape.props as any), [key]: newText } });
       });
     }
-    wbEditor.stopEditing();
+    wbEditor.stopEditing(selectAgain);
   };
 
   // Background colour for sticky notes
@@ -395,11 +396,11 @@ export function InlineEditor() {
           e.currentTarget.style.height = 'auto';
           e.currentTarget.style.height = e.currentTarget.scrollHeight + 'px';
         }}
-        onBlur={e => commit(e.currentTarget.value)}
+        onBlur={e => commit(e.currentTarget.value, false)}
         onKeyDown={e => {
-          if (e.key === 'Escape') { wbEditor.stopEditing(); e.stopPropagation(); }
+          if (e.key === 'Escape') { wbEditor.stopEditing(true); e.stopPropagation(); }
           if (e.key === 'Enter' && !e.shiftKey && !isSticky) {
-            commit(e.currentTarget.value);
+            commit(e.currentTarget.value, true);
             e.preventDefault();
           }
         }}

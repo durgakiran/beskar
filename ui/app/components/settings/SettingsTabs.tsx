@@ -1,7 +1,6 @@
-"use client";
 
-import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { Link } from "react-router-dom";
+import { useLocation } from "react-router-dom";
 import { HiMail, HiUsers } from "react-icons/hi";
 import { FiHardDrive, FiSliders } from "react-icons/fi";
 
@@ -13,7 +12,7 @@ const items = [
 ];
 
 export default function SettingsTabs({ spaceId }: { spaceId: string }) {
-    const pathname = usePathname();
+    const pathname = useLocation().pathname;
 
     return (
         <div className="rounded-lg border border-neutral-200 bg-white p-1">
@@ -25,7 +24,7 @@ export default function SettingsTabs({ spaceId }: { spaceId: string }) {
                     return (
                         <Link
                             key={item.key}
-                            href={href}
+                            to={href}
                             className={`inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors ${
                                 active ? "bg-primary-100 text-primary-700" : "text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900"
                             }`}

@@ -1,12 +1,11 @@
-"use client";
 
 import ToastComponent from "@components/ui/ToastComponent";
 import { Response, useGet } from "@http/hooks";
 import { Avatar, Box, Button, Dialog, Flex, Heading, Spinner, Text } from "@radix-ui/themes";
-import { useRouter } from "next/navigation";
+import { useNavigate } from "react-router-dom";
 import { useCallback, useEffect, useState } from "react";
 
-const USER_URI = process.env.NEXT_PUBLIC_USER_SERVER_URL;
+const USER_URI = import.meta.env.VITE_USER_SERVER_URL;
 
 interface NotificationAction {
     key: string;
@@ -108,7 +107,7 @@ function NotificationItem({
     onChanged: () => void;
     onToast: (toast: { type: "success" | "warning"; message: string }) => void;
 }) {
-    const router = useRouter();
+    const navigate = useNavigate();
     const [declineOpen, setDeclineOpen] = useState(false);
     const [pendingAction, setPendingAction] = useState<string | null>(null);
     const unread = !notification.readAt;
@@ -132,7 +131,7 @@ function NotificationItem({
             // Navigation is still safe even if read state update fails.
         }
         if (href) {
-            router.push(href);
+            navigate(href);
         }
         onChanged();
     };

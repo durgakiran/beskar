@@ -32,7 +32,7 @@ export function ContextMenu({ position, onClose }: ContextMenuProps) {
   };
 
   const handlePaste = () => {
-    const pt = wbEditor.camera.pageToWorld(position);
+    const pt = wbEditor.screenToPage(position);
     wbEditor.paste(pt);
     onClose();
   };

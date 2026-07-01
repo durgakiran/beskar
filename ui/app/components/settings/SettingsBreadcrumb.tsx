@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { Link } from "react-router-dom";
 
 type BreadcrumbItem = {
     label: string;
@@ -11,7 +11,7 @@ export default function SettingsBreadcrumb({ items }: { items: BreadcrumbItem[] 
             {items.map((item, index) => (
                 <div key={`${item.label}-${index}`} className="flex items-center gap-2">
                     {item.href ? (
-                        <Link href={item.href} className="hover:text-primary-700">
+                        <Link to={item.href} className="hover:text-primary-700">
                             {item.label}
                         </Link>
                     ) : (

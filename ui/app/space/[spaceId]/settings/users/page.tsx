@@ -1,4 +1,3 @@
-"use client";
 
 import SettingsBreadcrumb from "@components/settings/SettingsBreadcrumb";
 import SettingsPageHeader from "@components/settings/SettingsPageHeader";
@@ -11,9 +10,9 @@ import { Response, useDelete, useGet, usePut } from "@http/hooks";
 import { Button, Spinner } from "@radix-ui/themes";
 import { spaceSettingsPaths } from "../../../../core/queries/space/settings";
 import type { SpaceMember } from "../types";
-import { use, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { FiPlus } from "react-icons/fi";
-import { useRouter } from "next/navigation";
+import {  useNavigate , useParams } from "react-router-dom";
 
 type Profile = {
     id: string;
@@ -25,9 +24,9 @@ type SpaceState = {
     archivedAt?: string | null;
 };
 
-export default function Page({ params }: { params: Promise<{ spaceId: string }> }) {
-    const { spaceId } = use(params);
-    const router = useRouter();
+export default function Page() {
+    const { spaceId } = useParams() as any;
+    const navigate = useNavigate();
     const [{ isLoading, data, errors }, fetchUsers] = useGet<Response<SpaceMember[]>>(spaceSettingsPaths.users(spaceId));
     const [{ data: profileData, isLoading: profileLoading }, getProfile] = useGet<Response<Profile>>("profile/details");
     const [{ data: spaceDetails }, fetchSpaceDetails] = useGet<Response<SpaceState>>(`space/${spaceId}/details`);
@@ -99,7 +98,7 @@ export default function Page({ params }: { params: Promise<{ spaceId: string }> 
                 subtitle="Review active members in this space and adjust roles or membership where permitted."
                 action={
                     currentUser?.role === "owner" || currentUser?.role === "admin" ? (
-                        <Button disabled={archived} onClick={() => router.push(`/space/${spaceId}/settings/users/add`)}>
+                        <Button disabled={archived} onClick={() => navigate(`/space/${spaceId}/settings/users/add`)}>
                             <span className="inline-flex items-center">
                                 <FiPlus className="mr-2 h-4 w-4" /> Invite User
                             </span>

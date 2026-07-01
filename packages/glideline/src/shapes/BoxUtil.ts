@@ -17,9 +17,10 @@ import type { GlideShape } from '../types';
 import { Geometry2d, Rectangle2d } from '../geometry';
 import {
   StyleValidators, STROKE_WIDTHS, STROKE_DASH_ARRAYS,
-  svgFill, resolveColor, createTextForeignObject,
+  svgFill, resolveColor, inlinePatternDefs, createTextForeignObjectForExport,
+  FONT_FAMILIES, FONT_SIZES,
   type FillStyle, type StrokeStyle, type SizeStyle, type FontSize,
-  type TextAlign, type Font,
+  type TextAlign, type Font, type LabelProps,
 } from '../styles';
 
 export interface BoxProps {
@@ -92,9 +93,9 @@ export class BoxUtil extends ShapeUtil<BoxShape> {
       w:           120,
       h:           80,
       cornerRadius:0,
-      color:       'blue',
+      color:       'black',
       opacity:     1,
-      fillStyle:   'solid',
+      fillStyle:   'none',
       strokeStyle: 'solid',
       strokeWidth: 'medium',
       label:       '',
@@ -109,17 +110,20 @@ export class BoxUtil extends ShapeUtil<BoxShape> {
     return new Rectangle2d(0, 0, shape.props.w, shape.props.h);
   }
 
-  /** Returns an SVGRectElement representing the box (local coords, origin at 0,0). */
+  /** Geometry-only SVG — no text labels. For interactive canvas rendering. */
   toSvg(shape: BoxShape): SVGElement {
     const { props } = shape;
-    
     const strokeW = STROKE_WIDTHS[props.strokeWidth];
-    const fillColor = svgFill(props.fillStyle, resolveColor(props.color));
-    const strokeColor = props.fillStyle === 'none' ? resolveColor(props.color) : resolveColor(props.color);
+    const fillColor = svgFill(props.fillStyle, resolveColor(props.color), shape.id);
+    const strokeColor = resolveColor(props.color);
     const dashArray = STROKE_DASH_ARRAYS[props.strokeStyle];
 
     const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
     if (props.opacity < 1) g.setAttribute('opacity', String(props.opacity));
+
+    // Inline pattern defs when needed (per-shape SVG document scoping)
+    const defs = inlinePatternDefs(props.fillStyle, props.color, shape.id);
+    if (defs) g.appendChild(defs);
 
     const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
     rect.setAttribute('x',      '0');
@@ -129,7 +133,7 @@ export class BoxUtil extends ShapeUtil<BoxShape> {
     rect.setAttribute('fill',   fillColor);
     rect.setAttribute('stroke', strokeColor);
     rect.setAttribute('stroke-width', String(strokeW));
-    
+
     if (dashArray !== 'none') {
       rect.setAttribute('stroke-dasharray', dashArray);
       if (props.strokeStyle === 'dotted') {
@@ -141,11 +145,31 @@ export class BoxUtil extends ShapeUtil<BoxShape> {
       rect.setAttribute('rx', String(props.cornerRadius));
       rect.setAttribute('ry', String(props.cornerRadius));
     }
-    
+
     g.appendChild(rect);
-    
+    return g;
+  }
+
+  /** CSS label properties for the HTML overlay div. */
+  override getLabelProps(shape: BoxShape): LabelProps | null {
+    const { props } = shape;
+    return {
+      text:          props.label || '',
+      fontFamily:    FONT_FAMILIES[props.font] ?? FONT_FAMILIES.sans,
+      fontSize:      FONT_SIZES[props.fontSize] ?? FONT_SIZES.md,
+      color:         resolveColor(props.labelColor),
+      textAlign:     props.textAlign,
+      verticalAlign: 'center',
+      padding:       8,
+    };
+  }
+
+  /** Full SVG for export — includes foreignObject text label. */
+  override toSvgExport(shape: BoxShape): SVGElement {
+    const g = this.toSvg(shape) as SVGGElement;
+    const { props } = shape;
     if (props.label) {
-      const fo = createTextForeignObject({
+      const fo = createTextForeignObjectForExport({
         x: 0, y: 0, w: props.w, h: props.h,
         text: props.label,
         font: props.font,
@@ -156,7 +180,6 @@ export class BoxUtil extends ShapeUtil<BoxShape> {
       });
       g.appendChild(fo);
     }
-
     return g;
   }
 }

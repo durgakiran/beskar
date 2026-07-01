@@ -41,11 +41,14 @@ class Panning extends StateNode {
 
   /** Page-space pointer position when pan started. */
   private _startPagePt!: Vec2;
+  /** Screen-space pointer position when pan started. */
+  private _startScreenPt?: Vec2;
   /** Camera state at pan start. */
   private _startCamera!: CameraState;
 
   override onEnter(info: PointerDownEvent): void {
     this._startPagePt = info.point;           // already in page space
+    this._startScreenPt = info.screenPoint;
     this._startCamera = { ...this.editor.camera.getCamera() };
   }
 
@@ -53,8 +56,18 @@ class Panning extends StateNode {
     // Invariant: the page point under the cursor must stay fixed.
     // If the cursor moves right by Δ page units, the camera origin moves right by Δ too —
     // but we want the canvas to pan RIGHT (feel of dragging the canvas), so we subtract.
-    const dx = e.point.x - this._startPagePt.x;
-    const dy = e.point.y - this._startPagePt.y;
+    let dx = 0;
+    let dy = 0;
+
+    if (e.screenPoint && this._startScreenPt) {
+      const dxScreen = e.screenPoint.x - this._startScreenPt.x;
+      const dyScreen = e.screenPoint.y - this._startScreenPt.y;
+      dx = dxScreen / this._startCamera.z;
+      dy = dyScreen / this._startCamera.z;
+    } else {
+      dx = e.point.x - this._startPagePt.x;
+      dy = e.point.y - this._startPagePt.y;
+    }
 
     this.editor.camera.setCamera({
       x: this._startCamera.x - dx,

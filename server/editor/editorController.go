@@ -408,6 +408,7 @@ func getPageInlineLinkMetadataHandler(w http.ResponseWriter, r *http.Request) {
 		&metadata.Type,
 		&metadata.SpaceId,
 		&metadata.Title,
+		&metadata.PreviewAssetName,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -419,7 +420,7 @@ func getPageInlineLinkMetadataHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if metadata.Type != "document" {
+	if metadata.Type != "document" && metadata.Type != "whiteboard" {
 		core.SendFailedReponse(w, r, http.StatusBadRequest, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_INVALID_INPUT])
 		return
 	}
@@ -571,6 +572,9 @@ func Router() *chi.Mux {
 	r.Get("/space/{spaceId}/whiteboard/{pageId}/edit", getWhiteboardToEdit)
 	r.Put("/space/{spaceId}/whiteboard/{pageId}", updateWhiteboard)
 	r.Delete("/space/{spaceId}/whiteboard/{pageId}", deleteWhiteboard)
+	r.Put("/space/{spaceId}/whiteboard/{pageId}/publish", publishWhiteboard)
+	r.Get("/space/{spaceId}/whiteboard/{pageId}/versions", listWhiteboardVersions)
+	r.Get("/space/{spaceId}/whiteboard/{pageId}/versions/{docId}", getWhiteboardVersionByDocId)
 
 	r.Put("/publish", publishDoc)
 	r.Put("/update", updateDraftDoc)

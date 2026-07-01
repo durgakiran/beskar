@@ -297,8 +297,8 @@ func (document InputDocument) Create() (int64, error) {
 		defer conn.Release()
 		logger().Error("Unable to start transaction" + err.Error())
 	}
-	defer tx.Rollback(ctx)
 	defer conn.Release()
+	defer tx.Rollback(ctx)
 	// create page
 	page := Page{SpaceId: document.SpaceId, OwnerId: document.OwnerId, ParentId: document.ParentId, DateCreated: time.Now(), Status: 0}
 	pageId, err := page.Create(tx, ctx)
@@ -334,8 +334,8 @@ func (document InputDocument) Publish() (pageId int64, publishedDocId int64, err
 		defer conn.Release()
 		logger().Error("Unable to start transaction" + err.Error())
 	}
-	defer tx.Rollback(ctx)
 	defer conn.Release()
+	defer tx.Rollback(ctx)
 	// create or update doc
 	// update the doc in draft state
 	existingDocument, err := fetchDocumentToEdit(tx, ctx, document.Id, document.SpaceId, document.OwnerId)
@@ -430,8 +430,8 @@ func (document InputDraftDocument) Update() (pageId int64, draftGeneration int64
 		defer conn.Release()
 		logger().Error("Unable to start transaction" + err.Error())
 	}
-	defer tx.Rollback(ctx)
 	defer conn.Release()
+	defer tx.Rollback(ctx)
 	// create or update doc
 	// we need to create a doc if there is none exists in draft state
 	// we need to update a doc if exists in draft state
@@ -500,8 +500,8 @@ func GetDocument(pageId int64, spaceId uuid.UUID, ownerId uuid.UUID) (OutputDocu
 		defer conn.Release()
 		panic("Unable to start transaction" + err.Error())
 	}
-	defer tx.Rollback(ctx)
 	defer conn.Release()
+	defer tx.Rollback(ctx)
 	doc, err := fetchDocument(tx, ctx, pageId, spaceId, ownerId)
 	if err != nil {
 		return outputDocument, err
@@ -585,8 +585,8 @@ func GetDocumentView(pageId int64, spaceId uuid.UUID, ownerId uuid.UUID) (Output
 		defer conn.Release()
 		return output, err
 	}
-	defer tx.Rollback(ctx)
 	defer conn.Release()
+	defer tx.Rollback(ctx)
 
 	summary, err := fetchViewSpaceSummary(tx, ctx, spaceId)
 	if err != nil {
@@ -596,6 +596,12 @@ func GetDocumentView(pageId int64, spaceId uuid.UUID, ownerId uuid.UUID) (Output
 	meta, err := fetchViewMeta(tx, ctx, pageId)
 	if err != nil {
 		return output, err
+	}
+
+	var pageType string
+	err = tx.QueryRow(ctx, "SELECT type FROM core.page WHERE id = $1 AND space_id = $2", pageId, spaceId).Scan(&pageType)
+	if err != nil || pageType == "" {
+		pageType = "document"
 	}
 
 	var document *OutputDocument
@@ -642,7 +648,7 @@ func GetDocumentView(pageId int64, spaceId uuid.UUID, ownerId uuid.UUID) (Output
 	output = OutputDocumentView{
 		PageID:       pageId,
 		SpaceID:      spaceId,
-		PageType:     "document",
+		PageType:     pageType,
 		Title:        "",
 		Document:     document,
 		Breadcrumbs:  viewCrumbs,
@@ -653,6 +659,11 @@ func GetDocumentView(pageId int64, spaceId uuid.UUID, ownerId uuid.UUID) (Output
 	}
 	if document != nil {
 		output.Title = document.Title
+	} else {
+		draft, err := fetchDocumentToEdit(tx, ctx, pageId, spaceId, ownerId)
+		if err == nil {
+			output.Title = draft.Title
+		}
 	}
 
 	tx.Commit(ctx)
@@ -674,8 +685,8 @@ func GetDocumentToEdit(pageId int64, spaceId uuid.UUID, ownerId uuid.UUID) (Outp
 		defer conn.Release()
 		panic("Unable to start transaction" + err.Error())
 	}
-	defer tx.Rollback(ctx)
 	defer conn.Release()
+	defer tx.Rollback(ctx)
 	doc, err := fetchDocumentToEdit(tx, ctx, pageId, spaceId, ownerId)
 	if errors.Is(err, pgx.ErrNoRows) {
 		doc, err = fetchDocument(tx, ctx, pageId, spaceId, ownerId)
@@ -743,8 +754,8 @@ func DeleteDocument(pageId int64, spaceId uuid.UUID, ownerId uuid.UUID) (int64, 
 		defer conn.Release()
 		panic("Unable to start transaction" + err.Error())
 	}
-	defer tx.Rollback(ctx)
 	defer conn.Release()
+	defer tx.Rollback(ctx)
 	page := Page{Id: pageId, SpaceId: spaceId, OwnerId: ownerId}
 	if err := quota.ReleasePageStorageUsageTx(ctx, tx, spaceId, pageId, "page_delete"); err != nil {
 		return 0, err
