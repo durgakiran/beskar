@@ -5,7 +5,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import * as Toolbar from '@radix-ui/react-toolbar';
 import * as Separator from '@radix-ui/react-separator';
-import { Avatar, Badge, Box, Button, Flex, Spinner, Text, TextField } from '@radix-ui/themes';
+import { Avatar, Badge, Box, Button, Flex, Spinner, Text, TextField, Dialog } from '@radix-ui/themes';
 import { NodeViewWrapper } from '@tiptap/react';
 import type { NodeViewProps } from '@tiptap/react';
 import { useFloating, flip, shift, offset, autoUpdate } from '@floating-ui/react';
@@ -124,7 +124,7 @@ export function InternalLinkBlockView({ node, editor, updateAttributes, getPos, 
   }, [attrs.resourceIcon, attrs.resourceId, attrs.resourceTitle, attrs.resourceType, handler, isPicker, updateAttributes]);
 
   const cardTitle = metadata?.title || attrs.resourceTitle || 'Untitled resource';
-  const icon = getResourceIcon(attrs.resourceType, metadata?.icon || attrs.resourceIcon);
+  const icon = getResourceIcon(metadata?.resourceType || attrs.resourceType, metadata?.icon || attrs.resourceIcon);
 
   const pickResource = useCallback(
     (resource: InternalResourceResult) => {
@@ -276,15 +276,8 @@ export function InternalLinkBlockView({ node, editor, updateAttributes, getPos, 
         <div
           className={`internal-link-card${state === 'idle' || state === 'loading' ? '' : ' internal-link-card--error'}`}
           contentEditable={false}
-          role="button"
-          tabIndex={0}
-          onClick={state === 'idle' ? openResource : undefined}
-          onKeyDown={(event) => {
-            if (state === 'idle' && (event.key === 'Enter' || event.key === ' ')) {
-              event.preventDefault();
-              openResource();
-            }
-          }}
+          role="region"
+          aria-label="Internal Link Block"
         >
           {state === 'loading' ? (
             <Flex align="center" gap="2">
@@ -321,17 +314,73 @@ export function InternalLinkBlockView({ node, editor, updateAttributes, getPos, 
               <Flex align="center" gap="3">
                 <span className="internal-link-card__icon">{icon}</span>
                 <Box>
-                  <Text as="div" size="3" weight="bold">{cardTitle}</Text>
+                  <Text 
+                    as="a" 
+                    size="3" 
+                    weight="bold"
+                    href="#"
+                    style={{ cursor: state === 'idle' ? 'pointer' : 'default', color: 'var(--accent-11)', textDecoration: 'none' }}
+                    onClick={(e: React.MouseEvent) => {
+                      e.preventDefault();
+                      if (state === 'idle') openResource();
+                    }}
+                    onMouseOver={(e) => e.currentTarget.style.textDecoration = state === 'idle' ? 'underline' : 'none'}
+                    onMouseOut={(e) => e.currentTarget.style.textDecoration = 'none'}
+                  >
+                    {cardTitle}
+                  </Text>
                   <Flex gap="2" align="center" mt="1">
-                    <Badge color={attrs.resourceType === 'whiteboard' ? 'cyan' : 'indigo'} variant="soft">
-                      {attrs.resourceType}
+                    <Badge color={(metadata?.resourceType || attrs.resourceType) === 'whiteboard' ? 'cyan' : 'indigo'} variant="soft">
+                      {metadata?.resourceType || attrs.resourceType}
                     </Badge>
                     <Text size="1" color="gray">{formatRelativeTime(metadata?.lastEditedAt)}</Text>
                   </Flex>
                 </Box>
               </Flex>
-              {attrs.resourceType === 'whiteboard' && metadata?.thumbnailUrl ? (
-                <img className="internal-link-card__thumbnail" src={metadata.thumbnailUrl} alt="" />
+              {(metadata?.resourceType || attrs.resourceType) === 'whiteboard' && metadata?.thumbnailUrl ? (
+                <Dialog.Root>
+                  <Dialog.Trigger>
+                    <div style={{ position: 'relative', cursor: 'pointer', background: 'var(--gray-2)', borderRadius: 8, overflow: 'hidden', border: '1px solid var(--gray-4)' }}>
+                      <img
+                        className="internal-link-card__thumbnail"
+                        src={metadata.thumbnailUrl}
+                        alt={`Whiteboard: ${cardTitle}`}
+                        style={{ width: '100%', maxHeight: 500, objectFit: 'contain', display: 'block' }}
+                      />
+                      <div style={{ position: 'absolute', top: 8, right: 8 }}>
+                        <Button size="1" variant="solid" onClick={(e) => { e.stopPropagation(); openResource(); }}>
+                          Open Whiteboard
+                        </Button>
+                      </div>
+                      <div style={{ position: 'absolute', bottom: 8, right: 8 }}>
+                        <Badge size="1" variant="solid" color="gray" style={{ opacity: 0.85, backdropFilter: 'blur(4px)' }}>
+                          Click to Expand
+                        </Badge>
+                      </div>
+                    </div>
+                  </Dialog.Trigger>
+
+                  <Dialog.Content style={{ maxWidth: '95vw', maxHeight: '95vh', width: 'auto', padding: 0, display: 'flex', flexDirection: 'column', background: 'var(--gray-1)' }}>
+                    <Flex justify="between" align="center" p="3" style={{ borderBottom: '1px solid var(--gray-4)', background: 'var(--gray-2)' }}>
+                      <Dialog.Title style={{ margin: 0, fontSize: '1.2rem' }}>{cardTitle}</Dialog.Title>
+                      <Flex gap="3">
+                        <Button variant="solid" onClick={openResource}>
+                          Open Whiteboard
+                        </Button>
+                        <Dialog.Close>
+                          <Button variant="soft" color="gray">Close</Button>
+                        </Dialog.Close>
+                      </Flex>
+                    </Flex>
+                    <div style={{ flex: 1, overflow: 'auto', display: 'flex', justifyContent: 'center', alignItems: 'flex-start', padding: '24px' }}>
+                      <img
+                        src={metadata.thumbnailUrl}
+                        alt={`Whiteboard: ${cardTitle}`}
+                        style={{ maxWidth: '100%', height: 'auto', boxShadow: '0 8px 24px rgba(0,0,0,0.15)', borderRadius: 4 }}
+                      />
+                    </div>
+                  </Dialog.Content>
+                </Dialog.Root>
               ) : (
                 <Text size="2" color="gray" className="internal-link-card__excerpt">
                   {metadata?.excerpt || 'No preview available'}

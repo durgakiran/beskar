@@ -25,5 +25,13 @@ packages/*
 packages/editor/*
 !packages/editor/dist/
 !packages/editor/dist/**
+!packages/glideboard/
+packages/glideboard/*
+!packages/glideboard/dist/
+!packages/glideboard/dist/**
+!packages/glideline/
+packages/glideline/*
+!packages/glideline/dist/
+!packages/glideline/dist/**
 
 *.log

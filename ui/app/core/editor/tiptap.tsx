@@ -1,4 +1,3 @@
-"use client";
 import React, { useCallback } from "react";
 import type { Editor, JSONContent } from "@tiptap/core";
 import { useDebounce } from "../hooks/debounce";
@@ -154,7 +153,7 @@ export function TipTap({
                 }
 
                 return {
-                    url: `${getApiV1Base({ fallbackBase: process.env.NEXT_PUBLIC_IMAGE_SERVER_URL })}/media/image/${name}`,
+                    url: `${getApiV1Base({ fallbackBase: import.meta.env.VITE_IMAGE_SERVER_URL })}/media/image/${name}`,
                     width: adjustedWidth,
                     height: adjustedHeight,
                 };
@@ -209,7 +208,7 @@ export function TipTap({
     const internalResourceHandler: InternalResourceHandler | undefined = useMemo(() => {
         if (!spaceId) return undefined;
 
-        const baseUrl = process.env.NEXT_PUBLIC_USER_SERVER_URL?.replace(/\/+$/, "") || "";
+        const baseUrl = import.meta.env.VITE_USER_SERVER_URL?.replace(/\/+$/, "") || "";
         const appBaseUrl = typeof window !== "undefined" ? window.location.origin : "";
 
         const fetchJson = async <T,>(path: string): Promise<T> => {
@@ -269,34 +268,24 @@ export function TipTap({
                     }));
             },
             async getResourceMetadata(resourceId: string, resourceType: InternalResourceType): Promise<InternalResourceMetadata | null> {
-                if (resourceType === "document") {
-                    const response = await fetchJson<{
-                        data?: {
-                            pageId: number;
-                            type: string;
-                            title: string;
-                        };
-                    }>(`editor/space/${spaceId}/page/${resourceId}/inline-link`);
-                    const metadata = response.data;
-                    if (!metadata) return null;
-
-                    return {
-                        resourceId: String(metadata.pageId),
-                        resourceType: "document",
-                        title: metadata.title || "Untitled",
-                        icon: "📄",
+                const response = await fetchJson<{
+                    data?: {
+                        pageId: number;
+                        type: string;
+                        title: string;
+                        previewAssetName?: string;
                     };
-                }
+                }>(`editor/space/${spaceId}/page/${resourceId}/inline-link`);
+                const metadata = response.data;
+                if (!metadata) return null;
 
-                const pages = await listPages();
-                const page = pages.find((candidate) => String(candidate.pageId) === String(resourceId) && candidate.type === resourceType);
-                if (!page) return null;
-
+                const baseUrl = getApiV1Base({ fallbackBase: import.meta.env.VITE_IMAGE_SERVER_URL });
                 return {
-                    resourceId: String(page.pageId),
-                    resourceType: page.type,
-                    title: page.title || "Untitled",
-                    icon: page.type === "whiteboard" ? "▧" : "📄",
+                    resourceId: String(metadata.pageId),
+                    resourceType: metadata.type as InternalResourceType,
+                    title: metadata.title || "Untitled",
+                    icon: metadata.type === "whiteboard" ? "▧" : "📄",
+                    thumbnailUrl: metadata.previewAssetName ? `${baseUrl}/media/image/${metadata.previewAssetName}` : undefined,
                 };
             },
             navigateToResource(resourceId: string, _resourceType: InternalResourceType) {
@@ -309,7 +298,7 @@ export function TipTap({
     const externalLinkHandler: ExternalLinkHandler | undefined = useMemo(() => {
         if (!spaceId) return undefined;
 
-        const baseUrl = process.env.NEXT_PUBLIC_USER_SERVER_URL?.replace(/\/+$/, "") || "";
+        const baseUrl = import.meta.env.VITE_USER_SERVER_URL?.replace(/\/+$/, "") || "";
 
         const fetchJson = async <T,>(path: string): Promise<T> => {
             const response = await fetch(`${baseUrl}/${path}`, {
@@ -339,7 +328,7 @@ export function TipTap({
     const childPagesHandler: ChildPagesHandler | undefined = useMemo(() => {
         if (!spaceId || !Number.isFinite(id) || id < 1) return undefined;
 
-        const baseUrl = process.env.NEXT_PUBLIC_USER_SERVER_URL?.replace(/\/+$/, "") || "";
+        const baseUrl = import.meta.env.VITE_USER_SERVER_URL?.replace(/\/+$/, "") || "";
 
         const fetchJson = async <T,>(path: string): Promise<T> => {
             const response = await fetch(`${baseUrl}/${path}`, {

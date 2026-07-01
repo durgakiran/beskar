@@ -178,15 +178,31 @@ type WhiteboardInput struct {
 	ParentId int64     `json:"parentId"`
 	OwnerId  uuid.UUID `json:"ownerId"`
 	Data     []byte    `json:"data"` // base64-decoded Yjs state
+	PreviewAssetName string `json:"previewAssetName,omitempty"`
 }
 
 type WhiteboardData struct {
-	Id      int64     `json:"id" db:"id"`
-	DocId   int64     `json:"docId" db:"doc_id"`
-	Data    []byte    `json:"data" db:"data"`
-	Title   string    `json:"title" db:"title"`
-	PageId  int64     `json:"pageId" db:"id"`
-	SpaceId uuid.UUID `json:"spaceId" db:"spaceId"`
+	Id               int64     `json:"id" db:"id"`
+	DocId            int64     `json:"docId" db:"doc_id"`
+	Data             []byte    `json:"data" db:"data"`
+	Title            string    `json:"title" db:"title"`
+	PageId           int64     `json:"pageId" db:"id"`
+	SpaceId          uuid.UUID `json:"spaceId" db:"spaceId"`
+	PreviewAssetName string    `json:"previewAssetName"`
+}
+
+type WhiteboardPublishInput struct {
+	Id               int64     `json:"id"`
+	SpaceId          uuid.UUID `json:"spaceId"`
+	OwnerId          uuid.UUID `json:"ownerId"`
+	Data             []byte    `json:"data"`
+	PreviewAssetName string    `json:"previewAssetName"`
+}
+
+type WhiteboardVersion struct {
+	DocId            int64     `json:"docId"`
+	Version          time.Time `json:"version"`
+	PreviewAssetName string    `json:"previewAssetName"`
 }
 
 type PageMetadata struct {
@@ -196,10 +212,11 @@ type PageMetadata struct {
 }
 
 type PageInlineLinkMetadata struct {
-	PageId  int64     `json:"pageId" db:"id"`
-	Type    string    `json:"type" db:"type"`
-	SpaceId uuid.UUID `json:"spaceId" db:"spaceId"`
-	Title   string    `json:"title" db:"title"`
+	PageId           int64     `json:"pageId" db:"id"`
+	Type             string    `json:"type" db:"type"`
+	SpaceId          uuid.UUID `json:"spaceId" db:"spaceId"`
+	Title            string    `json:"title" db:"title"`
+	PreviewAssetName string    `json:"previewAssetName"`
 }
 
 type ExternalLinkMetadata struct {

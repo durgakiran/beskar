@@ -1,10 +1,9 @@
-"use client";
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useNavigate } from "react-router-dom";
 import AddPage from "./addPage";
 import { Box, Flex, Text, IconButton, Spinner } from "@radix-ui/themes";
 import { HiHome, HiOutlinePlusSm, HiOutlineChevronDown, HiOutlineChevronRight, HiCog, HiOutlineDocumentText, HiOutlinePencilAlt } from "react-icons/hi";
-import Link from "next/link";
+import { Link } from "react-router-dom";
 import { Response, useGet } from "@http/hooks";
 interface Docs {
     title: string;
@@ -63,7 +62,7 @@ function SideNavItem({ pages, spaceId, openAddPage }: { pages: Array<IPages>; sp
                                         </div>
                                         <Link
                                             className="text-sm text-neutral-700 hover:text-primary-600 flex-1 truncate transition-colors"
-                                            href={`/space/${spaceId}/view/${page.id}`}
+                                            to={`/space/${spaceId}/view/${page.id}`}
                                         >
                                             {page.details.title}
                                         </Link>
@@ -96,7 +95,7 @@ interface IPageList {
 export default function SideNav(param: Props) {
     const [isOpen, setIsOpen] = useState(false);
     const [isDropdownOpen, setIsDropdownOpen] = useState(true);
-    const router = useRouter();
+    const navigate = useNavigate();
     const [{ data, isLoading: loading, errors: error }, fetchData] = useGet<Response<IPageList[]>>(`space/${param.id}/page/list`);
     const [parentId, setParentId] = useState<number>();
     const [pages, setPages] = useState<IPages[]>();
@@ -159,11 +158,11 @@ export default function SideNav(param: Props) {
         // TODO: Add confirmation page
         // await mutateFunction({ variables: { pgId: page } });
         // refetch();
-        // router.push(`/space/${param.id}`);
+        // navigate(`/space/${param.id}`);
     };
 
     const editePage = async (page: number) => {
-        router.push(`/edit/${param.id}/${page}`);
+        navigate(`/edit/${param.id}/${page}`);
     };
 
     if (loading) {
@@ -183,14 +182,14 @@ export default function SideNav(param: Props) {
                     <Flex direction="column" gap="1">
                         {/* Navigation Links */}
                         <Link
-                            href={`/space/${param.id}`}
+                            to={`/space/${param.id}`}
                             className="flex items-center gap-3 px-3 py-2.5 rounded-sm hover:bg-mauve-100 hover:text-primary-700 text-neutral-700 text-sm font-medium transition-colors"
                         >
                             <HiHome size={18} className="text-mauve-600" />
                             <span>Overview</span>
                         </Link>
                         <Link
-                            href={`/space/${param.id}/settings/users`}
+                            to={`/space/${param.id}/settings/users`}
                             className="flex items-center gap-3 px-3 py-2.5 rounded-sm hover:bg-mauve-100 hover:text-primary-700 text-neutral-700 text-sm font-medium transition-colors"
                         >
                             <HiCog size={18} className="text-mauve-600" />

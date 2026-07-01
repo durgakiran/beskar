@@ -1,4 +1,3 @@
-"use client";
 
 import type { AttachmentRef } from "@durgakiran/editor";
 import { Box, Flex, Text, IconButton } from "@radix-ui/themes";

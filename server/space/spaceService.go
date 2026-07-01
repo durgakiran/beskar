@@ -69,8 +69,8 @@ func createSpaceEntry(s Space) (uuid.UUID, error) {
 		defer conn.Release()
 		return spaceId, errors.New(core.ErrorCode_name[core.ErrorCode_ERROR_CODE_CONNECTION_ISSUE])
 	}
-	defer tx.Rollback(ctx)
 	defer conn.Release()
+	defer tx.Rollback(ctx)
 	s.DateCreated = time.Now()
 	s.DateUpdated = time.Now()
 	spaceId, err = s.Create(tx, ctx)

@@ -1,4 +1,22 @@
 import React from 'react';
+import {
+  FiMousePointer,
+  FiMove,
+  FiSquare,
+  FiCircle,
+  FiTriangle,
+  FiHexagon,
+  FiStar,
+  FiType,
+  FiFileText,
+  FiPenTool,
+  FiMinus,
+  FiArrowRight,
+  FiRepeat,
+  FiRotateCcw,
+  FiRotateCw,
+} from 'react-icons/fi';
+import { LuEraser, LuDiamond } from 'react-icons/lu';
 import { arrowPresetSignal, setConnectorPreset, wbEditor, type ConnectorPreset } from './editor';
 import { wbTheme } from './theme';
 import { useSignalValue } from './useSignalValue';
@@ -7,35 +25,35 @@ interface ToolDef {
   id: string;
   label: string;
   shortcut?: string;
-  icon: string;
+  icon: React.ComponentType<any>;
 }
 
 const SHAPE_TOOLS: ToolDef[] = [
-  { id: 'box', label: 'Rectangle', shortcut: 'R', icon: '▭' },
-  { id: 'ellipse', label: 'Ellipse', shortcut: 'E', icon: '○' },
-  { id: 'triangle', label: 'Triangle', icon: '△' },
-  { id: 'diamond', label: 'Diamond', icon: '◇' },
-  { id: 'hexagon', label: 'Hexagon', icon: '⬡' },
-  { id: 'star', label: 'Star', icon: '☆' },
+  { id: 'box', label: 'Rectangle', shortcut: 'R', icon: FiSquare },
+  { id: 'ellipse', label: 'Ellipse', shortcut: 'E', icon: FiCircle },
+  { id: 'triangle', label: 'Triangle', icon: FiTriangle },
+  { id: 'diamond', label: 'Diamond', icon: LuDiamond },
+  { id: 'hexagon', label: 'Hexagon', icon: FiHexagon },
+  { id: 'star', label: 'Star', icon: FiStar },
 ];
 
 const SHAPE_TOOL_IDS = new Set(SHAPE_TOOLS.map(tool => tool.id));
 
 const ARROW_TOOLS: Array<ToolDef & { preset: ConnectorPreset }> = [
-  { id: 'connector-line', label: 'Line', shortcut: 'A', icon: '─', preset: 'line' },
-  { id: 'connector-arrow', label: 'Arrow', icon: '→', preset: 'arrow' },
-  { id: 'connector-double-arrow', label: 'Double Arrow', icon: '↔', preset: 'double-arrow' },
+  { id: 'connector-line', label: 'Line', shortcut: 'A', icon: FiMinus, preset: 'line' },
+  { id: 'connector-arrow', label: 'Arrow', icon: FiArrowRight, preset: 'arrow' },
+  { id: 'connector-double-arrow', label: 'Double Arrow', icon: FiRepeat, preset: 'double-arrow' },
 ];
 
 const TOOLS: ToolDef[] = [
-  { id: 'select', label: 'Select', shortcut: 'V', icon: '↖' },
-  { id: 'hand', label: 'Hand', shortcut: 'H', icon: '✋' },
-  { id: 'shape-picker', label: 'Shapes', shortcut: 'R', icon: '▭' },
-  { id: 'text', label: 'Text', shortcut: 'T', icon: 'A' },
-  { id: 'sticky-note', label: 'Sticky', shortcut: 'S', icon: '🗒' },
-  { id: 'draw', label: 'Draw', shortcut: 'D', icon: '✏' },
-  { id: 'eraser', label: 'Eraser', shortcut: 'X', icon: '⌫' },
-  { id: 'arrow-picker', label: 'Arrow', shortcut: 'A', icon: '→' },
+  { id: 'select', label: 'Select', shortcut: 'V', icon: FiMousePointer },
+  { id: 'hand', label: 'Hand', shortcut: 'H', icon: FiMove },
+  { id: 'shape-picker', label: 'Shapes', shortcut: 'R', icon: FiSquare },
+  { id: 'text', label: 'Text', shortcut: 'T', icon: FiType },
+  { id: 'sticky-note', label: 'Sticky', shortcut: 'S', icon: FiFileText },
+  { id: 'draw', label: 'Draw', shortcut: 'D', icon: FiPenTool },
+  { id: 'eraser', label: 'Eraser', shortcut: 'X', icon: LuEraser },
+  { id: 'arrow-picker', label: 'Arrow', shortcut: 'A', icon: FiArrowRight },
 ];
 
 const buttonStyle: React.CSSProperties = {
@@ -57,6 +75,7 @@ const buttonStyle: React.CSSProperties = {
 };
 
 function ToolButton({ tool, active, onClick }: { tool: ToolDef; active: boolean; onClick: () => void }) {
+  const Icon = tool.icon;
   return (
     <button
       id={`wb-tool-${tool.id}`}
@@ -69,7 +88,7 @@ function ToolButton({ tool, active, onClick }: { tool: ToolDef; active: boolean;
         color: active ? wbTheme.accentText : wbTheme.textSoft,
       }}
     >
-      <span style={{ fontSize: 18 }}>{tool.icon}</span>
+      <span style={{ fontSize: 18, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Icon size={18} /></span>
       {tool.shortcut ? (
         <span style={{ fontSize: 8, marginTop: 2, opacity: 0.7, fontFamily: 'monospace' }}>{tool.shortcut}</span>
       ) : null}
@@ -90,6 +109,7 @@ function ShapePickerButton({
   onToggle: () => void;
   onSelectShape: (toolId: string) => void;
 }) {
+  const Icon = currentShapeTool.icon;
   return (
     <div style={{ position: 'relative' }}>
       <button
@@ -103,7 +123,7 @@ function ShapePickerButton({
           color: active ? wbTheme.accentText : wbTheme.textSoft,
         }}
       >
-        <span style={{ fontSize: 18 }}>{currentShapeTool.icon}</span>
+        <span style={{ fontSize: 18, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Icon size={18} /></span>
         <span style={{ fontSize: 9, marginTop: 2, opacity: 0.7 }}>{isOpen ? '⌃' : '⌄'}</span>
       </button>
 
@@ -127,6 +147,7 @@ function ShapePickerButton({
         >
           {SHAPE_TOOLS.map(tool => {
             const selected = currentShapeTool.id === tool.id;
+            const ToolIcon = tool.icon;
             return (
               <button
                 key={tool.id}
@@ -147,7 +168,7 @@ function ShapePickerButton({
                   fontSize: 20,
                 }}
               >
-                {tool.icon}
+                <ToolIcon size={20} />
               </button>
             );
           })}
@@ -170,6 +191,7 @@ function ArrowPickerButton({
   onToggle: () => void;
   onSelectArrow: (preset: ConnectorPreset) => void;
 }) {
+  const Icon = currentArrowTool.icon;
   return (
     <div style={{ position: 'relative' }}>
       <button
@@ -183,7 +205,7 @@ function ArrowPickerButton({
           color: active ? wbTheme.accentText : wbTheme.textSoft,
         }}
       >
-        <span style={{ fontSize: 18 }}>{currentArrowTool.icon}</span>
+        <span style={{ fontSize: 18, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Icon size={18} /></span>
         <span style={{ fontSize: 9, marginTop: 2, opacity: 0.7 }}>{isOpen ? '⌃' : '⌄'}</span>
       </button>
 
@@ -207,6 +229,7 @@ function ArrowPickerButton({
         >
           {ARROW_TOOLS.map(tool => {
             const selected = currentArrowTool.preset === tool.preset;
+            const ToolIcon = tool.icon;
             return (
               <button
                 key={tool.id}
@@ -227,7 +250,7 @@ function ArrowPickerButton({
                   fontSize: 20,
                 }}
               >
-                {tool.icon}
+                <ToolIcon size={20} />
               </button>
             );
           })}
@@ -351,8 +374,8 @@ export function Toolbar() {
 
       <div style={{ width: '100%', height: 1, background: wbTheme.border, margin: '2px 0' }} />
 
-      <ToolButton tool={{ id: 'undo', label: 'Undo', shortcut: '⌘Z', icon: '↶' }} active={false} onClick={() => wbEditor.undo()} />
-      <ToolButton tool={{ id: 'redo', label: 'Redo', shortcut: '⌘⇧Z', icon: '↷' }} active={false} onClick={() => wbEditor.redo()} />
+      <ToolButton tool={{ id: 'undo', label: 'Undo', shortcut: '⌘Z', icon: FiRotateCcw }} active={false} onClick={() => wbEditor.undo()} />
+      <ToolButton tool={{ id: 'redo', label: 'Redo', shortcut: '⌘⇧Z', icon: FiRotateCw }} active={false} onClick={() => wbEditor.redo()} />
     </div>
   );
 }

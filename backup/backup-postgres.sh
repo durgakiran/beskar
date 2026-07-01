@@ -296,8 +296,13 @@ encrypt_file() {
     local plain_file="$1"
     local encrypted_file="$2"
 
+    local key_file_path="$BACKUP_ENCRYPTION_KEY_FILE"
+    if command -v cygpath >/dev/null 2>&1; then
+        key_file_path="$(cygpath -m "$key_file_path")"
+    fi
+
     openssl enc "-$BACKUP_OPENSSL_CIPHER" -salt -pbkdf2 -iter "$BACKUP_OPENSSL_ITERATIONS" \
-        -in "$plain_file" -out "$encrypted_file" -pass "file:$BACKUP_ENCRYPTION_KEY_FILE"
+        -in "$plain_file" -out "$encrypted_file" -pass "file:$key_file_path"
 
     if [[ ! -s "$encrypted_file" ]]; then
         echo "Encrypted artifact is empty: $encrypted_file" >&2

@@ -7,9 +7,9 @@ function resolveBrowserWebSocketUrl(path: string): string {
 }
 
 export function getSignalingUrl(): string {
-    return process.env.NEXT_PUBLIC_SIGNALING_URL || resolveBrowserWebSocketUrl("/ws");
+    return import.meta.env.VITE_SIGNALING_URL || resolveBrowserWebSocketUrl("/ws");
 }
 
 export function getCollaborationUrl(): string {
-    return process.env.NEXT_PUBLIC_COLLAB_URL || resolveBrowserWebSocketUrl("/collab");
+    return import.meta.env.VITE_COLLAB_URL || resolveBrowserWebSocketUrl("/collab");
 }

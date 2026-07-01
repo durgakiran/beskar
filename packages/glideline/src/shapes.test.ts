@@ -200,7 +200,7 @@ describe('T2.3-05: getDefaultProps()', () => {
 
   it('TextUtil: fontSize===16, text===empty string', () => {
     const p = textUtil.getDefaultProps();
-    expect(p.fontSize).toBe(16);
+    expect(p.fontSize).toBe('md');
     expect(p.text).toBe('');
   });
 });
@@ -256,8 +256,8 @@ describe('All three utils have static migrations with currentVersion: Box 2, Tex
   it('BoxUtil.migrations.currentVersion === 2', () => {
     expect(BoxUtil.migrations?.currentVersion).toBe(2);
   });
-  it('TextUtil.migrations.currentVersion === 1', () => {
-    expect(TextUtil.migrations?.currentVersion).toBe(1);
+  it('TextUtil.migrations.currentVersion === 3', () => {
+    expect(TextUtil.migrations?.currentVersion).toBe(3);
   });
   it('FrameUtil.migrations.currentVersion === 1', () => {
     expect(FrameUtil.migrations?.currentVersion).toBe(1);

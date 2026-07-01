@@ -27,6 +27,9 @@ export { GlideStore } from './store';
 
 // Shapes (base)
 export { ShapeUtil, BindingUtil } from './shapes/ShapeUtil';
+export { BoxUtil } from './shapes/BoxUtil';
+export { FrameUtil } from './shapes/FrameUtil';
+export { TextUtil } from './shapes/TextUtil';
 
 // Phase 3 — State machine + history + tools
 export { StateNode } from './state-node';
@@ -79,6 +82,9 @@ export {
   deleteShapesInputSchema,
   createConnectionInputSchema,
   getCanvasStateInputSchema,
+  createDiagramInputSchema,
+  layoutShapesInputSchema,
+  getCanvasImageInputSchema,
 } from './mcp';
 export type { CanvasToolName, CanvasToolResult, CanvasToolError, CanvasToolManifestEntry } from './mcp';
 
@@ -87,11 +93,13 @@ export {
   TLDRAW_COLORS, resolveColor, hexWithOpacity, svgFill,
   STROKE_WIDTHS, FONT_SIZES, FONT_FAMILIES,
   STROKE_DASH_ARRAYS, FILL_OPACITIES,
+  inlinePatternDefs, getPatternId, getShapePatternId,
+  createTextForeignObjectForExport,
 } from './styles';
 export type {
   TldrawColor,
   FillStyle, StrokeStyle, SizeStyle, FontSize, TextAlign, Font,
-  ShapeStyleProps,
+  ShapeStyleProps, LabelProps,
 } from './styles';
 
 // Phase A — Ellipse shape
@@ -130,5 +138,5 @@ export type {
 } from './shapes/GeoShapeUtil';
 
 // Phase B — SelectTool extensions (resize + rotation types)
-export type { ResizeHandle, ResizeInfo } from './shapes/ShapeUtil';
+export type { ResizeHandle, ResizeInfo, LabelProps } from './shapes/ShapeUtil';
 export type { RotationInfo } from './tools/SelectTool';

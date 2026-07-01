@@ -28,8 +28,8 @@ import type { GlideShape, GlideProps } from '../types';
 import { Geometry2d, Rectangle2d } from '../geometry';
 import {
   FONT_SIZES, FONT_FAMILIES,
-  resolveColor, createTextForeignObject,
-  type FontSize, type TextAlign, type Font,
+  resolveColor, createTextForeignObjectForExport,
+  type FontSize, type TextAlign, type Font, type LabelProps,
 } from '../styles';
 
 // ─────────────────────────────────────────────────────────────
@@ -201,18 +201,14 @@ export class StickyNoteUtil extends ShapeUtil<StickyNoteShape> {
     return new Rectangle2d(0, 0, shape.props.w, shape.props.h);
   }
 
+  /** Geometry-only SVG — background rect only, no text. For interactive canvas rendering. */
   toSvg(shape: StickyNoteShape): SVGElement {
     const { props } = shape;
     const bgColor = STICKY_COLORS[props.color] ?? resolveColor(props.color);
-    const fontSize = FONT_SIZES[props.fontSize];
-    const fontFamily = FONT_FAMILIES[props.font];
-    const lineHeight = fontSize * 1.5;
-    const textW = props.w - PAD * 2;
 
     const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
     if (props.opacity < 1) g.setAttribute('opacity', String(props.opacity));
 
-    // Background rect (local coords: x=0, y=0)
     const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
     rect.setAttribute('x',      '0');
     rect.setAttribute('y',      '0');
@@ -220,14 +216,34 @@ export class StickyNoteUtil extends ShapeUtil<StickyNoteShape> {
     rect.setAttribute('height', String(props.h));
     rect.setAttribute('fill',   bgColor);
     rect.setAttribute('rx',     '4');
-    // Subtle shadow via a slightly darker inner-bottom strip (CSS not available in pure SVG)
     rect.setAttribute('stroke', 'rgba(0,0,0,0.08)');
     rect.setAttribute('stroke-width', '1');
     g.appendChild(rect);
+    return g;
+  }
 
-    // Text content
+  /** CSS label properties for the HTML overlay div — includes sticky background color. */
+  override getLabelProps(shape: StickyNoteShape): LabelProps | null {
+    const { props } = shape;
+    const bgColor = STICKY_COLORS[props.color] ?? resolveColor(props.color);
+    return {
+      text:          props.text,
+      fontFamily:    FONT_FAMILIES[props.font] ?? FONT_FAMILIES.sans,
+      fontSize:      FONT_SIZES[props.fontSize] ?? FONT_SIZES.md,
+      color:         resolveColor(props.textColor),
+      textAlign:     props.textAlign,
+      verticalAlign: 'top',
+      padding:       PAD,
+      background:    bgColor,
+    };
+  }
+
+  /** Full SVG for export — includes foreignObject text. */
+  override toSvgExport(shape: StickyNoteShape): SVGElement {
+    const g = this.toSvg(shape) as SVGGElement;
+    const { props } = shape;
     if (props.text) {
-      const fo = createTextForeignObject({
+      const fo = createTextForeignObjectForExport({
         x: 0, y: 0, w: props.w, h: props.h,
         text: props.text,
         font: props.font,
@@ -239,7 +255,6 @@ export class StickyNoteUtil extends ShapeUtil<StickyNoteShape> {
       });
       g.appendChild(fo);
     }
-
     return g;
   }
 }

@@ -15,7 +15,7 @@ export default defineConfig({
   ],
   // Demo server must be started externally (npm run dev in glideline-demo)
   webServer: {
-    command: 'PATH=/opt/homebrew/bin:$PATH npm run dev',
+    command: 'npm run dev',
     cwd: '../glideline-demo',
     url: 'http://localhost:5173',
     reuseExistingServer: true,

@@ -1,16 +1,16 @@
-"use client";
 
 import { useGet, Response } from "@http/hooks";
-import { usePUT } from "app/core/http/hooks/usePut";
+import { usePut as usePUT } from "@http/hooks";
 import { useEffect, useMemo, useState, useRef } from "react";
 import * as Y from "yjs";
 import { WebrtcProvider } from "y-webrtc";
-import { Glideboard } from "@durgakiran/glideboard";
-import { Spinner, Flex, Button, IconButton } from "@radix-ui/themes";
-import { Buffer } from "buffer";
-import { useRouter } from "next/navigation";
+import { Spinner, Flex, Button, IconButton, Avatar, HoverCard, Box, Text } from "@radix-ui/themes";
+import { base64ToUint8Array, uint8ArrayToBase64 } from "app/core/utils/base64";
+import { useNavigate } from "react-router-dom";
 import { HiHome } from "react-icons/hi";
+import { FiStar } from "react-icons/fi";
 import { getSignalingUrl } from "app/core/signaling";
+import { wbEditor, Glideboard } from "@durgakiran/glideboard";
 
 export default function WhiteboardEditor({
     slug,
@@ -23,7 +23,7 @@ export default function WhiteboardEditor({
 }) {
     const spaceId = slug[0];
     const pageId = slug[1];
-    const router = useRouter();
+    const navigate = useNavigate();
     const fetchPath = readOnly
         ? `editor/space/${spaceId}/whiteboard/${pageId}`
         : `editor/space/${spaceId}/whiteboard/${pageId}/edit`;
@@ -89,7 +89,7 @@ export default function WhiteboardEditor({
         const encodedData = fetchRes.data?.data;
         if (encodedData) {
             try {
-                const update = Buffer.from(encodedData, 'base64');
+                const update = base64ToUint8Array(encodedData);
                 Y.applyUpdate(yDoc, update);
             } catch (err) {
                 console.error("Error applying init dbData to yDoc", err);
@@ -111,7 +111,7 @@ export default function WhiteboardEditor({
                 dirtyRef.current = false;
                 const encoded = Y.encodeStateAsUpdate(yDoc);
                 if (!encoded || encoded.length === 0) return; // skip empty state
-                const state = Buffer.from(encoded).toString('base64');
+                const state = uint8ArrayToBase64(encoded);
                 if (!state) return; // skip if base64 serialization failed
                 updateWhiteboard({ data: state });
             }
@@ -133,6 +133,36 @@ export default function WhiteboardEditor({
         });
     }, [provider, collaborationUser]);
 
+    const [isPublishing, setIsPublishing] = useState(false);
+    const [activeCollaborators, setActiveCollaborators] = useState<
+        Array<{ id: string; name: string; email?: string; color?: string }>
+    >([]);
+
+    useEffect(() => {
+        if (!provider) return;
+
+        const syncCollaborators = () => {
+            const states = Array.from(provider.awareness.getStates().values());
+            const nextCollaborators = states
+                .map((state) => state?.user as { id?: string; name?: string; email?: string; color?: string } | undefined)
+                .filter((candidate): candidate is { id: string; name: string; email?: string; color?: string } => Boolean(candidate?.id && candidate?.name));
+
+            const deduped = Array.from(
+                new Map(nextCollaborators.map((candidate) => [candidate.id, candidate])).values(),
+            );
+
+            setActiveCollaborators(deduped);
+        };
+
+        syncCollaborators();
+        provider.awareness.on("change", syncCollaborators);
+        return () => {
+            provider.awareness.off("change", syncCollaborators);
+        };
+    }, [provider]);
+
+    const visibleCollaborators = activeCollaborators.slice(0, 3);
+
     if (fetching || !isDbLoaded || (!readOnly && !provider)) {
         return (
             <Flex justify="center" style={{ marginTop: '20vh' }}>
@@ -142,7 +172,58 @@ export default function WhiteboardEditor({
     }
 
     const handleClose = () => {
-        router.push(`/space/${spaceId}/view/${pageId}`);
+        navigate(`/space/${spaceId}/view/${pageId}`);
+    };
+
+    const handlePublish = async () => {
+        setIsPublishing(true);
+        try {
+            // 1. SVG snapshot
+            const shapeIds = wbEditor.serialize().records
+                .filter((r) => 'x' in r && 'y' in r)
+                .map(s => s.id);
+            
+            let previewAssetName = '';
+            if (shapeIds.length > 0) {
+                const svgString = wbEditor.exportToSvg(shapeIds as any);
+                const svgBlob = new Blob([svgString], { type: 'image/svg+xml' });
+                
+                const formData = new FormData();
+                formData.append('file', svgBlob, 'whiteboard-preview.svg');
+                formData.append('pageId', pageId);
+                
+                const uploadRes = await fetch('/api/v1/media/upload', {
+                    method: 'POST',
+                    body: formData,
+                });
+                
+                if (uploadRes.ok) {
+                    const uploadJson = await uploadRes.json();
+                    previewAssetName = uploadJson.data?.name ?? '';
+                }
+            }
+
+            // 2. Yjs state
+            const encoded = uint8ArrayToBase64(Y.encodeStateAsUpdate(yDoc));
+
+            // 3. Publish
+            const publishRes = await fetch(
+                `/api/v1/editor/space/${spaceId}/whiteboard/${pageId}/publish`,
+                {
+                    method: 'PUT', // Route in editorController.go is PUT
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ data: encoded, previewAssetName }),
+                }
+            );
+
+            if (!publishRes.ok) throw new Error('Publish failed');
+            
+        } catch (e: any) {
+            console.error(e);
+            alert(e.message ?? 'Publish failed');
+        } finally {
+            setIsPublishing(false);
+        }
     };
 
     const pageTitle = fetchRes?.data?.title || 'Untitled Whiteboard';
@@ -202,10 +283,98 @@ export default function WhiteboardEditor({
                         </span>
                     </Flex>
 
-                    {/* Right: Close button */}
-                    <Button size="2" variant="ghost" color="gray" onClick={handleClose} style={{ flexShrink: 0 }}>
-                        Close
-                    </Button>
+                    {/* Right: Publish & Close button */}
+                    <Flex align="center" gap="3" style={{ flexShrink: 0 }}>
+                        <Flex align="center" gap="2">
+                            {visibleCollaborators.length ? (
+                                <Flex align="center" style={{ marginRight: "4px" }}>
+                                    {visibleCollaborators.map((collaborator, index) => (
+                                        <HoverCard.Root key={collaborator.id} openDelay={120} closeDelay={100}>
+                                            <HoverCard.Trigger>
+                                                <span
+                                                    aria-label={`${collaborator.name} profile`}
+                                                    style={{
+                                                        position: "relative",
+                                                        marginLeft: index === 0 ? 0 : -6,
+                                                        display: "inline-block",
+                                                        lineHeight: 0,
+                                                        cursor: "default",
+                                                        verticalAlign: "middle",
+                                                    }}
+                                                >
+                                                    <Avatar
+                                                        fallback={collaborator.name.charAt(0).toUpperCase()}
+                                                        radius="full"
+                                                        size="2"
+                                                        style={{
+                                                            backgroundColor: collaborator.color || "#f1eff4",
+                                                            color: "#221f26",
+                                                            border: "2px solid white",
+                                                        }}
+                                                    />
+                                                </span>
+                                            </HoverCard.Trigger>
+                                            <HoverCard.Content
+                                                size="2"
+                                                side="top"
+                                                sideOffset={8}
+                                                style={{ minWidth: 220, maxWidth: 280 }}
+                                            >
+                                                <Flex gap="3" align="start">
+                                                    <Avatar
+                                                        fallback={collaborator.name.charAt(0).toUpperCase()}
+                                                        radius="full"
+                                                        size="2"
+                                                        style={{
+                                                            backgroundColor: collaborator.color || "#f1eff4",
+                                                            color: "#221f26",
+                                                            border: "2px solid white",
+                                                            flexShrink: 0,
+                                                        }}
+                                                    />
+                                                    <Flex direction="column" gap="1" style={{ minWidth: 0 }}>
+                                                        <Text size="2" weight="medium" className="text-[#221f26]">
+                                                            {collaborator.name}
+                                                        </Text>
+                                                        {collaborator.email ? (
+                                                            <Text size="1" className="text-[#605c67] break-all">
+                                                                {collaborator.email}
+                                                            </Text>
+                                                        ) : (
+                                                            <Text size="1" className="text-[#898492]">
+                                                                Email not shared
+                                                            </Text>
+                                                        )}
+                                                    </Flex>
+                                                </Flex>
+                                            </HoverCard.Content>
+                                        </HoverCard.Root>
+                                    ))}
+                                </Flex>
+                            ) : null}
+                            <Text size="2" className="text-[#898492]">
+                                {activeCollaborators.length > 0
+                                    ? `${activeCollaborators.length} editing`
+                                    : "Solo editing"}
+                            </Text>
+                        </Flex>
+
+                        <Flex align="center" gap="2">
+                            <Button 
+                                size="2" 
+                                variant="solid" 
+                                color="blue" 
+                                onClick={handlePublish}
+                                disabled={isPublishing}
+                                loading={isPublishing}
+                            >
+                                Publish
+                            </Button>
+                            <Button size="2" variant="ghost" color="gray" onClick={handleClose}>
+                                Close
+                            </Button>
+                        </Flex>
+                    </Flex>
                 </Flex>
 
                 {/* Canvas */}
@@ -241,14 +410,16 @@ function WhiteboardCanvas({
         return <Flex>Error loading whiteboard.</Flex>;
     }
 
+    const collaborationProps = useMemo(() => ({
+        doc: yDoc,
+        provider: provider as any,
+        user: collaborationUser,
+    }), [yDoc, provider, collaborationUser]);
+
     return (
         <div style={{ width: "100%", height: "100%", position: "relative" }}>
             <Glideboard
-                collaboration={{
-                    doc: yDoc,
-                    provider: provider as any,
-                    user: collaborationUser,
-                }}
+                collaboration={collaborationProps}
                 readOnly={readOnly}
             />
         </div>

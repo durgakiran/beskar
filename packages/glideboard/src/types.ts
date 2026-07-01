@@ -8,6 +8,10 @@ export interface GlideboardUser {
 
 export interface GlideboardAwareness {
   setLocalStateField(field: string, value: unknown): void;
+  getStates(): Map<number, any>;
+  on(event: 'change', handler: () => void): void;
+  off(event: 'change', handler: () => void): void;
+  clientID: number;
 }
 
 export interface GlideboardCollaborationProvider {
@@ -30,8 +34,8 @@ export interface GlideboardSharedMap<T> {
   get(key: string): T | undefined;
   set(key: string, value: T): unknown;
   delete(key: string): void;
-  observe(listener: (event: GlideboardMapEvent) => void): void;
-  unobserve(listener: (event: GlideboardMapEvent) => void): void;
+  observe(listener: (event: GlideboardMapEvent, transaction: any) => void): void;
+  unobserve(listener: (event: GlideboardMapEvent, transaction: any) => void): void;
 }
 
 export interface GlideboardCollaborationDoc {

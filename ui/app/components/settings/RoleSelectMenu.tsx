@@ -1,4 +1,3 @@
-"use client";
 
 import { Select } from "@radix-ui/themes";
 

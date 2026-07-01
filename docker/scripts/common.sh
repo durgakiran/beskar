@@ -80,7 +80,7 @@ load_env_file() {
     : "${PROXY_HTTPS_PORT:=443}"
     : "${PROXY_DOMAIN_ALIASES_ENABLED:=true}"
     : "${ORIGIN_CERT_TRUST_INJECTION_ENABLED:=true}"
-    : "${UI_USE_LOCAL_EDITOR_DIST:=false}"
+    : "${UI_USE_LOCAL_PACKAGES_DIST:=false}"
     : "${DOCKER_LOG_MAX_SIZE:=10m}"
     : "${DOCKER_LOG_MAX_FILE:=3}"
     : "${LANDING_DOMAIN_ALIASES:=}"
@@ -222,7 +222,7 @@ load_env_file() {
 
     PROXY_DOMAIN_ALIASES_ENABLED="$(normalize_bool "$PROXY_DOMAIN_ALIASES_ENABLED")"
     ORIGIN_CERT_TRUST_INJECTION_ENABLED="$(normalize_bool "$ORIGIN_CERT_TRUST_INJECTION_ENABLED")"
-    UI_USE_LOCAL_EDITOR_DIST="$(normalize_bool "$UI_USE_LOCAL_EDITOR_DIST")"
+    UI_USE_LOCAL_PACKAGES_DIST="$(normalize_bool "$UI_USE_LOCAL_PACKAGES_DIST")"
     ZITADEL_ACCESS_LOG_STDOUT_ENABLED="$(normalize_bool "$ZITADEL_ACCESS_LOG_STDOUT_ENABLED")"
     SERVER_LOG_TO_FILES="$(normalize_bool "$SERVER_LOG_TO_FILES")"
     SERVER_HTTP_REQUEST_LOGGING_ENABLED="$(normalize_bool "$SERVER_HTTP_REQUEST_LOGGING_ENABLED")"
@@ -241,11 +241,16 @@ load_env_file() {
     DOCUMENT_VERSION_CLEANUP_DRY_RUN="$(normalize_bool "$DOCUMENT_VERSION_CLEANUP_DRY_RUN")"
     DOCUMENT_VERSION_CLEANUP_ADMIN_ENABLED="$(normalize_bool "$DOCUMENT_VERSION_CLEANUP_ADMIN_ENABLED")"
 
-    if [[ "$UI_USE_LOCAL_EDITOR_DIST" == "true" ]]; then
-        UI_DOCKER_BUILD_TARGET="runner-local-editor"
+    if [[ "$UI_USE_LOCAL_PACKAGES_DIST" == "true" ]]; then
+        UI_DOCKER_BUILD_TARGET="runner-local-packages"
         if [[ ! -f "$ROOT_DIR/packages/editor/dist/index.js" ]]; then
-            echo "UI_USE_LOCAL_EDITOR_DIST=true requires built editor files at $ROOT_DIR/packages/editor/dist" >&2
+            echo "UI_USE_LOCAL_PACKAGES_DIST=true requires built editor files at $ROOT_DIR/packages/editor/dist" >&2
             echo "Run: npm --prefix packages/editor run build" >&2
+            exit 1
+        fi
+        if [[ ! -f "$ROOT_DIR/packages/glideboard/dist/index.js" ]]; then
+            echo "UI_USE_LOCAL_PACKAGES_DIST=true requires built glideboard files at $ROOT_DIR/packages/glideboard/dist" >&2
+            echo "Run: npm --prefix packages/glideboard run build" >&2
             exit 1
         fi
     else
@@ -305,7 +310,7 @@ EOF
     export PROXY_HTTPS_PORT
     export PROXY_DOMAIN_ALIASES_ENABLED
     export ORIGIN_CERT_TRUST_INJECTION_ENABLED
-    export UI_USE_LOCAL_EDITOR_DIST
+    export UI_USE_LOCAL_PACKAGES_DIST
     export LANDING_DOMAIN_ALIASES
     export LANDING_DOMAIN_NAMES
     export DOCKER_LOG_MAX_SIZE

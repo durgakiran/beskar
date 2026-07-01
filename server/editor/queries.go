@@ -65,31 +65,98 @@ const (
 	// Whiteboard data
 	insertWhiteboardData = `INSERT INTO core.whiteboard_data (doc_id, data, updated_at) VALUES ($1, $2, NOW()) RETURNING id`
 	upsertWhiteboardData = `INSERT INTO core.whiteboard_data (doc_id, data, updated_at) VALUES ($1, $2, NOW()) ON CONFLICT (doc_id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW() RETURNING id`
-	getWhiteboardData    = `SELECT
-							COALESCE(wd.id, 0) AS id,
-							d.doc_id,
-							wd.data,
-							d.title,
-							d.page_id AS id,
-							p.space_id AS spaceId
-						FROM core.page p
-						JOIN core.page_doc_map d ON p.id = d.page_id
-						LEFT JOIN core.whiteboard_data wd ON d.doc_id = wd.doc_id
-						WHERE d.page_id = $1 AND p.space_id = $2
-						ORDER BY d.version DESC
-						LIMIT 1`
+	
+	publishWhiteboardFlipDraft = `
+		UPDATE core.page_doc_map
+		SET draft = 0, version = NOW()
+		WHERE page_id = $1 AND draft = 1
+		RETURNING doc_id`
+
+	publishWhiteboardUpsertData = `
+		INSERT INTO core.whiteboard_data (doc_id, data, preview_asset_name, updated_at)
+		VALUES ($1, $2, $3, NOW())
+		ON CONFLICT (doc_id) DO UPDATE
+		SET data = EXCLUDED.data,
+			preview_asset_name = EXCLUDED.preview_asset_name,
+			updated_at = NOW()`
+
+	insertDraftWhiteboardDocMap = `
+		INSERT INTO core.page_doc_map (page_id, title, version, owner_id, draft)
+		SELECT page_id, title, NOW(), $2, 1
+		FROM core.page_doc_map
+		WHERE page_id = $1
+		ORDER BY version DESC
+		LIMIT 1
+		RETURNING doc_id`
+
+	getWhiteboardVersions = `
+		SELECT d.doc_id, d.version, COALESCE(wd.preview_asset_name, '') AS previewAssetName
+		FROM core.page_doc_map d
+		LEFT JOIN core.whiteboard_data wd ON d.doc_id = wd.doc_id
+		WHERE d.page_id = $1 AND d.draft = 0
+		ORDER BY d.version DESC`
+
+	getWhiteboardDataByDocId = `
+		SELECT
+			COALESCE(wd.id, 0),
+			d.doc_id,
+			wd.data,
+			d.title,
+			d.page_id,
+			p.space_id
+		FROM core.page p
+		JOIN core.page_doc_map d ON p.id = d.page_id
+		LEFT JOIN core.whiteboard_data wd ON d.doc_id = wd.doc_id
+		WHERE d.doc_id = $1 AND p.space_id = $2 AND d.draft = 0`
+
+	getWhiteboardDraftData = `
+		SELECT
+			COALESCE(wd.id, 0),
+			d.doc_id,
+			wd.data,
+			d.title,
+			d.page_id,
+			p.space_id
+		FROM core.page p
+		JOIN core.page_doc_map d ON p.id = d.page_id
+		LEFT JOIN core.whiteboard_data wd ON d.doc_id = wd.doc_id
+		WHERE d.page_id = $1 AND p.space_id = $2 AND d.draft = 1
+		ORDER BY d.version DESC
+		LIMIT 1`
+
+	getWhiteboardPublishedData = `
+		SELECT
+			COALESCE(wd.id, 0),
+			d.doc_id,
+			wd.data,
+			d.title,
+			d.page_id,
+			p.space_id,
+			COALESCE(wd.preview_asset_name, '') AS previewAssetName
+		FROM core.page p
+		JOIN core.page_doc_map d ON p.id = d.page_id
+		LEFT JOIN core.whiteboard_data wd ON d.doc_id = wd.doc_id
+		WHERE d.page_id = $1 AND p.space_id = $2 AND d.draft = 0
+		ORDER BY d.version DESC
+		LIMIT 1`
 
 	// Page metadata (type lookup)
 	getPageMetadata           = `SELECT p.id, p.type, p.space_id AS spaceId FROM core.page p WHERE p.id = $1 AND p.space_id = $2`
 	getPageInlineLinkMetadata = `SELECT
 									p.id,
-									COALESCE(p.type, 'document') AS type,
+									CASE WHEN wd.doc_id IS NOT NULL THEN 'whiteboard' ELSE COALESCE(p.type, 'document') END AS type,
 									p.space_id AS spaceId,
-									d.title
+									COALESCE(d.title, 'Untitled') AS title,
+									COALESCE(wd.preview_asset_name, '') AS previewAssetName
 								FROM core.page p
-								LEFT JOIN core.page_doc_map d ON p.id = d.page_id
+								LEFT JOIN LATERAL (
+									SELECT doc_id, title
+									FROM core.page_doc_map
+									WHERE page_id = p.id AND draft = 0
+									ORDER BY version DESC LIMIT 1
+								) d ON TRUE
+								LEFT JOIN core.whiteboard_data wd ON d.doc_id = wd.doc_id
 								WHERE p.id = $1 AND p.space_id = $2
-								ORDER BY d.version DESC
 								LIMIT 1`
 
 	getViewSpaceSummary = `SELECT s.name, s.archived_at

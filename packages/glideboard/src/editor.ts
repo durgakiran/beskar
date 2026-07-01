@@ -21,14 +21,14 @@ import {
   createCanvasToolServer,
   createEditor,
   resolveArrowRoute,
+  BoxUtil,
+  FrameUtil,
+  TextUtil,
   type Box2d,
   type CanvasToolName,
   type GlideDocument,
   type Vec2,
 } from '@durgakiran/glideline';
-import { BoxUtil } from './shapes/BoxUtil';
-import { FrameUtil } from './shapes/FrameUtil';
-import { TextUtil } from './shapes/TextUtil';
 import { bindGlideboardCollaboration } from './collaboration';
 import type { GlideboardCollaborationConfig } from './types';
 
@@ -69,6 +69,19 @@ export const wbEditor = createGlideboardEditorInstance();
 
 const wbToolServer = createCanvasToolServer(wbEditor);
 export const readOnlySignal = signal(false);
+export const awarenessSignal = signal<any | null>(null);
+
+/**
+ * Set to true while a pointer is captured on the canvas (pointerdown → pointerup).
+ * Read by WhiteboardApp's spacebar keyup handler to know whether to defer tool restoration.
+ */
+export const isCanvasDraggingRef = { current: false };
+
+/**
+ * When the spacebar is released while isCanvasDraggingRef is true, the previous tool id
+ * is stored here. Canvas.tsx clears it and restores the tool on the next pointerUp.
+ */
+export const deferredToolRestoreRef = { current: null as string | null };
 
 export type ConnectorPreset = 'line' | 'arrow' | 'double-arrow';
 export type ArrowheadStyle = 'none' | 'arrow';
@@ -164,6 +177,7 @@ export function initializeGlideboardSession(opts: {
 
   if (opts.collaboration) {
     collaborationCleanup = bindGlideboardCollaboration(wbEditor, opts.collaboration);
+    awarenessSignal.value = opts.collaboration.provider?.awareness || null;
   }
 
   wbEditor.setCurrentTool(readOnlySignal.value ? 'hand' : 'select');
@@ -189,7 +203,7 @@ export function attachDebugApi(debugApiKey: string) {
     reset: clearWhiteboardState,
     setCurrentTool: (id: string) => wbEditor.setCurrentTool(id),
     getCurrentToolId: () => wbEditor.currentToolId.peek(),
-    callTool: (name: CanvasToolName, input: unknown) => wbToolServer.callTool(name, input),
+    callTool: async (name: CanvasToolName, input: unknown) => wbToolServer.callTool(name, input),
     getToolManifest: () => wbToolServer.generateToolManifest(),
     getAIContext: (opts?: { viewport?: boolean }) => wbEditor.getAIContext(opts),
     takeScreenshot: (box?: Box2d) => wbEditor.takeScreenshot(box),

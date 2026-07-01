@@ -1,4 +1,3 @@
-"use client";
 
 import ModifiedIcon from "@components/modifiedIcon";
 import { formatInviteRole, formatInviteTime } from "@components/invite/formatters";

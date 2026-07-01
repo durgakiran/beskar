@@ -23,8 +23,9 @@ import (
 )
 
 var allowedImageMIMEs = map[string]string{
-	"image/jpeg": ".jpg",
-	"image/png":  ".png",
+	"image/jpeg":    ".jpg",
+	"image/png":     ".png",
+	"image/svg+xml": ".svg",
 }
 
 type ImageAssetRecord struct {
@@ -79,8 +80,23 @@ func detectImageMetadata(data []byte) (string, int, int, error) {
 		sniffLen = len(data)
 	}
 	mimeType := http.DetectContentType(data[:sniffLen])
+
+	// http.DetectContentType often falls back to text/xml or text/plain for SVG.
+	// If the file starts with <svg (or <?xml ... <svg), treat it as an SVG.
+	isSVG := false
+	lowerData := bytes.ToLower(data[:sniffLen])
+	if bytes.Contains(lowerData, []byte("<svg")) {
+		mimeType = "image/svg+xml"
+		isSVG = true
+	}
+
 	if _, ok := allowedImageMIMEs[mimeType]; !ok {
 		return "", 0, 0, fmt.Errorf("not a supported image type: %s", mimeType)
+	}
+
+	if isSVG {
+		// SVGs don't decode natively via Go's image decoder, so we bypass pixel checks.
+		return mimeType, 0, 0, nil
 	}
 
 	cfg, _, err := image.DecodeConfig(bytes.NewReader(data))

@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
 
-const USER_URI = process.env.NEXT_PUBLIC_USER_SERVER_URL;
+const USER_URI = import.meta.env.VITE_USER_SERVER_URL;
 const EMPTY_HEADERS: Record<string, any> = {};
 
 /**

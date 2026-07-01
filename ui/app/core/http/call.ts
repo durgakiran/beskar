@@ -1,19 +1,33 @@
-import axios from "axios";
-
-// post utility method
-export const post = (
+export const post = async (
     path: string,
     body: any,
     headerOptions: Record<string, any>,
-    axiosConfig?: { signal?: AbortSignal },
+    config?: { signal?: AbortSignal },
 ) => {
-    return axios.post(path, body, {
-        withCredentials: false,
-        headers: { Authorization: `Bearer ${localStorage.getItem("access_token")}`, ...headerOptions },
-        ...axiosConfig,
+    const isFormData = body instanceof FormData;
+    const fetchHeaders: HeadersInit = { ...headerOptions };
+    if (!isFormData && !fetchHeaders['Content-Type']) {
+        fetchHeaders['Content-Type'] = 'application/json';
+    }
+
+    const res = await fetch(path, {
+        method: 'POST',
+        credentials: 'include',
+        headers: fetchHeaders,
+        body: isFormData ? body : JSON.stringify(body),
+        signal: config?.signal,
     });
+    if (!res.ok) throw new Error(`Request failed with status ${res.status}`);
+    const json = await res.json();
+    return { data: json };
 };
 
-export const get = (path: string, headers: Record<string, any> = {}) => {
-    return axios.get(path, { withCredentials: false, headers: { Authorization: `Bearer ${localStorage.getItem("access_token")}`, ...headers } });
+export const get = async (path: string, headers: Record<string, any> = {}) => {
+    const res = await fetch(path, {
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json', ...headers },
+    });
+    if (!res.ok) throw new Error(`Request failed with status ${res.status}`);
+    const json = await res.json();
+    return { data: json };
 };

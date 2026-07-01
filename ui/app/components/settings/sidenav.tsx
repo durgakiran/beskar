@@ -1,10 +1,10 @@
 import { Box, Flex, Text } from "@radix-ui/themes";
-import { usePathname } from "next/navigation";
-import Link from "next/link";
+import { useLocation } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { HiUsers, HiMail } from "react-icons/hi";
 
 export default function SideNav(param: { id: string }) {
-    const pathName = usePathname();
+    const pathName = useLocation().pathname;
     const isUsersActive = pathName.endsWith("users");
     const isInvitesActive = pathName.endsWith("invites");
 
@@ -17,7 +17,7 @@ export default function SideNav(param: { id: string }) {
                         Settings
                     </Text>
                     <Link 
-                        href={`/space/${param.id}/settings/users`}
+                        to={`/space/${param.id}/settings/users`}
                         className={`flex items-center gap-3 px-3 py-2.5 rounded-sm text-sm font-medium transition-colors ${
                             isUsersActive 
                                 ? 'bg-primary-100 text-primary-900' 
@@ -28,7 +28,7 @@ export default function SideNav(param: { id: string }) {
                         <span>Active Users</span>
                     </Link>
                     <Link 
-                        href={`/space/${param.id}/settings/invites`}
+                        to={`/space/${param.id}/settings/invites`}
                         className={`flex items-center gap-3 px-3 py-2.5 rounded-sm text-sm font-medium transition-colors ${
                             isInvitesActive 
                                 ? 'bg-primary-100 text-primary-900' 
@@ -45,7 +45,7 @@ export default function SideNav(param: { id: string }) {
             <Box className="md:hidden bg-white border-b border-neutral-200" p="3">
                 <Flex gap="2">
                     <Link 
-                        href={`/space/${param.id}/settings/users`}
+                        to={`/space/${param.id}/settings/users`}
                         className={`flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-sm text-sm font-medium transition-colors ${
                             isUsersActive 
                                 ? 'bg-primary-500 text-white' 
@@ -56,7 +56,7 @@ export default function SideNav(param: { id: string }) {
                         <span className="hidden sm:inline">Active</span>
                     </Link>
                     <Link 
-                        href={`/space/${param.id}/settings/invites`}
+                        to={`/space/${param.id}/settings/invites`}
                         className={`flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-sm text-sm font-medium transition-colors ${
                             isInvitesActive 
                                 ? 'bg-primary-500 text-white' 

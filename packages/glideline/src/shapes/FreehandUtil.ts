@@ -22,7 +22,8 @@ import { T } from '../validators';
 import { defineMigrations } from '../migrations';
 import { makeBox } from '../types';
 import type { GlideShape, Vec2, GlideProps } from '../types';
-import { STROKE_WIDTHS, resolveColor, type SizeStyle } from '../styles';
+import { STROKE_WIDTHS, STROKE_DASH_ARRAYS, resolveColor, StyleValidators } from '../styles';
+import type { SizeStyle, StrokeStyle } from '../styles';
 import { Geometry2d, Polyline2d } from '../geometry';
 
 // ─────────────────────────────────────────────────────────────
@@ -42,12 +43,13 @@ export interface FreehandPoint {
 
 export interface FreehandProps {
   [key: string]: unknown;
-  points:     FreehandPoint[];
-  color:      string;
-  size:       SizeStyle;
-  opacity:    number;
-  isClosed:   boolean;
-  isComplete: boolean;
+  points:      FreehandPoint[];
+  color:       string;
+  strokeWidth: SizeStyle;
+  strokeStyle: StrokeStyle;
+  opacity:     number;
+  isClosed:    boolean;
+  isComplete:  boolean;
 }
 
 export type FreehandShape = GlideShape<FreehandProps>;
@@ -60,15 +62,6 @@ const pointsValidator = {
   validate(v: unknown): FreehandPoint[] {
     if (!Array.isArray(v)) throw new Error('FreehandProps.points must be an array');
     return v as FreehandPoint[];
-  },
-};
-
-const sizeStyleValidator = {
-  validate(v: unknown): SizeStyle {
-    if (!['thin', 'medium', 'thick', 'xl'].includes(v as string)) {
-      throw new Error(`size must be thin|medium|thick|xl, got "${v}"`);
-    }
-    return v as SizeStyle;
   },
 };
 
@@ -130,16 +123,17 @@ export class FreehandUtil extends ShapeUtil<FreehandShape> {
   static override readonly type = 'freehand';
 
   static override readonly props: GlideProps<FreehandProps> = {
-    points:     pointsValidator,
-    color:      T.string,
-    size:       sizeStyleValidator,
-    opacity:    T.number,
-    isClosed:   T.boolean,
-    isComplete: T.boolean,
+    points:      pointsValidator,
+    color:       T.string,
+    strokeWidth: StyleValidators.strokeWidth,
+    strokeStyle: StyleValidators.strokeStyle,
+    opacity:     T.number,
+    isClosed:    T.boolean,
+    isComplete:  T.boolean,
   };
 
   static override readonly migrations = defineMigrations({
-    currentVersion: 1,
+    currentVersion: 2,
     migrators: {
       1: {
         up: r => ({
@@ -156,17 +150,32 @@ export class FreehandUtil extends ShapeUtil<FreehandShape> {
         }),
         down: r => r,
       },
+      2: {
+        up: r => {
+          const props = (r['props'] as any) || {};
+          const strokeWidth = props.strokeWidth || props.size || 'medium';
+          const strokeStyle = props.strokeStyle || 'solid';
+          const newProps = { ...props, strokeWidth, strokeStyle };
+          delete newProps.size;
+          return {
+            ...r,
+            props: newProps,
+          };
+        },
+        down: r => r,
+      },
     },
   });
 
   getDefaultProps(): FreehandProps {
     return {
-      points:     [],
-      color:      'black',
-      size:       'medium',
-      opacity:    1,
-      isClosed:   false,
-      isComplete: false,
+      points:      [],
+      color:       'black',
+      strokeWidth: 'medium',
+      strokeStyle: 'solid',
+      opacity:     1,
+      isClosed:    false,
+      isComplete:  false,
     };
   }
 
@@ -178,9 +187,10 @@ export class FreehandUtil extends ShapeUtil<FreehandShape> {
 
   toSvg(shape: FreehandShape): SVGElement {
     const { props } = shape;
-    const { points, color, size, opacity, isClosed } = props;
-    const strokeW = STROKE_WIDTHS[size];
+    const { points, color, strokeWidth, strokeStyle, opacity, isClosed } = props;
+    const strokeW = STROKE_WIDTHS[strokeWidth];
     const strokeColor = resolveColor(color);
+    const dashArray = STROKE_DASH_ARRAYS[strokeStyle];
 
     const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
     if (opacity < 1) g.setAttribute('opacity', String(opacity));
@@ -199,6 +209,9 @@ export class FreehandUtil extends ShapeUtil<FreehandShape> {
     path.setAttribute('stroke-linejoin', 'round');
     path.setAttribute('fill', isClosed ? strokeColor : 'none');
     if (isClosed) path.setAttribute('fill-opacity', '0.12');
+    if (dashArray !== 'none') {
+      path.setAttribute('stroke-dasharray', dashArray);
+    }
     g.appendChild(path);
 
     return g;

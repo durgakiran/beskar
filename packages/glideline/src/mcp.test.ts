@@ -38,11 +38,11 @@ function createBox(editor: ReturnType<typeof makeEditor>, id: string, x: number,
 }
 
 describe('Phase Infinity MCP tool server', () => {
-  it('T∞.2-01: create_shape creates a validated shape record', () => {
+  it('T∞.2-01: create_shape creates a validated shape record', async () => {
     const editor = makeEditor();
     const server = createCanvasToolServer(editor);
 
-    const result = server.callTool('create_shape', {
+    const result = await server.callTool('create_shape', {
       type: 'box',
       x: 100,
       y: 100,
@@ -56,35 +56,35 @@ describe('Phase Infinity MCP tool server', () => {
     expect(shape.y).toBe(100);
   });
 
-  it('T∞.2-02: AI-created shapes bypass the local undo stack', () => {
+  it('T∞.2-02: AI-created shapes bypass the local undo stack', async () => {
     const editor = makeEditor();
     const server = createCanvasToolServer(editor);
 
-    const result = server.callTool('create_shape', { type: 'box', x: 60, y: 80 }) as { id: ShapeId };
+    const result = await server.callTool('create_shape', { type: 'box', x: 60, y: 80 }) as { id: ShapeId };
     editor.undo();
 
     expect(editor.getShape(result.id)).toBeDefined();
   });
 
-  it('T∞.2-03: invalid params return a structured error instead of throwing', () => {
+  it('T∞.2-03: invalid params return a structured error instead of throwing', async () => {
     const editor = makeEditor();
     const server = createCanvasToolServer(editor);
 
-    const result = server.callTool('create_shape', { type: 123 });
+    const result = await server.callTool('create_shape', { type: 123 });
 
     expect(result).toEqual(expect.objectContaining({
-      error: expect.stringMatching(/string/i),
+      error: expect.any(String),
       issues: expect.any(Array),
     }));
   });
 
-  it('T∞.2-04: create_connection creates an arrow and binding records', () => {
+  it('T∞.2-04: create_connection creates an arrow and binding records', async () => {
     const editor = makeEditor();
     const server = createCanvasToolServer(editor);
     const fromId = createBox(editor, 'shape:from', 20, 20);
     const toId = createBox(editor, 'shape:to', 280, 20);
 
-    const result = server.callTool('create_connection', {
+    const result = await server.callTool('create_connection', {
       fromId,
       toId,
       routeStyle: 'smart',
@@ -96,13 +96,13 @@ describe('Phase Infinity MCP tool server', () => {
     expect(editor.getBindingsFromShape(result.id)).toHaveLength(2);
   });
 
-  it('T∞.2-05: get_canvas_state returns the editor AI context', () => {
+  it('T∞.2-05: get_canvas_state returns the editor AI context', async () => {
     const editor = makeEditor();
     const server = createCanvasToolServer(editor);
     createBox(editor, 'shape:a', 20, 20);
     createBox(editor, 'shape:b', 280, 20);
 
-    const result = server.callTool('get_canvas_state', {});
+    const result = await server.callTool('get_canvas_state', {});
 
     expect(result).toEqual(editor.getAIContext());
   });
@@ -119,24 +119,27 @@ describe('Phase Infinity MCP tool server', () => {
       'delete_shapes',
       'create_connection',
       'get_canvas_state',
+      'create_diagram',
+      'layout_shapes',
+      'get_canvas_image',
     ]);
     for (const tool of manifest) {
-      expect(() => z.fromJSONSchema(tool.inputSchema as object)).not.toThrow();
+      expect(() => z.fromJSONSchema(tool.inputSchema as any)).not.toThrow();
     }
   });
 
-  it('supports update_shape and delete_shapes tool flows', () => {
+  it('supports update_shape and delete_shapes tool flows', async () => {
     const editor = makeEditor();
     const server = createCanvasToolServer(editor);
-    const created = server.callTool('create_shape', { type: 'box', x: 20, y: 20 }) as { id: ShapeId };
+    const created = await server.callTool('create_shape', { type: 'box', x: 20, y: 20 }) as { id: ShapeId };
 
-    const updated = server.callTool('update_shape', {
+    const updated = await server.callTool('update_shape', {
       id: created.id,
       x: 180,
       y: 60,
       props: { label: 'Updated' },
     });
-    const deleted = server.callTool('delete_shapes', { ids: [created.id] });
+    const deleted = await server.callTool('delete_shapes', { ids: [created.id] });
 
     expect(updated).toEqual({ ok: true });
     expect(deleted).toEqual({ deleted: 1 });

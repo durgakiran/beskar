@@ -23,19 +23,20 @@ const (
 								p.id,
 								p.owner_id,
 								p.parent_id,
-								COALESCE(p.type, 'document') AS type,
+								CASE WHEN wd.doc_id IS NOT NULL THEN 'whiteboard' ELSE COALESCE(p.type, 'document') END AS type,
 								COALESCE(pr.title, d.title, 'Untitled') AS title,
 								COALESCE(d.draft, 0) AS draft
 							FROM
 								core.page p
 								LEFT JOIN LATERAL (
-									SELECT title, draft
+									SELECT doc_id, title, draft
 									FROM core.page_doc_map
 									WHERE page_id = p.id
 									ORDER BY version DESC
 									LIMIT 1
 								) d ON TRUE
 								LEFT JOIN project.projects pr ON pr.page_id = p.id
+								LEFT JOIN core.whiteboard_data wd ON wd.doc_id = d.doc_id
 							WHERE
 								p.space_id = $1 AND p.id = ANY($2)
 							ORDER BY p.id`

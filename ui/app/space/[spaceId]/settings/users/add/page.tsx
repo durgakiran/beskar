@@ -1,4 +1,3 @@
-"use client";
 
 import SettingsBreadcrumb from "@components/settings/SettingsBreadcrumb";
 import SettingsPageHeader from "@components/settings/SettingsPageHeader";
@@ -10,11 +9,11 @@ import { Button, Spinner, TextField } from "@radix-ui/themes";
 import { mapQuotaErrorMessage } from "../../../../../core/queries/quota";
 import { spaceSettingsPaths } from "../../../../../core/queries/space/settings";
 import type { MemberCandidate, MemberCandidateSearchResponse } from "../../types";
-import { use, useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
+import {  useNavigate , useParams } from "react-router-dom";
 import { FiChevronLeft } from "react-icons/fi";
 
-const USER_URI = process.env.NEXT_PUBLIC_USER_SERVER_URL;
+const USER_URI = import.meta.env.VITE_USER_SERVER_URL;
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -47,9 +46,9 @@ function parseInput(value: string) {
     );
 }
 
-export default function Page({ params }: { params: Promise<{ spaceId: string }> }) {
-    const { spaceId } = use(params);
-    const router = useRouter();
+export default function Page() {
+    const { spaceId } = useParams() as any;
+    const navigate = useNavigate();
     const [query, setQuery] = useState("");
     const [role, setRole] = useState("viewer");
     const [selectedMatches, setSelectedMatches] = useState<MemberCandidate[]>([]);
@@ -96,10 +95,10 @@ export default function Page({ params }: { params: Promise<{ spaceId: string }> 
 
     const navigateBack = () => {
         if (typeof window !== "undefined" && window.history.length > 1) {
-            router.back();
+            navigate(-1);
             return;
         }
-        router.push(fallbackHref);
+        navigate(fallbackHref);
     };
 
     const toggleMatch = (candidate: MemberCandidate) => {
@@ -160,7 +159,7 @@ export default function Page({ params }: { params: Promise<{ spaceId: string }> 
         }
 
         setToast({ type: "success", message: "Invites sent successfully" });
-        router.push(`/space/${spaceId}/settings/users`);
+        navigate(`/space/${spaceId}/settings/users`);
     };
 
     return (

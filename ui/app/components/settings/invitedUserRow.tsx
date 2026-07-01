@@ -1,4 +1,3 @@
-"use client";
 
 import { Button } from "@radix-ui/themes";
 import User from "./User";

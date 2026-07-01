@@ -1,4 +1,3 @@
-"use client";
 import { Button, IconButton, Flex } from "@radix-ui/themes";
 import { LuUndo, LuRedo } from "react-icons/lu";
 import { useContext } from "react";
