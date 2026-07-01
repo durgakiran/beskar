@@ -69,6 +69,7 @@ export const wbEditor = createGlideboardEditorInstance();
 
 const wbToolServer = createCanvasToolServer(wbEditor);
 export const readOnlySignal = signal(false);
+export const awarenessSignal = signal<any | null>(null);
 
 /**
  * Set to true while a pointer is captured on the canvas (pointerdown → pointerup).
@@ -176,6 +177,7 @@ export function initializeGlideboardSession(opts: {
 
   if (opts.collaboration) {
     collaborationCleanup = bindGlideboardCollaboration(wbEditor, opts.collaboration);
+    awarenessSignal.value = opts.collaboration.provider?.awareness || null;
   }
 
   wbEditor.setCurrentTool(readOnlySignal.value ? 'hand' : 'select');

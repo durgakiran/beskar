@@ -13,6 +13,7 @@ import { Toolbar } from './Toolbar';
 import { ZoomWidget, fitToScreen } from './ZoomWidget';
 import { useSignalValue } from './useSignalValue';
 import { BackToContentButton } from './BackToContentButton';
+import { CollaborationCursors } from './CollaborationCursors';
 
 const TOOL_KEYS: Record<string, string> = {
   v: 'select',
@@ -180,6 +181,7 @@ export function WhiteboardApp() {
       onContextMenu={onContextMenu}
     >
       <Canvas />
+      {!readOnly ? <CollaborationCursors /> : null}
       {!readOnly ? <Toolbar /> : null}
       <ZoomWidget />
       {!readOnly ? <StylePanel /> : null}

@@ -752,8 +752,9 @@ export class GlideEditor {
         if (box.maxY > maxY) maxY = box.maxY;
       }
 
-      if ((util as any).toSvg) {
-        const svgEl = (util as any).toSvg(shape);
+      const exportFn = (util as any).toSvgExport || (util as any).toSvg;
+      if (exportFn) {
+        const svgEl = exportFn.call(util, shape);
         if (svgEl) {
           this._prepareSvgElementForExport(svgEl);
           const wrapper = document.createElementNS('http://www.w3.org/2000/svg', 'g');

@@ -80,7 +80,8 @@ export function bindGlideboardCollaboration(
     });
   }) as typeof editor.store.remove;
 
-  const handleRemoteChange = (event: GlideboardMapEvent) => {
+  const handleRemoteChange = (event: GlideboardMapEvent, transaction: any) => {
+    if (transaction && transaction.local) return;
     if (applyingRemote) return;
     applyingRemote = true;
     try {

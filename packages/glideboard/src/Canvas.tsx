@@ -7,7 +7,7 @@ import type {
   LabelProps,
 } from '@durgakiran/glideline';
 import { FONT_FAMILIES } from '@durgakiran/glideline';
-import { readOnlySignal, wbEditor, isCanvasDraggingRef, deferredToolRestoreRef } from './editor';
+import { readOnlySignal, wbEditor, isCanvasDraggingRef, deferredToolRestoreRef, awarenessSignal } from './editor';
 import { CanvasOverlays, getHandleAtPagePoint, getCursorForHandle } from './CanvasOverlays';
 import { wbTheme } from './theme';
 import { useSignalValue } from './useSignalValue';
@@ -403,6 +403,11 @@ export function Canvas() {
       }
     }
     wbEditor.dispatchEvent({ type: 'pointerMove', point: page, screenPoint: screen, shiftKey: event.shiftKey, altKey: event.altKey } as any);
+    
+    const awareness = awarenessSignal.peek();
+    if (awareness) {
+      awareness.setLocalStateField('cursor', page);
+    }
   }, [getPagePoint]);
 
   const onPointerUp = useCallback((event: React.PointerEvent) => {
@@ -443,6 +448,13 @@ export function Canvas() {
     wbEditor.dispatchEvent({ type: 'keyDown', key: event.key } as any);
   }, [readOnly]);
 
+  const onPointerLeave = useCallback(() => {
+    const awareness = awarenessSignal.peek();
+    if (awareness) {
+      awareness.setLocalStateField('cursor', null);
+    }
+  }, []);
+
   // Sync canvas cursor when active tool changes (e.g. spacebar activates hand tool)
   useEffect(() => {
     if (!containerRef.current) return;
@@ -472,6 +484,7 @@ export function Canvas() {
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
+      onPointerLeave={onPointerLeave}
       onDoubleClick={onDoubleClick}
       onKeyDown={onKeyDown}
       onMouseDown={event => {

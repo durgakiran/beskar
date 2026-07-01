@@ -5,3 +5,4 @@ export type {
   GlideboardCollaborationConfig,
   GlideboardCollaborationProvider,
 } from './types';
+export { wbEditor } from './editor';
