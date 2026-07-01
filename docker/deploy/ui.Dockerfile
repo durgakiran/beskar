@@ -12,8 +12,13 @@ RUN printf "registry=https://registry.npmjs.org/\n@durgakiran:registry=https://n
 RUN npm ci
 
 FROM scratch AS local-editor-dist
-
 COPY packages/editor/dist /dist
+
+FROM scratch AS local-glideboard-dist
+COPY packages/glideboard/dist /dist
+
+FROM scratch AS local-glideline-dist
+COPY packages/glideline/dist /dist
 
 FROM golang:1.23.3-alpine AS wasm-builder
 
@@ -61,38 +66,27 @@ FROM builder-base AS builder
 RUN npm run build:workers
 RUN npm run build
 
-FROM builder-base AS builder-local-editor
-
+FROM builder-base AS builder-local-packages
 COPY --from=local-editor-dist /dist ./node_modules/@durgakiran/editor/dist
+COPY --from=local-glideboard-dist /dist ./node_modules/@durgakiran/glideboard/dist
+COPY --from=local-glideline-dist /dist ./node_modules/@durgakiran/glideline/dist
 RUN npm run build:workers
 RUN npm run build
 
 FROM node:22-alpine AS runner
-
 WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3000
-
-# Install serve globally for static hosting
 RUN npm install -g serve
-
-# Copy compiled vite output
 COPY --from=builder /app/dist ./dist
-
 EXPOSE 3000
-
 CMD ["serve", "-s", "dist", "-l", "3000"]
 
-FROM node:22-alpine AS runner-local-editor
-
+FROM node:22-alpine AS runner-local-packages
 WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3000
-
 RUN npm install -g serve
-
-COPY --from=builder-local-editor /app/dist ./dist
-
+COPY --from=builder-local-packages /app/dist ./dist
 EXPOSE 3000
-
 CMD ["serve", "-s", "dist", "-l", "3000"]
