@@ -319,8 +319,8 @@ func (i *Invite) invite() (string, error) {
 		defer conn.Release()
 		return token, err
 	}
-	defer tx.Rollback(ctx)
 	defer conn.Release()
+	defer tx.Rollback(ctx)
 	var exists int
 	if i.UserId != uuid.Nil {
 		err = conn.QueryRow(ctx, CHECK_PENDING_INVITE_EXISTS_BY_USER_QUERY, i.Entity, i.EntityId, i.UserId).Scan(&exists)
