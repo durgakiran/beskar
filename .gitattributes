@@ -2,3 +2,4 @@
 *.tmpl text eol=lf
 *.env text eol=lf
 *.example text eol=lf
+*.xml tex eol=lf
