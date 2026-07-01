@@ -18,6 +18,8 @@ import InvitesSettings from "../app/space/[spaceId]/settings/invites/page";
 import QuotaSettings from "../app/space/[spaceId]/settings/quota/page";
 import ViewPage from "../app/space/[spaceId]/view/[page]/page";
 import EditPage from "../app/space/[spaceId]/edit/[page]/page";
+import WhiteboardVersionsPage from "../app/space/[spaceId]/whiteboard/[pageId]/versions/page";
+import WhiteboardVersionViewPage from "../app/space/[spaceId]/whiteboard/[pageId]/versions/[versionId]/page";
 import EditSlugPage from "../app/edit/[...slug]/page";
 import NotificationsPage from "../app/user/notifications/page";
 import StoragePage from "../app/user/storage/page";
@@ -41,6 +43,8 @@ export default function App() {
           <Route index element={<SpaceDetailOverview />} />
           <Route path="view/:page" element={<RouteWrapper Component={ViewPage} />} />
           <Route path="edit/:page" element={<RouteWrapper Component={EditPage} />} />
+          <Route path="whiteboard/:pageId/versions" element={<RouteWrapper Component={WhiteboardVersionsPage} />} />
+          <Route path="whiteboard/:pageId/versions/:versionId" element={<RouteWrapper Component={WhiteboardVersionViewPage} />} />
           <Route path="settings" element={<SettingsLayout />}>
             <Route index element={<Navigate to="users" replace />} />
             <Route path="general" element={<GeneralSettings />} />

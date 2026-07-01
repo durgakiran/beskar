@@ -38,5 +38,9 @@ export default function Page() {
         return <WhiteboardEditor key={page} slug={slug} />;
     }
 
-    return <DocumentEditor key={page} slug={slug} />;
+    return (
+        <div className="h-full w-full overflow-y-auto relative">
+            <DocumentEditor key={page} slug={slug} />
+        </div>
+    );
 }
