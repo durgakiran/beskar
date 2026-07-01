@@ -1,0 +1,641 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext"
+    xmlns:pro="http://www.liquibase.org/xml/ns/pro"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd
+        http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd
+        http://www.liquibase.org/xml/ns/pro http://www.liquibase.org/xml/ns/pro/liquibase-pro-latest.xsd">
+
+    <changeSet id="project-management-1-create-project-schema" author="OpenAI Codex">
+        <comment>Create project schema for project-management feature</comment>
+        <sql>
+            <![CDATA[
+                CREATE SCHEMA IF NOT EXISTS project;
+                GRANT USAGE ON SCHEMA project TO ${app_user};
+                ALTER DEFAULT PRIVILEGES FOR USER beskar_admin IN SCHEMA project GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO ${app_user};
+                ALTER DEFAULT PRIVILEGES FOR USER beskar_admin IN SCHEMA project GRANT ALL ON SEQUENCES TO ${app_user};
+            ]]>
+        </sql>
+        <rollback>
+            <sql>DROP SCHEMA IF EXISTS project CASCADE;</sql>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="project-management-2-extend-page-type-check" author="OpenAI Codex">
+        <comment>Allow project pages in core.page.type</comment>
+        <sql>
+            <![CDATA[
+                ALTER TABLE core.page DROP CONSTRAINT IF EXISTS chk_page_type;
+                ALTER TABLE core.page
+                    ADD CONSTRAINT chk_page_type
+                    CHECK (type IN ('document', 'whiteboard', 'project'));
+            ]]>
+        </sql>
+        <rollback>
+            <sql>
+                <![CDATA[
+                    ALTER TABLE core.page DROP CONSTRAINT IF EXISTS chk_page_type;
+                    ALTER TABLE core.page
+                        ADD CONSTRAINT chk_page_type
+                        CHECK (type IN ('document', 'whiteboard'));
+                ]]>
+            </sql>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="project-management-3-create-projects-table" author="OpenAI Codex">
+        <comment>Create project.projects table</comment>
+        <createTable tableName="projects" schemaName="project">
+            <column name="id" type="UUID" defaultValueComputed="gen_random_uuid()">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="page_id" type="BIGINT">
+                <constraints nullable="false" unique="true"/>
+            </column>
+            <column name="space_id" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+            <column name="key" type="TEXT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="title" type="TEXT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="description" type="TEXT" defaultValue="">
+                <constraints nullable="false"/>
+            </column>
+            <column name="default_view" type="TEXT" defaultValue="list">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_by" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_by" type="UUID"/>
+            <column name="created_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="now()">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="now()">
+                <constraints nullable="false"/>
+            </column>
+            <column name="archived_at" type="TIMESTAMP WITH TIME ZONE"/>
+        </createTable>
+        <addForeignKeyConstraint
+            baseTableName="projects" baseTableSchemaName="project" baseColumnNames="page_id"
+            constraintName="fk_project_projects_page"
+            referencedTableName="page" referencedTableSchemaName="core" referencedColumnNames="id"
+            deleteCascade="true"/>
+        <addForeignKeyConstraint
+            baseTableName="projects" baseTableSchemaName="project" baseColumnNames="space_id"
+            constraintName="fk_project_projects_space"
+            referencedTableName="space" referencedTableSchemaName="core" referencedColumnNames="id"
+            deleteCascade="true"/>
+        <addUniqueConstraint tableName="projects" schemaName="project" columnNames="space_id,key" constraintName="uq_project_projects_space_key"/>
+        <sql>
+            <![CDATA[
+                ALTER TABLE project.projects
+                    ADD CONSTRAINT chk_project_default_view
+                    CHECK (default_view IN ('list', 'board', 'my_work'));
+            ]]>
+        </sql>
+        <createIndex tableName="projects" schemaName="project" indexName="idx_project_projects_space_id">
+            <column name="space_id"/>
+        </createIndex>
+        <rollback>
+            <dropTable tableName="projects" schemaName="project"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="project-management-4-create-tickets-table" author="OpenAI Codex">
+        <validCheckSum>ANY</validCheckSum>
+        <comment>Create project.tickets table</comment>
+        <createTable tableName="tickets" schemaName="project">
+            <column name="id" type="UUID" defaultValueComputed="gen_random_uuid()">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="project_id" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+            <column name="sequence_no" type="INTEGER">
+                <constraints nullable="false"/>
+            </column>
+            <column name="identifier" type="TEXT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="type" type="TEXT" defaultValue="task">
+                <constraints nullable="false"/>
+            </column>
+            <column name="parent_ticket_id" type="UUID"/>
+            <column name="root_ticket_id" type="UUID"/>
+            <column name="depth" type="SMALLINT" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="title" type="TEXT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="description" type="TEXT" defaultValue="">
+                <constraints nullable="false"/>
+            </column>
+            <column name="status" type="TEXT" defaultValue="todo">
+                <constraints nullable="false"/>
+            </column>
+            <column name="priority" type="TEXT" defaultValue="medium">
+                <constraints nullable="false"/>
+            </column>
+            <column name="assignee_user_id" type="UUID"/>
+            <column name="assignee_name" type="TEXT"/>
+            <column name="reporter_user_id" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+            <column name="reporter_name" type="TEXT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="label_names" type="TEXT[]" defaultValueComputed="'{}'::text[]">
+                <constraints nullable="false"/>
+            </column>
+            <column name="due_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="rank" type="TEXT"/>
+            <column name="started_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="completed_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="created_by" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_by" type="UUID"/>
+            <column name="created_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="now()">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="now()">
+                <constraints nullable="false"/>
+            </column>
+            <column name="archived_at" type="TIMESTAMP WITH TIME ZONE"/>
+        </createTable>
+        <addForeignKeyConstraint
+            baseTableName="tickets" baseTableSchemaName="project" baseColumnNames="project_id"
+            constraintName="fk_project_tickets_project"
+            referencedTableName="projects" referencedTableSchemaName="project" referencedColumnNames="id"
+            deleteCascade="true"/>
+        <addForeignKeyConstraint
+            baseTableName="tickets" baseTableSchemaName="project" baseColumnNames="parent_ticket_id"
+            constraintName="fk_project_tickets_parent"
+            referencedTableName="tickets" referencedTableSchemaName="project" referencedColumnNames="id"
+            onDelete="SET NULL"/>
+        <addForeignKeyConstraint
+            baseTableName="tickets" baseTableSchemaName="project" baseColumnNames="root_ticket_id"
+            constraintName="fk_project_tickets_root"
+            referencedTableName="tickets" referencedTableSchemaName="project" referencedColumnNames="id"
+            onDelete="SET NULL"/>
+        <addUniqueConstraint tableName="tickets" schemaName="project" columnNames="project_id,sequence_no" constraintName="uq_project_tickets_project_sequence"/>
+        <addUniqueConstraint tableName="tickets" schemaName="project" columnNames="project_id,identifier" constraintName="uq_project_tickets_project_identifier"/>
+        <sql>
+            <![CDATA[
+                ALTER TABLE project.tickets
+                    ADD CONSTRAINT chk_project_ticket_type
+                    CHECK (type IN ('epic', 'story', 'task', 'subtask', 'bug'));
+
+                ALTER TABLE project.tickets
+                    ADD CONSTRAINT chk_project_ticket_status
+                    CHECK (status IN ('backlog', 'todo', 'in_progress', 'in_review', 'done', 'canceled'));
+
+                ALTER TABLE project.tickets
+                    ADD CONSTRAINT chk_project_ticket_priority
+                    CHECK (priority IN ('none', 'low', 'medium', 'high', 'urgent'));
+            ]]>
+        </sql>
+        <createIndex tableName="tickets" schemaName="project" indexName="idx_project_tickets_project_status_updated">
+            <column name="project_id"/>
+            <column name="status"/>
+            <column name="updated_at"/>
+        </createIndex>
+        <createIndex tableName="tickets" schemaName="project" indexName="idx_project_tickets_project_parent">
+            <column name="project_id"/>
+            <column name="parent_ticket_id"/>
+        </createIndex>
+        <createIndex tableName="tickets" schemaName="project" indexName="idx_project_tickets_project_root">
+            <column name="project_id"/>
+            <column name="root_ticket_id"/>
+        </createIndex>
+        <createIndex tableName="tickets" schemaName="project" indexName="idx_project_tickets_project_assignee">
+            <column name="project_id"/>
+            <column name="assignee_user_id"/>
+        </createIndex>
+        <sql>
+            <![CDATA[
+                GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA project TO ${app_user};
+            ]]>
+        </sql>
+        <rollback>
+            <dropTable tableName="tickets" schemaName="project"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="project-management-5-create-ticket-comments-table" author="OpenAI Codex">
+        <comment>Create project.ticket_comments table</comment>
+        <createTable tableName="ticket_comments" schemaName="project">
+            <column name="id" type="UUID" defaultValueComputed="gen_random_uuid()">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="ticket_id" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+            <column name="body" type="TEXT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_by" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_by_name" type="TEXT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_by" type="UUID"/>
+            <column name="created_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="now()">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="now()">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+        <addForeignKeyConstraint
+            baseTableName="ticket_comments" baseTableSchemaName="project" baseColumnNames="ticket_id"
+            constraintName="fk_project_ticket_comments_ticket"
+            referencedTableName="tickets" referencedTableSchemaName="project" referencedColumnNames="id"
+            deleteCascade="true"/>
+        <createIndex tableName="ticket_comments" schemaName="project" indexName="idx_project_ticket_comments_ticket_created">
+            <column name="ticket_id"/>
+            <column name="created_at"/>
+        </createIndex>
+        <rollback>
+            <dropTable tableName="ticket_comments" schemaName="project"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="project-management-6-create-ticket-links-table" author="OpenAI Codex">
+        <comment>Create project.ticket_links table</comment>
+        <createTable tableName="ticket_links" schemaName="project">
+            <column name="id" type="UUID" defaultValueComputed="gen_random_uuid()">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="ticket_id" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+            <column name="url" type="TEXT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="title" type="TEXT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="source" type="TEXT" defaultValue="manual">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_by" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="now()">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+        <addForeignKeyConstraint
+            baseTableName="ticket_links" baseTableSchemaName="project" baseColumnNames="ticket_id"
+            constraintName="fk_project_ticket_links_ticket"
+            referencedTableName="tickets" referencedTableSchemaName="project" referencedColumnNames="id"
+            deleteCascade="true"/>
+        <addUniqueConstraint tableName="ticket_links" schemaName="project" columnNames="ticket_id,url,source" constraintName="uq_project_ticket_links_ticket_url_source"/>
+        <sql>
+            <![CDATA[
+                ALTER TABLE project.ticket_links
+                    ADD CONSTRAINT chk_project_ticket_link_source
+                    CHECK (source IN ('manual', 'description'));
+            ]]>
+        </sql>
+        <createIndex tableName="ticket_links" schemaName="project" indexName="idx_project_ticket_links_ticket_created">
+            <column name="ticket_id"/>
+            <column name="created_at"/>
+        </createIndex>
+        <rollback>
+            <dropTable tableName="ticket_links" schemaName="project"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="project-management-7-create-ticket-attachments-table" author="OpenAI Codex">
+        <comment>Create project.ticket_attachments table</comment>
+        <createTable tableName="ticket_attachments" schemaName="project">
+            <column name="ticket_id" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+            <column name="attachment_id" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+            <column name="attached_by" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+            <column name="attached_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="now()">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+        <addPrimaryKey tableName="ticket_attachments" schemaName="project" columnNames="ticket_id,attachment_id" constraintName="pk_project_ticket_attachments"/>
+        <addForeignKeyConstraint
+            baseTableName="ticket_attachments" baseTableSchemaName="project" baseColumnNames="ticket_id"
+            constraintName="fk_project_ticket_attachments_ticket"
+            referencedTableName="tickets" referencedTableSchemaName="project" referencedColumnNames="id"
+            deleteCascade="true"/>
+        <addForeignKeyConstraint
+            baseTableName="ticket_attachments" baseTableSchemaName="project" baseColumnNames="attachment_id"
+            constraintName="fk_project_ticket_attachments_attachment"
+            referencedTableName="attachment" referencedTableSchemaName="core" referencedColumnNames="id"
+            deleteCascade="true"/>
+        <createIndex tableName="ticket_attachments" schemaName="project" indexName="idx_project_ticket_attachments_ticket_attached">
+            <column name="ticket_id"/>
+            <column name="attached_at"/>
+        </createIndex>
+        <rollback>
+            <dropTable tableName="ticket_attachments" schemaName="project"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="project-management-8-create-ticket-activity-table" author="OpenAI Codex">
+        <comment>Create project.ticket_activity table</comment>
+        <createTable tableName="ticket_activity" schemaName="project">
+            <column name="id" type="UUID" defaultValueComputed="gen_random_uuid()">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="ticket_id" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+            <column name="project_id" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+            <column name="activity_type" type="TEXT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="field_name" type="TEXT"/>
+            <column name="old_value" type="TEXT"/>
+            <column name="new_value" type="TEXT"/>
+            <column name="actor_id" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+            <column name="actor_name" type="TEXT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="now()">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+        <addForeignKeyConstraint
+            baseTableName="ticket_activity" baseTableSchemaName="project" baseColumnNames="ticket_id"
+            constraintName="fk_project_ticket_activity_ticket"
+            referencedTableName="tickets" referencedTableSchemaName="project" referencedColumnNames="id"
+            deleteCascade="true"/>
+        <addForeignKeyConstraint
+            baseTableName="ticket_activity" baseTableSchemaName="project" baseColumnNames="project_id"
+            constraintName="fk_project_ticket_activity_project"
+            referencedTableName="projects" referencedTableSchemaName="project" referencedColumnNames="id"
+            deleteCascade="true"/>
+        <createIndex tableName="ticket_activity" schemaName="project" indexName="idx_project_ticket_activity_ticket_created">
+            <column name="ticket_id"/>
+            <column name="created_at"/>
+        </createIndex>
+        <createIndex tableName="ticket_activity" schemaName="project" indexName="idx_project_ticket_activity_project_created">
+            <column name="project_id"/>
+            <column name="created_at"/>
+        </createIndex>
+        <rollback>
+            <dropTable tableName="ticket_activity" schemaName="project"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="project-management-9-create-cycle-tracks-table" author="OpenAI Codex">
+        <comment>Create project.cycle_tracks table</comment>
+        <createTable tableName="cycle_tracks" schemaName="project">
+            <column name="id" type="UUID" defaultValueComputed="gen_random_uuid()">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="project_id" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+            <column name="key" type="TEXT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="name" type="TEXT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="position" type="INTEGER" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="display_style" type="TEXT" defaultValue="auto">
+                <constraints nullable="false"/>
+            </column>
+            <column name="activation_policy" type="TEXT" defaultValue="none">
+                <constraints nullable="false"/>
+            </column>
+            <column name="max_assignments_per_ticket" type="SMALLINT" defaultValueNumeric="1">
+                <constraints nullable="false"/>
+            </column>
+            <column name="color_token" type="TEXT"/>
+            <column name="created_by" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_by" type="UUID"/>
+            <column name="created_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="now()">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="now()">
+                <constraints nullable="false"/>
+            </column>
+            <column name="archived_at" type="TIMESTAMP WITH TIME ZONE"/>
+        </createTable>
+        <addForeignKeyConstraint
+            baseTableName="cycle_tracks" baseTableSchemaName="project" baseColumnNames="project_id"
+            constraintName="fk_project_cycle_tracks_project"
+            referencedTableName="projects" referencedTableSchemaName="project" referencedColumnNames="id"
+            deleteCascade="true"/>
+        <addUniqueConstraint tableName="cycle_tracks" schemaName="project" columnNames="project_id,key" constraintName="uq_project_cycle_tracks_project_key"/>
+        <sql>
+            <![CDATA[
+                ALTER TABLE project.cycle_tracks
+                    ADD CONSTRAINT chk_project_cycle_track_display_style
+                    CHECK (display_style IN ('range', 'marker', 'auto'));
+
+                ALTER TABLE project.cycle_tracks
+                    ADD CONSTRAINT chk_project_cycle_track_activation_policy
+                    CHECK (activation_policy IN ('none', 'single_active', 'multi_active'));
+
+                ALTER TABLE project.cycle_tracks
+                    ADD CONSTRAINT chk_project_cycle_track_max_assignments
+                    CHECK (max_assignments_per_ticket >= 1);
+            ]]>
+        </sql>
+        <createIndex tableName="cycle_tracks" schemaName="project" indexName="idx_project_cycle_tracks_project_position">
+            <column name="project_id"/>
+            <column name="position"/>
+        </createIndex>
+        <rollback>
+            <dropTable tableName="cycle_tracks" schemaName="project"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="project-management-10-create-cycles-table" author="OpenAI Codex">
+        <comment>Create project.cycles table</comment>
+        <createTable tableName="cycles" schemaName="project">
+            <column name="id" type="UUID" defaultValueComputed="gen_random_uuid()">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="project_id" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+            <column name="track_id" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+            <column name="name" type="TEXT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="goal" type="TEXT" defaultValue="">
+                <constraints nullable="false"/>
+            </column>
+            <column name="description" type="TEXT" defaultValue="">
+                <constraints nullable="false"/>
+            </column>
+            <column name="state" type="TEXT" defaultValue="planned">
+                <constraints nullable="false"/>
+            </column>
+            <column name="starts_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="ends_at" type="TIMESTAMP WITH TIME ZONE">
+                <constraints nullable="false"/>
+            </column>
+            <column name="position" type="INTEGER" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="completed_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="created_by" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_by" type="UUID"/>
+            <column name="created_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="now()">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="now()">
+                <constraints nullable="false"/>
+            </column>
+            <column name="archived_at" type="TIMESTAMP WITH TIME ZONE"/>
+        </createTable>
+        <addForeignKeyConstraint
+            baseTableName="cycles" baseTableSchemaName="project" baseColumnNames="project_id"
+            constraintName="fk_project_cycles_project"
+            referencedTableName="projects" referencedTableSchemaName="project" referencedColumnNames="id"
+            deleteCascade="true"/>
+        <addForeignKeyConstraint
+            baseTableName="cycles" baseTableSchemaName="project" baseColumnNames="track_id"
+            constraintName="fk_project_cycles_track"
+            referencedTableName="cycle_tracks" referencedTableSchemaName="project" referencedColumnNames="id"
+            deleteCascade="true"/>
+        <addUniqueConstraint tableName="cycles" schemaName="project" columnNames="project_id,track_id,name" constraintName="uq_project_cycles_project_track_name"/>
+        <sql>
+            <![CDATA[
+                ALTER TABLE project.cycles
+                    ADD CONSTRAINT chk_project_cycle_state
+                    CHECK (state IN ('planned', 'active', 'completed', 'canceled'));
+
+                ALTER TABLE project.cycles
+                    ADD CONSTRAINT chk_project_cycle_dates
+                    CHECK (starts_at IS NULL OR starts_at <= ends_at);
+            ]]>
+        </sql>
+        <createIndex tableName="cycles" schemaName="project" indexName="idx_project_cycles_project_track_position">
+            <column name="project_id"/>
+            <column name="track_id"/>
+            <column name="position"/>
+        </createIndex>
+        <createIndex tableName="cycles" schemaName="project" indexName="idx_project_cycles_project_state">
+            <column name="project_id"/>
+            <column name="state"/>
+        </createIndex>
+        <rollback>
+            <dropTable tableName="cycles" schemaName="project"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="project-management-11-create-ticket-cycle-assignments-table" author="OpenAI Codex">
+        <comment>Create project.ticket_cycle_assignments table</comment>
+        <createTable tableName="ticket_cycle_assignments" schemaName="project">
+            <column name="id" type="UUID" defaultValueComputed="gen_random_uuid()">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="project_id" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+            <column name="ticket_id" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+            <column name="track_id" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+            <column name="cycle_id" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_by" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_by" type="UUID"/>
+            <column name="created_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="now()">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="now()">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+        <addForeignKeyConstraint
+            baseTableName="ticket_cycle_assignments" baseTableSchemaName="project" baseColumnNames="project_id"
+            constraintName="fk_project_ticket_cycle_assignments_project"
+            referencedTableName="projects" referencedTableSchemaName="project" referencedColumnNames="id"
+            deleteCascade="true"/>
+        <addForeignKeyConstraint
+            baseTableName="ticket_cycle_assignments" baseTableSchemaName="project" baseColumnNames="ticket_id"
+            constraintName="fk_project_ticket_cycle_assignments_ticket"
+            referencedTableName="tickets" referencedTableSchemaName="project" referencedColumnNames="id"
+            deleteCascade="true"/>
+        <addForeignKeyConstraint
+            baseTableName="ticket_cycle_assignments" baseTableSchemaName="project" baseColumnNames="track_id"
+            constraintName="fk_project_ticket_cycle_assignments_track"
+            referencedTableName="cycle_tracks" referencedTableSchemaName="project" referencedColumnNames="id"
+            deleteCascade="true"/>
+        <addForeignKeyConstraint
+            baseTableName="ticket_cycle_assignments" baseTableSchemaName="project" baseColumnNames="cycle_id"
+            constraintName="fk_project_ticket_cycle_assignments_cycle"
+            referencedTableName="cycles" referencedTableSchemaName="project" referencedColumnNames="id"
+            deleteCascade="true"/>
+        <addUniqueConstraint tableName="ticket_cycle_assignments" schemaName="project" columnNames="ticket_id,track_id" constraintName="uq_project_ticket_cycle_assignments_ticket_track"/>
+        <addUniqueConstraint tableName="ticket_cycle_assignments" schemaName="project" columnNames="ticket_id,cycle_id" constraintName="uq_project_ticket_cycle_assignments_ticket_cycle"/>
+        <createIndex tableName="ticket_cycle_assignments" schemaName="project" indexName="idx_project_ticket_cycle_assignments_project_ticket">
+            <column name="project_id"/>
+            <column name="ticket_id"/>
+        </createIndex>
+        <createIndex tableName="ticket_cycle_assignments" schemaName="project" indexName="idx_project_ticket_cycle_assignments_cycle">
+            <column name="cycle_id"/>
+        </createIndex>
+        <rollback>
+            <dropTable tableName="ticket_cycle_assignments" schemaName="project"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="project-management-12-extend-project-default-view-for-cycles" author="OpenAI Codex">
+        <comment>Allow cycles as a project default view</comment>
+        <sql>
+            <![CDATA[
+                ALTER TABLE project.projects DROP CONSTRAINT IF EXISTS chk_project_default_view;
+                ALTER TABLE project.projects
+                    ADD CONSTRAINT chk_project_default_view
+                    CHECK (default_view IN ('list', 'board', 'my_work', 'cycles'));
+            ]]>
+        </sql>
+        <rollback>
+            <sql>
+                <![CDATA[
+                    ALTER TABLE project.projects DROP CONSTRAINT IF EXISTS chk_project_default_view;
+                    ALTER TABLE project.projects
+                        ADD CONSTRAINT chk_project_default_view
+                        CHECK (default_view IN ('list', 'board', 'my_work'));
+                ]]>
+            </sql>
+        </rollback>
+    </changeSet>
+</databaseChangeLog>
