@@ -243,7 +243,7 @@ export function getExtensions(options: GetExtensionsOptions = {}): Extensions {
     BlockDetailsSummary,
     BlockDetailsContent,
     TaskList, // Task list with checkboxes (requires TaskItem)
-    TaskItem, // Task item (checkbox item) - extends ListItem
+    TaskItem.configure({ nested: true }), // Task item (checkbox item) - extends ListItem
     NoteBlock, // Custom note block with themes and styling
     ImageBlock, // Custom image block with upload and resize
     ImageInline, // Inline image that flows within text (like Confluence)
