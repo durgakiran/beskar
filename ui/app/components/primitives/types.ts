@@ -42,13 +42,15 @@ export type SidebarPageItemProps = {
     id: string;
     title: string;
     href?: string;
-    type?: "document" | "whiteboard";
+    type?: "document" | "whiteboard" | "project";
+    canDelete?: boolean;
     active?: boolean;
     depth?: number;
     expanded?: boolean;
     hasChildren?: boolean;
     onToggle?: (id: string) => void;
     onAddChild?: (id: string) => void;
+    onDelete?: (id: string) => void;
     onSelect?: (id: string) => void;
     className?: string;
 };
@@ -57,7 +59,8 @@ export type PageTreeNode = {
     id: string;
     title: string;
     href?: string;
-    type?: "document" | "whiteboard";
+    type?: "document" | "whiteboard" | "project";
+    canDelete?: boolean;
     children?: PageTreeNode[];
 };
 
@@ -67,6 +70,7 @@ export type PageTreeProps = {
     activeId?: string;
     onToggle?: (id: string) => void;
     onAddChild?: (id: string) => void;
+    onDelete?: (id: string) => void;
     onSelect?: (id: string) => void;
     className?: string;
 };

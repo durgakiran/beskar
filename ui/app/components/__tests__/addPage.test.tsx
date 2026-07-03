@@ -5,6 +5,7 @@ import AddPage from "../addPage";
 
 const createDoc = vi.fn();
 const createWhiteboard = vi.fn();
+const createProject = vi.fn();
 const usePost = vi.fn();
 
 vi.mock("@http/hooks", () => ({
@@ -17,6 +18,9 @@ describe("AddPage", () => {
         usePost.mockImplementation((url: string) => {
             if (url.includes("/whiteboard/create")) {
                 return [{ data: null, isLoading: false, errors: null }, createWhiteboard];
+            }
+            if (url.includes("project/space/")) {
+                return [{ data: null, isLoading: false, errors: null }, createProject];
             }
             return [{ data: null, isLoading: false, errors: null }, createDoc];
         });
@@ -44,5 +48,30 @@ describe("AddPage", () => {
             parentId: undefined,
         });
         expect(createDoc).not.toHaveBeenCalled();
+    });
+
+    it("submits project creation through the project endpoint", () => {
+        render(
+            React.createElement(AddPage, {
+                isOpen: true,
+                setIsOpen: () => {},
+                spaceId: "space-1",
+                editPage: () => {},
+            }),
+        );
+
+        fireEvent.click(screen.getByRole("button", { name: "Project" }));
+        fireEvent.change(screen.getByPlaceholderText("Untitled project"), {
+            target: { value: "Launch tracker" },
+        });
+        fireEvent.click(screen.getByRole("button", { name: "Create" }));
+
+        expect(createProject).toHaveBeenCalledWith({
+            title: "Launch tracker",
+            spaceId: "space-1",
+            parentId: undefined,
+        });
+        expect(createDoc).not.toHaveBeenCalled();
+        expect(createWhiteboard).not.toHaveBeenCalled();
     });
 });

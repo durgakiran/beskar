@@ -2,11 +2,25 @@
 import { createContext, useContext, type ReactNode } from "react";
 
 export type OpenAddPageFn = (parentPageId?: string) => void;
+export type RefreshSpacePagesFn = () => void;
 
-const SpaceAddPageContext = createContext<OpenAddPageFn | null>(null);
+type SpacePageActions = {
+    openAddPage: OpenAddPageFn;
+    refreshPages: RefreshSpacePagesFn;
+};
 
-export function SpaceAddPageProvider({ children, openAddPage }: { children: ReactNode; openAddPage: OpenAddPageFn }) {
-    return <SpaceAddPageContext.Provider value={openAddPage}>{children}</SpaceAddPageContext.Provider>;
+const SpaceAddPageContext = createContext<SpacePageActions | null>(null);
+
+export function SpaceAddPageProvider({
+    children,
+    openAddPage,
+    refreshPages,
+}: {
+    children: ReactNode;
+    openAddPage: OpenAddPageFn;
+    refreshPages: RefreshSpacePagesFn;
+}) {
+    return <SpaceAddPageContext.Provider value={{ openAddPage, refreshPages }}>{children}</SpaceAddPageContext.Provider>;
 }
 
 export function useSpaceAddPage(): OpenAddPageFn {
@@ -14,5 +28,9 @@ export function useSpaceAddPage(): OpenAddPageFn {
     if (!ctx) {
         throw new Error("useSpaceAddPage must be used within SpaceAddPageProvider");
     }
-    return ctx;
+    return ctx.openAddPage;
+}
+
+export function useOptionalSpacePagesRefresh(): RefreshSpacePagesFn | null {
+    return useContext(SpaceAddPageContext)?.refreshPages ?? null;
 }

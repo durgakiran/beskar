@@ -9,6 +9,7 @@ function TreeBranch({
     activeId,
     onToggle,
     onAddChild,
+    onDelete,
     onSelect,
     depth = 0,
 }: {
@@ -17,6 +18,7 @@ function TreeBranch({
     activeId?: string;
     onToggle?: (id: string) => void;
     onAddChild?: (id: string) => void;
+    onDelete?: (id: string) => void;
     onSelect?: (id: string) => void;
     depth?: number;
 }) {
@@ -33,12 +35,14 @@ function TreeBranch({
                             title={node.title}
                             href={node.href}
                             type={node.type}
+                            canDelete={node.canDelete}
                             active={activeId === node.id}
                             depth={depth}
                             expanded={expanded}
                             hasChildren={hasChildren}
                             onToggle={onToggle}
                             onAddChild={onAddChild}
+                            onDelete={onDelete}
                             onSelect={onSelect}
                         />
                         {hasChildren && expanded ? (
@@ -48,6 +52,7 @@ function TreeBranch({
                                 activeId={activeId}
                                 onToggle={onToggle}
                                 onAddChild={onAddChild}
+                                onDelete={onDelete}
                                 onSelect={onSelect}
                                 depth={depth + 1}
                             />
@@ -59,7 +64,7 @@ function TreeBranch({
     );
 }
 
-export function PageTree({ nodes, expandedIds = [], activeId, onToggle, onAddChild, onSelect, className }: PageTreeProps) {
+export function PageTree({ nodes, expandedIds = [], activeId, onToggle, onAddChild, onDelete, onSelect, className }: PageTreeProps) {
     return (
         <div className={cn("space-y-[6px]", className)}>
             <TreeBranch
@@ -68,6 +73,7 @@ export function PageTree({ nodes, expandedIds = [], activeId, onToggle, onAddChi
                 activeId={activeId}
                 onToggle={onToggle}
                 onAddChild={onAddChild}
+                onDelete={onDelete}
                 onSelect={onSelect}
             />
         </div>

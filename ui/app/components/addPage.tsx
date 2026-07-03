@@ -7,7 +7,7 @@ interface IAddPage {
     spaceId: string;
     parentId?: number;
     setIsOpen: (open: boolean) => void;
-    editPage: (pageId: number) => void;
+    editPage: (pageId: number, pageType?: "document" | "whiteboard" | "project") => void;
     disabled?: boolean;
     disabledMessage?: string;
 }
@@ -24,13 +24,14 @@ interface PageResponse {
 
 export default function AddPage({ isOpen, setIsOpen, spaceId, parentId, editPage, disabled = false, disabledMessage = "This space is archived and read-only." }: IAddPage) {
     const [name, setName] = useState("");
-    const [pageType, setPageType] = useState<"document" | "whiteboard">("document");
+    const [pageType, setPageType] = useState<"document" | "whiteboard" | "project">("document");
     const [pendingCreate, setPendingCreate] = useState(false);
     
     const [{ data: docData, isLoading: docLoading, errors: docErrors }, createDoc] = usePost<Response<PageResponse>, Page>(`editor/space/${spaceId}/page/create`);
     const [{ data: whiteboardData, isLoading: whiteboardLoading, errors: whiteboardErrors }, createWhiteboard] = usePost<Response<PageResponse>, Page>(`editor/space/${spaceId}/whiteboard/create`);
+    const [{ data: projectData, isLoading: projectLoading, errors: projectErrors }, createProject] = usePost<Response<PageResponse>, Page>(`project/space/${spaceId}/create`);
 
-    const loading = docLoading || whiteboardLoading;
+    const loading = docLoading || whiteboardLoading || projectLoading;
     const added = pendingCreate && !loading;
 
     const handleInput = useCallback((value: string) => {
@@ -48,6 +49,10 @@ export default function AddPage({ isOpen, setIsOpen, spaceId, parentId, editPage
             createWhiteboard(payload);
             return;
         }
+        if (pageType === "project") {
+            createProject(payload);
+            return;
+        }
         createDoc(payload);
     };
 
@@ -55,18 +60,18 @@ export default function AddPage({ isOpen, setIsOpen, spaceId, parentId, editPage
         if (!pendingCreate) {
             return;
         }
-        const createdPageId = docData?.data?.page || whiteboardData?.data?.page;
+        const createdPageId = docData?.data?.page || whiteboardData?.data?.page || projectData?.data?.page;
         if (createdPageId) {
             setPendingCreate(false);
-            editPage(createdPageId);
+            editPage(createdPageId, pageType);
         }
-    }, [docData, editPage, pendingCreate, whiteboardData]);
+    }, [docData, editPage, pageType, pendingCreate, projectData, whiteboardData]);
 
     useEffect(() => {
-        if (!loading && pendingCreate && (docErrors || whiteboardErrors)) {
+        if (!loading && pendingCreate && (docErrors || whiteboardErrors || projectErrors)) {
             setPendingCreate(false);
         }
-    }, [docErrors, loading, pendingCreate, whiteboardErrors]);
+    }, [docErrors, loading, pendingCreate, projectErrors, whiteboardErrors]);
 
     useEffect(() => {
         if (!isOpen) {
@@ -108,6 +113,13 @@ export default function AddPage({ isOpen, setIsOpen, spaceId, parentId, editPage
                             >
                                 Whiteboard
                             </Button>
+                            <Button
+                                type="button"
+                                variant={pageType === "project" ? "solid" : "soft"}
+                                onClick={() => setPageType("project")}
+                            >
+                                Project
+                            </Button>
                         </Flex>
                     </label>
                     <label>
@@ -117,7 +129,7 @@ export default function AddPage({ isOpen, setIsOpen, spaceId, parentId, editPage
                         <TextField.Root
                             value={name}
                             onChange={(ev) => handleInput(ev.target.value)}
-                            placeholder={pageType === "whiteboard" ? "Untitled whiteboard" : "Untitled page"}
+                            placeholder={pageType === "whiteboard" ? "Untitled whiteboard" : pageType === "project" ? "Untitled project" : "Untitled page"}
                         />
                     </label>
                     <Flex gap="3" mt="4" justify="end">

@@ -66,7 +66,7 @@ The key UI idea is that cycles are visualized as **overlapping planning tracks o
 - A full Jira Advanced Roadmaps equivalent
 - Cross-project portfolio planning
 - Multiple assignments to different cycles within the same track in v1
-- Configurable workflow rules per cycle track
+- A generic configurable workflow rule engine per cycle track
 - Auto-closing tickets when a cycle completes
 
 ## 4. Core Product Model
@@ -87,6 +87,7 @@ A track defines:
 - how they are ordered visually
 - whether an active cycle concept exists for that track
 - whether cycles render as ranges, markers, or both
+- the default duration and date relationship policy for cycles in that track
 - whether a ticket can have one or many assignments in that track
 
 For the first version, the recommended rule is:
@@ -312,37 +313,46 @@ Tracks are project-scoped planning lanes.
 
 Suggested fields:
 
-| Field | Type | Notes |
-| --- | --- | --- |
-| `id` | UUID | Primary key |
-| `project_id` | UUID | FK to `project.projects.id` |
-| `key` | TEXT | Stable key such as `sprint`, `milestone`, `quarter` |
-| `name` | TEXT | Human name shown in UI |
-| `position` | INTEGER | Row ordering in the cycles view |
-| `display_style` | TEXT | `range`, `marker`, `auto` |
-| `activation_policy` | TEXT | `none`, `single_active`, `multi_active` |
-| `max_assignments_per_ticket` | SMALLINT | `1` in v1 |
-| `color_token` | TEXT nullable | Optional UI token |
-| `created_by` | UUID | Actor |
-| `updated_by` | UUID nullable | Last actor |
-| `created_at` | timestamptz | Audit |
-| `updated_at` | timestamptz | Audit |
-| `archived_at` | timestamptz nullable | Soft archive |
+
+| Field                         | Type                 | Notes                                               |
+| ----------------------------- | -------------------- | --------------------------------------------------- |
+| `id`                          | UUID                 | Primary key                                         |
+| `project_id`                  | UUID                 | FK to `project.projects.id`                         |
+| `key`                         | TEXT                 | Stable key such as `sprint`, `milestone`, `quarter` |
+| `name`                        | TEXT                 | Human name shown in UI                              |
+| `position`                    | INTEGER              | Row ordering in the cycles view                     |
+| `display_style`               | TEXT                 | `range`, `marker`, `auto`                           |
+| `activation_policy`           | TEXT                 | `none`, `single_active`, `multi_active`             |
+| `schedule_policy`             | TEXT                 | `flexible`, `non_overlapping`, `contiguous`         |
+| `carryover_policy`            | TEXT                 | `keep_assignments`, `optional_open_ticket_carryover`, `required_open_ticket_decision` |
+| `default_cycle_duration_days` | SMALLINT nullable    | Optional default duration for new cycles            |
+| `max_assignments_per_ticket`  | SMALLINT             | `1` in v1                                           |
+| `color_token`                 | TEXT nullable        | Optional UI token                                   |
+| `created_by`                  | UUID                 | Actor                                               |
+| `updated_by`                  | UUID nullable        | Last actor                                          |
+| `created_at`                  | timestamptz          | Audit                                               |
+| `updated_at`                  | timestamptz          | Audit                                               |
+| `archived_at`                 | timestamptz nullable | Soft archive                                        |
+
 
 Recommended constraints:
 
 - unique `(project_id, key)` for non-archived tracks
 - `display_style IN ('range', 'marker', 'auto')`
 - `activation_policy IN ('none', 'single_active', 'multi_active')`
+- `schedule_policy IN ('flexible', 'non_overlapping', 'contiguous')`
+- `carryover_policy IN ('keep_assignments', 'optional_open_ticket_carryover', 'required_open_ticket_decision')`
+- `default_cycle_duration_days IS NULL OR default_cycle_duration_days > 0`
 - `max_assignments_per_ticket >= 1`
 
 Recommended initial seed tracks per project:
 
-- `Sprint`
-- `Milestone`
-- `Quarter`
+- `Sprint`: `display_style=range`, `activation_policy=single_active`, `schedule_policy=contiguous`, `carryover_policy=required_open_ticket_decision`, `default_cycle_duration_days=14`
+- `Milestone`: `display_style=auto`, `activation_policy=multi_active`, `schedule_policy=flexible`, `carryover_policy=keep_assignments`, `default_cycle_duration_days=NULL`
+- `Quarter`: `display_style=range`, `activation_policy=single_active`, `schedule_policy=contiguous`, `carryover_policy=optional_open_ticket_carryover`, `default_cycle_duration_days=NULL`
 
 These can be stored as rows even if the product does not yet expose full custom track creation.
+The seed track keys are defaults for new projects, not service branching rules. Completion, scheduling, activation, and assignment behavior must be driven by the policy columns on the track row.
 
 ### `project.cycles`
 
@@ -350,24 +360,26 @@ Cycles belong to a track.
 
 Suggested fields:
 
-| Field | Type | Notes |
-| --- | --- | --- |
-| `id` | UUID | Primary key |
-| `project_id` | UUID | FK to `project.projects.id` |
-| `track_id` | UUID | FK to `project.cycle_tracks.id` |
-| `name` | TEXT | `Sprint 14`, `Launch Readiness`, `Q3 FY26` |
-| `goal` | TEXT | Short planning goal |
-| `description` | TEXT | Optional notes |
-| `state` | TEXT | `planned`, `active`, `completed`, `canceled` |
-| `starts_at` | timestamptz nullable | Optional, but recommended for ranges |
-| `ends_at` | timestamptz nullable | Required for target or range display |
-| `position` | INTEGER | Ordering within the track |
-| `completed_at` | timestamptz nullable | Set when completed |
-| `created_by` | UUID | Actor |
-| `updated_by` | UUID nullable | Last actor |
-| `created_at` | timestamptz | Audit |
-| `updated_at` | timestamptz | Audit |
-| `archived_at` | timestamptz nullable | Soft archive |
+
+| Field          | Type                 | Notes                                        |
+| -------------- | -------------------- | -------------------------------------------- |
+| `id`           | UUID                 | Primary key                                  |
+| `project_id`   | UUID                 | FK to `project.projects.id`                  |
+| `track_id`     | UUID                 | FK to `project.cycle_tracks.id`              |
+| `name`         | TEXT                 | `Sprint 14`, `Launch Readiness`, `Q3 FY26`   |
+| `goal`         | TEXT                 | Short planning goal                          |
+| `description`  | TEXT                 | Optional notes                               |
+| `state`        | TEXT                 | `planned`, `active`, `completed`, `canceled` |
+| `starts_at`    | timestamptz nullable | Optional, but recommended for ranges         |
+| `ends_at`      | timestamptz nullable | Required for target or range display         |
+| `position`     | INTEGER              | Ordering within the track                    |
+| `completed_at` | timestamptz nullable | Set when completed                           |
+| `created_by`   | UUID                 | Actor                                        |
+| `updated_by`   | UUID nullable        | Last actor                                   |
+| `created_at`   | timestamptz          | Audit                                        |
+| `updated_at`   | timestamptz          | Audit                                        |
+| `archived_at`  | timestamptz nullable | Soft archive                                 |
+
 
 Recommended constraints:
 
@@ -388,25 +400,31 @@ Assignments link tickets to cycles.
 
 Suggested fields:
 
-| Field | Type | Notes |
-| --- | --- | --- |
-| `id` | UUID | Primary key |
-| `project_id` | UUID | FK to project for query efficiency |
-| `ticket_id` | UUID | FK to `project.tickets.id` |
-| `track_id` | UUID | FK to `project.cycle_tracks.id` |
-| `cycle_id` | UUID | FK to `project.cycles.id` |
-| `created_by` | UUID | Actor |
-| `updated_by` | UUID nullable | Last actor |
-| `created_at` | timestamptz | Audit |
-| `updated_at` | timestamptz | Audit |
-| `archived_at` | timestamptz nullable | Soft delete if needed |
+
+| Field         | Type                 | Notes                              |
+| ------------- | -------------------- | ---------------------------------- |
+| `id`          | UUID                 | Primary key                        |
+| `project_id`  | UUID                 | FK to project for query efficiency |
+| `ticket_id`   | UUID                 | FK to `project.tickets.id`         |
+| `track_id`    | UUID                 | FK to `project.cycle_tracks.id`    |
+| `cycle_id`    | UUID                 | FK to `project.cycles.id`          |
+| `created_by`  | UUID                 | Actor                              |
+| `updated_by`  | UUID nullable        | Last actor                         |
+| `removed_by`  | UUID nullable        | Actor who removed or replaced this assignment |
+| `created_at`  | timestamptz          | Audit                              |
+| `updated_at`  | timestamptz          | Audit                              |
+| `removed_at`  | timestamptz nullable | Set when the assignment is no longer current |
+| `removal_reason` | TEXT nullable     | `manual`, `cycle_completed`, `cycle_canceled`, etc. |
+
 
 Recommended constraints:
 
-- unique active `(ticket_id, track_id)` so a ticket has at most one cycle per track
-- unique active `(ticket_id, cycle_id)`
+- unique current `(ticket_id, track_id)` where `removed_at IS NULL` so a ticket has at most one current cycle per track
+- unique current `(ticket_id, cycle_id)` where `removed_at IS NULL`
 - assignment must stay inside the same project
 - assigned cycle must belong to the referenced track
+
+Historical assignment rows should be retained after carryover or manual reassignment by setting `removed_at` instead of deleting the row. Current ticket planning views should read only rows where `removed_at IS NULL`; completed cycle reporting may include historical rows for that cycle.
 
 Those last two rules can be enforced in service logic first; trigger-based DB enforcement can be added later if needed.
 
@@ -435,6 +453,9 @@ erDiagram
     text key
     text name
     text activation_policy
+    text schedule_policy
+    text carryover_policy
+    int default_cycle_duration_days
     int max_assignments_per_ticket
   }
 
@@ -456,6 +477,8 @@ erDiagram
     uuid cycle_id
   }
 ```
+
+
 
 ## 7. Lifecycle Rules
 
@@ -500,7 +523,31 @@ This means:
 - one active quarter at a time
 - multiple milestones may be ongoing if the team wants that
 
-### 7.3 Assignment rules
+### 7.3 Schedule rules
+
+Cycle date relationships are constrained by the track's `schedule_policy`.
+
+Recommended values:
+
+- `flexible`: cycles may overlap or have gaps
+- `non_overlapping`: cycles may have gaps, but cannot overlap
+- `contiguous`: cycles must be back-to-back, with no gaps and no overlap
+
+Recommended first-version behavior:
+
+- `flexible` only requires valid dates on each individual cycle.
+- `non_overlapping` and `contiguous` require both `starts_at` and `ends_at`.
+- schedule checks compare cycles inside the same track only; overlaps across different tracks are expected.
+- archived and canceled cycles are ignored by schedule checks.
+- planned, active, and completed cycles participate in schedule checks so historical planning remains coherent.
+
+For timestamp math, cycle ranges should be treated as half-open intervals: `[starts_at, ends_at)`. Under `contiguous`, the next cycle's `starts_at` should equal the previous cycle's `ends_at`.
+
+`default_cycle_duration_days` is a creation default, not inherited mutable state. If a new cycle supplies `starts_at` but omits `ends_at`, the service can set `ends_at = starts_at + default_cycle_duration_days`. For a `contiguous` track, the create flow may also prefill `starts_at` from the latest non-archived, non-canceled cycle's `ends_at` when the caller does not provide a start date.
+
+Changing `default_cycle_duration_days` must not rewrite existing cycles.
+
+### 7.4 Assignment rules
 
 For v1:
 
@@ -512,26 +559,31 @@ Examples:
 - valid: `Sprint 15` + `Launch Readiness` + `Q3 FY26`
 - invalid: `Sprint 15` + `Sprint 16`
 
-### 7.4 Completion and carryover
+### 7.5 Completion and carryover
 
 When a cycle is completed:
 
 - historical assignments should remain visible for audit and reporting
 - incomplete tickets may need reassignment depending on the track
 
-Recommended first-version carryover behavior:
+Completion behavior is constrained by the track's `carryover_policy`, not by hardcoded track keys.
 
-- for sprint completion:
-  - keep closed tickets on the completed sprint
-  - require a carryover decision for still-open tickets
-  - move open tickets to another sprint or clear the sprint-track assignment
-- for milestone completion:
-  - do not force reassignment
-  - historical linkage is still useful
-- for quarter completion:
-  - allow carryover to the next quarter or clearing of the quarter-track assignment
+Recommended values:
 
-This is a better fit than auto-clearing every assignment, because long-range tracks like quarter are often part of reporting.
+- `keep_assignments`: completing a cycle does not modify ticket assignments
+- `optional_open_ticket_carryover`: completing a cycle may move or clear open-ticket assignments, but it is not required
+- `required_open_ticket_decision`: if open tickets are assigned to the cycle, the completion request must either move them to another cycle in the same track or clear that track assignment
+
+Generic first-version behavior:
+
+- closed tickets can remain assigned to the completed cycle for reporting
+- `keep_assignments` ignores carryover and only changes the cycle state
+- `optional_open_ticket_carryover` defaults to keeping open-ticket assignments if no carryover action is supplied
+- `required_open_ticket_decision` rejects completion when open tickets exist and no carryover action is supplied
+- moving open tickets requires the target cycle to belong to the same project and same track, and to be assignable
+- moving or clearing open tickets marks the old assignment rows as removed with `removal_reason=cycle_completed`; moving then inserts new current assignment rows for the target cycle
+
+This keeps sprint-like, milestone-like, quarter-like, and custom track behavior data-driven. The seed templates choose sensible defaults, but the completion service should only evaluate `carryover_policy`.
 
 ## 8. API Design
 
@@ -555,6 +607,7 @@ Recommended first version:
 
 - support only known templates or constrained inputs
 - avoid full arbitrary track configuration until the product proves the need
+- allow typed policy fields only through supported enum values
 
 ### Update track
 
@@ -565,7 +618,13 @@ Editable fields:
 - `name`
 - `position`
 - `displayStyle`
+- `activationPolicy`
+- `schedulePolicy`
+- `carryoverPolicy`
+- `defaultCycleDurationDays`
 - `colorToken`
+
+If `schedulePolicy` is changed on a track with existing cycles, the service must validate all non-archived, non-canceled cycles in that track under the new policy and reject the update if they do not satisfy it. Changing `defaultCycleDurationDays` affects future cycle creation only.
 
 ### Archive track
 
@@ -602,10 +661,11 @@ Request:
   "name": "Sprint 15",
   "goal": "Merchandising QA",
   "description": "",
-  "startsAt": "2026-06-10T00:00:00Z",
-  "endsAt": "2026-06-21T00:00:00Z"
+  "startsAt": "2026-06-10T00:00:00Z"
 }
 ```
+
+If `endsAt` is omitted and the track has `defaultCycleDurationDays`, the service should calculate `endsAt` from `startsAt`. If the track uses `non_overlapping` or `contiguous`, the resulting dates must pass the track's schedule policy before the cycle is created.
 
 ### Get cycle detail
 
@@ -631,6 +691,8 @@ Editable fields:
 - `endsAt`
 - `position`
 
+Any update to `startsAt` or `endsAt` must re-run the track's schedule policy validation.
+
 ### Activate cycle
 
 - `POST /cycles/{cycleId}/activate`
@@ -649,14 +711,18 @@ Request:
 
 ```json
 {
-  "carryoverToCycleId": "uuid-or-null"
+  "openTicketDisposition": "keep",
+  "targetCycleId": null
 }
 ```
 
 Interpretation:
 
-- for tracks where carryover matters, open-ticket assignments move to the replacement cycle or are cleared
-- for tracks where carryover does not matter, this field may be null
+- `openTicketDisposition=keep` leaves ticket assignments unchanged
+- `openTicketDisposition=move` moves open-ticket assignments to `targetCycleId`
+- `openTicketDisposition=clear` clears open-ticket assignments for this track
+- `targetCycleId` is required only when `openTicketDisposition=move`
+- allowed and required dispositions are determined by the track's `carryoverPolicy`
 
 ### Cancel cycle
 
@@ -847,9 +913,13 @@ Validation should live alongside the current project validation layer in [server
 Required checks:
 
 - track keys are unique within a project
-- `displayStyle` and `activationPolicy` are supported
+- `displayStyle`, `activationPolicy`, `schedulePolicy`, and `carryoverPolicy` are supported
+- `defaultCycleDurationDays` is null or positive
+- changing a track's schedule policy cannot make existing non-archived, non-canceled cycles invalid
 - cycle belongs to the same project as its track
 - cycle date order is valid
+- cycle dates follow the track's schedule policy
+- cycle completion follows the track's carryover policy
 - assignments stay inside one project
 - assigned cycle belongs to the referenced track
 - no more than one cycle assignment per ticket per track
@@ -1042,8 +1112,9 @@ Add new Liquibase change sets to [db/beskar/updates/project_management.xml](/Use
 1. create `project.cycle_tracks`
 2. create `project.cycles`
 3. create `project.ticket_cycle_assignments`
-4. create indexes and uniqueness constraints
-5. optionally extend `chk_project_default_view` to allow `cycles`
+4. create partial unique indexes for current ticket-cycle assignments
+5. seed or template default track policies
+6. optionally extend `chk_project_default_view` to allow `cycles`
 
 Notably, this design does **not** require adding direct cycle fields to `project.tickets`.
 
@@ -1077,8 +1148,8 @@ depending on the chosen product rollout.
 
 - [ui/app/components/project-management/ProjectPageView.tsx](/Users/kiran/projects/beskar/ui/app/components/project-management/ProjectPageView.tsx)
 - [ui/app/components/project-management/ProjectTicketCreatePage.tsx](/Users/kiran/projects/beskar/ui/app/components/project-management/ProjectTicketCreatePage.tsx)
-- [ui/app/components/__tests__/ProjectPageView.test.tsx](/Users/kiran/projects/beskar/ui/app/components/__tests__/ProjectPageView.test.tsx)
-- [ui/app/components/__tests__/ProjectTicketCreatePage.test.tsx](/Users/kiran/projects/beskar/ui/app/components/__tests__/ProjectTicketCreatePage.test.tsx)
+- [ui/app/components/**tests**/ProjectPageView.test.tsx](/Users/kiran/projects/beskar/ui/app/components/__tests__/ProjectPageView.test.tsx)
+- [ui/app/components/**tests**/ProjectTicketCreatePage.test.tsx](/Users/kiran/projects/beskar/ui/app/components/__tests__/ProjectTicketCreatePage.test.tsx)
 
 ## 15. Rollout Plan
 
@@ -1113,8 +1184,15 @@ This keeps the feature useful even if the larger planning UI takes longer.
 
 - create track
 - create cycle in track
+- create cycle with default duration from track
+- reject overlapping cycle under `non_overlapping`
+- reject gapped or overlapping cycle under `contiguous`
 - reject invalid activation under `single_active`
 - allow multiple active cycles under `multi_active`
+- complete cycle with `keep_assignments`
+- reject completion under `required_open_ticket_decision` when open tickets exist and no disposition is supplied
+- move open tickets to a same-track target cycle during completion
+- clear open-ticket assignments during completion while retaining historical assignment rows
 - reject assignment to cycle in another project
 - reject second assignment to another cycle in the same track
 - replace cycle assignment for a track

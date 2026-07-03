@@ -1,7 +1,9 @@
 
+import ToastComponent from "@components/ui/ToastComponent";
+import { getApiV1Base } from "@http";
 import { Response, useGet, usePut } from "@http/hooks";
-import { Spinner, Flex } from "@radix-ui/themes";
-import { useEffect, useMemo, useState } from "react";
+import { Button, Dialog, Flex, Spinner, Text } from "@radix-ui/themes";
+import { use, useEffect, useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
 import { SpaceSummaryStat, StatusNotice, PageTree, PageTreeNode, InlineEditable } from "@components/primitives";
 import { FiHome, FiSettings, FiPlus } from "react-icons/fi";
@@ -23,7 +25,8 @@ interface IPageList {
     ownerId: string;
     title: string;
     parentId: number;
-    type: "document" | "whiteboard";
+    type: "document" | "whiteboard" | "project";
+    canDelete?: boolean;
 }
 
 export default function Page() {
@@ -40,6 +43,10 @@ export default function Page() {
     // Local state for optimistic updates
     const [localName, setLocalName] = useState("");
     const [localDesc, setLocalDesc] = useState("");
+    const [deletePageId, setDeletePageId] = useState<string | null>(null);
+    const [isDeletingPage, setIsDeletingPage] = useState(false);
+    const [deletePageError, setDeletePageError] = useState<string | null>(null);
+    const [deletePageSuccess, setDeletePageSuccess] = useState(false);
 
     // Update Space Details
     const [{ isLoading: isUpdating }, updateSpace] = usePut<Response<SpaceDetails>, Partial<SpaceDetails>>(`space/${spaceId}`);
@@ -91,6 +98,7 @@ export default function Page() {
                 title: page.title || "Untitled",
                 href: `/space/${spaceId}/view/${page.pageId}`,
                 type: page.type || "document",
+                canDelete: Boolean(page.canDelete) && !isArchived,
                 children: [],
             });
         });
@@ -114,6 +122,34 @@ export default function Page() {
 
         return roots;
     }, [pages, spaceId]);
+
+    const handleDeletePage = async () => {
+        if (!deletePageId) {
+            return;
+        }
+        setIsDeletingPage(true);
+        setDeletePageError(null);
+        setDeletePageSuccess(false);
+        try {
+            const response = await fetch(`${getApiV1Base()}/editor/space/${spaceId}/page/${deletePageId}/delete`, {
+                method: "DELETE",
+                credentials: "include",
+            });
+            if (!response.ok) {
+                const body = await response.json().catch(() => null);
+                throw new Error(body?.error?.detail || body?.error?.message || `Request failed with status ${response.status}`);
+            }
+            setDeletePageId(null);
+            setDeletePageSuccess(true);
+            fetchPages();
+        } catch (error) {
+            setDeletePageError(error instanceof Error ? error.message : "Unable to delete page");
+        } finally {
+            setIsDeletingPage(false);
+        }
+    };
+
+    const deleteTarget = pages.find((page) => page.pageId.toString() === deletePageId) ?? null;
 
     if (errors) {
         return (
@@ -183,7 +219,7 @@ export default function Page() {
                         textClassName="text-[28px] font-bold leading-[1.15] text-neutral-900 md:text-[36px] lg:text-[40px]"
                         inputClassName="text-[28px] font-bold md:text-[36px] lg:text-[40px]"
                     />
-                    
+
                     <div className="space-y-4">
                         <InlineEditable
                             value={localDesc}
@@ -243,12 +279,41 @@ export default function Page() {
                         <PageTree
                             nodes={treeNodes}
                             onAddChild={(id) => openAddPage(id)}
+                            onDelete={(id) => {
+                                setDeletePageError(null);
+                                setDeletePageSuccess(false);
+                                setDeletePageId(id);
+                            }}
                             onSelect={(id) => navigate(`/space/${spaceId}/view/${id}`)}
                         />
                     ) : (
                         <p className="text-[13px] italic text-neutral-400 px-1 py-1">No pages yet</p>
                     )}
                 </div>
+                {deletePageError ? <ToastComponent icon="AlertTriangle" type="warning" toggle={true} message={deletePageError} /> : null}
+                {deletePageSuccess ? <ToastComponent icon="Check" type="success" toggle={true} message="Page deleted successfully" /> : null}
+                <Dialog.Root open={Boolean(deletePageId)} onOpenChange={(open) => !open && setDeletePageId(null)}>
+                    <Dialog.Content size="2" maxWidth="450px">
+                        <Dialog.Title>{deleteTarget?.type === "project" ? "Delete Project" : "Delete Page"}</Dialog.Title>
+                        <Flex direction="column" gap="4">
+                            <Text size="3">
+                                {deleteTarget?.type === "project"
+                                    ? `Are you sure you want to delete the project "${deleteTarget?.title || "Untitled"}"? This action cannot be undone.`
+                                    : `Are you sure you want to delete the page "${deleteTarget?.title || "Untitled"}"? This action cannot be undone.`}
+                            </Text>
+                            <Flex gap="3" mt="4" justify="end">
+                                <Dialog.Close>
+                                    <Button variant="soft" color="gray">
+                                        Cancel
+                                    </Button>
+                                </Dialog.Close>
+                                <Button onClick={handleDeletePage} disabled={isDeletingPage} loading={isDeletingPage} color="red">
+                                    Delete
+                                </Button>
+                            </Flex>
+                        </Flex>
+                    </Dialog.Content>
+                </Dialog.Root>
             </div>
         </div>
     );

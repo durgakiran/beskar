@@ -233,7 +233,7 @@ export function TipTap({
                 pageId: number;
                 title: string;
                 parentId: number;
-                type: "document" | "whiteboard";
+                type: "document" | "whiteboard" | "project";
             }>
         > => {
             const response = await fetchJson<{
@@ -241,10 +241,28 @@ export function TipTap({
                     pageId: number;
                     title: string;
                     parentId: number;
-                    type: "document" | "whiteboard";
+                    type: "document" | "whiteboard" | "project";
                 }>;
             }>(`space/${spaceId}/page/list`);
             return Array.isArray(response.data) ? response.data : [];
+        };
+
+        const isInternalResourcePage = (
+            page: Awaited<ReturnType<typeof listPages>>[number],
+            resourceType?: InternalResourceType,
+        ): page is {
+            pageId: number;
+            title: string;
+            parentId: number;
+            type: InternalResourceType;
+        } => {
+            if (page.type === "project") {
+                return false;
+            }
+            if (!resourceType) {
+                return true;
+            }
+            return page.type === resourceType;
         };
 
         return {
@@ -254,7 +272,7 @@ export function TipTap({
                 const normalizedQuery = query.trim().toLowerCase();
 
                 return pages
-                    .filter((page) => page.type === resourceType)
+                    .filter((page) => isInternalResourcePage(page, resourceType))
                     .filter((page) => {
                         if (!normalizedQuery) return true;
                         return (page.title || "").toLowerCase().includes(normalizedQuery);
@@ -278,6 +296,10 @@ export function TipTap({
                 }>(`editor/space/${spaceId}/page/${resourceId}/inline-link`);
                 const metadata = response.data;
                 if (!metadata) return null;
+
+                const pages = await listPages();
+                const page = pages.find((candidate) => String(candidate.pageId) === String(resourceId));
+                if (!page || !isInternalResourcePage(page, resourceType)) return null;
 
                 const baseUrl = getApiV1Base({ fallbackBase: import.meta.env.VITE_IMAGE_SERVER_URL });
                 return {
@@ -350,7 +372,7 @@ export function TipTap({
         type PageDescendant = {
             pageId: number;
             title: string;
-            type?: "document" | "whiteboard";
+            type?: "document" | "whiteboard" | "project";
             children?: PageDescendant[];
         };
 

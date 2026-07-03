@@ -18,9 +18,12 @@ export function usePUT<T, P>(path: string, headers: Record<string, any> = {}): [
 
     const mutateData = useCallback((payLoad: P) => {
         setIsDataFetching(true);
+        setData(undefined);
+        setErrors(undefined);
         fetch(USER_URI + "/" + path, {
             method: "PUT",
             body: JSON.stringify(payLoad),
+            credentials: "include",
             headers: { "Content-Type": "application/json", ...requestHeaders },
         })
             .then((res) => {

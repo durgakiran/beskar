@@ -23,6 +23,7 @@ import (
 	"github.com/durgakiran/beskar/notification"
 	page "github.com/durgakiran/beskar/page"
 	profile "github.com/durgakiran/beskar/profile/controller"
+	project "github.com/durgakiran/beskar/project"
 	"github.com/durgakiran/beskar/quota"
 	space "github.com/durgakiran/beskar/space"
 	blobstorage "github.com/durgakiran/beskar/storage"
@@ -162,6 +163,7 @@ func main() {
 	r.Mount("/api/v1/space", mw.CheckAuthentication()(space.Router()))
 	r.Mount("/api/v1/invite", mw.CheckAuthentication()(invite.Router()))
 	r.Mount("/api/v1/page", mw.CheckAuthentication()(page.Router()))
+	r.Mount("/api/v1/project", mw.CheckAuthentication()(project.Router()))
 	r.Mount("/api/v1/comment", mw.CheckAuthentication()(comment.Router()))
 	r.Mount("/api/v1/notifications", mw.CheckAuthentication()(notification.NewController().Router()))
 	r.Mount("/api/v1/user", user.Router())

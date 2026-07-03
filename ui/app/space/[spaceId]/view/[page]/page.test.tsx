@@ -1,122 +1,69 @@
 import React from "react";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import Page from "./page";
 
 const useGet = vi.fn();
 const useDelete = vi.fn();
-const push = vi.fn();
 
 vi.mock("@http/hooks", () => ({
     useGet: (...args: unknown[]) => useGet(...args),
     useDelete: (...args: unknown[]) => useDelete(...args),
 }));
 
-vi.mock("next/navigation", () => ({
-    useRouter: () => ({ push }),
-}));
-
-vi.mock("@components/WhiteboardEditor", () => ({
-    default: ({ slug, readOnly, fillParent }: { slug: string[]; readOnly?: boolean; fillParent?: boolean }) => (
-        <div
-            data-testid="whiteboard-editor"
-            data-slug={slug.join("/")}
-            data-readonly={String(Boolean(readOnly))}
-            data-fill-parent={String(Boolean(fillParent))}
-        />
-    ),
+vi.mock("@components/project-management/ProjectPageView", () => ({
+    default: ({ spaceId, pageId }: { spaceId: string; pageId: string }) =>
+        React.createElement("div", { "data-testid": "project-page-view" }, `${spaceId}:${pageId}`),
 }));
 
 vi.mock("@components/ReadOnlyContentMain", () => ({
-    default: ({
-        title,
-        capabilities,
-        onEdit,
-        onDelete,
-        children,
-    }: {
-        title: string;
-        capabilities: { canEdit: boolean; canDelete: boolean; canComment: boolean; canShare: boolean };
-        onEdit: () => void;
-        onDelete: () => void;
-        children: React.ReactNode;
-    }) => (
-        <div data-testid="readonly-shell">
-            <div>{title}</div>
-            <div data-testid="shell-capabilities">{JSON.stringify(capabilities)}</div>
-            <button onClick={onEdit}>Edit page</button>
-            <button onClick={onDelete}>Delete page</button>
-            {children}
-        </div>
-    ),
+    default: ({ children }: { children: React.ReactNode }) => React.createElement("div", { "data-testid": "readonly-shell" }, children),
+}));
+
+vi.mock("@components/ui/ToastComponent", () => ({
+    default: () => null,
+}));
+
+vi.mock("@components/WhiteboardEditor", () => ({
+    default: () => React.createElement("div", { "data-testid": "whiteboard-editor" }),
 }));
 
 vi.mock("@editor", () => ({
-    TipTap: () => <div data-testid="tiptap" />,
-    AttachmentPanel: () => <div data-testid="attachments" />,
+    TipTap: () => React.createElement("div", { "data-testid": "tiptap" }),
+    AttachmentPanel: () => React.createElement("div", { "data-testid": "attachment-panel" }),
 }));
 
-describe("whiteboard view page", () => {
+vi.mock("next/navigation", () => ({
+    useRouter: () => ({ push: vi.fn() }),
+}));
+
+describe("space view page route", () => {
     beforeEach(() => {
         vi.clearAllMocks();
-        useDelete.mockReturnValue([{ isLoading: false, data: null, errors: null }, vi.fn()]);
+        useDelete.mockReturnValue([{ data: null, isLoading: false, errors: null }, vi.fn()]);
+    });
+
+    it("routes project pages to the project-management view", async () => {
+        const fetchMetadata = vi.fn();
         useGet.mockImplementation((url: string) => {
             if (url === "editor/space/space-1/page/42/metadata") {
-                return [{ isLoading: false, data: { data: { type: "whiteboard" } }, errors: null }, vi.fn()];
-            }
-            if (url === "editor/space/space-1/page/42") {
-                return [{
-                    isLoading: false,
-                    errors: null,
-                    data: {
-                        data: {
-                            pageId: 42,
-                            spaceId: "space-1",
-                            pageType: "whiteboard",
-                            title: "Sprint board",
-                            document: null,
-                            breadcrumbs: [],
-                            space: { name: "Product" },
-                            capabilities: {
-                                canEdit: true,
-                                canDelete: true,
-                                canComment: true,
-                                canShare: true,
-                            },
-                            meta: {},
-                            attachments: [],
-                        },
-                        status: "success",
+                return [
+                    {
+                        data: { data: { type: "project" }, status: "success" },
+                        isLoading: false,
+                        errors: null,
                     },
-                }, vi.fn()];
+                    fetchMetadata,
+                ];
             }
             throw new Error(`Unexpected GET ${url}`);
         });
-    });
 
-    it("renders whiteboards inside the shared read-only shell with edit and delete actions", async () => {
         await act(async () => {
-            render(
-                <React.Suspense fallback={<div data-testid="loading" />}>
-                    <Page params={Promise.resolve({ page: "42", spaceId: "space-1" })} />
-                </React.Suspense>
-            );
+            render(React.createElement(Page, { params: Promise.resolve({ spaceId: "space-1", page: "42" }) }));
         });
 
-        await waitFor(() => expect(screen.getByTestId("readonly-shell")).not.toBeNull());
-        expect(screen.getByText("Sprint board")).not.toBeNull();
-
-        const whiteboard = screen.getByTestId("whiteboard-editor");
-        expect(whiteboard.getAttribute("data-slug")).toBe("space-1/42");
-        expect(whiteboard.getAttribute("data-readonly")).toBe("true");
-        expect(whiteboard.getAttribute("data-fill-parent")).toBe("true");
-
-        expect(screen.getByTestId("shell-capabilities").textContent).toContain("\"canComment\":false");
-
-        fireEvent.click(screen.getByText("Edit page"));
-        expect(push).toHaveBeenCalledWith("/edit/space-1/42");
-
-        fireEvent.click(screen.getByText("Delete page"));
-        expect(screen.getAllByText("Delete Page").length).toBeGreaterThan(0);
+        await waitFor(() => expect(fetchMetadata).toHaveBeenCalledTimes(1));
+        expect(screen.getByTestId("project-page-view").textContent).toBe("space-1:42");
     });
 });

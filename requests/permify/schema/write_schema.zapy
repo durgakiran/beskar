@@ -43,8 +43,9 @@
   "body_type": "application/json",
   "body": [
     "{",
-    "    \"schema\": \"entity user {}\\nentity tenant {\\n    relation space @space\\n}\\nentity space {\\n    relation owner @user\\n    relation admin @user\\n    relation editor @user\\n    relation commentor @user\\n    relation viewer @user\\n\\n    permission delete = owner\\n    permission edit = owner or admin\\n    permission edit_page = owner or admin or editor\\n    permission view = owner or admin or editor or commentor or viewer\\n    permission invite_admin = owner\\n    permission invite_member = owner or admin\\n}\\nentity page {\\n    relation owner @space#owner @space#admin @space#editor\\n    relation parent @page\\n    relation space @space\\n\\n    permission edit = space.edit or space.editor\\n    permission view = space.view\\n    permission delete = owner or space.owner\\n}\\n\\n\"",
+    "    \"schema\": \"entity user {}\\nentity tenant {\\n    relation space @space\\n}\\nentity space {\\n    relation owner @user\\n    relation admin @user\\n    relation editor @user\\n    relation commentor @user\\n    relation viewer @user\\n\\n    permission delete = owner\\n    permission edit = owner or admin\\n    permission edit_page = owner or admin or editor\\n    permission view = owner or admin or editor or commentor or viewer\\n    permission invite_admin = owner\\n    permission invite_member = owner or admin\\n    permission add_comment = owner or admin or editor or commentor\\n    permission manage_members = owner or admin\\n    permission transfer_owner = owner\\n    permission archive = owner or admin\\n}\\nentity page {\\n    relation owner @space#owner @space#admin @space#editor\\n    relation parent @page\\n    relation space @space\\n\\n    permission edit = space.edit or space.editor\\n    permission view = space.view\\n    permission delete = owner or space.owner\\n    permission add_comment = space.add_comment\\n}\\n\"",
     "}",
+    "",
     ""
   ]
 }

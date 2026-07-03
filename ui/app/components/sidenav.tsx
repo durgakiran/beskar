@@ -2,8 +2,8 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import AddPage from "./addPage";
 import { Box, Flex, Text, IconButton, Spinner } from "@radix-ui/themes";
-import { HiHome, HiOutlinePlusSm, HiOutlineChevronDown, HiOutlineChevronRight, HiCog, HiOutlineDocumentText, HiOutlinePencilAlt } from "react-icons/hi";
 import { Link } from "react-router-dom";
+import { HiHome, HiOutlinePlusSm, HiOutlineChevronDown, HiOutlineChevronRight, HiCog, HiOutlineDocumentText, HiOutlinePencilAlt, HiOutlineBriefcase } from "react-icons/hi";
 import { Response, useGet } from "@http/hooks";
 interface Docs {
     title: string;
@@ -43,7 +43,7 @@ interface IPages {
     id: number;
     parentId: number;
     details: PageDocMap;
-    type: "document" | "whiteboard";
+    type: "document" | "whiteboard" | "project";
     children: Array<IPages>;
 }
 
@@ -58,7 +58,7 @@ function SideNavItem({ pages, spaceId, openAddPage }: { pages: Array<IPages>; sp
                                 <li key={i}>
                                     <div className="flex flex-row items-center gap-1 py-1.5 px-2 rounded-sm hover:bg-mauve-50 transition-colors group">
                                         <div className="flex-shrink-0 flex items-center justify-center w-5 h-5 text-neutral-400">
-                                            {page.type === "whiteboard" ? <HiOutlinePencilAlt size={16} /> : <HiOutlineDocumentText size={16} />}
+                                            {page.type === "whiteboard" ? <HiOutlinePencilAlt size={16} /> : page.type === "project" ? <HiOutlineBriefcase size={16} /> : <HiOutlineDocumentText size={16} />}
                                         </div>
                                         <Link
                                             className="text-sm text-neutral-700 hover:text-primary-600 flex-1 truncate transition-colors"
@@ -89,7 +89,7 @@ interface IPageList {
     ownerId: string;
     title: string;
     parentId: number;
-    type: "document" | "whiteboard";
+    type: "document" | "whiteboard" | "project";
 }
 
 export default function SideNav(param: Props) {
@@ -161,7 +161,11 @@ export default function SideNav(param: Props) {
         // navigate(`/space/${param.id}`);
     };
 
-    const editePage = async (page: number) => {
+    const editePage = async (page: number, pageType?: "document" | "whiteboard" | "project") => {
+        if (pageType === "project") {
+            navigate(`/space/${param.id}/view/${page}`);
+            return;
+        }
         navigate(`/edit/${param.id}/${page}`);
     };
 

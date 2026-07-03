@@ -4275,6 +4275,28 @@
                       "fontWeight": "500"
                     },
                     {
+                      "id": "jkWXz",
+                      "type": "ref",
+                      "ref": "ZjmIx",
+                      "width": "fill_container",
+                      "name": "capNote",
+                      "fill": "#fffbeb",
+                      "stroke": {
+                        "thickness": 1,
+                        "fill": "#fedf89"
+                      },
+                      "descendants": {
+                        "6dQ3J": {
+                          "iconFontName": "users",
+                          "fill": "#b54708"
+                        },
+                        "eP0T7": {
+                          "content": "This space: 9 of 10 collaborators (plan limit). Invites and adds are blocked when the cap is reached.",
+                          "fill": "#b54708"
+                        }
+                      }
+                    },
+                    {
                       "type": "frame",
                       "id": "vnYBG",
                       "name": "Title Row",
@@ -4295,8 +4317,12 @@
                           "type": "frame",
                           "id": "YzQhu",
                           "name": "Add User",
-                          "fill": "$color.brand.primary",
+                          "fill": "#cac6d1",
                           "cornerRadius": 6,
+                          "stroke": {
+                            "thickness": 1,
+                            "fill": "#d4d1da"
+                          },
                           "gap": 8,
                           "padding": [
                             10,
@@ -4311,12 +4337,12 @@
                               "height": 16,
                               "iconFontName": "plus",
                               "iconFontFamily": "feather",
-                              "fill": "$color.text.inverse"
+                              "fill": "#605c67"
                             },
                             {
                               "type": "text",
                               "id": "OyUwo",
-                              "fill": "$color.text.inverse",
+                              "fill": "#605c67",
                               "content": "Add User",
                               "fontFamily": "Geist, Inter, system-ui, sans-serif",
                               "fontSize": 16,
@@ -4325,6 +4351,19 @@
                           ]
                         }
                       ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "VbVq8",
+                      "name": "metaCap",
+                      "fill": "#898492",
+                      "textGrowth": "fixed-width",
+                      "width": 720,
+                      "content": "Member count is enforced per space. Account-wide storage lives in Account / Storage.",
+                      "lineHeight": 1.45,
+                      "fontFamily": "Inter",
+                      "fontSize": 13,
+                      "fontWeight": "normal"
                     },
                     {
                       "type": "frame",
@@ -7511,6 +7550,19 @@
                       ]
                     }
                   ]
+                },
+                {
+                  "type": "text",
+                  "id": "DZdTq",
+                  "name": "hintAcct",
+                  "fill": "#898492",
+                  "textGrowth": "fixed-width",
+                  "width": "fill_container",
+                  "content": "Account-wide storage and plan usage are shown in Account settings. This area is for this space and its members.",
+                  "lineHeight": 1.4,
+                  "fontFamily": "Inter",
+                  "fontSize": 12,
+                  "fontWeight": "normal"
                 },
                 {
                   "type": "frame",
@@ -57650,6 +57702,824 @@
                       "fontFamily": "$font.family.primary",
                       "fontSize": 15,
                       "fontWeight": "$font.weight.semibold"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "lcrvf",
+      "x": 15788,
+      "y": -3459,
+      "name": "Account · Storage · healthy",
+      "width": 1200,
+      "height": 980,
+      "fill": "#fbfafc",
+      "layout": "vertical",
+      "children": [
+        {
+          "id": "e5wVL",
+          "type": "ref",
+          "ref": "ntTGm",
+          "width": "fill_container",
+          "name": "topH"
+        },
+        {
+          "type": "frame",
+          "id": "Z6TYR5",
+          "name": "bodyH",
+          "width": "fill_container",
+          "height": "fill_container",
+          "fill": "#fbfafc",
+          "layout": "vertical",
+          "gap": 20,
+          "padding": [
+            24,
+            32
+          ],
+          "children": [
+            {
+              "type": "text",
+              "id": "iRgMu",
+              "name": "crumbH",
+              "fill": "#898492",
+              "content": "Account / Storage",
+              "fontFamily": "Geist, Inter, system-ui, sans-serif",
+              "fontSize": 14,
+              "fontWeight": "500"
+            },
+            {
+              "type": "text",
+              "id": "n2r7Rc",
+              "name": "titH",
+              "fill": "#221f26",
+              "content": "Your account storage",
+              "fontFamily": "Geist, Inter, system-ui, sans-serif",
+              "fontSize": 40,
+              "fontWeight": "700"
+            },
+            {
+              "type": "text",
+              "id": "AZeSh",
+              "name": "subH",
+              "fill": "#605c67",
+              "textGrowth": "fixed-width",
+              "width": 760,
+              "content": "Limits apply to your personal account across all spaces you own. Uploads by collaborators in your spaces still count toward your account.",
+              "lineHeight": 1.55,
+              "fontFamily": "Geist, Inter, system-ui, sans-serif",
+              "fontSize": 16,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "frame",
+              "id": "rL3yV",
+              "name": "cardH",
+              "width": "fill_container",
+              "fill": "#f8f7f9",
+              "cornerRadius": 10,
+              "stroke": {
+                "thickness": 1,
+                "fill": "#d4d1da"
+              },
+              "layout": "vertical",
+              "gap": 14,
+              "padding": 18,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "h2bXht",
+                  "name": "rowH",
+                  "width": "fill_container",
+                  "justifyContent": "space_between",
+                  "alignItems": "end",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "r8BIK",
+                      "name": "labH",
+                      "fill": "#221f26",
+                      "content": "Storage used",
+                      "fontFamily": "Geist, Inter, system-ui, sans-serif",
+                      "fontSize": 18,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "hixjc",
+                      "name": "valH",
+                      "fill": "#605c67",
+                      "content": "1.2 GB of 10 GB",
+                      "fontFamily": "Geist, Inter, system-ui, sans-serif",
+                      "fontSize": 14,
+                      "fontWeight": "500"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "Qfm84",
+                  "name": "barBgH",
+                  "width": "fill_container",
+                  "height": 10,
+                  "fill": "#e8dfed",
+                  "cornerRadius": 5,
+                  "layout": "none",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "bi8yF",
+                      "x": 0,
+                      "y": 0,
+                      "name": "barFgH",
+                      "width": 120,
+                      "height": 10,
+                      "fill": "#6b4c7a",
+                      "cornerRadius": 5
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "id": "Br5k8",
+                  "name": "helpH",
+                  "fill": "#898492",
+                  "textGrowth": "fixed-width",
+                  "width": 720,
+                  "content": "Includes attachments and document images in pages across your owned spaces. Deleted items stop counting after permanent removal.",
+                  "lineHeight": 1.5,
+                  "fontFamily": "Geist, Inter, system-ui, sans-serif",
+                  "fontSize": 13,
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "WI3Cc",
+              "name": "cardPlanH",
+              "width": "fill_container",
+              "fill": "#f8f7f9",
+              "cornerRadius": 10,
+              "stroke": {
+                "thickness": 1,
+                "fill": "#d4d1da"
+              },
+              "layout": "vertical",
+              "gap": 10,
+              "padding": 18,
+              "children": [
+                {
+                  "type": "text",
+                  "id": "i9d8xA",
+                  "name": "planTitH",
+                  "fill": "#221f26",
+                  "content": "Plan",
+                  "fontFamily": "Geist, Inter, system-ui, sans-serif",
+                  "fontSize": 18,
+                  "fontWeight": "600"
+                },
+                {
+                  "type": "text",
+                  "id": "VxZgD",
+                  "name": "planBodyH",
+                  "fill": "#605c67",
+                  "textGrowth": "fixed-width",
+                  "width": 720,
+                  "content": "Current plan: Basic (example). Upgrade paths can appear here when billing is enabled.",
+                  "lineHeight": 1.5,
+                  "fontFamily": "Geist, Inter, system-ui, sans-serif",
+                  "fontSize": 14,
+                  "fontWeight": "normal"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "ufTRv",
+      "x": 17068,
+      "y": -3459,
+      "name": "Account · Storage · warning",
+      "width": 1200,
+      "height": 980,
+      "fill": "#fbfafc",
+      "layout": "vertical",
+      "children": [
+        {
+          "id": "bTOxh",
+          "type": "ref",
+          "ref": "ntTGm",
+          "width": "fill_container",
+          "name": "topW"
+        },
+        {
+          "type": "frame",
+          "id": "KULAa",
+          "name": "bodyW",
+          "width": "fill_container",
+          "height": "fill_container",
+          "fill": "#fbfafc",
+          "layout": "vertical",
+          "gap": 16,
+          "padding": [
+            24,
+            32
+          ],
+          "children": [
+            {
+              "type": "text",
+              "id": "EIHkH",
+              "name": "crumbW",
+              "fill": "#898492",
+              "content": "Account / Storage",
+              "fontFamily": "Inter",
+              "fontSize": 14,
+              "fontWeight": "500"
+            },
+            {
+              "type": "text",
+              "id": "I8vWRa",
+              "name": "titW",
+              "fill": "#221f26",
+              "content": "Your account storage",
+              "fontFamily": "Inter",
+              "fontSize": 40,
+              "fontWeight": "700"
+            },
+            {
+              "type": "text",
+              "id": "g43eY6",
+              "name": "subW",
+              "fill": "#605c67",
+              "textGrowth": "fixed-width",
+              "width": 760,
+              "content": "You are close to your account limit. Remove large files or wait until limits are raised.",
+              "lineHeight": 1.55,
+              "fontFamily": "Inter",
+              "fontSize": 16,
+              "fontWeight": "normal"
+            },
+            {
+              "id": "resl7",
+              "type": "ref",
+              "ref": "ZjmIx",
+              "width": "fill_container",
+              "name": "notW",
+              "fill": "#fffbeb",
+              "stroke": {
+                "thickness": 1,
+                "fill": "#fedf89"
+              },
+              "descendants": {
+                "6dQ3J": {
+                  "iconFontName": "alert-triangle",
+                  "fill": "#b54708"
+                },
+                "eP0T7": {
+                  "content": "You are at 92% of your account storage limit.",
+                  "fill": "#b54708"
+                }
+              }
+            },
+            {
+              "type": "frame",
+              "id": "X85YK",
+              "name": "cardW",
+              "width": "fill_container",
+              "fill": "#f8f7f9",
+              "cornerRadius": 10,
+              "stroke": {
+                "thickness": 1,
+                "fill": "#d4d1da"
+              },
+              "layout": "vertical",
+              "gap": 14,
+              "padding": 18,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "cXFZD",
+                  "name": "rowW",
+                  "width": "fill_container",
+                  "justifyContent": "space_between",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "LeGQU",
+                      "name": "labW",
+                      "fill": "#221f26",
+                      "content": "Storage used",
+                      "fontFamily": "Inter",
+                      "fontSize": 18,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "H3EMMx",
+                      "name": "valW",
+                      "fill": "#b54708",
+                      "content": "9.2 GB of 10 GB",
+                      "fontFamily": "Inter",
+                      "fontSize": 14,
+                      "fontWeight": "600"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "F3ro4b",
+                  "name": "barBgW",
+                  "width": "fill_container",
+                  "height": 10,
+                  "fill": "#e8dfed",
+                  "cornerRadius": 5,
+                  "layout": "none",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "uA6uI",
+                      "x": 0,
+                      "y": 0,
+                      "name": "barFgW",
+                      "width": 920,
+                      "height": 10,
+                      "fill": "#dc6803",
+                      "cornerRadius": 5
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "id": "Kej0j",
+                  "name": "helpW",
+                  "fill": "#898492",
+                  "textGrowth": "fixed-width",
+                  "width": 720,
+                  "content": "New uploads may be blocked if you exceed your limit. Free space by deleting attachments or images you no longer need.",
+                  "lineHeight": 1.5,
+                  "fontFamily": "Inter",
+                  "fontSize": 13,
+                  "fontWeight": "normal"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "M7CvI0",
+      "x": 18348,
+      "y": -3459,
+      "name": "Account · Storage · at limit",
+      "width": 1200,
+      "height": 980,
+      "fill": "#fbfafc",
+      "layout": "vertical",
+      "children": [
+        {
+          "id": "GdSmZ",
+          "type": "ref",
+          "ref": "ntTGm",
+          "width": "fill_container",
+          "name": "topB"
+        },
+        {
+          "type": "frame",
+          "id": "uz2OR",
+          "name": "bodyB",
+          "width": "fill_container",
+          "height": "fill_container",
+          "fill": "#fbfafc",
+          "layout": "vertical",
+          "gap": 16,
+          "padding": [
+            24,
+            32
+          ],
+          "children": [
+            {
+              "type": "text",
+              "id": "R5TaSw",
+              "name": "crumbB",
+              "fill": "#898492",
+              "content": "Account / Storage",
+              "fontFamily": "Inter",
+              "fontSize": 14,
+              "fontWeight": "500"
+            },
+            {
+              "type": "text",
+              "id": "VyJ8F",
+              "name": "titB",
+              "fill": "#221f26",
+              "content": "Your account storage",
+              "fontFamily": "Inter",
+              "fontSize": 40,
+              "fontWeight": "700"
+            },
+            {
+              "type": "text",
+              "id": "u2wY0z",
+              "name": "subB",
+              "fill": "#605c67",
+              "textGrowth": "fixed-width",
+              "width": 760,
+              "content": "Uploads are blocked until you free enough space to stay under your plan limit.",
+              "lineHeight": 1.55,
+              "fontFamily": "Inter",
+              "fontSize": 16,
+              "fontWeight": "normal"
+            },
+            {
+              "id": "pqNWV",
+              "type": "ref",
+              "ref": "ZjmIx",
+              "width": "fill_container",
+              "name": "notB",
+              "fill": "#fef3f2",
+              "stroke": {
+                "thickness": 1,
+                "fill": "#fda29b"
+              },
+              "descendants": {
+                "6dQ3J": {
+                  "iconFontName": "x-circle",
+                  "fill": "#b42318"
+                },
+                "eP0T7": {
+                  "content": "Account storage is full. Uploads are blocked until you free space.",
+                  "fill": "#b42318"
+                }
+              }
+            },
+            {
+              "type": "frame",
+              "id": "J7STSb",
+              "name": "cardB",
+              "width": "fill_container",
+              "fill": "#fef3f2",
+              "cornerRadius": 10,
+              "stroke": {
+                "thickness": 1,
+                "fill": "#fda29b"
+              },
+              "layout": "vertical",
+              "gap": 14,
+              "padding": 18,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "NrFAG",
+                  "name": "rowB",
+                  "width": "fill_container",
+                  "justifyContent": "space_between",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "FkJ9w",
+                      "name": "labB",
+                      "fill": "#b42318",
+                      "content": "Storage used",
+                      "fontFamily": "Inter",
+                      "fontSize": 18,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "jmDOV",
+                      "name": "valB",
+                      "fill": "#b42318",
+                      "content": "10 GB of 10 GB",
+                      "fontFamily": "Inter",
+                      "fontSize": 14,
+                      "fontWeight": "600"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "w8OSVz",
+                  "name": "barBgB",
+                  "width": "fill_container",
+                  "height": 10,
+                  "fill": "#fecdc9",
+                  "cornerRadius": 5,
+                  "layout": "none",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "T6LPNP",
+                      "x": 0,
+                      "y": 0,
+                      "name": "barFgB",
+                      "width": 800,
+                      "height": 10,
+                      "fill": "#b42318",
+                      "cornerRadius": 5
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "id": "i8R0cZ",
+                  "name": "helpB",
+                  "fill": "#7a271a",
+                  "textGrowth": "fixed-width",
+                  "width": 720,
+                  "content": "This is a specific quota state—not a generic error. Users should always see which limit blocked them.",
+                  "lineHeight": 1.5,
+                  "fontFamily": "Inter",
+                  "fontSize": 13,
+                  "fontWeight": "normal"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "lZpTh",
+      "x": 20908,
+      "y": -3459,
+      "name": "Editor · upload quota toasts",
+      "width": 1100,
+      "height": 720,
+      "fill": "#fbfafc",
+      "layout": "vertical",
+      "children": [
+        {
+          "type": "frame",
+          "id": "ETZta",
+          "name": "hdrE",
+          "width": "fill_container",
+          "stroke": {
+            "thickness": {
+              "bottom": 1
+            },
+            "fill": "#d4d1da"
+          },
+          "layout": "vertical",
+          "gap": 6,
+          "padding": [
+            20,
+            24
+          ],
+          "children": [
+            {
+              "type": "text",
+              "id": "YfVWi",
+              "name": "titE",
+              "fill": "#221f26",
+              "content": "Editor · upload feedback (examples)",
+              "fontFamily": "Inter",
+              "fontSize": 22,
+              "fontWeight": "700"
+            },
+            {
+              "type": "text",
+              "id": "WluFG",
+              "name": "subE",
+              "fill": "#605c67",
+              "textGrowth": "fixed-width",
+              "width": 900,
+              "content": "Use specific copy: file too large vs account full. Leave the document unchanged on failure.",
+              "fontFamily": "Inter",
+              "fontSize": 14,
+              "fontWeight": "normal"
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "BJ14x",
+          "name": "stackE",
+          "width": "fill_container",
+          "height": "fill_container",
+          "fill": "#fbfafc",
+          "layout": "vertical",
+          "gap": 14,
+          "padding": 24,
+          "children": [
+            {
+              "id": "WgkH8",
+              "type": "ref",
+              "ref": "ZjmIx",
+              "width": "fill_container",
+              "name": "toast1",
+              "fill": "#fef3f2",
+              "stroke": {
+                "thickness": 1,
+                "fill": "#fda29b"
+              },
+              "descendants": {
+                "6dQ3J": {
+                  "iconFontName": "alert-circle",
+                  "fill": "#b42318"
+                },
+                "eP0T7": {
+                  "content": "Could not upload attachment: account storage is full (10 GB). Free space in Account / Storage, then try again.",
+                  "fill": "#b42318"
+                }
+              }
+            },
+            {
+              "id": "nMZxY",
+              "type": "ref",
+              "ref": "ZjmIx",
+              "width": "fill_container",
+              "name": "toast2",
+              "fill": "#fef3f2",
+              "stroke": {
+                "thickness": 1,
+                "fill": "#fda29b"
+              },
+              "descendants": {
+                "6dQ3J": {
+                  "iconFontName": "alert-circle",
+                  "fill": "#b42318"
+                },
+                "eP0T7": {
+                  "content": "Could not upload image: file exceeds the maximum image size for your plan (4 MB).",
+                  "fill": "#b42318"
+                }
+              }
+            },
+            {
+              "id": "yFLto",
+              "type": "ref",
+              "ref": "ZjmIx",
+              "width": "fill_container",
+              "name": "toast3",
+              "fill": "#fffbeb",
+              "stroke": {
+                "thickness": 1,
+                "fill": "#fedf89"
+              },
+              "descendants": {
+                "6dQ3J": {
+                  "iconFontName": "alert-triangle",
+                  "fill": "#b54708"
+                },
+                "eP0T7": {
+                  "content": "Upload will succeed, but you are within the soft warning band for account storage. Consider cleaning up large files.",
+                  "fill": "#b54708"
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "ZpXMt",
+      "x": 22188,
+      "y": -3459,
+      "name": "Members · invite blocked (collaborator cap)",
+      "width": 1200,
+      "height": 900,
+      "fill": "#fbfafc",
+      "layout": "none",
+      "children": [
+        {
+          "type": "frame",
+          "id": "ziyyw",
+          "x": 0,
+          "y": 0,
+          "name": "scrimM",
+          "width": 1200,
+          "height": 900,
+          "fill": "#0b102066",
+          "layout": "none"
+        },
+        {
+          "type": "frame",
+          "id": "R5eZD",
+          "x": 340,
+          "y": 200,
+          "name": "modalM",
+          "width": 520,
+          "fill": "#f8f7f9",
+          "cornerRadius": 12,
+          "stroke": {
+            "thickness": 1,
+            "fill": "#d4d1da"
+          },
+          "layout": "vertical",
+          "gap": 16,
+          "padding": 24,
+          "children": [
+            {
+              "type": "text",
+              "id": "i7harG",
+              "name": "titM",
+              "fill": "#221f26",
+              "content": "Cannot send invite",
+              "fontFamily": "Inter",
+              "fontSize": 22,
+              "fontWeight": "700"
+            },
+            {
+              "type": "text",
+              "id": "gqJ6g",
+              "name": "bodyM",
+              "fill": "#605c67",
+              "textGrowth": "fixed-width",
+              "width": 472,
+              "content": "This space has reached its collaborator limit (10 members). Remove a member or raise the limit on a higher plan before inviting someone new.",
+              "lineHeight": 1.55,
+              "fontFamily": "Inter",
+              "fontSize": 15,
+              "fontWeight": "normal"
+            },
+            {
+              "id": "XL9dW",
+              "type": "ref",
+              "ref": "ZjmIx",
+              "width": "fill_container",
+              "name": "notM",
+              "fill": "#fef3f2",
+              "stroke": {
+                "thickness": 1,
+                "fill": "#fda29b"
+              },
+              "descendants": {
+                "6dQ3J": {
+                  "iconFontName": "users",
+                  "fill": "#b42318"
+                },
+                "eP0T7": {
+                  "content": "Reason: collaborators.count.per_space — cap reached.",
+                  "fill": "#b42318"
+                }
+              }
+            },
+            {
+              "type": "frame",
+              "id": "gf8Ws",
+              "name": "actionsM",
+              "width": "fill_container",
+              "gap": 10,
+              "justifyContent": "end",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "X6UAc",
+                  "name": "btnSec",
+                  "fill": "#f5f4f6",
+                  "cornerRadius": 8,
+                  "gap": 8,
+                  "padding": [
+                    10,
+                    16
+                  ],
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "kTaUW",
+                      "name": "btnSecT",
+                      "fill": "#221f26",
+                      "content": "Close",
+                      "fontFamily": "Inter",
+                      "fontSize": 14,
+                      "fontWeight": "600"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "PRivJ",
+                  "name": "btnPri",
+                  "fill": "#6b4c7a",
+                  "cornerRadius": 8,
+                  "gap": 8,
+                  "padding": [
+                    10,
+                    16
+                  ],
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "e3uEsa",
+                      "name": "btnPriT",
+                      "fill": "#f8f7f9",
+                      "content": "Manage members",
+                      "fontFamily": "Inter",
+                      "fontSize": 14,
+                      "fontWeight": "600"
                     }
                   ]
                 }

@@ -1,13 +1,15 @@
 
 import ReadOnlyContentMain, { type ReadOnlyBreadcrumb, type ReadOnlyCapabilities, type ReadOnlyMeta } from "@components/ReadOnlyContentMain";
+import ProjectPageView from "@components/project-management/ProjectPageView";
 import ToastComponent from "@components/ui/ToastComponent";
 import WhiteboardEditor from "@components/WhiteboardEditor";
 import { TipTap, AttachmentPanel } from "@editor";
 import type { AttachmentRef } from "@durgakiran/editor";
-import { useGet, useDelete } from "@http/hooks";
-import { Button, Spinner, Flex, Box, Text, Dialog } from "@radix-ui/themes";
-import {  useNavigate , useParams } from "react-router-dom";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useDelete, useGet } from "@http/hooks";
+import { Box, Button, Dialog, Flex, Spinner, Text } from "@radix-ui/themes";
+import { useNavigate, useParams } from "react-router-dom";
+import { use, useEffect, useMemo, useRef, useState } from "react";
+import { useOptionalSpacePagesRefresh } from "../../SpaceAddPageContext";
 
 interface ViewSpaceState {
     name: string;
@@ -28,12 +30,11 @@ interface ViewResponseData {
 }
 
 interface PageMetadataResponse {
-    data: { type: string };
+    data: { type: "document" | "whiteboard" | "project" };
     status: string;
 }
 
-export default function Page() {
-    const { page, spaceId } = useParams() as any;
+function ContentPageView({ spaceId, page, pageType }: { spaceId: string; page: string; pageType: "document" | "whiteboard" }) {
     const workerRef = useRef<Worker | null>(null);
     const [workerInitiated, setWorkerInitiated] = useState(false);
     const [content, setContent] = useState();
@@ -42,12 +43,13 @@ export default function Page() {
     const [isMobileViewport, setIsMobileViewport] = useState(false);
     const [isTabletViewport, setIsTabletViewport] = useState(false);
     const navigate = useNavigate();
+    const refreshSpacePages = useOptionalSpacePagesRefresh();
 
-    const [{ isLoading: loadingDocument, data: documentData, errors: documentErrors }, fetchDocument] = useGet<{ data: ViewResponseData | null; status: string }>(`editor/space/${spaceId}/page/${page}`);
-    const [{ isLoading: loadingDelete, data: deleteData, errors: deleteErrors }, deletePageRequest] = useDelete<{ rowsAffected: number }, null>(`editor/space/${spaceId}/page/${page}/delete`);
-    const [{ isLoading: loadingMetadata, data: metadata, errors: metaErrors }, getMetadata] = useGet<PageMetadataResponse>(`editor/space/${spaceId}/page/${page}/metadata`);
+    const [{ isLoading: loadingDocument, data: documentData, errors: documentErrors }, fetchDocument] =
+        useGet<{ data: ViewResponseData | null; status: string }>(`editor/space/${spaceId}/page/${page}`);
+    const [{ isLoading: loadingDelete, data: deleteData, errors: deleteErrors }, deletePageRequest] =
+        useDelete<{ rowsAffected: number }, null>(`editor/space/${spaceId}/page/${page}/delete`);
 
-    const pageType = metadata?.data?.type;
     const viewData = documentData?.data ?? null;
     const title = viewData?.title || viewData?.document?.title || "";
     const attachments = viewData?.attachments ?? [];
@@ -82,20 +84,20 @@ export default function Page() {
         }
 
         workerRef.current = new Worker("/workers/editor.js", { type: "module" });
-        workerRef.current.onmessage = (e) => {
-            switch (e.data.type) {
+        workerRef.current.onmessage = (event) => {
+            switch (event.data.type) {
                 case "initiated":
                     setWorkerInitiated(true);
                     break;
                 case "editorData":
-                    setContent(JSON.parse(e.data.data));
+                    setContent(JSON.parse(event.data.data));
                     break;
                 default:
                     break;
             }
         };
-        workerRef.current.onerror = (e) => {
-            console.error(e);
+        workerRef.current.onerror = (event) => {
+            console.error(event);
         };
         workerRef.current.postMessage({ type: "init" });
         return () => {
@@ -104,14 +106,7 @@ export default function Page() {
     }, [pageType]);
 
     useEffect(() => {
-        getMetadata();
-    }, [getMetadata]);
-
-    useEffect(() => {
-        if (!pageType) return;
-        if (pageType === "document") {
-            if (!workerInitiated) return;
-            fetchDocument();
+        if (pageType === "document" && !workerInitiated) {
             return;
         }
         fetchDocument();
@@ -127,9 +122,10 @@ export default function Page() {
 
     useEffect(() => {
         if (deleteData) {
+            refreshSpacePages?.();
             navigate(`/space/${spaceId}`);
         }
-    }, [deleteData, navigate, spaceId]);
+    }, [deleteData, refreshSpacePages, navigate, spaceId]);
 
     const onEdit = () => {
         navigate(`/edit/${spaceId}/${page}`);
@@ -144,9 +140,9 @@ export default function Page() {
         deletePageRequest(null);
     };
 
-    const hasMainErrors = Boolean(metaErrors || documentErrors);
+    const hasMainErrors = Boolean(documentErrors);
     const isPageLoading = pageType === "document" ? (!workerInitiated || loadingDocument) : loadingDocument;
-    const showShell = Boolean(pageType && !loadingMetadata && !isPageLoading && !hasMainErrors && viewData && shellCapabilities);
+    const showShell = Boolean(!isPageLoading && !hasMainErrors && viewData && shellCapabilities);
     const readOnlyContent = useMemo(() => {
         if (!viewData?.document || !content) return null;
         return (
@@ -168,20 +164,10 @@ export default function Page() {
         );
     }, [commentPresentation, content, isSidePanelOpen, page, spaceId, title, viewData?.document]);
 
-    if (loadingMetadata || isPageLoading) {
+    if (isPageLoading) {
         return (
             <Flex align="center" justify="center" p="4">
                 <Spinner size="3" />
-            </Flex>
-        );
-    }
-
-    if (metaErrors) {
-        return (
-            <Flex align="center" justify="center" className="min-h-[40vh] px-6">
-                <Text size="3" className="text-neutral-700">
-                    Something went wrong while loading this page.
-                </Text>
             </Flex>
         );
     }
@@ -245,8 +231,8 @@ export default function Page() {
                 </ReadOnlyContentMain>
             ) : null}
 
-            {(deleteErrors) && !loadingDelete && <ToastComponent icon="AlertTriangle" type="warning" toggle={true} message="Unable to delete page" />}
-            {deleteData && !loadingDelete && <ToastComponent icon="Check" type="success" toggle={true} message="Page deleted successfully" />}
+            {deleteErrors && !loadingDelete ? <ToastComponent icon="AlertTriangle" type="warning" toggle={true} message="Unable to delete page" /> : null}
+            {deleteData && !loadingDelete ? <ToastComponent icon="Check" type="success" toggle={true} message="Page deleted successfully" /> : null}
 
             <Dialog.Root open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
                 <Dialog.Content size="2" maxWidth="450px">
@@ -261,12 +247,7 @@ export default function Page() {
                                     Cancel
                                 </Button>
                             </Dialog.Close>
-                            <Button
-                                onClick={confirmDelete}
-                                disabled={loadingDelete}
-                                loading={loadingDelete}
-                                color="red"
-                            >
+                            <Button onClick={confirmDelete} disabled={loadingDelete} loading={loadingDelete} color="red">
                                 Delete
                             </Button>
                         </Flex>
@@ -275,4 +256,50 @@ export default function Page() {
             </Dialog.Root>
         </>
     );
+}
+
+export default function Page({ params }: { params: Promise<{ page: string; spaceId: string }> }) {
+    const { page, spaceId } = use(params);
+    const [{ isLoading, data: metadata, errors }, getMetadata] =
+        useGet<PageMetadataResponse>(`editor/space/${spaceId}/page/${page}/metadata`);
+
+    useEffect(() => {
+        getMetadata();
+    }, [getMetadata]);
+
+    const pageType = metadata?.data?.type;
+
+    if (isLoading) {
+        return (
+            <Flex align="center" justify="center" p="4">
+                <Spinner size="3" />
+            </Flex>
+        );
+    }
+
+    if (errors) {
+        return (
+            <Flex align="center" justify="center" className="min-h-[40vh] px-6">
+                <Text size="3" className="text-neutral-700">
+                    Something went wrong while loading this page.
+                </Text>
+            </Flex>
+        );
+    }
+
+    if (!pageType) {
+        return (
+            <Flex align="center" justify="center" className="min-h-[40vh] px-6">
+                <Text size="3" className="text-neutral-700">
+                    This page type is not available.
+                </Text>
+            </Flex>
+        );
+    }
+
+    if (pageType === "project") {
+        return <ProjectPageView spaceId={spaceId} pageId={page} />;
+    }
+
+    return <ContentPageView spaceId={spaceId} page={page} pageType={pageType} />;
 }

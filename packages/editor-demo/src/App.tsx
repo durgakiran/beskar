@@ -15,11 +15,15 @@ import type { TiptapEditor, ImageAPIHandler, CommentThread } from '@beskar/edito
 import { commentDecorationKey } from '@beskar/editor';
 import { mockCommentHandler, resetMockCommentStorage } from './mockCommentHandler';
 import { mockAttachmentHandler } from './mockAttachmentHandler';
+import { mockInternalResourceHandler } from './mockInternalResourceHandler';
+import { mockChildPagesHandler } from './mockChildPagesHandler';
 // Import Radix UI styles first, then editor styles so editor can use Radix variables
 import '@beskar/editor/styles.css';
 import '@beskar/editor/index.css';
 import './App.css';
 import { Button } from '@radix-ui/themes';
+
+const demoOrigin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:5173';
 
 const initialContent = {
   type: 'doc',
@@ -52,7 +56,9 @@ const initialContent = {
         { type: 'text', marks: [{ type: 'italic' }], text: 'italic' },
         { type: 'text', text: ', and ' },
         { type: 'text', marks: [{ type: 'underline' }], text: 'underlined' },
-        { type: 'text', text: ' text.' },
+        { type: 'text', text: ' text, plus an inline due date ' },
+        { type: 'dateInline', attrs: { value: '2026-04-25' } },
+        { type: 'text', text: '.' },
       ],
     },
 
@@ -163,6 +169,177 @@ const initialContent = {
     {
       type: 'mathBlock',
       attrs: { latex: 'E = mc^2', displayMode: true, blockId: 'init-math' },
+    },
+
+    // ── Internal document inline link ────────────────────────────────────────
+    {
+      type: 'paragraph',
+      attrs: { blockId: 'init-internal-doc-inline-p' },
+      content: [
+        { type: 'text', text: 'Internal document link chip: ' },
+        {
+          type: 'internalDocInline',
+          attrs: {
+            resourceId: 'doc-roadmap',
+            resourceTitle: 'Product Roadmap',
+            href: `${demoOrigin}/space/demo/view/doc-roadmap`,
+          },
+        },
+        { type: 'text', text: ' opens the document in a new tab.' },
+      ],
+    },
+    {
+      type: 'childPagesList',
+      attrs: {
+        title: 'Child pages',
+        blockId: 'init-child-pages',
+      },
+    },
+
+    // ── External embeds ──────────────────────────────────────────────────────
+    {
+      type: 'embedBlock',
+      attrs: {
+        src: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+        embedUrl: 'https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ',
+        provider: 'youtube',
+        align: 'center',
+        height: 320,
+        error: '',
+        blockId: 'init-embed',
+      },
+    },
+    {
+      type: 'embedBlock',
+      attrs: {
+        src: 'https://vimeo.com/76979871',
+        embedUrl: 'https://player.vimeo.com/video/76979871',
+        provider: 'vimeo',
+        align: 'center',
+        height: 320,
+        error: '',
+        blockId: 'init-embed-vimeo',
+      },
+    },
+    {
+      type: 'embedBlock',
+      attrs: {
+        src: 'https://www.loom.com/share/5a7bfe4c4e4f4f90ad739f7f8a6b6a5f',
+        embedUrl: 'https://www.loom.com/embed/5a7bfe4c4e4f4f90ad739f7f8a6b6a5f',
+        provider: 'loom',
+        align: 'center',
+        height: 320,
+        error: '',
+        blockId: 'init-embed-loom',
+      },
+    },
+    {
+      type: 'embedBlock',
+      attrs: {
+        src: 'https://www.figma.com/file/abc123/Beskar-Demo',
+        embedUrl: 'https://www.figma.com/embed?embed_host=beskar&url=https%3A%2F%2Fwww.figma.com%2Ffile%2Fabc123%2FBeskar-Demo',
+        provider: 'figma',
+        align: 'center',
+        height: 420,
+        error: 'Demo placeholder: Figma requires a real public file/design URL with access permissions.',
+        blockId: 'init-embed-figma',
+      },
+    },
+    {
+      type: 'embedBlock',
+      attrs: {
+        src: 'https://miro.com/app/board/uXjVMdemo123=/',
+        embedUrl: 'https://miro.com/app/live-embed/uXjVMdemo123=/',
+        provider: 'miro',
+        align: 'center',
+        height: 420,
+        error: 'Demo placeholder: Miro requires a real public board embed URL with sharing enabled.',
+        blockId: 'init-embed-miro',
+      },
+    },
+    {
+      type: 'embedBlock',
+      attrs: {
+        src: 'https://embed.diagrams.net/?embed=1&ui=atlas',
+        embedUrl: 'https://embed.diagrams.net/?embed=1&ui=atlas',
+        provider: 'drawio',
+        align: 'center',
+        height: 420,
+        error: 'Demo placeholder: diagrams.net embeds require a real diagram source or storage-backed document.',
+        blockId: 'init-embed-drawio',
+      },
+    },
+    {
+      type: 'embedBlock',
+      attrs: {
+        src: 'https://excalidraw.com/#json=demo-id,demo-key',
+        embedUrl: 'https://excalidraw.com/#json=demo-id,demo-key',
+        provider: 'excalidraw',
+        align: 'center',
+        height: 420,
+        error: 'Demo placeholder: Excalidraw embeds require a real shared scene URL.',
+        blockId: 'init-embed-excalidraw',
+      },
+    },
+    {
+      type: 'embedBlock',
+      attrs: {
+        src: 'https://framer.com/projects/demo',
+        embedUrl: 'https://framer.com/projects/demo',
+        provider: 'framer',
+        align: 'center',
+        height: 420,
+        error: 'Demo placeholder: Framer project URLs are not iframe embeds; use a published public site URL.',
+        blockId: 'init-embed-framer',
+      },
+    },
+    {
+      type: 'embedBlock',
+      attrs: {
+        src: 'https://airtable.com/appDemo/tblDemo/viwDemo',
+        embedUrl: 'https://airtable.com/embed/appDemo/tblDemo/viwDemo',
+        provider: 'airtable',
+        align: 'center',
+        height: 420,
+        error: 'Demo placeholder: Airtable requires a real shared view/form embed URL.',
+        blockId: 'init-embed-airtable',
+      },
+    },
+    {
+      type: 'embedBlock',
+      attrs: {
+        src: 'https://form.typeform.com/to/demo123',
+        embedUrl: 'https://form.typeform.com/to/demo123',
+        provider: 'typeform',
+        align: 'center',
+        height: 420,
+        error: 'Demo placeholder: Typeform requires a real published form URL.',
+        blockId: 'init-embed-typeform',
+      },
+    },
+    {
+      type: 'embedBlock',
+      attrs: {
+        src: 'https://drive.google.com/file/d/1demoFileId/view',
+        embedUrl: 'https://drive.google.com/file/d/1demoFileId/preview',
+        provider: 'gdrive',
+        align: 'center',
+        height: 420,
+        error: 'Demo placeholder: Google Drive requires a real file ID with public or viewer access.',
+        blockId: 'init-embed-gdrive',
+      },
+    },
+    {
+      type: 'embedBlock',
+      attrs: {
+        src: 'https://docs.google.com/spreadsheets/d/1demoSheetId/edit#gid=0',
+        embedUrl: 'https://docs.google.com/spreadsheets/d/1demoSheetId/preview',
+        provider: 'gsheets',
+        align: 'center',
+        height: 420,
+        error: 'Demo placeholder: Google Sheets requires a real sheet ID with public or viewer access.',
+        blockId: 'init-embed-gsheets',
+      },
     },
 
     // ── Details (collapsible) ─────────────────────────────────────────────────
@@ -362,7 +539,7 @@ function App() {
         const CONTEXT_CHARS = 32;
         const { doc } = state;
 
-        pluginState.threads.forEach((thread) => {
+        pluginState.threads.forEach((thread: CommentThread) => {
           if (thread.orphaned || thread.resolvedAt) return;
 
           // Find the current decoration for this thread
@@ -457,7 +634,9 @@ function App() {
     };
     checkOrphans();
     editor.on('transaction', checkOrphans);
-    return () => editor.off('transaction', checkOrphans);
+    return () => {
+      editor.off('transaction', checkOrphans);
+    };
   }, [editor, threads]);
 
   const derivedThreads = useMemo(() => {
@@ -621,6 +800,8 @@ function App() {
           maxAttachmentBytes={maxAttachmentBytes}
           onAttachmentRejected={onAttachmentRejected}
           allowedMimeAccept="image/*,audio/*,video/*,text/*,application/pdf,application/json,application/xml,application/zip,application/x-zip-compressed,application/x-7z-compressed,application/vnd.rar,application/gzip,application/x-tar,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation,.pdf,.json,.xml,.zip,.7z,.rar,.gz,.tar,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.csv,.txt,.md,.png,.jpg,.jpeg,.webp,.gif,.mp3,.wav,.mp4,.mov"
+          internalResourceHandler={mockInternalResourceHandler}
+          childPagesHandler={mockChildPagesHandler}
           commentHandler={mockCommentHandler}
         />
 

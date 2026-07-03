@@ -2,19 +2,21 @@
 import { cn } from "@/lib/utils";
 import { Link } from "react-router-dom";
 import { SidebarPageItemProps } from "./types";
-import { FiChevronRight, FiChevronDown, FiFileText, FiEdit3, FiPlus, FiCornerDownRight } from "react-icons/fi";
+import { FiChevronRight, FiChevronDown, FiFileText, FiEdit3, FiPlus, FiCornerDownRight, FiBriefcase, FiTrash2 } from "react-icons/fi";
 
 export function SidebarPageItem({
     id,
     title,
     href,
     type = "document",
+    canDelete = false,
     active,
     depth = 0,
     expanded,
     hasChildren,
     onToggle,
     onAddChild,
+    onDelete,
     onSelect,
     className,
 }: SidebarPageItemProps) {
@@ -64,6 +66,8 @@ export function SidebarPageItem({
                 <div className="flex h-[13px] w-[13px] items-center justify-center">
                     {type === "whiteboard" ? (
                         <FiEdit3 className={cn("h-[13px] w-[13px]", active ? "text-primary-700" : "text-neutral-800")} />
+                    ) : type === "project" ? (
+                        <FiBriefcase className={cn("h-[13px] w-[13px]", active ? "text-primary-700" : "text-neutral-800")} />
                     ) : (
                         <FiFileText className={cn("h-[13px] w-[13px]", active ? "text-primary-700" : "text-neutral-800")} />
                     )}
@@ -86,25 +90,43 @@ export function SidebarPageItem({
                 </div>
             </div>
 
-            {/* Add Button Section */}
-            {!isChild && (
-                <button
-                    type="button"
-                    onClick={(event) => {
-                        event.preventDefault();
-                        event.stopPropagation();
-                        onAddChild?.(id);
-                    }}
-                    className={cn(
-                        "flex h-[18px] w-[18px] items-center justify-center rounded-sm transition-colors",
-                        "text-neutral-700",
-                        "group-hover:text-neutral-800 hover:!bg-primary-100 hover:!text-primary-700",
-                        active ? "text-primary-600" : ""
-                    )}
-                >
-                    <FiPlus className="h-3.5 w-3.5" />
-                </button>
-            )}
+            <div className="flex items-center gap-1 opacity-100 md:opacity-0 md:transition-opacity md:group-hover:opacity-100 md:group-focus-within:opacity-100">
+                {!isChild ? (
+                    <button
+                        type="button"
+                        onClick={(event) => {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            onAddChild?.(id);
+                        }}
+                        className={cn(
+                            "flex h-[18px] w-[18px] items-center justify-center rounded-sm transition-colors",
+                            "text-neutral-700",
+                            "group-hover:text-neutral-800 hover:!bg-primary-100 hover:!text-primary-700",
+                            active ? "text-primary-600" : "",
+                        )}
+                        aria-label={`Add sub-page to ${title}`}
+                        title="Add sub-page"
+                    >
+                        <FiPlus className="h-3.5 w-3.5" />
+                    </button>
+                ) : null}
+                {canDelete ? (
+                    <button
+                        type="button"
+                        onClick={(event) => {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            onDelete?.(id);
+                        }}
+                        className="flex h-[18px] w-[18px] items-center justify-center rounded-sm text-neutral-500 transition-colors hover:!bg-red-50 hover:!text-red-600"
+                        aria-label={`Delete ${type === "project" ? "project" : "page"} ${title}`}
+                        title={type === "project" ? "Delete project" : "Delete page"}
+                    >
+                        <FiTrash2 className="h-3.5 w-3.5" />
+                    </button>
+                ) : null}
+            </div>
         </div>
     );
 
