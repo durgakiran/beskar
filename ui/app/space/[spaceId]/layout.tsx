@@ -41,6 +41,9 @@ export default function Layout() {
     const [{ data, isLoading: pagesLoading }, fetchPages] = useGet<Response<IPageList[]>>(`space/${spaceId}/page/list`);
     const [{ data: spaceDetails }, fetchSpaceDetails] = useGet<Response<SpaceState>>(`space/${spaceId}/details`);
 
+    const match = pathname.match(/\/(?:view|edit)\/(\d+)/);
+    const activePageId = match ? match[1] : undefined;
+
     useEffect(() => {
         fetchPages();
         fetchSpaceDetails();
@@ -78,6 +81,38 @@ export default function Layout() {
             setPages(rootNodes);
         }
     }, [data, spaceId]);
+
+    useEffect(() => {
+        if (activePageId && data?.data) {
+            const ancestors = new Set<string>();
+            let currentId = parseInt(activePageId);
+            let maxDepth = 20;
+            while (currentId && maxDepth > 0) {
+                const node = data.data.find(p => p.pageId === currentId);
+                if (node && node.parentId > 0) {
+                    ancestors.add(node.parentId.toString());
+                    currentId = node.parentId;
+                    maxDepth--;
+                } else {
+                    break;
+                }
+            }
+
+            if (ancestors.size > 0) {
+                setExpandedIds(prev => {
+                    const newIds = new Set(prev);
+                    let changed = false;
+                    ancestors.forEach(id => {
+                        if (!newIds.has(id)) {
+                            newIds.add(id);
+                            changed = true;
+                        }
+                    });
+                    return changed ? Array.from(newIds) : prev;
+                });
+            }
+        }
+    }, [activePageId, data]);
 
     // Resize Logic
     useEffect(() => {
@@ -216,6 +251,7 @@ export default function Layout() {
                             <PageTree 
                                 nodes={pages}
                                 expandedIds={expandedIds}
+                                activeId={activePageId}
                                 onToggle={handleToggleNode}
                                 onAddChild={handleAddPage}
                                 onSelect={handlePageSelect}
