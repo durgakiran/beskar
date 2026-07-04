@@ -30,7 +30,7 @@ export function SidebarPageItem({
         >
             <div 
                 className="flex min-w-0 items-center gap-2" 
-                style={{ paddingLeft: isChild ? "20px" : "0px" }}
+                style={{ paddingLeft: `${depth * 20}px` }}
             >
                 {/* Chevron/Toggle Section */}
                 <div className="flex h-3 w-3 items-center justify-center">
@@ -87,24 +87,22 @@ export function SidebarPageItem({
             </div>
 
             {/* Add Button Section */}
-            {!isChild && (
-                <button
-                    type="button"
-                    onClick={(event) => {
-                        event.preventDefault();
-                        event.stopPropagation();
-                        onAddChild?.(id);
-                    }}
-                    className={cn(
-                        "flex h-[18px] w-[18px] items-center justify-center rounded-sm transition-colors",
-                        "text-neutral-700",
-                        "group-hover:text-neutral-800 hover:!bg-primary-100 hover:!text-primary-700",
-                        active ? "text-primary-600" : ""
-                    )}
-                >
-                    <FiPlus className="h-3.5 w-3.5" />
-                </button>
-            )}
+            <button
+                type="button"
+                onClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    onAddChild?.(id);
+                }}
+                className={cn(
+                    "flex h-[18px] w-[18px] items-center justify-center rounded-sm transition-colors",
+                    "text-neutral-700",
+                    "group-hover:text-neutral-800 hover:!bg-primary-100 hover:!text-primary-700",
+                    active ? "text-primary-600" : ""
+                )}
+            >
+                <FiPlus className="h-3.5 w-3.5" />
+            </button>
         </div>
     );
 
