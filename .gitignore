@@ -50,3 +50,10 @@ openssl-backup.key
 beskarpostgresdata
 ui/dist
 .npmrc
+desktop/ui/dist
+desktop/bin
+desktop.exe
+ui/scripts
+*.exe
+.task
+bindings

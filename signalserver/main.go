@@ -55,6 +55,45 @@ func handleRoot(w http.ResponseWriter, r *http.Request) {
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
+	CheckOrigin: func(r *http.Request) bool {
+		origin := r.Header.Get("Origin")
+		if origin == "" {
+			return true // Allow non-browser clients
+		}
+
+		origins := os.Getenv("CORS_ALLOWED_ORIGINS")
+		if origins == "" {
+			origins = "http://localhost:3000,http://localhost:8085,wails://wails,http://wails.localhost,http://wails.localhost:*"
+		}
+
+		for _, o := range strings.Split(origins, ",") {
+			o = strings.TrimSpace(o)
+			if o == "" {
+				continue
+			}
+			// Exact match
+			if o == origin {
+				return true
+			}
+			// Prefix wildcard (e.g., wails://*)
+			if strings.HasSuffix(o, "*") && strings.HasPrefix(origin, strings.TrimSuffix(o, "*")) {
+				return true
+			}
+			// Suffix wildcard (e.g., *.localhost)
+			if strings.HasPrefix(o, "*") && strings.HasSuffix(origin, strings.TrimPrefix(o, "*")) {
+				return true
+			}
+		}
+
+		// Fallback to default check (origin host == request host)
+		u, err := url.Parse(origin)
+		if err == nil && u.Host == r.Host {
+			return true
+		}
+
+		log.Printf("CheckOrigin rejected origin: %s", origin)
+		return false
+	},
 }
 
 func newHub() *Hub {
@@ -437,12 +476,33 @@ func validateSession(r *http.Request) bool {
 		req.AddCookie(cookie)
 	}
 
+	token := r.Header.Get("Authorization")
+	if token == "" {
+		queryToken := r.URL.Query().Get("token")
+		if queryToken != "" {
+			token = "Bearer " + queryToken
+		}
+	}
+	if token != "" {
+		req.Header.Set("Authorization", token)
+		log.Println("auth: Found token, sending to validation server")
+	} else {
+		log.Println("auth: No token found in headers or query params")
+	}
+
+	log.Printf("auth: Making request to %s", req.URL.String())
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		log.Println("auth: validation request failed:", err)
 		return false
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		log.Printf("auth: validation failed with status %d", resp.StatusCode)
+	} else {
+		log.Println("auth: validation succeeded!")
+	}
 
 	return resp.StatusCode == http.StatusOK
 }

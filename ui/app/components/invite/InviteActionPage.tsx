@@ -10,6 +10,7 @@ import { mapQuotaErrorMessage } from "../../core/queries/quota";
 import { formatInviteRole, formatInviteTime, normalizeInviteStatus } from "./formatters";
 import type { InviteDecision, InviteDetails } from "./types";
 import { useInviteDecision } from "./useInviteDecision";
+import { useDesktopLogout } from "../../core/auth/useKeycloak";
 
 function BrandMark() {
     return (
@@ -251,6 +252,15 @@ export default function InviteActionPage() {
     const { data: decisionData, errors: decisionErrors, isLoading: isDeciding, response: decisionResponse, pendingDecision, submitDecision } = useInviteDecision();
     const [selectedDecision, setSelectedDecision] = useState<InviteDecision | null>(initialDecision);
     const [localError, setLocalError] = useState<string | null>(null);
+    const desktopLogout = useDesktopLogout();
+
+    const handleLogout = (e: React.MouseEvent) => {
+        // @ts-ignore
+        if (window.wails) {
+            e.preventDefault();
+            desktopLogout();
+        }
+    };
 
     useEffect(() => {
         setSelectedDecision(initialDecision);
@@ -347,7 +357,7 @@ export default function InviteActionPage() {
                     copy="Sign out, then sign in with the email address that received this invitation."
                     actions={
                         <>
-                            <ActionButton tone="primary" href="/auth/logout">
+                            <ActionButton tone="primary" href="/auth/logout" onClick={handleLogout}>
                                 Switch account
                             </ActionButton>
                             <ActionButton tone="secondary" href="/user/notifications">

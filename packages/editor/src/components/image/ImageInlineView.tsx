@@ -10,6 +10,7 @@ import { useFloating, flip, shift, offset, autoUpdate } from '@floating-ui/react
 import { FiTrash2, FiCopy } from 'react-icons/fi';
 import * as Toolbar from '@radix-ui/react-toolbar';
 import * as Separator from '@radix-ui/react-separator';
+import { getImagePasteStorage } from '../../extensions/image-paste-drop';
 
 const DEFAULT_INLINE_HEIGHT = 24;
 const MIN_HEIGHT = 16;
@@ -23,7 +24,13 @@ export function ImageInlineView({
   getPos,
   deleteNode,
 }: NodeViewProps) {
-  const { src, alt, width, height, uploadStatus } = node.attrs;
+  let { src, alt, width, height, uploadStatus } = node.attrs;
+  if (typeof src === 'string') {
+    const imageHandler = getImagePasteStorage(editor)?.imageHandler;
+    if (imageHandler?.getImageUrl) {
+      src = imageHandler.getImageUrl(src);
+    }
+  }
   const imgRef = useRef<HTMLImageElement>(null);
   const [isResizing, setIsResizing] = useState(false);
 
