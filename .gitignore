@@ -50,3 +50,4 @@ openssl-backup.key
 beskarpostgresdata
 ui/dist
 .npmrc
+output
