@@ -404,7 +404,7 @@ export default function ReadOnlyContentMain({
                 onShare={copyPageLink}
             />
 
-            <style jsx global>{`
+            <style>{`
                 .readonly-content-page .beskar-editor {
                     background: transparent;
                 }

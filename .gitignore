@@ -51,3 +51,10 @@ beskarpostgresdata
 ui/dist
 .npmrc
 output
+desktop/ui/dist
+desktop/bin
+desktop.exe
+ui/scripts
+*.exe
+.task
+bindings

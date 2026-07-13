@@ -29,6 +29,9 @@ type tokenType struct {
 }
 
 type Claims struct {
+	Subject       string      `json:"sub"`
+	Name          string      `json:"name"`
+	Username      string      `json:"preferred_username"`
 	Email         string      `json:"email"`
 	EmailVerified bool        `json:"email_verified"`
 	Claims        DefaultRole `json:"https://hasura.io/jwt/claims"`
@@ -82,6 +85,7 @@ func (t *tokenType) authenticate() error {
 func AuthMiddleWare(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		token := r.Header.Get("Authorization")
+		Logger.Info(fmt.Sprintf("======> AuthMiddleWare HIT! Token length: %d", len(token)))
 		if len(token) == 0 {
 			render.Status(r, http.StatusUnauthorized)
 			render.Render(w, r, NewFailedResponse(401, FAILURE, "Authorization token not provided", ""))
@@ -90,10 +94,12 @@ func AuthMiddleWare(next http.Handler) http.Handler {
 		Itoken := tokenType{value: strings.Split(token, " ")[1]}
 		err := Itoken.authenticate()
 		if err != nil {
+			Logger.Error(fmt.Sprintf("======> AuthMiddleWare auth failed: %v", err))
 			render.Status(r, http.StatusUnauthorized)
 			render.Render(w, r, NewFailedResponse(401, FAILURE, err.Error(), ""))
 			return
 		}
+		Logger.Info("======> AuthMiddleWare auth SUCCESS!")
 		ctx := context.WithValue(r.Context(), "claims", Itoken.Claims)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
@@ -215,7 +221,7 @@ func ZitadelMiddleware() *authentication.Interceptor[*openid.UserInfoContext[*zo
 
 func Authenticated(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if authentication.IsAuthenticated(r.Context()) {
+		if _, err := GetUserInfo(r.Context()); err == nil {
 			next.ServeHTTP(w, r)
 		} else {
 			render.Status(r, http.StatusUnauthorized)
