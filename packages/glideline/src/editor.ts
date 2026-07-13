@@ -44,6 +44,7 @@ export interface GlidePlugin {
   id: string;
   shapes?:   (abstract new() => ShapeUtil<any>)[];
   bindings?: (abstract new() => BindingUtil<any>)[];
+  tools?:    (typeof StateNode)[];
   onInstall?(editor: GlideEditor): void;
 }
 
@@ -972,8 +973,12 @@ export function createEditor(opts: CreateEditorOptions = {}): GlideEditor {
   }
 
   // 10. Register tools — default to SelectTool + BoxTool; callers can override
-  const toolClasses = tools ?? [SelectTool, BoxTool];
+  const pluginTools = plugins.flatMap(plugin => plugin.tools ?? []);
+  const toolClasses = [...(tools ?? [SelectTool, BoxTool]), ...pluginTools];
+  const seenToolIds = new Set<string>();
   for (const ToolClass of toolClasses) {
+    if (seenToolIds.has(ToolClass.id)) continue;
+    seenToolIds.add(ToolClass.id);
     editor._registerTool(ToolClass);
   }
 

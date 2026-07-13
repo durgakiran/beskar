@@ -6,3 +6,4 @@ export type {
   GlideboardCollaborationProvider,
 } from './types';
 export { wbEditor } from './editor';
+export { createSvgPathShape } from '@durgakiran/glideline';

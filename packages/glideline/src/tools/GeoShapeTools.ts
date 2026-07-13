@@ -153,3 +153,38 @@ export class StarTool extends BaseGeoShapeTool {
   static override readonly id = 'star';
   static override readonly shapeType = 'star';
 }
+
+export class RoundedRectTool extends BaseGeoShapeTool {
+  static override readonly id = 'rounded-rect';
+  static override readonly shapeType = 'rounded-rect';
+}
+
+export class ParallelogramTool extends BaseGeoShapeTool {
+  static override readonly id = 'parallelogram';
+  static override readonly shapeType = 'parallelogram';
+}
+
+export class ChevronTool extends BaseGeoShapeTool {
+  static override readonly id = 'chevron';
+  static override readonly shapeType = 'chevron';
+}
+
+export class DocumentTool extends BaseGeoShapeTool {
+  static override readonly id = 'document';
+  static override readonly shapeType = 'document';
+}
+
+export class CylinderTool extends BaseGeoShapeTool {
+  static override readonly id = 'cylinder';
+  static override readonly shapeType = 'cylinder';
+}
+
+export class NoteTool extends BaseGeoShapeTool {
+  static override readonly id = 'note';
+  static override readonly shapeType = 'note';
+}
+
+export class CalloutTool extends BaseGeoShapeTool {
+  static override readonly id = 'callout';
+  static override readonly shapeType = 'callout';
+}

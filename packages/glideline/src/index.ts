@@ -127,16 +127,28 @@ export { TextTool } from './tools/TextTool';
 export { StickyNoteTool } from './tools/StickyNoteTool';
 export { DrawTool } from './tools/DrawTool';
 export { EraserTool } from './tools/EraserTool';
-export { TriangleTool, DiamondTool, HexagonTool, StarTool } from './tools/GeoShapeTools';
+export {
+  TriangleTool, DiamondTool, HexagonTool, StarTool,
+  RoundedRectTool, ParallelogramTool, ChevronTool,
+  DocumentTool, CylinderTool, NoteTool, CalloutTool,
+} from './tools/GeoShapeTools';
 
 // Phase C — Additional geo shapes
 export {
   TriangleUtil, DiamondUtil, HexagonUtil, StarUtil, GeoShapePlugin,
+  RoundedRectUtil, ParallelogramUtil, ChevronUtil,
+  DocumentUtil, CylinderUtil, NoteUtil, CalloutUtil,
+  P1ShapesPlugin,
 } from './shapes/GeoShapeUtil';
 export type {
   GeoShapeProps, TriangleShape, DiamondShape, HexagonShape, StarShape,
+  RoundedRectShape, ParallelogramShape, ChevronShape,
+  DocumentShape, CylinderShape, NoteShape, CalloutShape,
 } from './shapes/GeoShapeUtil';
 
 // Phase B — SelectTool extensions (resize + rotation types)
 export type { ResizeHandle, ResizeInfo, LabelProps } from './shapes/ShapeUtil';
 export type { RotationInfo } from './tools/SelectTool';
+
+export { createSvgPathShape } from './shapes/createSvgPathShape';
+export type { CreateSvgPathShapeDef } from './shapes/createSvgPathShape';

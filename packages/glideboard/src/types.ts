@@ -1,4 +1,4 @@
-import type { GlideDocument } from '@durgakiran/glideline';
+import type { GlideDocument, GlidePlugin } from '@durgakiran/glideline';
 
 export interface GlideboardUser {
   id: string;
@@ -56,4 +56,6 @@ export interface GlideboardProps {
   onDocumentChange?: (document: GlideDocument) => void;
   documentChangeDebounceMs?: number;
   debugApiKey?: string;
+  /** Additional shape plugins registered before the first board session starts. */
+  customShapes?: GlidePlugin[];
 }

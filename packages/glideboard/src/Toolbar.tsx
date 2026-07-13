@@ -16,7 +16,16 @@ import {
   FiRotateCcw,
   FiRotateCw,
 } from 'react-icons/fi';
-import { LuEraser, LuDiamond } from 'react-icons/lu';
+import {
+  LuEraser,
+  LuDiamond,
+  LuRectangleHorizontal,
+  LuDatabase,
+  LuMessageSquare,
+  LuStickyNote,
+  LuChevronsRight,
+  LuFileOutput,
+} from 'react-icons/lu';
 import { arrowPresetSignal, setConnectorPreset, wbEditor, type ConnectorPreset } from './editor';
 import { wbTheme } from './theme';
 import { useSignalValue } from './useSignalValue';
@@ -35,6 +44,13 @@ const SHAPE_TOOLS: ToolDef[] = [
   { id: 'diamond', label: 'Diamond', icon: LuDiamond },
   { id: 'hexagon', label: 'Hexagon', icon: FiHexagon },
   { id: 'star', label: 'Star', icon: FiStar },
+  { id: 'rounded-rect', label: 'Rounded Rect', icon: LuRectangleHorizontal },
+  { id: 'parallelogram', label: 'Parallelogram', icon: FiSquare },
+  { id: 'chevron', label: 'Chevron', icon: LuChevronsRight },
+  { id: 'document', label: 'Document', icon: LuFileOutput },
+  { id: 'cylinder', label: 'Cylinder', icon: LuDatabase },
+  { id: 'note', label: 'Note', icon: LuStickyNote },
+  { id: 'callout', label: 'Callout', icon: LuMessageSquare },
 ];
 
 const SHAPE_TOOL_IDS = new Set(SHAPE_TOOLS.map(tool => tool.id));
@@ -136,7 +152,7 @@ function ShapePickerButton({
             top: -6,
             zIndex: 120,
             display: 'grid',
-            gridTemplateColumns: 'repeat(2, 48px)',
+            gridTemplateColumns: 'repeat(3, 48px)',
             gap: 8,
             padding: 10,
             background: wbTheme.surface,

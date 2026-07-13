@@ -5,6 +5,7 @@ import {
   initializeGlideboardSession,
   subscribeToDocumentChanges,
   teardownGlideboardSession,
+  registerCustomShapes,
 } from './editor';
 import type { GlideboardProps } from './types';
 
@@ -15,7 +16,14 @@ export function Glideboard({
   onDocumentChange,
   documentChangeDebounceMs = 500,
   debugApiKey,
+  customShapes,
 }: GlideboardProps) {
+  const customShapesRegisteredRef = React.useRef(false);
+  if (!customShapesRegisteredRef.current && customShapes && customShapes.length > 0) {
+    customShapesRegisteredRef.current = true;
+    registerCustomShapes(customShapes);
+  }
+
   React.useEffect(() => {
     initializeGlideboardSession({
       initialDocument,

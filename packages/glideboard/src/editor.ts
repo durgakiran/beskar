@@ -8,6 +8,7 @@ import {
   EraserTool,
   FreehandUtil,
   GeoShapePlugin,
+  P1ShapesPlugin,
   HandTool,
   SelectTool,
   StickyNoteTool,
@@ -17,6 +18,13 @@ import {
   DiamondTool,
   HexagonTool,
   StarTool,
+  RoundedRectTool,
+  ParallelogramTool,
+  ChevronTool,
+  DocumentTool,
+  CylinderTool,
+  NoteTool,
+  CalloutTool,
   ArrowTool,
   createCanvasToolServer,
   createEditor,
@@ -44,9 +52,9 @@ const CoreShapesPlugin = {
   ],
 };
 
-export function createGlideboardEditorInstance() {
+export function createGlideboardEditorInstance(extraPlugins: import('@durgakiran/glideline').GlidePlugin[] = []) {
   return createEditor({
-    plugins: [CoreShapesPlugin, GeoShapePlugin, ArrowPlugin],
+    plugins: [CoreShapesPlugin, GeoShapePlugin, ArrowPlugin, P1ShapesPlugin, ...extraPlugins],
     tools: [
       SelectTool,
       BoxTool,
@@ -61,13 +69,26 @@ export function createGlideboardEditorInstance() {
       StickyNoteTool,
       DrawTool,
       EraserTool,
+      RoundedRectTool,
+      ParallelogramTool,
+      ChevronTool,
+      DocumentTool,
+      CylinderTool,
+      NoteTool,
+      CalloutTool,
     ],
   });
 }
 
-export const wbEditor = createGlideboardEditorInstance();
+export let wbEditor = createGlideboardEditorInstance();
 
-const wbToolServer = createCanvasToolServer(wbEditor);
+let wbToolServer = createCanvasToolServer(wbEditor);
+
+/** Recreate the singleton before the board session starts so the schema remains immutable. */
+export function registerCustomShapes(plugins: import('@durgakiran/glideline').GlidePlugin[]) {
+  wbEditor = createGlideboardEditorInstance(plugins);
+  wbToolServer = createCanvasToolServer(wbEditor);
+}
 export const readOnlySignal = signal(false);
 export const awarenessSignal = signal<any | null>(null);
 
