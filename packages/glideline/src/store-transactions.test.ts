@@ -226,7 +226,9 @@ describe('stable signals and derived indices', () => {
     store.put([shape('revive', 1)]);
     const originalSignal = store.getSignal('revive')!;
     const seen: Array<number | null> = [];
-    const stop = effect(() => seen.push(originalSignal.value ? originalSignal.value.x as number : null));
+    const stop = effect(() => {
+      seen.push(originalSignal.value ? originalSignal.value.x as number : null);
+    });
     store.remove(['revive']);
     store.transact({ origin: 'user' }, tx => tx.insert(shape('revive', 2)));
     expect(store.getSignal('revive')).toBe(originalSignal);

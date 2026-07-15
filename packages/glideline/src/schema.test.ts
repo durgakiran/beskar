@@ -19,7 +19,6 @@ interface BoxProps { w: number; h: number; }
 const BoxUtil = {
   type: 'box' as const,
   props: { w: T.number, h: T.number } as Record<string, { validate(v: unknown): unknown }>,
-  migrations: undefined,
 };
 
 // ─────────────────────────────────────────────────────────────

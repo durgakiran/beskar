@@ -69,7 +69,7 @@ class Idle extends StateNode {
       // Arrow handles
       if (['start', 'end', 'bend'].includes(e.handleId)) {
         if (sel.length === 1) {
-          const id = sel[0];
+          const id = sel[0]!;
           const shape = this.editor.getShape(id);
           if (shape && shape.type === 'arrow') {
             const bindings = this.editor.getBindingsFromShape(id) || [];
@@ -508,20 +508,9 @@ class DraggingHandle extends StateNode {
         if (term === 'start') {
           // Moving the start terminal: shape.x/y moves, start.point stays {0,0}
           // end.point adjusts to keep end world position stable
-          const initArrowX = this._initialProps.start.point.x + (this.editor.getShape(this._arrowId) as any)?.x ?? 0;
           // Use _origin as initial world arrow.x
           const newArrowX = this._origin.x + dx;
           const newArrowY = this._origin.y + dy;
-          const initEndWorldX = (this.editor.getShape(this._arrowId) as ArrowShape)?.x + this._initialProps.end.point.x ?? 0;
-          const initEndWorldY = (this.editor.getShape(this._arrowId) as ArrowShape)?.y + this._initialProps.end.point.y ?? 0;
-
-          // World end stays the same, new local end = world_end - new_start
-          const currentArrow = this.editor.getShape(this._arrowId) as ArrowShape;
-          const worldEndX = currentArrow.x + currentArrow.props.end.point.x;
-          const worldEndY = currentArrow.y + currentArrow.props.end.point.y;
-
-          const newEndLocalX = worldEndX - (this._initialProps.start.point.x + this._origin.x + dx - this._origin.x);
-          const newEndLocalY = worldEndY - (this._initialProps.start.point.y + this._origin.y + dy - this._origin.y);
 
           // Simpler: new start world = cursor; new end local = old_world_end - cursor_world_start
           const nextStartWorldX = e.point.x;
@@ -540,7 +529,7 @@ class DraggingHandle extends StateNode {
           let normalizedAnchor = { x: 0.5, y: 0.5 };
 
           if (hits.length > 0) {
-            const targetShape = hits[hits.length - 1];
+            const targetShape = hits[hits.length - 1]!;
             const preview = buildBindingPreview(this.editor, targetShape as any, e.point, 'start');
             const snapped = { normalizedAnchor: preview.normalizedAnchor, point: preview.point };
             finalStartX = snapped.point.x;
@@ -590,7 +579,7 @@ class DraggingHandle extends StateNode {
           let normalizedAnchor = { x: 0.5, y: 0.5 };
 
           if (hits.length > 0) {
-            const targetShape = hits[hits.length - 1];
+            const targetShape = hits[hits.length - 1]!;
             const preview = buildBindingPreview(this.editor, targetShape as any, e.point, 'end');
             const snapped = { normalizedAnchor: preview.normalizedAnchor, point: preview.point };
             finalEndLocalX = snapped.point.x - arrowX;
@@ -650,7 +639,7 @@ class DraggingHandle extends StateNode {
             .filter(s => s.type !== 'arrow' && s.id !== otherBoundId && s.id !== this._arrowId);
 
           if (hits.length > 0) {
-            const targetShape = hits[hits.length - 1];
+            const targetShape = hits[hits.length - 1]!;
             const previewCandidate = matchingPreview(activePreview, term, targetShape.id as ShapeId);
             const snapped = previewCandidate
               ? { normalizedAnchor: previewCandidate.normalizedAnchor, point: previewCandidate.point }

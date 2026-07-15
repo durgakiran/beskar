@@ -76,9 +76,9 @@ describe('T4.1-01: createBinding indexes correctly', () => {
     const toBox   = ed.getBindingsToShape(sid('boxA'));
 
     expect(fromArr).toHaveLength(1);
-    expect(fromArr[0].id).toBe(bid('bind1'));
+    expect(fromArr[0]!.id).toBe(bid('bind1'));
     expect(toBox).toHaveLength(1);
-    expect(toBox[0].id).toBe(bid('bind1'));
+    expect(toBox[0]!.id).toBe(bid('bind1'));
   });
 });
 
@@ -101,7 +101,7 @@ describe('T4.1-02: onAfterChangeToShape fires on updateShape', () => {
     ed.updateShape(sid('boxB'), { x: 100, y: 100 });
 
     expect(spy).toHaveBeenCalledTimes(1);
-    const binding = spy.mock.calls[0][0];
+    const binding = spy.mock.calls[0]![0] as AnyRecord;
     expect(binding.id).toBe(bid('bind2'));
   });
 });
@@ -120,8 +120,8 @@ describe('T4.1-03: onBeforeDeleteToShape fires before delete', () => {
     let hookCalledWithBinding: AnyRecord | null = null;
     let boxStillExistsOnHook = false;
 
-    vi.spyOn(bindingUtil, 'onBeforeDeleteToShape').mockImplementation((b: AnyRecord) => {
-      hookCalledWithBinding = b;
+    vi.spyOn(bindingUtil, 'onBeforeDeleteToShape').mockImplementation((b: unknown) => {
+      hookCalledWithBinding = b as AnyRecord;
       boxStillExistsOnHook = !!ed.store.get(sid('boxC'));
     });
 

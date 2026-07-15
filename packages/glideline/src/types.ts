@@ -66,7 +66,7 @@ export interface BaseRecord {
 }
 
 /** Every shape record in the store. `props` is typed per-shape via ShapeUtil<S>. */
-export interface GlideShape<Props extends Record<string, unknown> = Record<string, unknown>>
+export interface GlideShape<Props extends object = Record<string, unknown>>
   extends BaseRecord {
   readonly id: ShapeId;
   x: number;
@@ -80,7 +80,7 @@ export interface GlideShape<Props extends Record<string, unknown> = Record<strin
 }
 
 /** Every binding record in the store (e.g. arrow → box). */
-export interface GlideBinding<Props extends Record<string, unknown> = Record<string, unknown>>
+export interface GlideBinding<Props extends object = Record<string, unknown>>
   extends BaseRecord {
   readonly id: BindingId;
   readonly fromId: ShapeId;
@@ -122,7 +122,7 @@ export interface Validator<T> {
 }
 
 /** Maps every key in Props to a matching Validator. */
-export type GlideProps<Props extends Record<string, unknown>> = {
+export type GlideProps<Props extends object> = {
   [K in keyof Props]: Validator<Props[K]>;
 };
 

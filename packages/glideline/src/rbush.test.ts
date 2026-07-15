@@ -18,7 +18,7 @@ describe('Story 2.4: Spatial Index Integration (RBush)', () => {
 
     const shapes = editor.getShapesAtPoint({ x: 150, y: 150 });
     expect(shapes.length).toBe(1);
-    expect(shapes[0].id).toBe('b1');
+    expect(shapes[0]!.id).toBe('b1');
   });
 
   it('T2.4-02: Point outside returns empty', () => {

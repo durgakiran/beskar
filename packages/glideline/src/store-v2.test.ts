@@ -170,8 +170,8 @@ describe('graph-aware import', () => {
       binding('connector', 'source', 'target'),
     ]);
 
-    const importedSource = store.get(report.idMap.source)!;
-    const importedBinding = store.get(report.idMap.connector)!;
+    const importedSource = store.get(report.idMap.source!)!;
+    const importedBinding = store.get(report.idMap.connector!)!;
     expect(((importedSource['props'] as AnyRecord)['start'] as AnyRecord)['boundShapeId'])
       .toBe(report.idMap.target);
     expect(importedBinding['fromId']).toBe(report.idMap.source);

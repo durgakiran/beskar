@@ -164,7 +164,7 @@ export type {
 } from './shapes/GeoShapeUtil';
 
 // Phase B — SelectTool extensions (resize + rotation types)
-export type { ResizeHandle, ResizeInfo, LabelProps } from './shapes/ShapeUtil';
+export type { ResizeHandle, ResizeInfo } from './shapes/ShapeUtil';
 export type { RotationInfo } from './tools/SelectTool';
 
 export { createSvgPathShape } from './shapes/createSvgPathShape';

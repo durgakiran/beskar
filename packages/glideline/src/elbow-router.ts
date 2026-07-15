@@ -32,6 +32,7 @@ function edgePoint(bounds: Box2d, edge: EdgeName): Vec2 {
 function pointsToPath(pts: Vec2[]): string {
   if (pts.length === 0) return '';
   const [first, ...rest] = pts;
+  if (!first) return '';
   const parts = [`M ${first.x} ${first.y}`];
   for (const p of rest) {
     parts.push(`L ${p.x} ${p.y}`);
@@ -178,7 +179,11 @@ export function parseElbowPoints(path: string): Vec2[] {
   const re = /[ML]\s+([\d.\-eE+]+)\s+([\d.\-eE+]+)/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(path)) !== null) {
-    pts.push({ x: parseFloat(m[1]), y: parseFloat(m[2]) });
+    const x = m[1];
+    const y = m[2];
+    if (x !== undefined && y !== undefined) {
+      pts.push({ x: parseFloat(x), y: parseFloat(y) });
+    }
   }
   return pts;
 }
@@ -191,13 +196,13 @@ export function countElbowSegments(path: string): number {
 /** Get the handle point for an orthogonal (elbow) line at the center of its middle segment. */
 export function getOrthoHandlePoint(pts: Vec2[]): Vec2 {
   if (pts.length === 0) return { x: 0, y: 0 };
-  if (pts.length === 1) return pts[0];
+  if (pts.length === 1) return pts[0]!;
   const N = pts.length;
   if (N % 2 === 0) {
-    const pA = pts[N / 2 - 1];
-    const pB = pts[N / 2];
+    const pA = pts[N / 2 - 1]!;
+    const pB = pts[N / 2]!;
     return { x: (pA.x + pB.x) / 2, y: (pA.y + pB.y) / 2 };
   } else {
-    return pts[Math.floor(N / 2)];
+    return pts[Math.floor(N / 2)]!;
   }
 }

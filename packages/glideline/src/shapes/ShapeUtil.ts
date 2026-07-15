@@ -18,7 +18,7 @@ export type { LabelProps };
 
 export type ResizeHandle = 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w';
 
-export interface ResizeInfo<S extends GlideShape = GlideShape> {
+export interface ResizeInfo<S extends GlideShape<object> = GlideShape> {
   handle: ResizeHandle;
   scaleX: number;
   scaleY: number;
@@ -32,11 +32,12 @@ export type { GlideProps, GlideMigrations };
 
 /** Minimal editor interface needed by ShapeUtil (grows in Phase 3). */
 export interface ShapeUtilEditor {
-  getShape<S extends GlideShape>(id: S['id']): S | undefined;
+  getShape<S extends GlideShape<object>>(id: S['id']): S | undefined;
   getSelectedShapeIds(): ShapeId[];
+  updateShape<S extends GlideShape<object>>(id: S['id'], patch: Partial<S>): void;
 }
 
-export abstract class ShapeUtil<S extends GlideShape = GlideShape> {
+export abstract class ShapeUtil<S extends GlideShape<object> = GlideShape> {
   /** Unique type string — must match shape.type. */
   static readonly type: string;
 
@@ -162,7 +163,7 @@ export abstract class ShapeUtil<S extends GlideShape = GlideShape> {
 // BindingUtil — abstract class for relation types
 // ─────────────────────────────────────────────────────────────
 
-export abstract class BindingUtil<B extends GlideBinding = GlideBinding> {
+export abstract class BindingUtil<B extends GlideBinding<object> = GlideBinding> {
   static readonly type: string;
   static readonly props: GlideProps<Record<string, unknown>>;
   static readonly migrations?: GlideMigrations;

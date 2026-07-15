@@ -61,7 +61,7 @@ describe('Phase Infinity MCP tool server', () => {
     const server = createCanvasToolServer(editor);
 
     const result = await server.callTool('create_shape', { type: 'box', x: 60, y: 80 }) as { id: ShapeId };
-    expect(editor.history.undoStack.at(-1)?.label).toBe('AI: Create Shape');
+    expect(editor.history.undoStack[editor.history.undoStack.length - 1]?.label).toBe('AI: Create Shape');
     editor.undo();
 
     expect(editor.getShape(result.id)).toBeUndefined();
@@ -146,7 +146,7 @@ describe('Phase Infinity MCP tool server', () => {
     expect(deleted).toEqual({ deleted: 1 });
     expect(editor.getShape(created.id)).toBeUndefined();
 
-    expect(editor.history.undoStack.at(-1)?.label).toBe('AI: Delete Shapes');
+    expect(editor.history.undoStack[editor.history.undoStack.length - 1]?.label).toBe('AI: Delete Shapes');
     editor.undo();
     expect(editor.getShape(created.id)).toMatchObject({ x: 180, y: 60 });
     editor.undo();

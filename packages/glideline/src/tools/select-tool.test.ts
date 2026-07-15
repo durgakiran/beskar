@@ -301,7 +301,7 @@ describe('interactive transform history', () => {
     pointerUp(editor, 150, 120);
 
     expect(editor.getShape(sid('resize-history'))?.props).toMatchObject({ w: 150, h: 120 });
-    expect(editor.history.undoStack.at(-1)?.label).toBe('Resize Shapes');
+    expect(editor.history.undoStack[editor.history.undoStack.length - 1]?.label).toBe('Resize Shapes');
 
     editor.undo();
 
@@ -322,7 +322,7 @@ describe('interactive transform history', () => {
     pointerUp(editor, 110, 40);
 
     expect(editor.getShape(sid('rotate-history'))?.rotation).toBeCloseTo(Math.PI / 2);
-    expect(editor.history.undoStack.at(-1)?.label).toBe('Rotate Shapes');
+    expect(editor.history.undoStack[editor.history.undoStack.length - 1]?.label).toBe('Rotate Shapes');
 
     editor.undo();
 

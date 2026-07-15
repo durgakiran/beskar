@@ -347,29 +347,37 @@ export class ArrowUtil extends ShapeUtil<ArrowShape> {
 
 function arrowStartPoint(pathStr: string, fallback: { x: number; y: number }): { x: number; y: number } {
   const match = pathStr.match(/^M\s+([\d.\-eE+]+)\s+([\d.\-eE+]+)/);
-  if (match) return { x: parseFloat(match[1]), y: parseFloat(match[2]) };
+  const x = match?.[1];
+  const y = match?.[2];
+  if (x !== undefined && y !== undefined) return { x: parseFloat(x), y: parseFloat(y) };
   return fallback;
 }
 
 function arrowTangentTo(pathStr: string, fallback: { x: number; y: number }): { x: number; y: number } {
   const qMatch = pathStr.match(/^M\s+[\d.\-eE+]+\s+[\d.\-eE+]+\s+Q\s+([\d.\-eE+]+)\s+([\d.\-eE+]+)/);
-  if (qMatch) return { x: parseFloat(qMatch[1]), y: parseFloat(qMatch[2]) };
+  const qx = qMatch?.[1];
+  const qy = qMatch?.[2];
+  if (qx !== undefined && qy !== undefined) return { x: parseFloat(qx), y: parseFloat(qy) };
   const pts = getPathPoints(pathStr);
-  if (pts.length >= 2) return pts[1];
+  if (pts.length >= 2) return pts[1]!;
   return fallback;
 }
 
 function arrowEndPoint(pathStr: string, fallback: { x: number; y: number }): { x: number; y: number } {
   const match = pathStr.match(/(?:Q\s+[\d.\-eE+]+\s+[\d.\-eE+]+\s+|L\s+)([\d.\-eE+]+)\s+([\d.\-eE+]+)$/);
-  if (match) return { x: parseFloat(match[1]), y: parseFloat(match[2]) };
+  const x = match?.[1];
+  const y = match?.[2];
+  if (x !== undefined && y !== undefined) return { x: parseFloat(x), y: parseFloat(y) };
   return fallback;
 }
 
 function arrowTangentFrom(pathStr: string, fallback: { x: number; y: number }): { x: number; y: number } {
   const qMatch = pathStr.match(/Q\s+([\d.\-eE+]+)\s+([\d.\-eE+]+)\s+[\d.\-eE+]+\s+[\d.\-eE+]+/);
-  if (qMatch) return { x: parseFloat(qMatch[1]), y: parseFloat(qMatch[2]) };
+  const qx = qMatch?.[1];
+  const qy = qMatch?.[2];
+  if (qx !== undefined && qy !== undefined) return { x: parseFloat(qx), y: parseFloat(qy) };
   const pts = getPathPoints(pathStr);
-  if (pts.length >= 2) return pts[pts.length - 2];
+  if (pts.length >= 2) return pts[pts.length - 2]!;
   return fallback;
 }
 
@@ -377,7 +385,13 @@ function getPathPoints(pathStr: string): { x: number; y: number }[] {
   const pts: { x: number; y: number }[] = [];
   const re = /[ML]\s+([\d.\-eE+]+)\s+([\d.\-eE+]+)/g;
   let m: RegExpExecArray | null;
-  while ((m = re.exec(pathStr)) !== null) pts.push({ x: parseFloat(m[1]), y: parseFloat(m[2]) });
+  while ((m = re.exec(pathStr)) !== null) {
+    const x = m[1];
+    const y = m[2];
+    if (x !== undefined && y !== undefined) {
+      pts.push({ x: parseFloat(x), y: parseFloat(y) });
+    }
+  }
   return pts;
 }
 
@@ -461,7 +475,7 @@ export function getConnectionPoints(bounds: Box2d): Array<{ normalizedAnchor: Ve
 export function getClosestConnectionPoint(pt: Vec2, bounds: Box2d): { normalizedAnchor: Vec2; point: Vec2 } {
   const points = getConnectionPoints(bounds);
   let minDistance = Infinity;
-  let closest = points[0];
+  let closest = points[0]!;
   for (const p of points) {
     const d = Math.hypot(pt.x - p.point.x, pt.y - p.point.y);
     if (d < minDistance) {

@@ -276,7 +276,7 @@ function writeRecordPointer(record: AnyRecord, pointer: string, value: unknown, 
     if (child === null || typeof child !== 'object') return;
     target = child as AnyRecord;
   }
-  const key = segments.at(-1);
+  const key = segments[segments.length - 1];
   if (key === undefined) return;
   if (remove) delete target[key];
   else target[key] = value;

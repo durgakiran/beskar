@@ -79,7 +79,9 @@ const pointsValidator = {
 export function catmullRomPath(pts: Vec2[], isClosed: boolean): string {
   if (pts.length < 2) return '';
   if (pts.length === 2) {
-    return `M ${pts[0].x} ${pts[0].y} L ${pts[1].x} ${pts[1].y}`;
+    const first = pts[0]!;
+    const second = pts[1]!;
+    return `M ${first.x} ${first.y} L ${second.x} ${second.y}`;
   }
 
   // Tension factor: 0 = standard, higher = tighter

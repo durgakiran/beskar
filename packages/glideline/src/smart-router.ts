@@ -438,7 +438,10 @@ export function computeFallbackLocalElbowPoints(
 export function offsetOrthogonalPolyline(points: Vec2[], offset: number): Vec2[] {
   if (offset === 0 || points.length < 2) return points;
 
-  const segments = [];
+  const segments: Array<
+    | { axis: 'h'; y: number; x1: number; x2: number }
+    | { axis: 'v'; x: number; y1: number; y2: number }
+  > = [];
   for (let i = 0; i < points.length - 1; i++) {
     const a = points[i]!;
     const b = points[i + 1]!;
@@ -460,9 +463,11 @@ export function offsetOrthogonalPolyline(points: Vec2[], offset: number): Vec2[]
   for (let i = 1; i < segments.length; i++) {
     const prev = segments[i - 1]!;
     const next = segments[i]!;
-    result.push(prev.axis === 'h'
-      ? { x: next.x, y: prev.y }
-      : { x: prev.x, y: next.y });
+    if (prev.axis === 'h' && next.axis === 'v') {
+      result.push({ x: next.x, y: prev.y });
+    } else if (prev.axis === 'v' && next.axis === 'h') {
+      result.push({ x: prev.x, y: next.y });
+    }
   }
 
   const last = segments[segments.length - 1]!;
@@ -611,9 +616,9 @@ function computeOrthogonalRoute(args: {
       const neighborPoint = nodeToPoint(neighbor, xs, ys);
       const nextAxis = Math.abs(currentPoint.x - neighborPoint.x) < EPSILON ? 2 : 1;
       const bendPenalty = currentAxis !== 0 && currentAxis !== nextAxis ? 2 : 0;
-      const tentative = gScore[current.state] + manhattan(currentPoint, neighborPoint) + bendPenalty;
+      const tentative = (gScore[current.state] ?? Infinity) + manhattan(currentPoint, neighborPoint) + bendPenalty;
       const neighborState = encodeState(neighbor, nextAxis);
-      if (tentative >= gScore[neighborState]) continue;
+      if (tentative >= (gScore[neighborState] ?? Infinity)) continue;
 
       gScore[neighborState] = tentative;
       cameFrom[neighborState] = current.state;

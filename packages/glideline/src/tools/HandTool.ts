@@ -42,7 +42,7 @@ class Panning extends StateNode {
   /** Page-space pointer position when pan started. */
   private _startPagePt!: Vec2;
   /** Screen-space pointer position when pan started. */
-  private _startScreenPt?: Vec2;
+  private _startScreenPt: Vec2 | undefined;
   /** Camera state at pan start. */
   private _startCamera!: CameraState;
 

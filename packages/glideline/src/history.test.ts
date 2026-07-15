@@ -148,13 +148,13 @@ describe('editor mutation history defaults', () => {
     const editor = makeEditor();
 
     editor.createShape(boxShape('direct', 10, 20));
-    expect(editor.history.undoStack.at(-1)?.label).toBe('Create Shape');
+    expect(editor.history.undoStack[editor.history.undoStack.length - 1]?.label).toBe('Create Shape');
 
     editor.updateShape(sid('direct'), { x: 90 });
-    expect(editor.history.undoStack.at(-1)?.label).toBe('Update Shape');
+    expect(editor.history.undoStack[editor.history.undoStack.length - 1]?.label).toBe('Update Shape');
 
     editor.deleteShapes([sid('direct')]);
-    expect(editor.history.undoStack.at(-1)?.label).toBe('Delete Shapes');
+    expect(editor.history.undoStack[editor.history.undoStack.length - 1]?.label).toBe('Delete Shapes');
 
     editor.undo();
     expect(editor.getShape(sid('direct'))?.x).toBe(90);

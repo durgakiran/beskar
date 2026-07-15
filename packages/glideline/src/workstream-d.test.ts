@@ -8,9 +8,9 @@ import { BoxUtil } from './shapes/BoxUtil';
 import { ArrowBindingUtil, ArrowPlugin, ArrowUtil, type ArrowShape } from './shapes/ArrowUtil';
 import { buildArrowBindingRecord, buildArrowShapeRecord } from './arrow-records';
 
-class AssetBoxUtil extends BoxUtil {
-  static override readonly type = 'asset-box';
-  static override readonly references = [
+class AssetBoxUtil extends (BoxUtil as new () => BoxUtil) {
+  static readonly type = 'asset-box';
+  static readonly references = [
     { path: '/props/assetId', targetKind: 'asset', onDetach: 'null' },
   ] as const;
 }
@@ -25,7 +25,10 @@ function makeEditor(tokens?: string[]) {
   const idService = tokens
     ? new RecordIdService(() => tokens.shift() ?? `fallback-${tokens.length}`)
     : undefined;
-  return createEditor({ plugins: [TestPlugin], idService });
+  return createEditor({
+    plugins: [TestPlugin],
+    ...(idService ? { idService } : {}),
+  });
 }
 
 function createBox(editor: ReturnType<typeof makeEditor>, id: string, x: number, overrides: AnyRecord = {}): ShapeId {

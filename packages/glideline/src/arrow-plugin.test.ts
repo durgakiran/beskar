@@ -157,6 +157,7 @@ describe('T4.4-06: routeStyle switch', () => {
 
     ed.updateShape<ArrowShape>(sid('arrF'), {
       props: {
+        ...new ArrowUtil().getDefaultProps(),
         start: { boundShapeId: null, normalizedAnchor: { x: 0.5, y: 0.5 }, point: { x: 0, y: 0 } },
         end:   { boundShapeId: null, normalizedAnchor: { x: 0.5, y: 0.5 }, point: { x: 100, y: 0 } },
         routeStyle: 'ortho',
@@ -222,7 +223,7 @@ describe('Arrow handle dragging via SelectTool', () => {
 
     const arr = ed.getShape<ArrowShape>(sid('arrG'))!;
     expect(arr.props.bend).toBeCloseTo(-1, 2);
-    expect(ed.history.undoStack.at(-1)?.label).toBe('Adjust Arrow Bend');
+    expect(ed.history.undoStack[ed.history.undoStack.length - 1]?.label).toBe('Adjust Arrow Bend');
 
     ed.undo();
     expect(ed.getShape<ArrowShape>(sid('arrG'))?.props.bend).toBe(0);
@@ -255,7 +256,7 @@ describe('Arrow handle dragging via SelectTool', () => {
     expect(arr.props.end.boundShapeId).toBeNull();
     expect(arr.props.end.point).toEqual({ x: 400, y: 400 });
     expect(ed.getBindingsFromShape(sid('arrH'))).toHaveLength(0);
-    expect(ed.history.undoStack.at(-1)?.label).toBe('Move Arrow Handle');
+    expect(ed.history.undoStack[ed.history.undoStack.length - 1]?.label).toBe('Move Arrow Handle');
 
     ed.undo();
     expect(ed.getShape<ArrowShape>(sid('arrH'))?.props.end.boundShapeId).toBe(sid('boxEnd'));
@@ -277,7 +278,7 @@ describe('Arrow handle dragging via SelectTool', () => {
     const arr = ed.getShape<ArrowShape>(sid('arrH2'))!;
     expect(arr.props.end.boundShapeId).toBe(sid('boxEnd2'));
     expect(ed.getBindingsFromShape(sid('arrH2'))).toHaveLength(1);
-    const bnd = ed.getBindingsFromShape(sid('arrH2'))[0];
+    const bnd = ed.getBindingsFromShape(sid('arrH2'))[0]!;
     expect(bnd.toId).toBe(sid('boxEnd2'));
     expect(bnd.props.terminal).toBe('end');
   });
@@ -441,9 +442,9 @@ describe('Arrow handle dragging via SelectTool', () => {
     const bxT = box('bxT', 300, 0, 100, 100);
     const arr = arrow('arr1', { x: 100, y: 50 }, { x: 300, y: 50 });
     arr.props.routeStyle = 'ortho';
-    arr.props.start.boundShapeId = sid('bxS');
+    arr.props.start.boundShapeId = sid('bxS') as any;
     arr.props.start.normalizedAnchor = { x: 1.0, y: 0.5 };
-    arr.props.end.boundShapeId = sid('bxT');
+    arr.props.end.boundShapeId = sid('bxT') as any;
     arr.props.end.normalizedAnchor = { x: 0.0, y: 0.5 };
 
     ed.store.put([

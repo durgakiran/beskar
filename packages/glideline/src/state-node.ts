@@ -45,7 +45,7 @@ export abstract class StateNode {
   editor!: GlideEditor;
 
   /** Parent node (undefined for root tools). */
-  parent?: StateNode;
+  parent: StateNode | undefined;
 
   /** Active child state. Points to `this` for leaf nodes. */
   current!: StateNode;

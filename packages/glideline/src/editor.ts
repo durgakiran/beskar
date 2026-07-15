@@ -17,7 +17,7 @@
  */
 
 import { signal, type Signal, type ReadonlySignal } from '@preact/signals';
-import { bid, sid } from './types';
+import { bid, isGlideShape, sid } from './types';
 import { GlideStore, type ImportOptions, type ImportReport, type StoreTransaction } from './store';
 import { CURRENT_STORE_VERSION, GlideSchema } from './schema';
 import { GlideCamera } from './camera';
@@ -50,9 +50,9 @@ export interface GlidePlugin {
   onInstall?(editor: GlideEditor): void;
 }
 
-// Internal static-side shape of a ShapeUtil class
-interface ShapeUtilClass {
-  type: string;
+// Internal static-side shape shared by ShapeUtil and BindingUtil classes.
+interface UtilStatic {
+  readonly type: string;
   props?: Record<string, { validate(v: unknown): unknown }>;
   migrations?: import('./types').GlideMigrations;
 }
@@ -110,6 +110,21 @@ function readPointer(record: AnyRecord, pointer: string): unknown {
     value = (value as AnyRecord)[segment];
   }
   return value;
+}
+
+function toGlideShape(record: unknown): GlideShape | null {
+  if (!record || typeof record !== 'object') return null;
+  if (!isGlideShape(record as AnyRecord)) return null;
+  return record as unknown as GlideShape;
+}
+
+function toGlideShapes(records: readonly AnyRecord[]): GlideShape[] {
+  const shapes: GlideShape[] = [];
+  for (const record of records) {
+    const shape = toGlideShape(record);
+    if (shape) shapes.push(shape);
+  }
+  return shapes;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -198,7 +213,7 @@ export class GlideEditor {
 
   /** @internal — called by createEditor during plugin installation. */
   _registerUtil(instance: ShapeUtil<any>): void {
-    const type = (instance.constructor as ShapeUtilClass).type;
+    const type = (instance.constructor as unknown as UtilStatic).type;
     if (this._utils.has(type)) {
       throw new Error(
         `GlideEditor: duplicate ShapeUtil type "${type}". ` +
@@ -211,7 +226,7 @@ export class GlideEditor {
 
   /** @internal — called by createEditor for each BindingUtil. */
   _registerBindingUtil(instance: BindingUtil<any>): void {
-    const type = (instance.constructor as ShapeUtilClass).type;
+    const type = (instance.constructor as unknown as UtilStatic).type;
     if (this._bindingUtils.has(type)) {
       throw new Error(
         `GlideEditor: duplicate BindingUtil type "${type}". ` +
@@ -244,11 +259,11 @@ export class GlideEditor {
   }
 
   getShapesAtPoint(point: Vec2): GlideShape[] {
-    return this.store.getShapesAtPoint(point.x, point.y) as GlideShape[];
+    return toGlideShapes(this.store.getShapesAtPoint(point.x, point.y));
   }
 
-  getShapesInBox(box: Box2d): GlideShape[] {
-    return this.store.getShapesInBox(box.minX, box.minY, box.maxX, box.maxY) as GlideShape[];
+  getShapesInBox(box: Pick<Box2d, 'minX' | 'minY' | 'maxX' | 'maxY'> & Partial<Pick<Box2d, 'x' | 'y' | 'w' | 'h'>>): GlideShape[] {
+    return toGlideShapes(this.store.getShapesInBox(box.minX, box.minY, box.maxX, box.maxY));
   }
 
   // ── Binding queries ────────────────────────────────────────
@@ -641,7 +656,8 @@ export class GlideEditor {
     const shapes: GlideShape[] = [];
     for (const id of ids) {
       const s = this.store.get(id);
-      if (s) shapes.push(s as GlideShape);
+      const shape = toGlideShape(s);
+      if (shape) shapes.push(shape);
     }
     if (sorted) {
       shapes.sort((a, b) => (a.index < b.index ? -1 : a.index > b.index ? 1 : 0));
@@ -687,7 +703,8 @@ export class GlideEditor {
         // Find the correct insertion position among non-targets
         let nonTargetPos = 0;
         for (let i = 0; i < all.length && i < insertAt; i++) {
-          if (!idSet.has(all[i].id as ShapeId)) nonTargetPos++;
+          const shape = all[i];
+          if (shape && !idSet.has(shape.id as ShapeId)) nonTargetPos++;
         }
         withoutTargets.splice(nonTargetPos, 0, ...targets);
         reordered = withoutTargets;
@@ -1015,9 +1032,14 @@ export class GlideEditor {
     return new Promise((resolve, reject) => {
       const svgMatch = svgStr.match(/width="([^"]+)"\s+height="([^"]+)"/);
       if (!svgMatch) return reject(new Error('Invalid SVG bounds'));
+      const widthValue = svgMatch[1];
+      const heightValue = svgMatch[2];
+      if (widthValue === undefined || heightValue === undefined) {
+        return reject(new Error('Invalid SVG bounds'));
+      }
       
-      const width = parseFloat(svgMatch[1]);
-      const height = parseFloat(svgMatch[2]);
+      const width = parseFloat(widthValue);
+      const height = parseFloat(heightValue);
 
       const img = new Image();
       const svgBlob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
@@ -1131,7 +1153,7 @@ export function createEditor(opts: CreateEditorOptions = {}): GlideEditor {
   const seenBindingTypes = new Set<string>();
   for (const plugin of plugins) {
     for (const UtilClass of plugin.shapes ?? []) {
-      const type = (UtilClass as unknown as ShapeUtilClass).type;
+      const type = (UtilClass as unknown as UtilStatic).type;
       if (!type) throw new Error(`Plugin "${plugin.id}": ShapeUtil missing static 'type'`);
       if (seenShapeTypes.has(type)) {
         throw new Error(
@@ -1141,10 +1163,10 @@ export function createEditor(opts: CreateEditorOptions = {}): GlideEditor {
         );
       }
       seenShapeTypes.add(type);
-      schema.registerShapeUtil(UtilClass as unknown as ShapeUtilClass);
+      schema.registerShapeUtil(UtilClass as unknown as UtilStatic);
     }
     for (const UtilClass of plugin.bindings ?? []) {
-      const type = (UtilClass as unknown as ShapeUtilClass).type;
+      const type = (UtilClass as unknown as UtilStatic).type;
       if (!type) throw new Error(`Plugin "${plugin.id}": BindingUtil missing static 'type'`);
       if (seenBindingTypes.has(type)) {
         throw new Error(
@@ -1154,7 +1176,7 @@ export function createEditor(opts: CreateEditorOptions = {}): GlideEditor {
         );
       }
       seenBindingTypes.add(type);
-      schema.registerBindingUtil(UtilClass as unknown as ShapeUtilClass);
+      schema.registerBindingUtil(UtilClass as unknown as UtilStatic);
     }
   }
 
