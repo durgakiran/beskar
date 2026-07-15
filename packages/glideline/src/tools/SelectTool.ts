@@ -2,7 +2,7 @@ import { StateNode } from '../state-node';
 import { signal } from '@preact/signals';
 import type { PointerDownEvent, PointerMoveEvent, PointerUpEvent, KeyDownEvent, DoubleClickEvent } from '../state-node';
 import type { ShapeId, Vec2, AnyRecord } from '../types';
-import { makeBox, bid } from '../types';
+import { makeBox } from '../types';
 import type { ArrowShape, ArrowProps } from '../shapes/ArrowUtil';
 import { getClosestConnectionPoint, getConnectionPoints, anchorToEdge } from '../shapes/ArrowUtil';
 import type { BindingPreview, BindingPreviewCandidate } from '../editor';
@@ -698,7 +698,7 @@ class DraggingHandle extends StateNode {
             }
 
             const newBinding = {
-              id: bid(`bind-${term}-${Date.now()}-${Math.random().toString(36).slice(2)}`),
+              id: this.editor.createBindingId('arrow'),
               type: 'arrow',
               fromId: this._arrowId,
               toId: targetShape.id,

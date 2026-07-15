@@ -104,7 +104,7 @@ class Drawing extends StateNode {
     const w = e.point.x - this._origin.x;
     const h = e.point.y - this._origin.y;
     const shapeType = getToolClass(this).shapeType;
-    const finalId = sid(`${shapeType}-${Date.now()}`);
+    const finalId = this.editor.createShapeId(shapeType);
 
     this.editor.history.batch('Geo Shape Preview Cleanup', () => {
       this.editor.deleteShapes([getPreviewId(this)]);

@@ -17,9 +17,9 @@
  */
 
 import { signal, type Signal, type ReadonlySignal } from '@preact/signals';
-import { sid } from './types';
-import { GlideStore, type ImportOptions, type ImportReport } from './store';
-import { GlideSchema } from './schema';
+import { bid, sid } from './types';
+import { GlideStore, type ImportOptions, type ImportReport, type StoreTransaction } from './store';
+import { CURRENT_STORE_VERSION, GlideSchema } from './schema';
 import { GlideCamera } from './camera';
 import { HistoryManager } from './history';
 import type { BatchOptions } from './history';
@@ -35,6 +35,7 @@ import type { GlideShape, GlideBinding, ShapeId, BindingId, Vec2, Box2d, AnyReco
 import type { GlideEvent } from './state-node';
 import { getMinHeightForShape } from './styles';
 import { createTopIndex } from './arrow-records';
+import { RecordIdService } from './id';
 
 // ─────────────────────────────────────────────────────────────
 // GlidePlugin — unit of extension
@@ -85,6 +86,32 @@ const DEFAULT_ACTIVE_STYLES = Object.freeze({
   textAlign: 'center',
 });
 
+export interface ClipboardSchemaHeader {
+  readonly clipboardVersion: 1;
+  readonly storeVersion: number;
+}
+
+export interface ClipboardPayload {
+  readonly schema: ClipboardSchemaHeader;
+  readonly rootIds: readonly ShapeId[];
+  readonly records: readonly AnyRecord[];
+  readonly assetRefs: readonly string[];
+  readonly sourceBounds: Box2d;
+}
+
+function cloneRecord<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T;
+}
+
+function readPointer(record: AnyRecord, pointer: string): unknown {
+  let value: unknown = record;
+  for (const segment of pointer.slice(1).split('/').map(part => part.replace(/~1/g, '/').replace(/~0/g, '~'))) {
+    if (value === null || typeof value !== 'object') return undefined;
+    value = (value as AnyRecord)[segment];
+  }
+  return value;
+}
+
 // ─────────────────────────────────────────────────────────────
 // GlideEditor
 // ─────────────────────────────────────────────────────────────
@@ -94,7 +121,7 @@ export class GlideEditor {
   readonly schema:  GlideSchema;
   readonly camera:  GlideCamera;
   readonly history: HistoryManager;
-  private _clipboard: GlideShape[] = [];
+  private _clipboard: ClipboardPayload | null = null;
   arrowRouteStyle: ArrowRouteStyle = 'curve';
   arrowheadStart: ArrowheadStyle = 'none';
   arrowheadEnd: ArrowheadStyle = 'arrow';
@@ -240,13 +267,23 @@ export class GlideEditor {
 
   // ── Shape mutations ────────────────────────────────────────
 
+  createShapeId(type = 'shape'): ShapeId {
+    return sid(this.store.createRecordId(`shape:${type}`));
+  }
+
+  createBindingId(type = 'binding'): BindingId {
+    return bid(this.store.createRecordId(`binding:${type}`));
+  }
+
   createShape(partial: AnyRecord): ShapeId {
+    const requestedType = String(partial['type'] ?? 'shape');
     partial = {
-      kind: 'shape',
       rotation: 0,
       index: createTopIndex(),
       meta: {},
       ...partial,
+      kind: 'shape',
+      id: partial['id'] ?? this.createShapeId(requestedType),
     };
     const type = partial['type'] as string;
     const util = this._utils.get(type);
@@ -325,10 +362,22 @@ export class GlideEditor {
   }
 
   deleteShapes(ids: ShapeId[]): void {
+    const closure = new Set<ShapeId>();
+    const visit = (id: ShapeId) => {
+      if (closure.has(id)) return;
+      const record = this.store.get(id);
+      if (!record || record['kind'] !== 'shape') return;
+      closure.add(id);
+      for (const child of this.store.getChildren(id)) {
+        if (child['kind'] === 'shape') visit(child['id'] as ShapeId);
+      }
+    };
+    for (const id of ids) visit(id);
+    const deleteIds = Array.from(closure);
     let shouldInvalidateSmartRoutes = false;
     this.history.batch('Delete Shapes', () => {
       this.store.transact({ origin: 'user' }, tx => {
-        for (const id of ids) {
+        for (const id of deleteIds) {
           const existing = tx.get(id);
           if (existing && existing['type'] !== 'arrow') {
             shouldInvalidateSmartRoutes = true;
@@ -338,6 +387,7 @@ export class GlideEditor {
           for (const binding of bindingsTo) {
             const util = this._bindingUtils.get(binding.type);
             util?.onBeforeDeleteToShape?.(binding);
+            this._stageBindingTerminal(tx, binding as unknown as AnyRecord, null);
             tx.remove(binding.id);
           }
 
@@ -346,11 +396,12 @@ export class GlideEditor {
           for (const binding of bindingsFrom) {
             const util = this._bindingUtils.get(binding.type);
             util?.onBeforeDeleteFromShape?.(binding);
+            this._stageBindingTerminal(tx, binding as unknown as AnyRecord, null);
             tx.remove(binding.id);
           }
         }
         // 3. Finally remove the shapes themselves
-        for (const id of ids) tx.remove(id);
+        for (const id of deleteIds) tx.remove(id);
       });
     });
     if (shouldInvalidateSmartRoutes) {
@@ -361,8 +412,21 @@ export class GlideEditor {
   // ── Binding mutations ──────────────────────────────────────
 
   createBinding(partial: AnyRecord): BindingId {
+    partial = {
+      meta: {},
+      ...partial,
+      kind: 'binding',
+      id: partial['id'] ?? this.createBindingId(String(partial['type'] ?? 'binding')),
+      props: partial['props'] ?? {},
+    };
     this.history.batch('Create Binding', () => {
-      this.store.transact({ origin: 'user' }, tx => tx.insert(partial));
+      this.store.transact({ origin: 'user' }, tx => {
+        tx.insert(partial);
+        // Binding records are authoritative. If the source shape exposes an
+        // arrow-style terminal cache, derive its boundShapeId in the same
+        // staged command so no contradictory graph is ever published.
+        this._stageBindingTerminal(tx, partial, partial['toId']);
+      });
     });
     return partial['id'] as BindingId;
   }
@@ -382,8 +446,40 @@ export class GlideEditor {
 
   deleteBinding(id: BindingId): void {
     this.history.batch('Delete Binding', () => {
-      this.store.transact({ origin: 'user' }, tx => tx.remove(id));
+      this.store.transact({ origin: 'user' }, tx => {
+        const binding = tx.get(id);
+        if (binding) this._stageBindingTerminal(tx, binding as unknown as AnyRecord, null);
+        tx.remove(id);
+      });
     });
+  }
+
+  private _stageBindingTerminal(
+    tx: StoreTransaction,
+    binding: AnyRecord,
+    boundShapeId: unknown,
+  ): void {
+    const terminal = (binding['props'] as AnyRecord | undefined)?.['terminal'];
+    const fromId = binding['fromId'];
+    if ((terminal !== 'start' && terminal !== 'end') || typeof fromId !== 'string') return;
+    if (boundShapeId !== null && typeof boundShapeId !== 'string') return;
+    const source = tx.get(fromId);
+    const props = source?.['props'];
+    const terminalValue = props && typeof props === 'object'
+      ? (props as AnyRecord)[terminal]
+      : undefined;
+    if (!terminalValue || typeof terminalValue !== 'object'
+      || (terminalValue as AnyRecord)['boundShapeId'] === boundShapeId) return;
+    tx.update(fromId, record => ({
+      ...record,
+      props: {
+        ...(record['props'] as AnyRecord),
+        [terminal]: {
+          ...(terminalValue as AnyRecord),
+          boundShapeId,
+        },
+      },
+    }));
   }
 
   // ── Selection ──────────────────────────────────────────────
@@ -418,46 +514,120 @@ export class GlideEditor {
   // ── Clipboard ──────────────────────────────────────────────
 
   copy(ids: ShapeId[]): void {
-    const shapes = this.getShapes().filter(s => ids.includes(s.id as ShapeId));
-    this._clipboard = JSON.parse(JSON.stringify(shapes));
+    this._clipboard = this._createClipboardPayload(ids);
   }
 
   paste(point?: Vec2): ShapeId[] {
-    if (this._clipboard.length === 0) return [];
-    
-    // Find bounding box of clipboard items to calculate offset
-    let minX = Infinity, minY = Infinity;
-    for (const shape of this._clipboard) {
-      minX = Math.min(minX, shape.x as number);
-      minY = Math.min(minY, shape.y as number);
-    }
-    
-    // If a point is provided, paste at that point. Otherwise, offset slightly from original.
-    let offsetX = 20;
-    let offsetY = 20;
-    if (point && minX !== Infinity && minY !== Infinity) {
-      offsetX = point.x - minX;
-      offsetY = point.y - minY;
-    }
-
-    const newIds: ShapeId[] = [];
-    this.history.batch('Paste', () => {
-      for (const shape of this._clipboard) {
-        const newId = sid(`${shape.id}-paste-${Date.now()}-${Math.random().toString(36).slice(2)}`);
-        const clone = {
-          ...shape,
-          id: newId,
-          x: (shape.x as number) + offsetX,
-          y: (shape.y as number) + offsetY,
-        };
-        this.store.put([clone as any]);
-        newIds.push(newId);
-      }
-    });
-
-    // Select the newly pasted items
+    if (!this._clipboard) return [];
+    const offset = point
+      ? { x: point.x - this._clipboard.sourceBounds.minX, y: point.y - this._clipboard.sourceBounds.minY }
+      : { x: 20, y: 20 };
+    const newIds = this._pasteClipboardPayload(this._clipboard, offset, 'Paste');
     this.setSelectedShapeIds(newIds);
     return newIds;
+  }
+
+  private _createClipboardPayload(ids: readonly ShapeId[]): ClipboardPayload | null {
+    const selected = new Set(ids.filter(id => this.store.get(id)?.['kind'] === 'shape'));
+    const rootIds = Array.from(selected).filter(id => {
+      let cursor = this.store.get(id);
+      const seen = new Set<string>();
+      while (typeof cursor?.['parentId'] === 'string') {
+        const parentId = cursor['parentId'] as string;
+        if (selected.has(parentId as ShapeId)) return false;
+        if (seen.has(parentId)) break;
+        seen.add(parentId);
+        cursor = this.store.get(parentId);
+      }
+      return true;
+    });
+    if (rootIds.length === 0) return null;
+
+    const shapeIds = new Set<ShapeId>();
+    const visit = (id: ShapeId) => {
+      if (shapeIds.has(id)) return;
+      const record = this.store.get(id);
+      if (!record || record['kind'] !== 'shape') return;
+      shapeIds.add(id);
+      for (const child of this.store.getChildren(id)) {
+        if (child['kind'] === 'shape') visit(child['id'] as ShapeId);
+      }
+    };
+    rootIds.forEach(visit);
+
+    const documentRecords = this.store.serialize().records as AnyRecord[];
+    const records: AnyRecord[] = documentRecords
+      .filter(record => record['kind'] === 'shape' && shapeIds.has(record['id'] as ShapeId))
+      .map(record => cloneRecord(record));
+    for (const record of documentRecords) {
+      if (record['kind'] !== 'binding') continue;
+      if (shapeIds.has(record['fromId'] as ShapeId) && shapeIds.has(record['toId'] as ShapeId)) {
+        records.push(cloneRecord(record));
+      }
+    }
+
+    const assetRefs = new Set<string>();
+    for (const record of records) {
+      if (record['kind'] !== 'shape') continue;
+      if (typeof record['assetId'] === 'string') assetRefs.add(record['assetId']);
+      for (const descriptor of this.schema.getReferenceDescriptors(record)) {
+        if (descriptor.targetKind !== 'asset') continue;
+        const value = readPointer(record, descriptor.path);
+        if (typeof value === 'string') assetRefs.add(value);
+      }
+    }
+    for (const assetId of assetRefs) {
+      const asset = documentRecords.find(record => record['id'] === assetId && record['kind'] === 'asset');
+      if (asset) records.push(cloneRecord(asset));
+    }
+
+    const shapes = Array.from(shapeIds)
+      .map(id => this.getShape(id))
+      .filter((shape): shape is GlideShape => shape !== undefined);
+    const bounds = shapes.map(shape => getWorldBounds(this, shape));
+    const minX = Math.min(...bounds.map(box => box.minX));
+    const minY = Math.min(...bounds.map(box => box.minY));
+    const maxX = Math.max(...bounds.map(box => box.maxX));
+    const maxY = Math.max(...bounds.map(box => box.maxY));
+
+    return Object.freeze({
+      schema: Object.freeze({ clipboardVersion: 1 as const, storeVersion: CURRENT_STORE_VERSION }),
+      rootIds: Object.freeze(rootIds),
+      records: Object.freeze(records),
+      assetRefs: Object.freeze(Array.from(assetRefs)),
+      sourceBounds: Object.freeze({ x: minX, y: minY, w: maxX - minX, h: maxY - minY, minX, minY, maxX, maxY }),
+    });
+  }
+
+  private _pasteClipboardPayload(payload: ClipboardPayload, offset: Vec2, label: string): ShapeId[] {
+    if (payload.schema.clipboardVersion !== 1 || payload.schema.storeVersion > CURRENT_STORE_VERSION) {
+      throw new Error(`Unsupported clipboard schema version ${payload.schema.clipboardVersion}`);
+    }
+    const records = payload.records.map(record => cloneRecord(record));
+    const recordById = new Map(records.map(record => [record['id'] as string, record]));
+    const orderedRootIds = [...payload.rootIds].sort((left, right) =>
+      String(recordById.get(left)?.['index'] ?? '').localeCompare(String(recordById.get(right)?.['index'] ?? ''))
+      || String(left).localeCompare(String(right)),
+    );
+    const rootOrder = new Map(orderedRootIds.map((id, ordinal) => [id, ordinal]));
+    const orderStamp = Date.now().toString(36);
+    for (const record of records) {
+      const ordinal = rootOrder.get(record['id'] as ShapeId);
+      if (ordinal === undefined || record['kind'] !== 'shape') continue;
+      record['x'] = Number(record['x']) + offset.x;
+      record['y'] = Number(record['y']) + offset.y;
+      record['index'] = `zz:${orderStamp}:${ordinal.toString(36).padStart(6, '0')}`;
+    }
+
+    let report!: ImportReport;
+    this.history.batch(label, () => {
+      report = this.store.importRecords(records, {
+        label,
+        relationshipPolicy: 'detach-external',
+        preserveExternalKinds: ['page'],
+      });
+    });
+    return payload.rootIds.map(id => report.idMap[id] as ShapeId);
   }
 
   // ── Shape list ─────────────────────────────────────────────
@@ -554,23 +724,9 @@ export class GlideEditor {
    * Returns the new shape IDs.
    */
   duplicateShapes(ids: ShapeId[], offset: Vec2 = { x: 10, y: 10 }): ShapeId[] {
-    const newIds: ShapeId[] = [];
-    this.history.batch('Duplicate Shapes', () => {
-      for (const id of ids) {
-        const shape = this.store.get(id);
-        if (!shape) continue;
-        const newId = sid(`${id}-copy-${Date.now()}-${Math.random().toString(36).slice(2)}`);
-        const clone = {
-          ...shape,
-          id: newId,
-          x: (shape['x'] as number) + offset.x,
-          y: (shape['y'] as number) + offset.y,
-        };
-        this.store.put([clone as any]);
-        newIds.push(newId);
-      }
-    });
-    return newIds;
+    const payload = this._createClipboardPayload(ids);
+    if (!payload) return [];
+    return this._pasteClipboardPayload(payload, offset, 'Duplicate Shapes');
   }
 
   // ── Inline editing state ───────────────────────────────────
@@ -755,7 +911,7 @@ export class GlideEditor {
 
   resetSessionState(): void {
     this.history.clear();
-    this._clipboard = [];
+    this._clipboard = null;
     this.setSelectedShapeIds([]);
     this.editingShapeId.value = null;
     this.erasingShapeIds.value = new Set<ShapeId>();
@@ -948,6 +1104,7 @@ export interface CreateEditorOptions {
   tools?:    (typeof StateNode)[];
   viewport?: { width: number; height: number };
   camera?:   { x?: number; y?: number; z?: number };
+  idService?: RecordIdService;
 }
 
 /**
@@ -1005,7 +1162,7 @@ export function createEditor(opts: CreateEditorOptions = {}): GlideEditor {
   schema.freeze();
 
   // 5–7. Store + Camera + Editor
-  const store  = new GlideStore(schema);
+  const store  = new GlideStore(schema, opts.idService ?? new RecordIdService());
   const cam    = new GlideCamera(camInit ?? {}, viewport?.width ?? 1000, viewport?.height ?? 600);
   const editor = new GlideEditor(store, schema, cam);
 

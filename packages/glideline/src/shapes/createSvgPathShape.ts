@@ -212,7 +212,7 @@ export function createSvgPathShape(def: CreateSvgPathShapeDef): {
     override onPointerUp(e: PointerUpEvent): void {
       const w = e.point.x - this._origin.x;
       const h = e.point.y - this._origin.y;
-      const finalId = sid(`${type}-${Date.now()}`);
+      const finalId = this.editor.createShapeId(type);
       this.editor.history.batch('Custom Shape Cleanup', () => {
         this.editor.deleteShapes([this._previewId]);
     }, { history: 'ignore', scope: 'ephemeral' });

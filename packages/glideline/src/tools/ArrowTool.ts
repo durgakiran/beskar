@@ -249,7 +249,7 @@ class Drawing extends StateNode {
     const arrowheadEnd = (this.editor as any).arrowheadEnd ?? 'arrow';
 
     // Commit final arrow + bindings
-    const finalId = sid(`arrow-${Date.now()}`);
+    const finalId = this.editor.createShapeId('arrow');
     this.editor.history.batch('Create Arrow', () => {
       // Compute start world point
       let startAnchor = { x: 0.5, y: 0.5 };
@@ -319,7 +319,7 @@ class Drawing extends StateNode {
       // Create binding: start → fromShape
       if (this._fromShapeId) {
         this.editor.createBinding(buildArrowBindingRecord({
-          id: `bind-start-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+          id: this.editor.createBindingId('arrow'),
           fromId: finalId,
           toId: this._fromShapeId,
           terminal: 'start',
@@ -330,7 +330,7 @@ class Drawing extends StateNode {
       // Create binding: end → toShape
       if (toShapeId) {
         this.editor.createBinding(buildArrowBindingRecord({
-          id: `bind-end-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+          id: this.editor.createBindingId('arrow'),
           fromId: finalId,
           toId: toShapeId,
           terminal: 'end',

@@ -132,7 +132,7 @@ class Drawing extends StateNode {
     }, { history: 'ignore', scope: 'ephemeral' });
 
     // Commit final shape
-    const finalId = sid(`ellipse-${Date.now()}`);
+    const finalId = this.editor.createShapeId('ellipse');
     this.editor.history.batch('Create Ellipse', () => {
       this.editor.createShape(makeEllipseShape(finalId, this._origin.x, this._origin.y, w, h));
     });

@@ -124,7 +124,7 @@ class Drawing extends StateNode {
     }, { history: 'ignore', scope: 'ephemeral' });
 
     // Commit final shape as a single undo entry
-    const finalId = sid(`box-${Date.now()}`);
+    const finalId = this.editor.createShapeId('box');
     this.editor.history.batch('Create Box', () => {
       this.editor.createShape(makeBoxShape(finalId, x, y, w, h));
     });

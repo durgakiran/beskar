@@ -15,7 +15,6 @@
 import { StateNode } from '../state-node';
 import type { PointerDownEvent } from '../state-node';
 import type { ShapeId } from '../types';
-import { sid } from '../types';
 
 // ─────────────────────────────────────────────────────────────
 // Idle
@@ -37,7 +36,7 @@ class Idle extends StateNode {
     }
 
     // Create a new text shape at click position and start editing
-    const newId: ShapeId = sid(`text-${Date.now()}`);
+    const newId: ShapeId = this.editor.createShapeId('text');
     this.editor.history.batch('Create Text', () => {
       this.editor.createShape({
         id:       newId,

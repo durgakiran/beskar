@@ -5,7 +5,6 @@ import type { AIContextSnapshot } from './ai-context';
 import {
   buildArrowBindingRecord,
   buildArrowShapeRecord,
-  createCanvasShapeId,
   createTopIndex,
   resolveConnectionTerminal,
 } from './arrow-records';
@@ -233,7 +232,7 @@ const TOOL_DEFINITIONS = [
         return { error: `Unknown shape type "${type}"` };
       }
 
-      const id = createCanvasShapeId(type);
+      const id = editor.createShapeId(type);
       editor.batch('AI: Create Shape', () => {
         editor.createShape({
           id,
@@ -322,7 +321,7 @@ const TOOL_DEFINITIONS = [
         return { error: 'Unable to resolve connection anchors' };
       }
 
-      const id = createCanvasShapeId('arrow');
+      const id = editor.createShapeId('arrow');
       const routeStyle = input.routeStyle ?? editor.arrowRouteStyle;
       const arrow = buildArrowShapeRecord({
         id,
@@ -402,7 +401,7 @@ const TOOL_DEFINITIONS = [
       editor.batch('AI: Create Diagram', () => {
         for (const node of input.nodes) {
           const dagreNode = g.node(node.id);
-          const canvasId = createCanvasShapeId(node.type);
+          const canvasId = editor.createShapeId(node.type);
           idMap.set(node.id, canvasId);
 
           const { id: _userNodeId, type, ...props } = node as any;
@@ -436,7 +435,7 @@ const TOOL_DEFINITIONS = [
           const end   = resolveConnectionTerminal(editor, toCanvasId,   fromCenter);
           if (!start || !end) continue;
 
-          const arrowId    = createCanvasShapeId('arrow');
+          const arrowId    = editor.createShapeId('arrow');
           const routeStyle = (edge.routeStyle ?? editor.arrowRouteStyle) as ArrowRouteStyle;
           const arrow      = buildArrowShapeRecord({ id: arrowId, startWorld: start.point, endWorld: end.point, routeStyle, index: createTopIndex() });
 

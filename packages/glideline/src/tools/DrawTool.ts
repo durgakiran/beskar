@@ -17,7 +17,7 @@
 
 import { StateNode } from '../state-node';
 import type { PointerDownEvent, PointerMoveEvent, PointerUpEvent, KeyDownEvent } from '../state-node';
-import type { ShapeId, Vec2 } from '../types';
+import type { Vec2 } from '../types';
 import { sid } from '../types';
 import type { FreehandPoint } from '../shapes/FreehandUtil';
 
@@ -115,7 +115,7 @@ class Drawing extends StateNode {
 
     // Commit only if stroke has enough points to be meaningful
     if (this._points.length >= 2) {
-      const finalId = sid(`draw-${Date.now()}`);
+      const finalId = this.editor.createShapeId('freehand');
       const pts = this._points;
 
       // Compute AABB origin for shape.x/y

@@ -1,5 +1,6 @@
 import type { GlideEditor } from './editor';
-import { bid, type AnyRecord, type ShapeId, sid, type Vec2 } from './types';
+import { type AnyRecord, type ShapeId, sid, type Vec2 } from './types';
+import { RecordIdService } from './id';
 import { getWorldBounds } from './smart-router';
 import {
   anchorToEdge,
@@ -66,7 +67,7 @@ export function buildArrowBindingRecord(args: {
   normalizedAnchor: Vec2;
 }): AnyRecord {
   return {
-    id: bid(args.id ?? `${args.terminal}-${Date.now()}-${Math.random().toString(36).slice(2)}`),
+    ...(args.id ? { id: args.id } : {}),
     type: 'arrow',
     fromId: args.fromId,
     toId: args.toId,
@@ -96,8 +97,11 @@ export function resolveConnectionTerminal(
   };
 }
 
+const compatibilityIds = new RecordIdService();
+
+/** @deprecated Prefer editor.createShapeId() so collisions are checked against the board. */
 export function createCanvasShapeId(prefix: string): ShapeId {
-  return sid(`${prefix}-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+  return sid(compatibilityIds.create(`shape:${prefix}`));
 }
 
 export function createTopIndex(): string {

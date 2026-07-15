@@ -675,6 +675,20 @@ Duplicate delegates to the same pipeline. It is not a separate shallow-copy impl
 
 Replace `Date.now()`/`Math.random()` combinations with one injectable, collision-checked ID service. Prefer cryptographically strong UUIDs with readable kind prefixes; tests inject deterministic IDs. Creation retries or reports collision and never overwrites. Import always uses a complete old-to-new ID map rather than relying on prefix replacement.
 
+### 10.7 Implementation checkpoint — completed July 15, 2026
+
+Workstream D is implemented in `packages/glideline`:
+
+- Transaction commits derive RBush, binding endpoint, page, parent, and reverse asset-usage changes from each record's `before → after` delta. Old memberships are removed before new memberships are added, and empty sets are deleted.
+- Changes to util-declared reference paths trigger validation of the complete candidate graph. Direct writes cannot publish dangling bindings, pages, parents, assets, cyclic parents, conflicting concrete arrow-terminal caches, or record-kind changes.
+- Binding records are authoritative. Editor binding creation and deletion derive an arrow terminal's `boundShapeId` in the same staged command; deletion hooks, terminal detachment, binding removal, descendant removal, and canonical record removal abort together on failure.
+- `store.getShapeIdsOnPage()`, `store.getChildren()`, and `store.getAssetUserIds()` expose derived queries. `store.rebuildIndices()` atomically rebuilds derived state without changing records, revision, persistence, or history. `store.assertIntegrity()` compares all indices and signal views with a brute-force canonical scan and reports typed issues.
+- Copy now produces a versioned graph payload containing selected roots, descendants, bindings whose endpoints are both included, referenced assets, canonical source bounds, and root order. Boundary connector terminals detach while retaining their points. Paste allocates all IDs before rewriting references, preserves an existing destination page, deep-clones owned data, assigns fresh root order keys, validates once, and publishes one history entry.
+- Duplicate delegates to the clipboard graph pipeline. It has no independent shallow-copy path.
+- `RecordIdService` uses secure UUID tokens, readable kind/type prefixes, collision retry, and an injectable deterministic token source. Store import, editor creation, built-in tools, custom SVG tools, arrows/bindings, and AI/MCP commands now use the same service. The legacy standalone `createCanvasShapeId()` helper remains only as a compatibility API and is no longer used by production creation paths.
+
+Regression coverage lives in `packages/glideline/src/workstream-d.test.ts` and covers index repair, missing geometry, invalid references, direct unsafe deletion, terminal conflicts, descendant cascades, full connector duplication, boundary detachment, assets, ownership rewriting, alias isolation, one-step undo/redo, and deterministic collision retry.
+
 ## 11. Workstream E — History, Commands, and Interaction Previews
 
 ### 11.1 History redesign

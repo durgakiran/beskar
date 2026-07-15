@@ -14,7 +14,6 @@
 import { StateNode } from '../state-node';
 import type { PointerDownEvent } from '../state-node';
 import type { ShapeId } from '../types';
-import { sid } from '../types';
 
 // ─────────────────────────────────────────────────────────────
 // Idle
@@ -36,7 +35,7 @@ class Idle extends StateNode {
     }
 
     // Place a new sticky note centred on click
-    const newId: ShapeId = sid(`sticky-${Date.now()}`);
+    const newId: ShapeId = this.editor.createShapeId('sticky-note');
     const W = 200;
     const H = 200;
 

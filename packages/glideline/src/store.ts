@@ -18,6 +18,7 @@ import type {
   ShapeId,
   BindingId,
   PageId,
+  AssetId,
   GlideShape,
   GlideBinding,
   GlideDocument,
@@ -26,6 +27,7 @@ import type {
 } from './types';
 import type { Geometry2d } from './geometry';
 import { GlideSchema, DocumentValidationError, type LoadReport } from './schema';
+import { RecordIdService } from './id';
 
 interface RBushEntry {
   id: string;
@@ -97,6 +99,7 @@ export interface ReplaceDocumentOptions {
 export interface ImportOptions {
   idPolicy?: 'remap' | 'reject';
   relationshipPolicy?: 'detach-external' | 'preserve';
+  preserveExternalKinds?: readonly ('page' | 'asset')[];
   label?: string;
 }
 
@@ -104,6 +107,18 @@ export interface ImportReport {
   readonly importedRecordCount: number;
   readonly idMap: Readonly<Record<string, string>>;
   readonly warnings: readonly string[];
+}
+
+export interface IntegrityIssue {
+  readonly code: string;
+  readonly message: string;
+  readonly recordId?: string;
+}
+
+export interface IntegrityReport {
+  readonly ok: boolean;
+  readonly recordCount: number;
+  readonly issues: readonly IntegrityIssue[];
 }
 
 export type StoreChangeListener = (changes: StoreChangeSet) => void;
@@ -144,7 +159,20 @@ interface DerivedState {
   bindingsByFrom: Map<ShapeId, Set<BindingId>>;
   bindingsByTo: Map<ShapeId, Set<BindingId>>;
   shapesByPage: Map<PageId, Set<ShapeId>>;
+  childrenByParent: Map<string, Set<string>>;
+  assetUsers: Map<AssetId, Set<string>>;
   shapeIds: readonly ShapeId[] | null;
+}
+
+interface FullDerivedState {
+  tree: RBush<RBushEntry>;
+  treeEntries: Map<string, RBushEntry>;
+  bindingsByFrom: Map<ShapeId, Set<BindingId>>;
+  bindingsByTo: Map<ShapeId, Set<BindingId>>;
+  shapesByPage: Map<PageId, Set<ShapeId>>;
+  childrenByParent: Map<string, Set<string>>;
+  assetUsers: Map<AssetId, Set<string>>;
+  shapeIds: readonly ShapeId[];
 }
 
 const NO_FAILURE = Symbol('no transaction failure');
@@ -236,6 +264,10 @@ function readRecordPointer(record: AnyRecord, pointer: string): unknown {
   return value;
 }
 
+function pointerOverlaps(left: string, right: string): boolean {
+  return left === right || left.startsWith(`${right}/`) || right.startsWith(`${left}/`);
+}
+
 function writeRecordPointer(record: AnyRecord, pointer: string, value: unknown, remove = false): void {
   const segments = pointerSegments(pointer);
   let target: AnyRecord = record;
@@ -288,6 +320,8 @@ export class GlideStore {
   private _bindingsByFrom = new Map<ShapeId, Set<BindingId>>();
   private _bindingsByTo = new Map<ShapeId, Set<BindingId>>();
   private _shapesByPage = new Map<PageId, Set<ShapeId>>();
+  private _childrenByParent = new Map<string, Set<string>>();
+  private _assetUsers = new Map<AssetId, Set<string>>();
   private _shapeIdsSignal = signal<readonly ShapeId[]>(Object.freeze([]));
   private _shapeIdsReadonly = computed(() => this._shapeIdsSignal.value);
   private _ephemeralIds = new Set<string>();
@@ -301,7 +335,10 @@ export class GlideStore {
   public getGeometry?: (shape: AnyRecord) => Geometry2d | undefined;
   public hitTestPoint?: (shape: AnyRecord, x: number, y: number) => boolean;
 
-  constructor(public readonly schema: GlideSchema = new GlideSchema()) {}
+  constructor(
+    public readonly schema: GlideSchema = new GlideSchema(),
+    public readonly ids: RecordIdService = new RecordIdService(),
+  ) {}
 
   get revision(): number { return this._versionSignal.peek(); }
 
@@ -361,6 +398,26 @@ export class GlideStore {
     const ids = this._bindingsByTo.get(shapeId);
     if (!ids) return [];
     return Array.from(ids, id => this.get(id)).filter(Boolean) as unknown as GlideBinding[];
+  }
+
+  getShapeIdsOnPage(pageId: PageId): readonly ShapeId[] {
+    return Object.freeze(Array.from(this._shapesByPage.get(pageId) ?? []));
+  }
+
+  getChildren(parentId: string): readonly StoreRecord[] {
+    return Object.freeze(Array.from(this._childrenByParent.get(parentId) ?? [])
+      .map(id => this.get(id))
+      .filter((record): record is StoreRecord => record !== undefined)
+      .sort((left, right) => String(left['index'] ?? '').localeCompare(String(right['index'] ?? ''))
+        || String(left['id']).localeCompare(String(right['id']))));
+  }
+
+  getAssetUserIds(assetId: AssetId): readonly string[] {
+    return Object.freeze(Array.from(this._assetUsers.get(assetId) ?? []));
+  }
+
+  createRecordId(prefix: string, reserved: ReadonlySet<string> = new Set()): string {
+    return this.ids.create(prefix, id => reserved.has(id) || this.has(id));
   }
 
   getShapesAtPoint(x: number, y: number): AnyRecord[] {
@@ -496,14 +553,18 @@ export class GlideStore {
     let derived: DerivedState;
     this._preparingCommit = true;
     try {
-      const graphMayHaveChanged = deltas.some(delta =>
-        delta.before === null
-        || delta.after === null
-        || delta.changedPaths.some(path =>
+      const graphMayHaveChanged = deltas.some(delta => {
+        if (delta.before === null || delta.after === null) return true;
+        const referencePaths = new Set([
+          ...this.schema.getReferenceDescriptors(delta.before as AnyRecord).map(reference => reference.path),
+          ...this.schema.getReferenceDescriptors(delta.after as AnyRecord).map(reference => reference.path),
+        ]);
+        return delta.changedPaths.some(path =>
           /^\/(parentId|pageId|assetId|fromId|toId)(\/|$)/.test(path)
-          || (this.schema.isBindingRecord(delta.after as AnyRecord) && /^\/props(\/|$)/.test(path)),
-        ),
-      );
+          || (this.schema.isBindingRecord(delta.after as AnyRecord) && /^\/props(\/|$)/.test(path))
+          || Array.from(referencePaths).some(referencePath => pointerOverlaps(path, referencePath)),
+        );
+      });
       if (graphMayHaveChanged) {
         // Existing committed records are already valid, so a non-structural
         // update only needs its changed records revalidated. Relationship
@@ -599,6 +660,8 @@ export class GlideStore {
     const bindingsByFrom = new Map<ShapeId, Set<BindingId>>();
     const bindingsByTo = new Map<ShapeId, Set<BindingId>>();
     const shapesByPage = new Map<PageId, Set<ShapeId>>();
+    const childrenByParent = new Map<string, Set<string>>();
+    const assetUsers = new Map<AssetId, Set<string>>();
     let shapeIds: ShapeId[] | null = null;
 
     const mutableSet = <K, V>(
@@ -624,6 +687,13 @@ export class GlideStore {
       const beforeIsShape = before !== null && this.schema.isRenderableShape(before as AnyRecord);
       const afterIsShape = after !== null && this.schema.isRenderableShape(after as AnyRecord);
       if (before) {
+        const parentId = before['parentId'];
+        if (typeof parentId === 'string') {
+          mutableSet(this._childrenByParent, childrenByParent, parentId).delete(id);
+        }
+        for (const assetId of this._assetReferences(before as AnyRecord)) {
+          mutableSet(this._assetUsers, assetUsers, assetId).delete(id);
+        }
         if (this.schema.isBindingRecord(before as AnyRecord)
           && this.schema.hasRuntimeCapability(before as AnyRecord)) {
           const fromId = before['fromId'] as ShapeId;
@@ -644,6 +714,13 @@ export class GlideStore {
       }
 
       if (!after) continue;
+      const parentId = after['parentId'];
+      if (typeof parentId === 'string') {
+        mutableSet(this._childrenByParent, childrenByParent, parentId).add(id);
+      }
+      for (const assetId of this._assetReferences(after as AnyRecord)) {
+        mutableSet(this._assetUsers, assetUsers, assetId).add(id);
+      }
       if (this.schema.isBindingRecord(after as AnyRecord)
         && this.schema.hasRuntimeCapability(after as AnyRecord)) {
         const fromId = after['fromId'] as ShapeId;
@@ -661,23 +738,8 @@ export class GlideStore {
       const pageId = after['pageId'] as PageId | undefined;
       if (pageId) mutableSet(this._shapesByPage, shapesByPage, pageId).add(id as ShapeId);
 
-      let bounds: { minX: number; minY: number; maxX: number; maxY: number } | undefined;
-      if (this.getGeometry) {
-        bounds = this.getGeometry(after as AnyRecord)?.getBounds();
-      } else {
-        const x = after['x'];
-        const y = after['y'];
-        const w = after['w'];
-        const h = after['h'];
-        if ([x, y, w, h].every(value => typeof value === 'number')) {
-          bounds = { minX: x as number, minY: y as number, maxX: (x as number) + (w as number), maxY: (y as number) + (h as number) };
-        }
-      }
-      if (bounds) {
-        if (![bounds.minX, bounds.minY, bounds.maxX, bounds.maxY].every(Number.isFinite)) {
-          throw new Error(`Shape "${id}" produced non-finite geometry bounds`);
-        }
-        const entry = { id, ...bounds };
+      const entry = this._geometryEntry(after);
+      if (entry) {
         treeInsertions.push(entry);
       }
     }
@@ -688,6 +750,8 @@ export class GlideStore {
       bindingsByFrom,
       bindingsByTo,
       shapesByPage,
+      childrenByParent,
+      assetUsers,
       shapeIds: shapeIds ? Object.freeze(shapeIds) : null,
     };
   }
@@ -713,7 +777,200 @@ export class GlideStore {
       if (values.size === 0) this._shapesByPage.delete(id);
       else this._shapesByPage.set(id, values);
     }
+    for (const [id, values] of derived.childrenByParent) {
+      if (values.size === 0) this._childrenByParent.delete(id);
+      else this._childrenByParent.set(id, values);
+    }
+    for (const [id, values] of derived.assetUsers) {
+      if (values.size === 0) this._assetUsers.delete(id);
+      else this._assetUsers.set(id, values);
+    }
     if (derived.shapeIds) this._shapeIdsSignal.value = derived.shapeIds;
+  }
+
+  private _assetReferences(record: AnyRecord): AssetId[] {
+    const result = new Set<AssetId>();
+    if (typeof record['assetId'] === 'string') result.add(record['assetId'] as AssetId);
+    for (const descriptor of this.schema.getReferenceDescriptors(record)) {
+      if (descriptor.targetKind !== 'asset') continue;
+      const value = readRecordPointer(record, descriptor.path);
+      if (typeof value === 'string') result.add(value as AssetId);
+    }
+    return Array.from(result);
+  }
+
+  private _geometryEntry(record: StoreRecord): RBushEntry | null {
+    const id = record['id'] as string;
+    let bounds: { minX: number; minY: number; maxX: number; maxY: number } | undefined;
+    if (this.getGeometry) {
+      bounds = this.getGeometry(record as AnyRecord)?.getBounds();
+    } else {
+      const { x, y, w, h } = record;
+      if ([x, y, w, h].every(value => typeof value === 'number')) {
+        bounds = {
+          minX: x as number,
+          minY: y as number,
+          maxX: (x as number) + (w as number),
+          maxY: (y as number) + (h as number),
+        };
+      }
+    }
+    if (!bounds) return null;
+    if (![bounds.minX, bounds.minY, bounds.maxX, bounds.maxY].every(Number.isFinite)) {
+      throw new Error(`Shape "${id}" produced non-finite geometry bounds`);
+    }
+    return { id, ...bounds };
+  }
+
+  private _buildFullDerivedState(): FullDerivedState {
+    const tree = new RBush<RBushEntry>();
+    const treeEntries = new Map<string, RBushEntry>();
+    const bindingsByFrom = new Map<ShapeId, Set<BindingId>>();
+    const bindingsByTo = new Map<ShapeId, Set<BindingId>>();
+    const shapesByPage = new Map<PageId, Set<ShapeId>>();
+    const childrenByParent = new Map<string, Set<string>>();
+    const assetUsers = new Map<AssetId, Set<string>>();
+    const shapeIds: ShapeId[] = [];
+    const add = <K, V>(map: Map<K, Set<V>>, key: K, value: V) => {
+      const values = map.get(key) ?? new Set<V>();
+      values.add(value);
+      map.set(key, values);
+    };
+
+    for (const [id, recordSignal] of this._signals) {
+      const record = recordSignal.peek();
+      if (!record) continue;
+      const parentId = record['parentId'];
+      if (typeof parentId === 'string') add(childrenByParent, parentId, id);
+      for (const assetId of this._assetReferences(record as AnyRecord)) add(assetUsers, assetId, id);
+      if (this.schema.isBindingRecord(record as AnyRecord) && this.schema.hasRuntimeCapability(record as AnyRecord)) {
+        add(bindingsByFrom, record['fromId'] as ShapeId, id as BindingId);
+        add(bindingsByTo, record['toId'] as ShapeId, id as BindingId);
+        continue;
+      }
+      if (!this.schema.isRenderableShape(record as AnyRecord)) continue;
+      shapeIds.push(id as ShapeId);
+      const pageId = record['pageId'];
+      if (typeof pageId === 'string') add(shapesByPage, pageId as PageId, id as ShapeId);
+      const entry = this._geometryEntry(record);
+      if (entry) {
+        tree.insert(entry);
+        treeEntries.set(id, entry);
+      }
+    }
+    return {
+      tree,
+      treeEntries,
+      bindingsByFrom,
+      bindingsByTo,
+      shapesByPage,
+      childrenByParent,
+      assetUsers,
+      shapeIds: Object.freeze(shapeIds),
+    };
+  }
+
+  rebuildIndices(): void {
+    if (this._activeTransaction || this._preparingCommit) {
+      throw new TransactionReentryError();
+    }
+    const rebuilt = this._buildFullDerivedState();
+    preactBatch(() => {
+      this._tree = rebuilt.tree;
+      this._treeEntries = rebuilt.treeEntries;
+      this._bindingsByFrom = rebuilt.bindingsByFrom;
+      this._bindingsByTo = rebuilt.bindingsByTo;
+      this._shapesByPage = rebuilt.shapesByPage;
+      this._childrenByParent = rebuilt.childrenByParent;
+      this._assetUsers = rebuilt.assetUsers;
+      this._shapeIdsSignal.value = rebuilt.shapeIds;
+    });
+  }
+
+  assertIntegrity(): IntegrityReport {
+    const issues: IntegrityIssue[] = [];
+    const liveRecords = Array.from(this._signals.values())
+      .map(recordSignal => recordSignal.peek())
+      .filter((record): record is StoreRecord => record !== null);
+    try {
+      this.schema.validateCandidate(liveRecords as unknown as AnyRecord[]);
+    } catch (error) {
+      issues.push({
+        code: 'graph-invalid',
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+
+    let expected: FullDerivedState | null = null;
+    try {
+      expected = this._buildFullDerivedState();
+    } catch (error) {
+      issues.push({
+        code: 'geometry-invalid',
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+
+    const compareSetMap = <K, V>(
+      code: string,
+      actual: Map<K, Set<V>>,
+      wanted: Map<K, Set<V>>,
+    ) => {
+      const keys = new Set([...actual.keys(), ...wanted.keys()]);
+      for (const key of keys) {
+        const left = actual.get(key) ?? new Set<V>();
+        const right = wanted.get(key) ?? new Set<V>();
+        if (left.size !== right.size || Array.from(left).some(value => !right.has(value))) {
+          issues.push({ code, message: `${code} differs for "${String(key)}"`, recordId: String(key) });
+        }
+      }
+    };
+
+    if (expected) {
+      compareSetMap('bindings-from-mismatch', this._bindingsByFrom, expected.bindingsByFrom);
+      compareSetMap('bindings-to-mismatch', this._bindingsByTo, expected.bindingsByTo);
+      compareSetMap('page-membership-mismatch', this._shapesByPage, expected.shapesByPage);
+      compareSetMap('parent-membership-mismatch', this._childrenByParent, expected.childrenByParent);
+      compareSetMap('asset-usage-mismatch', this._assetUsers, expected.assetUsers);
+      const actualShapeIds = this._shapeIdsSignal.peek();
+      if (actualShapeIds.length !== expected.shapeIds.length
+        || actualShapeIds.some(id => !expected!.shapeIds.includes(id))) {
+        issues.push({ code: 'shape-ids-mismatch', message: 'Reactive shape IDs differ from canonical records' });
+      }
+      const treeEntries = this._tree.all();
+      const treeIds = new Set(treeEntries.map(entry => entry.id));
+      if (treeEntries.length !== treeIds.size) {
+        issues.push({ code: 'spatial-duplicate', message: 'RBush contains duplicate entries for a shape' });
+      }
+      if (treeIds.size !== expected.treeEntries.size
+        || Array.from(treeIds).some(id => !expected!.treeEntries.has(id))) {
+        issues.push({ code: 'spatial-membership-mismatch', message: 'RBush membership differs from canonical shape geometry' });
+      }
+      if (this._treeEntries.size !== expected.treeEntries.size
+        || Array.from(this._treeEntries).some(([id]) => !expected!.treeEntries.has(id))) {
+        issues.push({ code: 'spatial-entry-map-mismatch', message: 'Spatial entry map differs from canonical shape geometry' });
+      }
+      for (const [id, wanted] of expected.treeEntries) {
+        const actual = this._treeEntries.get(id);
+        if (!actual || actual.minX !== wanted.minX || actual.minY !== wanted.minY
+          || actual.maxX !== wanted.maxX || actual.maxY !== wanted.maxY) {
+          issues.push({ code: 'spatial-bounds-mismatch', message: `RBush bounds differ for "${id}"`, recordId: id });
+        }
+      }
+    }
+
+    for (const [id, writable] of this._signals) {
+      const readonly = this._readonlySignals.get(id);
+      if (!readonly || readonly.peek() !== writable.peek()) {
+        issues.push({ code: 'signal-mismatch', message: `Signal view differs for "${id}"`, recordId: id });
+      }
+    }
+
+    return Object.freeze({
+      ok: issues.length === 0,
+      recordCount: liveRecords.length,
+      issues: Object.freeze(issues.map(issue => Object.freeze(issue))),
+    });
   }
 
   serialize(): GlideDocument {
@@ -756,6 +1013,7 @@ export class GlideStore {
       : this.schema.loadDocument(cloneJsonValue(payload) as GlideDocument).records;
     const idPolicy = options.idPolicy ?? 'remap';
     const relationshipPolicy = options.relationshipPolicy ?? 'detach-external';
+    const preserveExternalKinds = new Set(options.preserveExternalKinds ?? []);
     const sourceIds = new Set<string>();
     for (const record of source) {
       this.schema.validateRecord(record);
@@ -770,7 +1028,7 @@ export class GlideStore {
         .map(([id]) => id),
     ]);
     const idMap: Record<string, string> = {};
-    let sequence = 1;
+    const sourceById = new Map(source.map(record => [record['id'] as string, record]));
     for (const oldId of sourceIds) {
       if (idPolicy === 'reject') {
         if (reserved.has(oldId)) throw new DocumentValidationError(`import id "${oldId}" already exists`);
@@ -778,9 +1036,9 @@ export class GlideStore {
         reserved.add(oldId);
         continue;
       }
-      const stem = `${oldId}:import`;
-      let nextId: string;
-      do nextId = `${stem}:${sequence++}`; while (reserved.has(nextId));
+      const sourceRecord = sourceById.get(oldId)!;
+      const prefix = `${String(sourceRecord['kind'] ?? 'record')}:${String(sourceRecord['type'] ?? 'unknown')}`;
+      const nextId = this.ids.create(prefix, id => reserved.has(id));
       idMap[oldId] = nextId;
       reserved.add(nextId);
     }
@@ -795,6 +1053,12 @@ export class GlideStore {
         if (typeof reference !== 'string') continue;
         if (idMap[reference]) {
           next[field] = idMap[reference];
+          continue;
+        }
+        const external = this.get(reference);
+        if ((field === 'pageId' || field === 'assetId')
+          && preserveExternalKinds.has(field === 'pageId' ? 'page' : 'asset')
+          && external?.['kind'] === (field === 'pageId' ? 'page' : 'asset')) {
           continue;
         }
         if (relationshipPolicy === 'preserve') continue;

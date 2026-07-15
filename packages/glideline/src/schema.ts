@@ -290,6 +290,9 @@ export class GlideSchema {
           const cachedTarget = from
             ? readPointer(from, `/props/${terminal}/boundShapeId`)
             : undefined;
+          // Null is allowed during a live handle preview while the durable
+          // binding remains in place. Any concrete cached target must agree
+          // with the authoritative binding record.
           if (typeof cachedTarget === 'string' && cachedTarget !== record['toId']) {
             throw new DocumentValidationError(`binding target conflicts with the arrow ${terminal} terminal`, id);
           }

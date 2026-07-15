@@ -14,6 +14,8 @@ export type {
   GlideMigrations, GlideMigrator,
 } from './types';
 export { sid, bid, pid, aid, makeBox, isGlideBinding, isGlideShape } from './types';
+export { RecordIdService } from './id';
+export type { IdTokenFactory } from './id';
 
 // Validators
 export { T } from './validators';
@@ -35,6 +37,7 @@ export type {
   ChangeOrigin, JsonPointer, StoreRecord, RecordDelta, StoreChangeSet, TransactionScope,
   TransactionOptions, StoreTransaction, TransactionResult, StoreChangeListener,
   ReplaceDocumentOptions, ImportOptions, ImportReport,
+  IntegrityIssue, IntegrityReport,
 } from './store';
 
 // Shapes (base)
@@ -53,7 +56,9 @@ export { BoxTool } from './tools/BoxTool';
 
 // Editor
 export { GlideEditor, createEditor } from './editor';
-export type { GlidePlugin, CreateEditorOptions } from './editor';
+export type {
+  GlidePlugin, CreateEditorOptions, ClipboardSchemaHeader, ClipboardPayload,
+} from './editor';
 
 // Phase 4 — Bindings & Arrow Routing
 export { computeArcPath, parseArcControlPoint } from './arc-router';
