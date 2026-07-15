@@ -91,7 +91,7 @@ class Drawing extends StateNode {
     const h = info.current.y - y;
     this.editor.history.batch('Preview', () => {
       this.editor.createShape(makeBoxShape(PREVIEW_ID, x, y, w, h));
-    }, { history: 'ignore' });
+    }, { history: 'ignore', scope: 'ephemeral' });
   }
 
   override onPointerMove(e: PointerMoveEvent): void {
@@ -109,7 +109,7 @@ class Drawing extends StateNode {
           h: Math.abs(h),
         },
       });
-    }, { history: 'ignore' });
+    }, { history: 'ignore', scope: 'ephemeral' });
   }
 
   override onPointerUp(e: PointerUpEvent): void {
@@ -121,7 +121,7 @@ class Drawing extends StateNode {
     // Remove preview without history
     this.editor.history.batch('Preview Cleanup', () => {
       this.editor.deleteShapes([PREVIEW_ID]);
-    }, { history: 'ignore' });
+    }, { history: 'ignore', scope: 'ephemeral' });
 
     // Commit final shape as a single undo entry
     const finalId = sid(`box-${Date.now()}`);
@@ -139,7 +139,7 @@ class Drawing extends StateNode {
       // Delete preview without history
       this.editor.history.batch('Preview Cleanup', () => {
         this.editor.deleteShapes([PREVIEW_ID]);
-      }, { history: 'ignore' });
+    }, { history: 'ignore', scope: 'ephemeral' });
 
       this.parent!.transition('idle');
     }

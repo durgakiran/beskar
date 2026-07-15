@@ -90,7 +90,7 @@ class Drawing extends StateNode {
     const h = info.current.y - info.origin.y;
     this.editor.history.batch('Ellipse Preview', () => {
       this.editor.createShape(makeEllipseShape(PREVIEW_ID, info.origin.x, info.origin.y, w, h));
-    }, { history: 'ignore' });
+    }, { history: 'ignore', scope: 'ephemeral' });
   }
 
   override onPointerMove(e: PointerMoveEvent): void {
@@ -114,7 +114,7 @@ class Drawing extends StateNode {
           h:           Math.max(1, Math.abs(h)),
         },
       });
-    }, { history: 'ignore' });
+    }, { history: 'ignore', scope: 'ephemeral' });
   }
 
   override onPointerUp(e: PointerUpEvent): void {
@@ -129,7 +129,7 @@ class Drawing extends StateNode {
     // Remove preview
     this.editor.history.batch('Ellipse Preview Cleanup', () => {
       this.editor.deleteShapes([PREVIEW_ID]);
-    }, { history: 'ignore' });
+    }, { history: 'ignore', scope: 'ephemeral' });
 
     // Commit final shape
     const finalId = sid(`ellipse-${Date.now()}`);
@@ -148,7 +148,7 @@ class Drawing extends StateNode {
     if (e.key === 'Escape') {
       this.editor.history.batch('Ellipse Preview Cleanup', () => {
         this.editor.deleteShapes([PREVIEW_ID]);
-      }, { history: 'ignore' });
+    }, { history: 'ignore', scope: 'ephemeral' });
       this.parent!.transition('idle');
     }
   }

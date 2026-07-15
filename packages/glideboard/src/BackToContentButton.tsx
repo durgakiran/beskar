@@ -1,16 +1,18 @@
 import React, { useMemo } from 'react';
 import { useSignalValue } from './useSignalValue';
-import { wbEditor } from './editor';
+import { useGlideboardController } from './GlideboardContext';
 import { wbTheme } from './theme';
 
 export function BackToContentButton() {
-  const camera = useSignalValue(wbEditor.camera.signal);
-  const shapeIds = useSignalValue(wbEditor.store.getShapeIdsSignal());
+  const controller = useGlideboardController();
+  const editor = controller.editor;
+  const camera = useSignalValue(editor.camera.signal);
+  const shapeIds = useSignalValue(editor.store.getShapeIdsSignal());
 
   const isOffscreen = useMemo(() => {
     if (!shapeIds || shapeIds.length === 0) return false;
 
-    const shapes = wbEditor.getShapes();
+    const shapes = editor.getShapes();
     if (shapes.length === 0) return false;
 
     let minX = Infinity;
@@ -19,7 +21,7 @@ export function BackToContentButton() {
     let maxY = -Infinity;
 
     for (const shape of shapes) {
-      const bounds = wbEditor.getShapeWorldBounds(shape);
+      const bounds = editor.getShapeWorldBounds(shape);
       if (bounds.minX < minX) minX = bounds.minX;
       if (bounds.minY < minY) minY = bounds.minY;
       if (bounds.maxX > maxX) maxX = bounds.maxX;
@@ -28,16 +30,16 @@ export function BackToContentButton() {
 
     if (minX === Infinity) return false;
 
-    const vp = wbEditor.getViewportBounds();
+    const vp = editor.getViewportBounds();
     // Check if the viewport completely misses the content bounding box
     const intersects = !(vp.maxX < minX || vp.minX > maxX || vp.maxY < minY || vp.minY > maxY);
     return !intersects;
-  }, [camera, shapeIds]);
+  }, [camera, editor, shapeIds]);
 
   if (!isOffscreen) return null;
 
   const handleBackToContent = () => {
-    const shapes = wbEditor.getShapes();
+    const shapes = editor.getShapes();
     if (shapes.length === 0) return;
 
     let minX = Infinity;
@@ -46,7 +48,7 @@ export function BackToContentButton() {
     let maxY = -Infinity;
 
     for (const shape of shapes) {
-      const bounds = wbEditor.getShapeWorldBounds(shape);
+      const bounds = editor.getShapeWorldBounds(shape);
       if (bounds.minX < minX) minX = bounds.minX;
       if (bounds.minY < minY) minY = bounds.minY;
       if (bounds.maxX > maxX) maxX = bounds.maxX;
@@ -55,15 +57,15 @@ export function BackToContentButton() {
 
     if (minX === Infinity) return;
 
-    const container = document.getElementById('wb-canvas');
+    const container = controller.getCanvasElement();
     if (!container) return;
 
     const { width, height } = container.getBoundingClientRect();
     const cx = (minX + maxX) / 2;
     const cy = (minY + maxY) / 2;
-    const camera = wbEditor.camera.getCamera();
+    const camera = editor.camera.getCamera();
 
-    wbEditor.camera.setCamera({
+    editor.camera.setCamera({
       x: cx - (width / 2) / camera.z,
       y: cy - (height / 2) / camera.z,
     });
@@ -71,7 +73,7 @@ export function BackToContentButton() {
 
   return (
     <button
-      id="wb-back-to-content"
+      id={controller.domId('back-to-content')}
       onClick={handleBackToContent}
       style={{
         position: 'absolute',

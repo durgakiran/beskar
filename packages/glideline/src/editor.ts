@@ -16,9 +16,9 @@
  *  - updateShape calls onAfterChangeToShape for all bindings to the shape
  */
 
-import { signal, type Signal } from '@preact/signals';
+import { signal, type Signal, type ReadonlySignal } from '@preact/signals';
 import { sid } from './types';
-import { GlideStore } from './store';
+import { GlideStore, type ImportOptions, type ImportReport } from './store';
 import { GlideSchema } from './schema';
 import { GlideCamera } from './camera';
 import { HistoryManager } from './history';
@@ -34,6 +34,7 @@ import { getWorldBounds, SmartRouterCache, type SmartRouteResolution, type Smart
 import type { GlideShape, GlideBinding, ShapeId, BindingId, Vec2, Box2d, AnyRecord } from './types';
 import type { GlideEvent } from './state-node';
 import { getMinHeightForShape } from './styles';
+import { createTopIndex } from './arrow-records';
 
 // ─────────────────────────────────────────────────────────────
 // GlidePlugin — unit of extension
@@ -73,6 +74,17 @@ export interface BindingPreview extends BindingPreviewCandidate {
   sourceCandidate?: BindingPreviewCandidate | null;
 }
 
+const DEFAULT_ACTIVE_STYLES = Object.freeze({
+  color: 'black',
+  labelColor: 'black',
+  fillStyle: 'none',
+  strokeStyle: 'solid',
+  strokeWidth: 'medium',
+  font: 'sans',
+  fontSize: 'md',
+  textAlign: 'center',
+});
+
 // ─────────────────────────────────────────────────────────────
 // GlideEditor
 // ─────────────────────────────────────────────────────────────
@@ -108,16 +120,7 @@ export class GlideEditor {
   readonly bindingPreview: Signal<BindingPreview | null> = signal(null);
 
   /** Signal carrying the active/last-selected styles. */
-  readonly activeStyles = signal<Record<string, any>>({
-    color: 'black',
-    labelColor: 'black',
-    fillStyle: 'none',
-    strokeStyle: 'solid',
-    strokeWidth: 'medium',
-    font: 'sans',
-    fontSize: 'md',
-    textAlign: 'center',
-  });
+  readonly activeStyles = signal<Record<string, any>>({ ...DEFAULT_ACTIVE_STYLES });
 
   constructor(store: GlideStore, schema: GlideSchema, camera: GlideCamera) {
     this.store   = store;
@@ -204,7 +207,7 @@ export class GlideEditor {
     return this.store.get(id) as S | undefined;
   }
 
-  getShapeIdsSignal(): Signal<ShapeId[]> {
+  getShapeIdsSignal(): ReadonlySignal<readonly ShapeId[]> {
     return this.store.getShapeIdsSignal();
   }
 
@@ -238,6 +241,13 @@ export class GlideEditor {
   // ── Shape mutations ────────────────────────────────────────
 
   createShape(partial: AnyRecord): ShapeId {
+    partial = {
+      kind: 'shape',
+      rotation: 0,
+      index: createTopIndex(),
+      meta: {},
+      ...partial,
+    };
     const type = partial['type'] as string;
     const util = this._utils.get(type);
     if (util) {
@@ -272,10 +282,12 @@ export class GlideEditor {
       }
       partial['props'] = mergedProps;
     }
-    this.store.put([partial]);
-    if (type !== 'arrow') {
-      this._smartRouter.markDirty();
-    }
+    this.history.batch('Create Shape', () => {
+      this.store.transact({ origin: 'user' }, tx => tx.insert(partial));
+      if (type !== 'arrow') {
+        this._smartRouter.markDirty();
+      }
+    });
     return partial['id'] as ShapeId;
   }
 
@@ -295,44 +307,52 @@ export class GlideEditor {
       }
     }
 
-    this.store.put([newShape]);
-    if ((existing['type'] as string) !== 'arrow') {
-      this._smartRouter.markDirty();
-    }
-    // Fire onAfterChangeToShape for all bindings pointing to this shape
-    const bindings = this.store.getBindingsToShape(id);
-    for (const binding of bindings) {
-      const util = this._bindingUtils.get(binding.type);
-      util?.onAfterChangeToShape?.(binding);
-    }
+    this.history.batch('Update Shape', () => {
+      this.store.transact({ origin: 'user' }, tx => {
+        tx.update(id, () => newShape);
+        if ((existing['type'] as string) !== 'arrow') {
+          this._smartRouter.markDirty();
+        }
+        // Binding lifecycle writes join this same root transaction. If a hook
+        // throws, neither the target update nor any hook-generated write commits.
+        const bindings = this.store.getBindingsToShape(id);
+        for (const binding of bindings) {
+          const util = this._bindingUtils.get(binding.type);
+          util?.onAfterChangeToShape?.(binding);
+        }
+      });
+    });
   }
 
   deleteShapes(ids: ShapeId[]): void {
     let shouldInvalidateSmartRoutes = false;
-    for (const id of ids) {
-      const existing = this.store.get(id);
-      if (existing && existing['type'] !== 'arrow') {
-        shouldInvalidateSmartRoutes = true;
-      }
-      // 1. Fire onBeforeDeleteToShape for bindings pointing to this shape
-      const bindingsTo = this.store.getBindingsToShape(id);
-      for (const binding of bindingsTo) {
-        const util = this._bindingUtils.get(binding.type);
-        util?.onBeforeDeleteToShape?.(binding);
-      }
-      // 2. Remove those bindings from the store
-      this.store.remove(bindingsTo.map(b => b.id));
+    this.history.batch('Delete Shapes', () => {
+      this.store.transact({ origin: 'user' }, tx => {
+        for (const id of ids) {
+          const existing = tx.get(id);
+          if (existing && existing['type'] !== 'arrow') {
+            shouldInvalidateSmartRoutes = true;
+          }
+          // 1. Fire onBeforeDeleteToShape for bindings pointing to this shape
+          const bindingsTo = this.store.getBindingsToShape(id);
+          for (const binding of bindingsTo) {
+            const util = this._bindingUtils.get(binding.type);
+            util?.onBeforeDeleteToShape?.(binding);
+            tx.remove(binding.id);
+          }
 
-      // 3. Fire onBeforeDeleteFromShape + remove bindings from this shape
-      const bindingsFrom = this.store.getBindingsFromShape(id);
-      for (const binding of bindingsFrom) {
-        const util = this._bindingUtils.get(binding.type);
-        util?.onBeforeDeleteFromShape?.(binding);
-      }
-      this.store.remove(bindingsFrom.map(b => b.id));
-    }
-    // 4. Finally remove the shapes themselves
-    this.store.remove(ids);
+          // 2. Fire onBeforeDeleteFromShape for bindings from this shape
+          const bindingsFrom = this.store.getBindingsFromShape(id);
+          for (const binding of bindingsFrom) {
+            const util = this._bindingUtils.get(binding.type);
+            util?.onBeforeDeleteFromShape?.(binding);
+            tx.remove(binding.id);
+          }
+        }
+        // 3. Finally remove the shapes themselves
+        for (const id of ids) tx.remove(id);
+      });
+    });
     if (shouldInvalidateSmartRoutes) {
       this._smartRouter.markDirty();
     }
@@ -341,18 +361,29 @@ export class GlideEditor {
   // ── Binding mutations ──────────────────────────────────────
 
   createBinding(partial: AnyRecord): BindingId {
-    this.store.put([partial]);
+    this.history.batch('Create Binding', () => {
+      this.store.transact({ origin: 'user' }, tx => tx.insert(partial));
+    });
     return partial['id'] as BindingId;
   }
 
   updateBinding(id: BindingId, partialProps: AnyRecord): void {
     const existing = this.store.get(id);
     if (!existing) return; // binding may have been deleted; silent no-op
-    this.store.put([{ ...existing, props: { ...(existing['props'] as object), ...partialProps } }]);
+    this.history.batch('Update Binding', () => {
+      this.store.transact({ origin: 'user' }, tx => {
+        tx.update(id, record => ({
+          ...record,
+          props: { ...(record['props'] as object), ...partialProps },
+        }));
+      });
+    });
   }
 
   deleteBinding(id: BindingId): void {
-    this.store.remove([id]);
+    this.history.batch('Delete Binding', () => {
+      this.store.transact({ origin: 'user' }, tx => tx.remove(id));
+    });
   }
 
   // ── Selection ──────────────────────────────────────────────
@@ -381,14 +412,7 @@ export class GlideEditor {
   }
 
   selectAll(): void {
-    const all: ShapeId[] = [];
-    for (const sig of (this.store as any)._signals.values()) {
-      const rec = sig.peek();
-      if (rec && typeof rec['fromId'] === 'undefined') {
-        all.push(rec['id'] as ShapeId);
-      }
-    }
-    this._selection.value = new Set(all);
+    this._selection.value = new Set(this.store.getShapeIds());
   }
 
   // ── Clipboard ──────────────────────────────────────────────
@@ -443,7 +467,7 @@ export class GlideEditor {
    * fractional `index` field for z-ordered rendering.
    */
   getShapes(sorted = false): GlideShape[] {
-    const ids = this.store.getShapeIdsSignal().peek();
+    const ids = this.store.getShapeIds();
     const shapes: GlideShape[] = [];
     for (const id of ids) {
       const s = this.store.get(id);
@@ -582,7 +606,7 @@ export class GlideEditor {
   /**
    * Execute a mutation block at the editor API level.
    *
-   * - `batch(fn)` preserves the legacy transactional store batch.
+   * - `batch(fn)` records one generically-labelled undo entry.
    * - `batch(label, fn, opts)` records a named undo entry, unless history is ignored.
    */
   batch(fn: () => void): void;
@@ -593,7 +617,7 @@ export class GlideEditor {
     opts?: BatchOptions,
   ): void {
     if (typeof labelOrFn === 'function') {
-      this.store.batch(labelOrFn);
+      this.history.batch('Batch', labelOrFn);
       return;
     }
 
@@ -696,9 +720,52 @@ export class GlideEditor {
   // ── Persistence ────────────────────────────────────────────
 
   serialize()                                { return this.store.serialize(); }
-  deserialize(doc: ReturnType<GlideStore['serialize']>) {
-    this.store.deserialize(doc);
+
+  /**
+   * Hydrate the editor from a complete document snapshot.
+   *
+   * The resulting store exactly matches `doc`: records that belonged to the
+   * previous document but are absent from `doc` are removed. The store first
+   * migrates and validates the complete candidate, then publishes the
+   * replacement atomically, so a failure leaves the current document intact.
+   *
+   * Use importRecords() when the intention is to merge content into the
+   * current document. Keeping replacement and import separate prevents an
+   * old board's records from surviving a hydration or board switch.
+   */
+  replaceDocument(doc: ReturnType<GlideStore['serialize']>) {
+    const report = this.store.replaceDocument(doc);
     this._smartRouter.markDirty();
+    return report;
+  }
+
+  /**
+   * Backward-compatible hydration alias.
+   * @deprecated Use replaceDocument() so the replacement semantics are explicit.
+   */
+  deserialize(doc: ReturnType<GlideStore['serialize']>) {
+    this.replaceDocument(doc);
+  }
+
+  importRecords(payload: Parameters<GlideStore['importRecords']>[0], options?: ImportOptions): ImportReport {
+    const report = this.store.importRecords(payload, options);
+    this._smartRouter.markDirty();
+    return report;
+  }
+
+  resetSessionState(): void {
+    this.history.clear();
+    this._clipboard = [];
+    this.setSelectedShapeIds([]);
+    this.editingShapeId.value = null;
+    this.erasingShapeIds.value = new Set<ShapeId>();
+    this.bindingPreview.value = null;
+    this.activeStyles.value = { ...DEFAULT_ACTIVE_STYLES };
+    this.arrowRouteStyle = 'curve';
+    this.arrowheadStart = 'none';
+    this.arrowheadEnd = 'arrow';
+    this.camera.setCamera({ x: 0, y: 0, z: 1 });
+    this.setCurrentTool('select');
   }
 
   // ── AI / MCP ───────────────────────────────────────────────
@@ -903,20 +970,34 @@ export function createEditor(opts: CreateEditorOptions = {}): GlideEditor {
   const schema = new GlideSchema();
 
   // 2+3. Register ShapeUtils (checks for duplicates, bakes validators)
-  const seenTypes = new Set<string>();
+  const seenShapeTypes = new Set<string>();
+  const seenBindingTypes = new Set<string>();
   for (const plugin of plugins) {
     for (const UtilClass of plugin.shapes ?? []) {
       const type = (UtilClass as unknown as ShapeUtilClass).type;
       if (!type) throw new Error(`Plugin "${plugin.id}": ShapeUtil missing static 'type'`);
-      if (seenTypes.has(type)) {
+      if (seenShapeTypes.has(type)) {
         throw new Error(
           `createEditor: duplicate shape type "${type}" ` +
           `registered by plugin "${plugin.id}". ` +
           `Each type must be unique across all plugins.`,
         );
       }
-      seenTypes.add(type);
+      seenShapeTypes.add(type);
       schema.registerShapeUtil(UtilClass as unknown as ShapeUtilClass);
+    }
+    for (const UtilClass of plugin.bindings ?? []) {
+      const type = (UtilClass as unknown as ShapeUtilClass).type;
+      if (!type) throw new Error(`Plugin "${plugin.id}": BindingUtil missing static 'type'`);
+      if (seenBindingTypes.has(type)) {
+        throw new Error(
+          `createEditor: duplicate binding type "${type}" ` +
+          `registered by plugin "${plugin.id}". ` +
+          `Each binding type must be unique across all plugins.`,
+        );
+      }
+      seenBindingTypes.add(type);
+      schema.registerBindingUtil(UtilClass as unknown as ShapeUtilClass);
     }
   }
 

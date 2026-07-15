@@ -40,6 +40,7 @@ export interface CreateSvgPathShapeDef {
   defaultSize?: { w: number; h: number };
   getPathD: (w: number, h: number) => string;
   defaultColor?: string;
+  defaultFillStyle?: FillStyle;
 }
 
 export function createSvgPathShape(def: CreateSvgPathShapeDef): {
@@ -47,7 +48,13 @@ export function createSvgPathShape(def: CreateSvgPathShapeDef): {
   tool: typeof StateNode;
   plugin: GlidePlugin;
 } {
-  const { type, defaultSize = { w: 120, h: 80 }, getPathD, defaultColor = 'black' } = def;
+  const {
+    type,
+    defaultSize = { w: 120, h: 80 },
+    getPathD,
+    defaultColor = 'black',
+    defaultFillStyle = 'none',
+  } = def;
 
   class CustomUtil extends ShapeUtil<CustomPathShape> {
     static override readonly type = type;
@@ -74,7 +81,7 @@ export function createSvgPathShape(def: CreateSvgPathShapeDef): {
             props: {
               w: defaultSize.w, h: defaultSize.h,
               color: defaultColor, opacity: 1,
-              fillStyle: 'none', strokeStyle: 'solid', strokeWidth: 'medium',
+              fillStyle: defaultFillStyle, strokeStyle: 'solid', strokeWidth: 'medium',
               label: '', labelColor: 'black',
               font: 'sans', fontSize: 'md', textAlign: 'center',
               ...(r['props'] as object),
@@ -89,7 +96,7 @@ export function createSvgPathShape(def: CreateSvgPathShapeDef): {
       return {
         w: defaultSize.w, h: defaultSize.h,
         color: defaultColor, opacity: 1,
-        fillStyle: 'none', strokeStyle: 'solid', strokeWidth: 'medium',
+        fillStyle: defaultFillStyle, strokeStyle: 'solid', strokeWidth: 'medium',
         label: '', labelColor: 'black',
         font: 'sans', fontSize: 'md', textAlign: 'center',
       };
@@ -187,7 +194,7 @@ export function createSvgPathShape(def: CreateSvgPathShapeDef): {
           index: 'a1', rotation: 0, meta: {},
           props: { ...(new CustomUtil()).getDefaultProps(), w: Math.max(1, Math.abs(w)), h: Math.max(1, Math.abs(h)) },
         });
-      }, { history: 'ignore' });
+    }, { history: 'ignore', scope: 'ephemeral' });
     }
 
     override onPointerMove(e: PointerMoveEvent): void {
@@ -199,7 +206,7 @@ export function createSvgPathShape(def: CreateSvgPathShapeDef): {
           y: Math.min(this._origin.y, this._origin.y + h),
           props: { w: Math.max(1, Math.abs(w)), h: Math.max(1, Math.abs(h)) },
         });
-      }, { history: 'ignore' });
+    }, { history: 'ignore', scope: 'ephemeral' });
     }
 
     override onPointerUp(e: PointerUpEvent): void {
@@ -208,7 +215,7 @@ export function createSvgPathShape(def: CreateSvgPathShapeDef): {
       const finalId = sid(`${type}-${Date.now()}`);
       this.editor.history.batch('Custom Shape Cleanup', () => {
         this.editor.deleteShapes([this._previewId]);
-      }, { history: 'ignore' });
+    }, { history: 'ignore', scope: 'ephemeral' });
       this.editor.history.batch(`Create ${type}`, () => {
         this.editor.createShape({
           id: finalId, type,
@@ -227,7 +234,7 @@ export function createSvgPathShape(def: CreateSvgPathShapeDef): {
       if (e.key === 'Escape') {
         this.editor.history.batch('Custom Shape Cleanup', () => {
           this.editor.deleteShapes([this._previewId]);
-        }, { history: 'ignore' });
+    }, { history: 'ignore', scope: 'ephemeral' });
         this.parent!.transition('idle');
       }
     }

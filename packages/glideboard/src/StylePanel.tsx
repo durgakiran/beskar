@@ -4,14 +4,11 @@ import {
   type ShapeId,
 } from '@durgakiran/glideline';
 import { useSelectedShapes } from './hooks/useSelectedShapes';
-import {
-  setArrowRouteStyle,
-  setArrowheadEnd,
-  setArrowheadStart,
-  wbEditor,
-  type ArrowRouteStyle,
-  type ArrowheadStyle,
-} from './editor';
+import { useGlideboardController } from './GlideboardContext';
+import type {
+  ArrowRouteStyle,
+  ArrowheadStyle,
+} from './GlideboardController';
 import { wbTheme } from './theme';
 import { useSignalValue } from './useSignalValue';
 
@@ -74,8 +71,10 @@ function IconButton({ active, onClick, style, children }: { active: boolean; onC
 }
 
 export function StylePanel() {
+  const controller = useGlideboardController();
+  const { editor } = controller;
   const shapes = useSelectedShapes();
-  const activeStyles = useSignalValue(wbEditor.activeStyles);
+  const activeStyles = useSignalValue(editor.activeStyles);
 
   const supportedKeys = useMemo(() => {
     const keys = new Set<string>();
@@ -105,15 +104,15 @@ export function StylePanel() {
   };
 
   const updateProp = (key: string, value: unknown) => {
-    wbEditor.activeStyles.value = {
-      ...wbEditor.activeStyles.value,
+    editor.activeStyles.value = {
+      ...editor.activeStyles.value,
       [key]: value,
     };
     if (shapes.length > 0) {
-      wbEditor.history.batch('Style change', () => {
+      editor.history.batch('Style change', () => {
         for (const shape of shapes) {
           if (key in shape.props) {
-            wbEditor.updateShape(shape.id as ShapeId, {
+            editor.updateShape(shape.id as ShapeId, {
               props: { ...shape.props, [key]: value },
             });
           }
@@ -135,13 +134,13 @@ export function StylePanel() {
   const arrowheadEnd = getCommonValue('arrowheadEnd');
 
   const updateArrowRoute = (value: ArrowRouteStyle) => {
-    setArrowRouteStyle(value);
+    controller.setArrowRouteStyle(value);
     updateProp('routeStyle', value);
   };
 
   const updateArrowhead = (terminal: 'start' | 'end', value: ArrowheadStyle) => {
-    if (terminal === 'start') setArrowheadStart(value);
-    else setArrowheadEnd(value);
+    if (terminal === 'start') controller.setArrowheadStart(value);
+    else controller.setArrowheadEnd(value);
     updateProp(terminal === 'start' ? 'arrowheadStart' : 'arrowheadEnd', value);
   };
 

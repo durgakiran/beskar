@@ -234,7 +234,7 @@ const TOOL_DEFINITIONS = [
       }
 
       const id = createCanvasShapeId(type);
-      editor.run(() => {
+      editor.batch('AI: Create Shape', () => {
         editor.createShape({
           id,
           type,
@@ -245,7 +245,7 @@ const TOOL_DEFINITIONS = [
           meta: {},
           props,
         });
-      }, { history: 'ignore' });
+      });
 
       return { id };
     },
@@ -267,9 +267,9 @@ const TOOL_DEFINITIONS = [
       if (input.rotation !== undefined) partial.rotation = input.rotation;
       if (input.props !== undefined) partial.props = input.props;
 
-      editor.run(() => {
+      editor.batch('AI: Update Shape', () => {
         editor.updateShape(id, partial as Partial<Omit<typeof existing, 'id' | 'type'>>);
-      }, { history: 'ignore' });
+      });
 
       return { ok: true };
     },
@@ -283,9 +283,9 @@ const TOOL_DEFINITIONS = [
       const existingIds = ids.filter((id: ShapeId) => Boolean(editor.getShape(id)));
 
       if (existingIds.length > 0) {
-        editor.run(() => {
+        editor.batch('AI: Delete Shapes', () => {
           editor.deleteShapes(existingIds);
-        }, { history: 'ignore' });
+        });
       }
 
       return { deleted: existingIds.length };
@@ -350,7 +350,7 @@ const TOOL_DEFINITIONS = [
         },
       };
 
-      editor.run(() => {
+      editor.batch('AI: Create Connection', () => {
         editor.createShape(arrow as unknown as AnyRecord);
         editor.createBinding(buildArrowBindingRecord({
           fromId: id,
@@ -366,7 +366,7 @@ const TOOL_DEFINITIONS = [
         }));
         editor.updateShape(fromId, { x: fromShape.x });
         editor.updateShape(toId, { x: toShape.x });
-      }, { history: 'ignore' });
+      });
 
       return { id };
     },
@@ -399,7 +399,7 @@ const TOOL_DEFINITIONS = [
 
       dagre.layout(g);
 
-      editor.run(() => {
+      editor.batch('AI: Create Diagram', () => {
         for (const node of input.nodes) {
           const dagreNode = g.node(node.id);
           const canvasId = createCanvasShapeId(node.type);
@@ -459,7 +459,7 @@ const TOOL_DEFINITIONS = [
           editor.updateShape(fromCanvasId, { x: fromShape.x });
           editor.updateShape(toCanvasId,   { x: toShape.x });
         }
-      }, { history: 'ignore' });
+      });
 
       return {
         nodeIds: Object.fromEntries(idMap.entries()),
@@ -508,7 +508,7 @@ const TOOL_DEFINITIONS = [
 
       dagre.layout(g);
 
-      editor.run(() => {
+      editor.batch('AI: Layout Shapes', () => {
         for (const id of ids) {
           const dagreNode = g.node(id);
           editor.updateShape(id, {
@@ -516,7 +516,7 @@ const TOOL_DEFINITIONS = [
             y: dagreNode.y - dagreNode.height / 2,
           });
         }
-      }, { history: 'ignore' });
+      });
 
       return { ok: true, repositioned: ids.length } as any;
     },

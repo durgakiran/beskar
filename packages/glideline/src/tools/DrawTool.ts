@@ -78,7 +78,7 @@ class Drawing extends StateNode {
           isComplete: false,
         },
       });
-    }, { history: 'ignore' });
+    }, { history: 'ignore', scope: 'ephemeral' });
   }
 
   override onPointerMove(e: PointerMoveEvent): void {
@@ -104,14 +104,14 @@ class Drawing extends StateNode {
           isComplete: false,
         },
       });
-    }, { history: 'ignore' });
+    }, { history: 'ignore', scope: 'ephemeral' });
   }
 
   override onPointerUp(_e: PointerUpEvent): void {
     // Remove preview always
     this.editor.history.batch('Draw Preview Cleanup', () => {
       this.editor.deleteShapes([PREVIEW_ID]);
-    }, { history: 'ignore' });
+    }, { history: 'ignore', scope: 'ephemeral' });
 
     // Commit only if stroke has enough points to be meaningful
     if (this._points.length >= 2) {
@@ -154,7 +154,7 @@ class Drawing extends StateNode {
     if (e.key === 'Escape') {
       this.editor.history.batch('Draw Preview Cleanup', () => {
         this.editor.deleteShapes([PREVIEW_ID]);
-      }, { history: 'ignore' });
+    }, { history: 'ignore', scope: 'ephemeral' });
       this.parent!.transition('idle');
     }
   }

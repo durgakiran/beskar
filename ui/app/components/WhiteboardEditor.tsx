@@ -1,7 +1,6 @@
 
 import { useGet, Response } from "@http/hooks";
-import { usePut as usePUT } from "@http/hooks";
-import { useEffect, useMemo, useState, useRef } from "react";
+import { useCallback, useEffect, useMemo, useState, useRef, type RefObject } from "react";
 import * as Y from "yjs";
 import { WebrtcProvider } from "y-webrtc";
 import { Spinner, Flex, Button, IconButton, Avatar, HoverCard, Box, Text } from "@radix-ui/themes";
@@ -10,7 +9,35 @@ import { useNavigate } from "react-router-dom";
 import { HiHome } from "react-icons/hi";
 import { FiStar } from "react-icons/fi";
 import { getSignalingUrl } from "app/core/signaling";
-import { wbEditor, Glideboard } from "@durgakiran/glideboard";
+import { Glideboard, type GlideboardHandle } from "@durgakiran/glideboard";
+
+const USER_URI = (import.meta.env.VITE_USER_SERVER_URL || "").replace(/\/+$/, "");
+const INITIAL_DATABASE_LOAD = Symbol('whiteboard-initial-database-load');
+
+interface WhiteboardData {
+    id: number;
+    docId: number;
+    data?: string | null;
+    title: string;
+    pageId: number;
+    spaceId: string;
+}
+
+interface BoardLoadState {
+    sessionKey: string;
+    status: 'loading' | 'ready' | 'error';
+    data: WhiteboardData | null;
+    error: unknown;
+}
+
+interface DocumentSession {
+    doc: Y.Doc;
+    save: {
+        dirty: boolean;
+        revision: number;
+        inFlight: Promise<void> | null;
+    };
+}
 
 export default function WhiteboardEditor({
     slug,
@@ -27,23 +54,47 @@ export default function WhiteboardEditor({
     const fetchPath = readOnly
         ? `editor/space/${spaceId}/whiteboard/${pageId}`
         : `editor/space/${spaceId}/whiteboard/${pageId}/edit`;
-
-    const [{ data: fetchRes, isLoading: fetching, errors: fetchErr }, fetchWhiteboard] = useGet<Response<{
-        id: number;
-        docId: number;
-        data?: string | null;
-        title: string;
-        pageId: number;
-        spaceId: string;
-    }>>(fetchPath);
-    const [{ isLoading: updating }, updateWhiteboard] = usePUT<Response<any>, { data: string }>(`editor/space/${spaceId}/whiteboard/${pageId}`);
     const [{ data: profileData }, getProfile] = useGet<Response<{ id: string; name: string; email: string }>>(`profile/details`);
 
-    const [isDbLoaded, setIsDbLoaded] = useState(false);
-    const [provider, setProvider] = useState<WebrtcProvider | null>(null);
-    const dirtyRef = useRef(false);
-    const didApplyInitialDataRef = useRef(false);
     const documentSessionKey = `${spaceId}:${pageId}`;
+    const boardRequestRef = useRef({
+        sessionKey: documentSessionKey,
+        path: fetchPath,
+    });
+    // The request path is startup configuration for a board session. Capture
+    // a new path only when the board identity changes; toggling readOnly for
+    // the same board must update policy without reloading its Y.Doc.
+    if (boardRequestRef.current.sessionKey !== documentSessionKey) {
+        boardRequestRef.current = { sessionKey: documentSessionKey, path: fetchPath };
+    }
+    const boardRequest = boardRequestRef.current;
+    const [boardLoad, setBoardLoad] = useState<BoardLoadState>({
+        sessionKey: documentSessionKey,
+        status: 'loading',
+        data: null,
+        error: null,
+    });
+    const [providerSession, setProviderSession] = useState<{
+        sessionKey: string;
+        provider: WebrtcProvider;
+    } | null>(null);
+    const yDocLifetimeGenerationsRef = useRef(new WeakMap<Y.Doc, number>());
+    const boardRef = useRef<GlideboardHandle | null>(null);
+    const getProfileRef = useRef(getProfile);
+    getProfileRef.current = getProfile;
+    // React preserves state while route props change. Until the new session's
+    // request is accepted, expose a loading state instead of briefly showing
+    // the previous board's title, error, or loaded status.
+    const currentBoardLoad = boardLoad.sessionKey === documentSessionKey
+        ? boardLoad
+        : { sessionKey: documentSessionKey, status: 'loading' as const, data: null, error: null };
+    const fetching = currentBoardLoad.status === 'loading';
+    const fetchErr = currentBoardLoad.status === 'error' ? currentBoardLoad.error : null;
+    const boardData = currentBoardLoad.status === 'ready' ? currentBoardLoad.data : null;
+    const isDbLoaded = currentBoardLoad.status === 'ready';
+    const provider = !readOnly && providerSession?.sessionKey === documentSessionKey
+        ? providerSession.provider
+        : null;
 
     const collaborationUser = useMemo(() => {
         if (!profileData?.data) return null;
@@ -54,10 +105,38 @@ export default function WhiteboardEditor({
         return { id: profileData.data.id, name: profileData.data.name, color };
     }, [profileData]);
 
-    const yDoc = useMemo(() => {
-        void documentSessionKey;
-        return new Y.Doc();
-    }, [documentSessionKey]);
+    const documentSession = useMemo<DocumentSession>(() => ({
+        doc: new Y.Doc(),
+        save: { dirty: false, revision: 0, inFlight: null },
+    }), [documentSessionKey]);
+    const yDoc = documentSession.doc;
+
+    useEffect(() => {
+        const generations = yDocLifetimeGenerationsRef.current;
+        const generation = (generations.get(yDoc) ?? 0) + 1;
+        generations.set(yDoc, generation);
+
+        return () => {
+            // Defer destruction for two reasons:
+            // 1. StrictMode immediately reattaches the same Y.Doc and advances
+            //    its generation, so this simulated cleanup must do nothing.
+            // 2. A real route change/unmount may have started a final save, so
+            //    keep the document alive until that save has finished.
+            queueMicrotask(async () => {
+                if (generations.get(yDoc) !== generation) return;
+                while (documentSession.save.inFlight) {
+                    try {
+                        await documentSession.save.inFlight;
+                    } catch {
+                        break;
+                    }
+                }
+                if (generations.get(yDoc) !== generation) return;
+                generations.delete(yDoc);
+                yDoc.destroy();
+            });
+        };
+    }, [documentSession, yDoc]);
 
     useEffect(() => {
         if (readOnly) return; // no collaboration in view mode
@@ -65,81 +144,163 @@ export default function WhiteboardEditor({
             signaling: [getSignalingUrl()],
             filterBcConns: false
         });
-        setProvider(_provider);
+        setProviderSession({ sessionKey: documentSessionKey, provider: _provider });
         return () => {
             _provider.disconnect();
             _provider.destroy();
-            setProvider(null);
+            setProviderSession(current => current?.provider === _provider ? null : current);
         };
-    }, [yDoc, spaceId, pageId, readOnly]);
+    }, [documentSessionKey, yDoc, spaceId, pageId, readOnly]);
 
     useEffect(() => {
-        didApplyInitialDataRef.current = false;
-        setIsDbLoaded(false);
-        fetchWhiteboard();
-        getProfile();
-        return () => {
-            yDoc.destroy();
-        };
-    }, [fetchWhiteboard, getProfile, yDoc]);
+        const abortController = new AbortController();
+        let active = true;
+        setBoardLoad({
+            sessionKey: boardRequest.sessionKey,
+            status: 'loading',
+            data: null,
+            error: null,
+        });
+        getProfileRef.current();
 
-    useEffect(() => {
-        if (!fetchRes || didApplyInitialDataRef.current) return;
-        didApplyInitialDataRef.current = true;
-        const encodedData = fetchRes.data?.data;
-        if (encodedData) {
+        const loadBoard = async () => {
             try {
-                const update = base64ToUint8Array(encodedData);
-                Y.applyUpdate(yDoc, update);
-            } catch (err) {
-                console.error("Error applying init dbData to yDoc", err);
+                const response = await fetch(`${USER_URI}/${boardRequest.path}`, {
+                    credentials: 'include',
+                    headers: { 'Content-Type': 'application/json' },
+                    signal: abortController.signal,
+                });
+                if (!response.ok) {
+                    throw new Error(`Failed to load whiteboard (${response.status})`);
+                }
+
+                const result = await response.json() as Response<WhiteboardData>;
+                if (!active || abortController.signal.aborted) return;
+                const data = result.data;
+                if (
+                    !data ||
+                    String(data.pageId) !== String(pageId) ||
+                    String(data.spaceId).toLowerCase() !== String(spaceId).toLowerCase()
+                ) {
+                    throw new Error('Whiteboard response does not match the requested session');
+                }
+
+                if (data.data) {
+                    Y.applyUpdate(
+                        yDoc,
+                        base64ToUint8Array(data.data),
+                        INITIAL_DATABASE_LOAD,
+                    );
+                }
+
+                if (!active) return;
+                setBoardLoad({
+                    sessionKey: boardRequest.sessionKey,
+                    status: 'ready',
+                    data,
+                    error: null,
+                });
+            } catch (error) {
+                if (!active || abortController.signal.aborted) return;
+                console.error('Error loading whiteboard', error);
+                setBoardLoad({
+                    sessionKey: boardRequest.sessionKey,
+                    status: 'error',
+                    data: null,
+                    error,
+                });
+            }
+        };
+
+        void loadBoard();
+        return () => {
+            active = false;
+            abortController.abort();
+        };
+    }, [boardRequest, documentSession, pageId, spaceId, yDoc]);
+
+    const persistYDoc = useCallback(async (keepalive = false): Promise<void> => {
+        const save = documentSession.save;
+        if (readOnly || !isDbLoaded) return;
+
+        while (save.dirty) {
+            if (save.inFlight) {
+                await save.inFlight;
+                continue;
+            }
+
+            const revision = save.revision;
+            const data = uint8ArrayToBase64(Y.encodeStateAsUpdate(yDoc));
+            const savePromise = (async () => {
+                const response = await fetch(
+                    `${USER_URI}/editor/space/${spaceId}/whiteboard/${pageId}`,
+                    {
+                        method: 'PUT',
+                        credentials: 'include',
+                        keepalive,
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ data }),
+                    },
+                );
+                if (!response.ok) {
+                    throw new Error(`Failed to save whiteboard (${response.status})`);
+                }
+            })();
+            save.inFlight = savePromise;
+
+            try {
+                await savePromise;
+                if (save.revision === revision) save.dirty = false;
+            } finally {
+                if (save.inFlight === savePromise) save.inFlight = null;
             }
         }
-        setIsDbLoaded(true);
-    }, [fetchRes, yDoc]);
+    }, [documentSession, isDbLoaded, pageId, readOnly, spaceId, yDoc]);
 
     useEffect(() => {
         if (readOnly) return;
 
-        const handleUpdate = () => {
-            dirtyRef.current = true;
+        const handleUpdate = (_update: Uint8Array, origin: unknown) => {
+            if (origin === INITIAL_DATABASE_LOAD) return;
+            documentSession.save.dirty = true;
+            documentSession.save.revision += 1;
         };
         yDoc.on('update', handleUpdate);
 
         const syncInterval = setInterval(() => {
-            if (dirtyRef.current && isDbLoaded) {
-                dirtyRef.current = false;
-                const encoded = Y.encodeStateAsUpdate(yDoc);
-                if (!encoded || encoded.length === 0) return; // skip empty state
-                const state = uint8ArrayToBase64(encoded);
-                if (!state) return; // skip if base64 serialization failed
-                updateWhiteboard({ data: state });
-            }
+            void persistYDoc().catch(error => {
+                console.error('Error saving whiteboard', error);
+            });
         }, 5000);
+
+        const handlePageHide = () => {
+            void persistYDoc(true).catch(() => {
+                // The browser may terminate the page before reporting failure.
+            });
+        };
+        window.addEventListener('pagehide', handlePageHide);
 
         return () => {
             yDoc.off('update', handleUpdate);
             clearInterval(syncInterval);
+            window.removeEventListener('pagehide', handlePageHide);
+            void persistYDoc(true).catch(error => {
+                console.error('Error flushing whiteboard during cleanup', error);
+            });
         };
-    }, [isDbLoaded, readOnly, updateWhiteboard, yDoc]);
-
-    // 5. Set awareness user from profile (edit mode only)
-    useEffect(() => {
-        if (!provider || !collaborationUser) return;
-        provider.awareness.setLocalStateField('user', {
-            id: collaborationUser.id,
-            name: collaborationUser.name,
-            color: collaborationUser.color,
-        });
-    }, [provider, collaborationUser]);
+    }, [documentSession, persistYDoc, readOnly, yDoc]);
 
     const [isPublishing, setIsPublishing] = useState(false);
+    const [isClosing, setIsClosing] = useState(false);
     const [activeCollaborators, setActiveCollaborators] = useState<
         Array<{ id: string; name: string; email?: string; color?: string }>
     >([]);
 
     useEffect(() => {
-        if (!provider) return;
+        if (!provider) {
+            setActiveCollaborators([]);
+            return;
+        }
 
         const syncCollaborators = () => {
             const states = Array.from(provider.awareness.getStates().values());
@@ -163,6 +324,10 @@ export default function WhiteboardEditor({
 
     const visibleCollaborators = activeCollaborators.slice(0, 3);
 
+    if (fetchErr) {
+        return <Flex>Error loading whiteboard.</Flex>;
+    }
+
     if (fetching || !isDbLoaded || (!readOnly && !provider)) {
         return (
             <Flex justify="center" style={{ marginTop: '20vh' }}>
@@ -171,21 +336,33 @@ export default function WhiteboardEditor({
         );
     }
 
-    const handleClose = () => {
-        navigate(`/space/${spaceId}/view/${pageId}`);
+    const handleClose = async () => {
+        setIsClosing(true);
+        try {
+            await boardRef.current?.flush();
+            await persistYDoc();
+            setIsClosing(false);
+            navigate(`/space/${spaceId}/view/${pageId}`);
+        } catch (error) {
+            console.error('Failed to save before closing whiteboard', error);
+            alert('Could not save the latest whiteboard changes. Please try again.');
+            setIsClosing(false);
+        }
     };
 
     const handlePublish = async () => {
         setIsPublishing(true);
         try {
             // 1. SVG snapshot
-            const shapeIds = wbEditor.serialize().records
-                .filter((r) => 'x' in r && 'y' in r)
-                .map(s => s.id);
+            const board = boardRef.current;
+            if (!board) throw new Error('Whiteboard is not ready');
+            await board.flush();
+            await persistYDoc();
+            const hasShapes = board.serialize().records.some((record) => 'x' in record && 'y' in record);
             
             let previewAssetName = '';
-            if (shapeIds.length > 0) {
-                const svgString = wbEditor.exportToSvg(shapeIds as any);
+            if (hasShapes) {
+                const svgString = await board.exportSvg();
                 const svgBlob = new Blob([svgString], { type: 'image/svg+xml' });
                 
                 const formData = new FormData();
@@ -226,7 +403,7 @@ export default function WhiteboardEditor({
         }
     };
 
-    const pageTitle = fetchRes?.data?.title || 'Untitled Whiteboard';
+    const pageTitle = boardData?.title || 'Untitled Whiteboard';
 
     // Edit mode: pull flush under the fixed navbar, with our own sub-header.
     // View mode: the page already has a header, so render canvas directly.
@@ -270,6 +447,7 @@ export default function WhiteboardEditor({
                             size="2"
                             aria-label="home"
                             onClick={handleClose}
+                            disabled={isClosing}
                             style={{ height: '32px', width: '32px' }}
                         >
                             <HiHome size={18} />
@@ -370,7 +548,7 @@ export default function WhiteboardEditor({
                             >
                                 Publish
                             </Button>
-                            <Button size="2" variant="ghost" color="gray" onClick={handleClose}>
+                            <Button size="2" variant="ghost" color="gray" onClick={handleClose} disabled={isClosing} loading={isClosing}>
                                 Close
                             </Button>
                         </Flex>
@@ -379,7 +557,7 @@ export default function WhiteboardEditor({
 
                 {/* Canvas */}
                 <div style={{ flex: 1, position: 'relative', minWidth: 0 }}>
-                    <WhiteboardCanvas yDoc={yDoc} provider={provider} fetchErr={fetchErr} readOnly={readOnly} collaborationUser={collaborationUser} />
+                    <WhiteboardCanvas boardRef={boardRef} sessionKey={documentSessionKey} yDoc={yDoc} provider={provider} fetchErr={fetchErr} readOnly={readOnly} collaborationUser={collaborationUser} />
                 </div>
             </div>
         );
@@ -388,18 +566,22 @@ export default function WhiteboardEditor({
     // View mode: render canvas directly, no sub-header
     return (
         <div style={{ width: '100%', height: fillParent ? '100%' : 'calc(100vh - 120px)' }}>
-            <WhiteboardCanvas yDoc={yDoc} provider={provider} fetchErr={fetchErr} readOnly={readOnly} collaborationUser={collaborationUser} />
+            <WhiteboardCanvas boardRef={boardRef} sessionKey={documentSessionKey} yDoc={yDoc} provider={provider} fetchErr={fetchErr} readOnly={readOnly} collaborationUser={collaborationUser} />
         </div>
     );
 }
 
 function WhiteboardCanvas({
+    boardRef,
+    sessionKey,
     yDoc,
     provider,
     fetchErr,
     readOnly,
     collaborationUser,
 }: {
+    boardRef: RefObject<GlideboardHandle | null>;
+    sessionKey: string;
     yDoc: Y.Doc;
     provider: WebrtcProvider | null;
     fetchErr: any;
@@ -419,6 +601,8 @@ function WhiteboardCanvas({
     return (
         <div style={{ width: "100%", height: "100%", position: "relative" }}>
             <Glideboard
+                ref={boardRef}
+                sessionKey={sessionKey}
                 collaboration={collaborationProps}
                 readOnly={readOnly}
             />

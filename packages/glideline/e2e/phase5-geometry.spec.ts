@@ -5,14 +5,14 @@ test.describe('Phase 5 geometry refactor on Whiteboard', () => {
     // Go to the main whiteboard demo
     await page.goto('/#whiteboard');
     // Wait for the canvas to be ready
-    await page.waitForSelector('#wb-canvas', { timeout: 10_000 });
+    await page.waitForSelector('[data-glideboard-role="canvas"]', { timeout: 10_000 });
   });
 
   test('Draw a box → selection box visually aligns with the box bounds', async ({ page }) => {
     // Select box tool
     await page.click('#wb-tool-box');
     
-    const canvas = page.locator('#wb-canvas');
+    const canvas = page.locator('[data-glideboard-role="canvas"]');
     const box = await canvas.boundingBox();
     if (!box) throw new Error('Canvas bounding box not found');
 
@@ -35,7 +35,7 @@ test.describe('Phase 5 geometry refactor on Whiteboard', () => {
   });
 
   test('Draw an arrow between two boxes → arrow renders correctly', async ({ page }) => {
-    const canvas = page.locator('#wb-canvas');
+    const canvas = page.locator('[data-glideboard-role="canvas"]');
     const box = await canvas.boundingBox();
     if (!box) throw new Error('Canvas bounding box not found');
 
@@ -66,7 +66,7 @@ test.describe('Phase 5 geometry refactor on Whiteboard', () => {
   });
 
   test('Drag arrow start terminal → arrow stays connected', async ({ page }) => {
-    const canvas = page.locator('#wb-canvas');
+    const canvas = page.locator('[data-glideboard-role="canvas"]');
     const box = await canvas.boundingBox();
     if (!box) throw new Error('Canvas bounding box not found');
 
@@ -99,7 +99,7 @@ test.describe('Phase 5 geometry refactor on Whiteboard', () => {
     await page.mouse.up();
 
     // Verify selection occurred
-    await expect(page.locator('#wb-statusbar')).toContainText('3 shapes');
+    await expect(page.locator('[data-glideboard-role="statusbar"]')).toContainText('3 shapes');
     
     // Start handle should be visible
     const startHandle = page.locator('rect[data-handle="start"]');
@@ -116,7 +116,7 @@ test.describe('Phase 5 geometry refactor on Whiteboard', () => {
   });
 
   test('Select arrow → no resize handles visible, no rotate handle visible', async ({ page }) => {
-    const canvas = page.locator('#wb-canvas');
+    const canvas = page.locator('[data-glideboard-role="canvas"]');
     const box = await canvas.boundingBox();
     if (!box) throw new Error('Canvas bounding box not found');
 
@@ -135,7 +135,7 @@ test.describe('Phase 5 geometry refactor on Whiteboard', () => {
     await page.mouse.up();
 
     // Verify shape count
-    await expect(page.locator('#wb-statusbar')).toContainText('1 shape');
+    await expect(page.locator('[data-glideboard-role="statusbar"]')).toContainText('1 shape');
 
     // Resize handles shouldn't be there
     const nwHandle = page.locator('rect[data-handle="nw"]');
@@ -151,7 +151,7 @@ test.describe('Phase 5 geometry refactor on Whiteboard', () => {
   });
 
   test('Multi-select arrow + box, rotate → both move correctly', async ({ page }) => {
-    const canvas = page.locator('#wb-canvas');
+    const canvas = page.locator('[data-glideboard-role="canvas"]');
     const box = await canvas.boundingBox();
     if (!box) throw new Error('Canvas bounding box not found');
 

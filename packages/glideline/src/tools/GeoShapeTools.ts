@@ -81,7 +81,7 @@ class Drawing extends StateNode {
 
     this.editor.history.batch('Geo Shape Preview', () => {
       this.editor.createShape(makeShape(this, getPreviewId(this), info.origin.x, info.origin.y, w, h));
-    }, { history: 'ignore' });
+    }, { history: 'ignore', scope: 'ephemeral' });
   }
 
   override onPointerMove(e: PointerMoveEvent): void {
@@ -97,7 +97,7 @@ class Drawing extends StateNode {
           h: Math.max(1, Math.abs(h)),
         },
       });
-    }, { history: 'ignore' });
+    }, { history: 'ignore', scope: 'ephemeral' });
   }
 
   override onPointerUp(e: PointerUpEvent): void {
@@ -108,7 +108,7 @@ class Drawing extends StateNode {
 
     this.editor.history.batch('Geo Shape Preview Cleanup', () => {
       this.editor.deleteShapes([getPreviewId(this)]);
-    }, { history: 'ignore' });
+    }, { history: 'ignore', scope: 'ephemeral' });
 
     this.editor.history.batch(`Create ${shapeType}`, () => {
       this.editor.createShape(makeShape(this, finalId, this._origin.x, this._origin.y, w, h));
@@ -123,7 +123,7 @@ class Drawing extends StateNode {
     if (e.key === 'Escape') {
       this.editor.history.batch('Geo Shape Preview Cleanup', () => {
         this.editor.deleteShapes([getPreviewId(this)]);
-      }, { history: 'ignore' });
+    }, { history: 'ignore', scope: 'ephemeral' });
       this.parent!.transition('idle');
     }
   }

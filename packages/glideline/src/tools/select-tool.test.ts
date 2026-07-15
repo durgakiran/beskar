@@ -46,6 +46,21 @@ function pointerUp(e: ReturnType<typeof makeEditor>, x: number, y: number): void
   e.dispatchEvent({ type: 'pointerUp', point: { x, y } });
 }
 
+function pointerDownHandle(
+  e: ReturnType<typeof makeEditor>,
+  x: number,
+  y: number,
+  handleId: string,
+): void {
+  e.dispatchEvent({
+    type: 'pointerDown',
+    point: { x, y },
+    shiftKey: false,
+    target: 'handle',
+    handleId,
+  });
+}
+
 function keyDown(e: ReturnType<typeof makeEditor>, key: string): void {
   e.dispatchEvent({ type: 'keyDown', key });
 }
@@ -119,6 +134,28 @@ describe('T3.2-04: drag translates shape', () => {
 
     const shape = editor.getShape(sid('drag1'))!;
     expect(shape.x).toBe(150); // 100 + 50
+  });
+
+  it('undo restores every selected shape instead of undoing the last creation', () => {
+    const editor = makeEditor();
+    editor.batch('Create first', () => editor.createShape(boxShape('drag-a', 100, 100)));
+    editor.batch('Create second', () => editor.createShape(boxShape('drag-b', 300, 100)));
+    editor.setSelectedShapeIds([sid('drag-a'), sid('drag-b')]);
+
+    pointerDown(editor, 150, 150, { shapeId: 'drag-a' });
+    pointerMove(editor, 170, 170); // enter Dragging and publish a preview
+    pointerMove(editor, 210, 190);
+    pointerUp(editor, 210, 190);
+
+    expect(editor.getShape(sid('drag-a'))).toMatchObject({ x: 160, y: 140 });
+    expect(editor.getShape(sid('drag-b'))).toMatchObject({ x: 360, y: 140 });
+    const undoStack = editor.history.undoStack;
+    expect(undoStack[undoStack.length - 1]?.label).toBe('Move Shapes');
+
+    editor.undo();
+
+    expect(editor.getShape(sid('drag-a'))).toMatchObject({ x: 100, y: 100 });
+    expect(editor.getShape(sid('drag-b'))).toMatchObject({ x: 300, y: 100 });
   });
 });
 
@@ -253,3 +290,42 @@ describe('T3.2-08: Escape deselects (common across states)', () => {
   });
 });
 
+describe('interactive transform history', () => {
+  it('undo restores a resized shape when pointer-up repeats the final preview', () => {
+    const editor = makeEditor();
+    editor.batch('Create', () => editor.createShape(boxShape('resize-history', 0, 0)));
+    editor.setSelectedShapeIds([sid('resize-history')]);
+
+    pointerDownHandle(editor, 100, 80, 'se');
+    pointerMove(editor, 150, 120);
+    pointerUp(editor, 150, 120);
+
+    expect(editor.getShape(sid('resize-history'))?.props).toMatchObject({ w: 150, h: 120 });
+    expect(editor.history.undoStack.at(-1)?.label).toBe('Resize Shapes');
+
+    editor.undo();
+
+    expect(editor.getShape(sid('resize-history'))).toMatchObject({
+      x: 0,
+      y: 0,
+      props: { w: 100, h: 80 },
+    });
+  });
+
+  it('undo restores rotation when pointer-up repeats the final preview', () => {
+    const editor = makeEditor();
+    editor.batch('Create', () => editor.createShape(boxShape('rotate-history', 0, 0)));
+    editor.setSelectedShapeIds([sid('rotate-history')]);
+
+    pointerDownHandle(editor, 50, -20, 'rotate');
+    pointerMove(editor, 110, 40);
+    pointerUp(editor, 110, 40);
+
+    expect(editor.getShape(sid('rotate-history'))?.rotation).toBeCloseTo(Math.PI / 2);
+    expect(editor.history.undoStack.at(-1)?.label).toBe('Rotate Shapes');
+
+    editor.undo();
+
+    expect(editor.getShape(sid('rotate-history'))).toMatchObject({ x: 0, y: 0, rotation: 0 });
+  });
+});

@@ -71,4 +71,28 @@ describe('bindGlideboardCollaboration', () => {
 
     cleanup();
   });
+
+  it('does not synchronize or serialize ephemeral preview records', async () => {
+    const editorA = createGlideboardEditorInstance();
+    const editorB = createGlideboardEditorInstance();
+    const docA = new Y.Doc();
+    const docB = new Y.Doc();
+
+    connectDocs(docA, docB);
+    const cleanupA = bindGlideboardCollaboration(editorA, { doc: docA });
+    const cleanupB = bindGlideboardCollaboration(editorB, { doc: docB });
+
+    editorA.history.batch('Preview', () => {
+      editorA.createShape(createBoxRecord('shape:preview', 20, 30) as any);
+    }, { history: 'ignore', scope: 'ephemeral' });
+    await Promise.resolve();
+
+    expect(editorA.getShape('shape:preview' as any)).toBeDefined();
+    expect(editorA.serialize().records).toHaveLength(0);
+    expect(editorB.getShape('shape:preview' as any)).toBeUndefined();
+    expect(docA.getMap('glideboard-records').has('shape:preview')).toBe(false);
+
+    cleanupA();
+    cleanupB();
+  });
 });

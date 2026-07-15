@@ -6,6 +6,7 @@
 import { describe, it, expect } from 'vitest';
 import { createEditor } from './editor';
 import { BoxUtil } from './shapes/BoxUtil';
+import { BindingUtil } from './shapes/ShapeUtil';
 import { sid } from './types';
 import type { GlidePlugin } from './editor';
 
@@ -139,5 +140,145 @@ describe('editor.run()', () => {
 
     editor.undo();
     expect(editor.getShape(sid('run1'))).toBeUndefined();
+  });
+});
+
+describe('editor mutation history defaults', () => {
+  it('records direct create, update, and delete commands', () => {
+    const editor = makeEditor();
+
+    editor.createShape(boxShape('direct', 10, 20));
+    expect(editor.history.undoStack.at(-1)?.label).toBe('Create Shape');
+
+    editor.updateShape(sid('direct'), { x: 90 });
+    expect(editor.history.undoStack.at(-1)?.label).toBe('Update Shape');
+
+    editor.deleteShapes([sid('direct')]);
+    expect(editor.history.undoStack.at(-1)?.label).toBe('Delete Shapes');
+
+    editor.undo();
+    expect(editor.getShape(sid('direct'))?.x).toBe(90);
+    editor.undo();
+    expect(editor.getShape(sid('direct'))?.x).toBe(10);
+    editor.undo();
+    expect(editor.getShape(sid('direct'))).toBeUndefined();
+  });
+
+  it('records the legacy batch callback form instead of silently ignoring it', () => {
+    const editor = makeEditor();
+
+    editor.batch(() => editor.createShape(boxShape('generic-batch')));
+
+    expect(editor.history.undoStack).toHaveLength(1);
+    expect(editor.history.undoStack[0]?.label).toBe('Batch');
+    editor.undo();
+    expect(editor.getShape(sid('generic-batch'))).toBeUndefined();
+  });
+
+  it('records direct low-level store mutations by default', () => {
+    const editor = makeEditor();
+
+    editor.store.put([boxShape('direct-store')]);
+
+    expect(editor.history.undoStack).toHaveLength(1);
+    expect(editor.history.undoStack[0]?.label).toBe('Store Change');
+    editor.undo();
+    expect(editor.getShape(sid('direct-store'))).toBeUndefined();
+  });
+});
+
+describe('immutable history snapshots', () => {
+  it('cannot mutate a stored before/after record', () => {
+    const editor = makeEditor();
+    editor.batch('Create immutable', () => editor.createShape(boxShape('immutable', 10, 20)));
+    const entry = editor.history.undoStack[0]!;
+    const after = entry.after.get('immutable')!;
+    expect(Object.isFrozen(after)).toBe(true);
+    expect(() => { (after as any).x = 999; }).toThrow();
+    expect(editor.getShape(sid('immutable'))?.x).toBe(10);
+  });
+});
+
+describe('editor lifecycle atomicity', () => {
+  it('aborts the target update when a binding lifecycle hook throws', () => {
+    class ThrowingBindingUtil extends BindingUtil<any> {
+      static readonly type = 'throwing-binding';
+      getDefaultProps() { return {}; }
+      override onAfterChangeToShape() { throw new Error('hook failed'); }
+    }
+    const editor = createEditor({
+      plugins: [{
+        id: 'throwing-lifecycle',
+        shapes: [BoxUtil as any],
+        bindings: [ThrowingBindingUtil as any],
+      }],
+    });
+    editor.createShape(boxShape('source'));
+    editor.createShape(boxShape('target'));
+    editor.createBinding({
+      id: 'throwing:1',
+      type: 'throwing-binding',
+      fromId: sid('source'),
+      toId: sid('target'),
+      props: {},
+      meta: {},
+    });
+    const revision = editor.store.revision;
+
+    expect(() => editor.updateShape(sid('target'), { x: 100 })).toThrow('hook failed');
+    expect(editor.getShape(sid('target'))?.x).toBe(0);
+    expect(editor.store.revision).toBe(revision);
+  });
+
+  it('records indirect binding-hook changes made during an ignored live preview', () => {
+    class TrackingBindingUtil extends BindingUtil<any> {
+      static readonly type = 'tracking-binding';
+      getDefaultProps() { return {}; }
+      override onAfterChangeToShape(binding: any) {
+        const target = this.editor.getShape(binding.toId)!;
+        this.editor.updateShape(binding.fromId, {
+          meta: { anchorX: target.x },
+        } as any);
+      }
+    }
+    const editor = createEditor({
+      plugins: [{
+        id: 'tracking-lifecycle',
+        shapes: [BoxUtil as any],
+        bindings: [TrackingBindingUtil as any],
+      }],
+    });
+    editor.createShape(boxShape('source'));
+    editor.createShape(boxShape('target'));
+    editor.createBinding({
+      id: 'tracking:1',
+      type: 'tracking-binding',
+      fromId: sid('source'),
+      toId: sid('target'),
+      props: {},
+      meta: {},
+    });
+    editor.history.clear();
+
+    const targetBefore = editor.store.get('target')!;
+    editor.history.beginPreview();
+    editor.history.batch('Move Preview', () => {
+      editor.updateShape(sid('target'), { x: 100 });
+    }, { history: 'ignore' });
+    editor.history.recordPreview(
+      'Move Shapes',
+      new Map([['target', targetBefore as any]]),
+    );
+
+    expect(editor.history.undoStack[0]?.after.has('source')).toBe(true);
+    expect(editor.getShape(sid('source'))?.meta['anchorX']).toBe(100);
+
+    editor.undo();
+    expect(editor.getShape(sid('target'))?.x).toBe(0);
+    expect(editor.getShape(sid('source'))?.meta['anchorX']).toBeUndefined();
+
+    editor.redo();
+    expect(editor.getShape(sid('target'))?.x).toBe(100);
+    expect(editor.getShape(sid('source'))?.meta['anchorX']).toBe(100);
   });
 });

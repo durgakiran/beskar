@@ -39,39 +39,39 @@ function routeIntersectsBoxInterior(points: Point[], box: Box): boolean {
 test.describe('glideboard browser automation', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/#whiteboard');
-    await page.waitForSelector('#wb-canvas', { timeout: 10_000 });
+    await page.waitForSelector('[data-glideboard-role="canvas"]', { timeout: 10_000 });
     await page.evaluate(() => {
       localStorage.clear();
     });
     await page.reload();
-    await page.waitForSelector('#wb-canvas', { timeout: 10_000 });
+    await page.waitForSelector('[data-glideboard-role="canvas"]', { timeout: 10_000 });
     await page.evaluate(() => {
       (window as any).__GLIDELINE_WHITEBOARD__?.reset();
     });
   });
 
   test('smart routes avoid obstacles', async ({ page }) => {
-    const state = await page.evaluate(() => {
+    const state = await page.evaluate(async () => {
       const api = (window as any).__GLIDELINE_WHITEBOARD__;
-      const from = api.callTool('create_shape', {
+      const from = await api.callTool('create_shape', {
         type: 'box',
         x: 40,
         y: 140,
         props: { w: 120, h: 80, label: 'A' },
       });
-      const obstacle = api.callTool('create_shape', {
+      const obstacle = await api.callTool('create_shape', {
         type: 'box',
         x: 240,
         y: 110,
         props: { w: 120, h: 140, label: 'B' },
       });
-      const to = api.callTool('create_shape', {
+      const to = await api.callTool('create_shape', {
         type: 'box',
         x: 460,
         y: 140,
         props: { w: 120, h: 80, label: 'C' },
       });
-      const arrow = api.callTool('create_connection', {
+      const arrow = await api.callTool('create_connection', {
         fromId: from.id,
         toId: to.id,
         routeStyle: 'smart',
@@ -94,15 +94,15 @@ test.describe('glideboard browser automation', () => {
   });
 
   test('fit-to-screen updates zoom for wide boards and reset restores 100%', async ({ page }) => {
-    await page.evaluate(() => {
+    await page.evaluate(async () => {
       const api = (window as any).__GLIDELINE_WHITEBOARD__;
-      api.callTool('create_shape', {
+      await api.callTool('create_shape', {
         type: 'box',
         x: 40,
         y: 180,
         props: { w: 140, h: 100, label: 'A' },
       });
-      api.callTool('create_shape', {
+      await api.callTool('create_shape', {
         type: 'box',
         x: 1280,
         y: 220,
@@ -110,22 +110,22 @@ test.describe('glideboard browser automation', () => {
       });
     });
 
-    await expect(page.locator('#wb-zoom-pct')).toHaveText('100%');
-    await page.locator('#wb-fit').click();
+    await expect(page.locator('[data-glideboard-control="zoom-pct"]')).toHaveText('100%');
+    await page.locator('[data-glideboard-control="fit"]').click();
 
-    const fittedZoom = await page.locator('#wb-zoom-pct').textContent();
+    const fittedZoom = await page.locator('[data-glideboard-control="zoom-pct"]').textContent();
     expect(fittedZoom).not.toBeNull();
     expect(Number.parseInt(fittedZoom!, 10)).toBeLessThan(100);
 
-    await page.locator('#wb-zoom-pct').click();
-    await expect(page.locator('#wb-zoom-pct')).toHaveText('100%');
+    await page.locator('[data-glideboard-control="zoom-pct"]').click();
+    await expect(page.locator('[data-glideboard-control="zoom-pct"]')).toHaveText('100%');
   });
 
   test('uses the light chrome palette instead of a dark theme', async ({ page }) => {
     const styles = await page.evaluate(() => {
-      const app = window.getComputedStyle(document.getElementById('whiteboard-app')!);
-      const toolbar = window.getComputedStyle(document.getElementById('wb-toolbar')!);
-      const zoom = window.getComputedStyle(document.getElementById('wb-zoom-widget')!);
+      const app = window.getComputedStyle(document.querySelector('[data-glideboard-role="app"]')!);
+      const toolbar = window.getComputedStyle(document.querySelector('[data-glideboard-role="toolbar"]')!);
+      const zoom = window.getComputedStyle(document.querySelector('[data-glideboard-role="zoom-widget"]')!);
       return {
         appBackground: app.backgroundColor,
         toolbarBackground: toolbar.backgroundColor,

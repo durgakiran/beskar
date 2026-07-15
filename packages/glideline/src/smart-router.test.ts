@@ -158,6 +158,8 @@ describe('Phase 6 smart routing', () => {
     createBox(editor, 'box:dirty-b', 240, 110, 120, 140);
     const toId = createBox(editor, 'box:dirty-c', 460, 140, 120, 80);
     const arrow = createBoundArrow(editor, 'shape:dirty-route', fromId, toId, 'smart');
+    // Same-value updates are store no-ops, so build the lazy route explicitly.
+    resolveArrowRoute(editor, arrow);
     const initialSnapshot = editor.getSmartRoutingSnapshot();
     expect(initialSnapshot.dirty).toBe(false);
     expect(initialSnapshot.buildCount).toBeGreaterThanOrEqual(1);

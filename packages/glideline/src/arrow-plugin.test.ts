@@ -222,6 +222,10 @@ describe('Arrow handle dragging via SelectTool', () => {
 
     const arr = ed.getShape<ArrowShape>(sid('arrG'))!;
     expect(arr.props.bend).toBeCloseTo(-1, 2);
+    expect(ed.history.undoStack.at(-1)?.label).toBe('Adjust Arrow Bend');
+
+    ed.undo();
+    expect(ed.getShape<ArrowShape>(sid('arrG'))?.props.bend).toBe(0);
   });
 
   it('drags end handle to detach bound shape and delete binding', () => {
@@ -251,6 +255,11 @@ describe('Arrow handle dragging via SelectTool', () => {
     expect(arr.props.end.boundShapeId).toBeNull();
     expect(arr.props.end.point).toEqual({ x: 400, y: 400 });
     expect(ed.getBindingsFromShape(sid('arrH'))).toHaveLength(0);
+    expect(ed.history.undoStack.at(-1)?.label).toBe('Move Arrow Handle');
+
+    ed.undo();
+    expect(ed.getShape<ArrowShape>(sid('arrH'))?.props.end.boundShapeId).toBe(sid('boxEnd'));
+    expect(ed.getBindingsFromShape(sid('arrH'))).toHaveLength(1);
   });
 
   it('drags end handle onto a shape to bind it and create a binding', () => {

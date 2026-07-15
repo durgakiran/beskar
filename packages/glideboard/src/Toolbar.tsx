@@ -26,7 +26,8 @@ import {
   LuChevronsRight,
   LuFileOutput,
 } from 'react-icons/lu';
-import { arrowPresetSignal, setConnectorPreset, wbEditor, type ConnectorPreset } from './editor';
+import { useGlideboardController } from './GlideboardContext';
+import type { ConnectorPreset } from './GlideboardController';
 import { wbTheme } from './theme';
 import { useSignalValue } from './useSignalValue';
 
@@ -91,10 +92,12 @@ const buttonStyle: React.CSSProperties = {
 };
 
 function ToolButton({ tool, active, onClick }: { tool: ToolDef; active: boolean; onClick: () => void }) {
+  const controller = useGlideboardController();
   const Icon = tool.icon;
   return (
     <button
-      id={`wb-tool-${tool.id}`}
+      id={controller.domId(`tool-${tool.id}`)}
+      data-glideboard-tool={tool.id}
       title={tool.shortcut ? `${tool.label} (${tool.shortcut})` : tool.label}
       onClick={onClick}
       style={{
@@ -125,11 +128,13 @@ function ShapePickerButton({
   onToggle: () => void;
   onSelectShape: (toolId: string) => void;
 }) {
+  const controller = useGlideboardController();
   const Icon = currentShapeTool.icon;
   return (
     <div style={{ position: 'relative' }}>
       <button
-        id="wb-tool-shape-picker"
+        id={controller.domId('tool-shape-picker')}
+        data-glideboard-control="shape-picker"
         title={`Shapes (${currentShapeTool.label})`}
         onClick={onToggle}
         style={{
@@ -145,7 +150,8 @@ function ShapePickerButton({
 
       {isOpen ? (
         <div
-          id="wb-shape-picker"
+          id={controller.domId('shape-picker')}
+          data-glideboard-role="shape-picker"
           style={{
             position: 'absolute',
             left: 56,
@@ -167,7 +173,8 @@ function ShapePickerButton({
             return (
               <button
                 key={tool.id}
-                id={`wb-shape-option-${tool.id}`}
+                id={controller.domId(`shape-option-${tool.id}`)}
+                data-glideboard-shape-option={tool.id}
                 title={tool.shortcut ? `${tool.label} (${tool.shortcut})` : tool.label}
                 onClick={() => onSelectShape(tool.id)}
                 style={{
@@ -207,11 +214,13 @@ function ArrowPickerButton({
   onToggle: () => void;
   onSelectArrow: (preset: ConnectorPreset) => void;
 }) {
+  const controller = useGlideboardController();
   const Icon = currentArrowTool.icon;
   return (
     <div style={{ position: 'relative' }}>
       <button
-        id="wb-tool-arrow-picker"
+        id={controller.domId('tool-arrow-picker')}
+        data-glideboard-control="arrow-picker"
         title={`Connector (${currentArrowTool.label})`}
         onClick={onToggle}
         style={{
@@ -227,7 +236,8 @@ function ArrowPickerButton({
 
       {isOpen ? (
         <div
-          id="wb-arrow-picker"
+          id={controller.domId('arrow-picker')}
+          data-glideboard-role="arrow-picker"
           style={{
             position: 'absolute',
             left: 56,
@@ -249,7 +259,8 @@ function ArrowPickerButton({
             return (
               <button
                 key={tool.id}
-                id={`wb-arrow-option-${tool.preset}`}
+                id={controller.domId(`arrow-option-${tool.preset}`)}
+                data-glideboard-arrow-option={tool.preset}
                 title={tool.shortcut ? `${tool.label} (${tool.shortcut})` : tool.label}
                 onClick={() => onSelectArrow(tool.preset)}
                 style={{
@@ -277,8 +288,10 @@ function ArrowPickerButton({
 }
 
 export function Toolbar() {
-  const activeTool = useSignalValue(wbEditor.currentToolId) ?? 'select';
-  const currentArrowPreset = useSignalValue(arrowPresetSignal) ?? 'arrow';
+  const controller = useGlideboardController();
+  const { editor } = controller;
+  const activeTool = useSignalValue(editor.currentToolId) ?? 'select';
+  const currentArrowPreset = useSignalValue(controller.arrowPresetSignal) ?? 'arrow';
   const toolbarRef = React.useRef<HTMLDivElement>(null);
   const [isShapePickerOpen, setIsShapePickerOpen] = React.useState(false);
   const [isArrowPickerOpen, setIsArrowPickerOpen] = React.useState(false);
@@ -310,7 +323,7 @@ export function Toolbar() {
   const currentArrowTool = ARROW_TOOLS.find(tool => tool.preset === currentArrowPreset) ?? ARROW_TOOLS[1]!;
 
   const selectTool = (toolId: string) => {
-    wbEditor.setCurrentTool(toolId);
+    controller.setCurrentTool(toolId);
     setIsShapePickerOpen(false);
     setIsArrowPickerOpen(false);
   };
@@ -318,7 +331,8 @@ export function Toolbar() {
   return (
     <div
       ref={toolbarRef}
-      id="wb-toolbar"
+      id={controller.domId('toolbar')}
+      data-glideboard-role="toolbar"
       style={{
         position: 'absolute',
         left: 12,
@@ -346,7 +360,7 @@ export function Toolbar() {
                 setIsArrowPickerOpen(false);
                 setIsShapePickerOpen(open => !open);
                 if (!SHAPE_TOOL_IDS.has(activeTool)) {
-                  wbEditor.setCurrentTool(currentShapeTool.id);
+                  controller.setCurrentTool(currentShapeTool.id);
                 }
               }}
               onSelectShape={(toolId) => {
@@ -367,11 +381,11 @@ export function Toolbar() {
               onToggle={() => {
                 setIsShapePickerOpen(false);
                 setIsArrowPickerOpen(open => !open);
-                wbEditor.setCurrentTool('arrow');
+                controller.setCurrentTool('arrow');
               }}
               onSelectArrow={(preset) => {
-                setConnectorPreset(preset);
-                wbEditor.setCurrentTool('arrow');
+                controller.setConnectorPreset(preset);
+                controller.setCurrentTool('arrow');
                 setIsArrowPickerOpen(false);
               }}
             />
@@ -390,8 +404,8 @@ export function Toolbar() {
 
       <div style={{ width: '100%', height: 1, background: wbTheme.border, margin: '2px 0' }} />
 
-      <ToolButton tool={{ id: 'undo', label: 'Undo', shortcut: '⌘Z', icon: FiRotateCcw }} active={false} onClick={() => wbEditor.undo()} />
-      <ToolButton tool={{ id: 'redo', label: 'Redo', shortcut: '⌘⇧Z', icon: FiRotateCw }} active={false} onClick={() => wbEditor.redo()} />
+      <ToolButton tool={{ id: 'undo', label: 'Undo', shortcut: '⌘Z', icon: FiRotateCcw }} active={false} onClick={() => editor.undo()} />
+      <ToolButton tool={{ id: 'redo', label: 'Redo', shortcut: '⌘⇧Z', icon: FiRotateCw }} active={false} onClick={() => editor.redo()} />
     </div>
   );
 }

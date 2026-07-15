@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { awarenessSignal, wbEditor } from './editor';
+import { useGlideboardController } from './GlideboardContext';
 import { useSignalValue } from './useSignalValue';
 import type { Vec2 } from '@durgakiran/glideline';
 import type { GlideboardUser } from './types';
@@ -10,12 +10,17 @@ interface CursorState {
 }
 
 export function CollaborationCursors() {
+  const controller = useGlideboardController();
+  const editor = controller.editor;
   const [cursors, setCursors] = useState<Map<number, CursorState>>(new Map());
-  const camera = useSignalValue(wbEditor.camera.signal)!;
-  const awareness = useSignalValue(awarenessSignal);
+  const camera = useSignalValue(editor.camera.signal)!;
+  const awareness = useSignalValue(controller.awarenessSignal);
 
   useEffect(() => {
-    if (!awareness) return;
+    if (!awareness) {
+      setCursors(new Map());
+      return;
+    }
 
     const handleAwarenessChange = () => {
       const states = awareness.getStates();

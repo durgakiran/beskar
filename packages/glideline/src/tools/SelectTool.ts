@@ -301,6 +301,7 @@ class Dragging extends StateNode {
     this._origin         = info.origin;
     this._startPositions = info.startPositions;
     this._axis           = null;
+    this.editor.history.beginPreview();
   }
 
   override onPointerMove(e: PointerMoveEvent): void {
@@ -336,11 +337,22 @@ class Dragging extends StateNode {
     if (this._axis === 'y') fdx = 0;
     const startPositions = this._startPositions;
 
-    this.editor.history.batch('Move Shapes', () => {
+    // Publish the final pointer location atomically as an ignored preview.
+    // The store may correctly treat this as a no-op when the last move event
+    // already reached the same point, so history is recorded from the initial
+    // snapshots explicitly below.
+    this.editor.history.batch('Move Shapes Preview', () => {
       for (const [id, start] of startPositions) {
         this.editor.updateShape(id, { x: start.x + fdx, y: start.y + fdy });
       }
-    });
+    }, { history: 'ignore' });
+
+    const before = new Map<string, AnyRecord | null>();
+    for (const [id, start] of startPositions) {
+      const current = this.editor.getShape(id);
+      if (current) before.set(id, { ...current, x: start.x, y: start.y });
+    }
+    this.editor.history.recordPreview('Move Shapes', before);
 
     this.parent!.transition('idle');
   }
@@ -353,8 +365,13 @@ class Dragging extends StateNode {
           this.editor.updateShape(id, { x: start.x, y: start.y });
         }
       }, { history: 'ignore' });
+      this.editor.history.cancelPreview();
       this.parent!.transition('idle');
     }
+  }
+
+  override onExit(): void {
+    this.editor.history.cancelPreview();
   }
 }
 
@@ -370,6 +387,7 @@ class DraggingHandle extends StateNode {
   private _origin!: Vec2;
   private _initialProps!: ArrowProps;
   private _initialBinding: any = null;
+  private _initialArrow!: ArrowShape;
   /** World-space arrow position at drag start (= shape.x, shape.y). */
   private _initialArrowX!: number;
   private _initialArrowY!: number;
@@ -389,8 +407,10 @@ class DraggingHandle extends StateNode {
     this.editor.clearBindingPreview();
     // Capture initial world position of the arrow (= start terminal world pos)
     const arrow = this.editor.getShape(info.arrowId) as ArrowShape;
+    this._initialArrow = JSON.parse(JSON.stringify(arrow)) as ArrowShape;
     this._initialArrowX = arrow?.x ?? 0;
     this._initialArrowY = arrow?.y ?? 0;
+    this.editor.history.beginPreview();
   }
 
   override onPointerMove(e: PointerMoveEvent): void {
@@ -610,22 +630,13 @@ class DraggingHandle extends StateNode {
     const finalProps = { ...arrow.props };
     const finalArrowX = arrow.x;
     const finalArrowY = arrow.y;
+    let newBindingId: string | null = null;
 
-    // 1. Revert to initial state
-    this.editor.history.batch('Revert Drag Handle', () => {
-      this.editor.updateShape(this._arrowId, {
-        x: this._initialArrowX,
-        y: this._initialArrowY,
-        props: { ...this._initialProps }
-      });
-      if (this._initialBinding) {
-        this.editor.store.put([this._initialBinding]);
-      }
-    }, { history: 'ignore' });
-
-    // 2. Commit transaction
+    // Finalize bindings and the last pointer position as one publication. The
+    // live arrow preview is already in the store, so history is synthesized
+    // from the snapshots captured when the interaction began.
     this.editor.history.batch(
-      this._handleType === 'bend' ? 'Adjust Arrow Bend' : 'Move Arrow Handle',
+      'Finalize Arrow Handle Preview',
       () => {
         if (this._handleType !== 'bend' && this._initialBinding) {
           this.editor.deleteBinding(this._initialBinding.id);
@@ -698,6 +709,7 @@ class DraggingHandle extends StateNode {
                 fromEdge: anchorToEdge(snapped.normalizedAnchor),
               },
             };
+            newBindingId = newBinding.id;
             this.editor.createBinding(newBinding as any);
           }
         }
@@ -713,7 +725,22 @@ class DraggingHandle extends StateNode {
           const s = this.editor.getShape(finalProps.end.boundShapeId);
           if (s) this.editor.updateShape(finalProps.end.boundShapeId, { x: s.x });
         }
-      }
+      },
+      { history: 'ignore' },
+    );
+
+    const before = new Map<string, AnyRecord | null>([
+      [this._arrowId, this._initialArrow as unknown as AnyRecord],
+    ]);
+    if (this._initialBinding) {
+      before.set(this._initialBinding.id, this._initialBinding);
+    }
+    if (newBindingId) {
+      before.set(newBindingId, null);
+    }
+    this.editor.history.recordPreview(
+      this._handleType === 'bend' ? 'Adjust Arrow Bend' : 'Move Arrow Handle',
+      before,
     );
 
     this.parent!.transition('idle');
@@ -725,6 +752,8 @@ class DraggingHandle extends StateNode {
       this.editor.clearBindingPreview();
       this.editor.history.batch('Cancel Drag Handle', () => {
         this.editor.updateShape(this._arrowId, {
+          x: this._initialArrowX,
+          y: this._initialArrowY,
           props: {
             ...this._initialProps,
           }
@@ -734,12 +763,14 @@ class DraggingHandle extends StateNode {
         }
       }, { history: 'ignore' });
 
+      this.editor.history.cancelPreview();
       this.parent!.transition('idle');
     }
   }
 
   override onExit(): void {
     this.editor.clearBindingPreview();
+    this.editor.history.cancelPreview();
   }
 }
 
@@ -836,6 +867,7 @@ class DraggingResize extends StateNode {
 
   override onEnter(info: DraggingResizeState): void {
     this._info = info;
+    this.editor.history.beginPreview();
   }
 
   override onPointerMove(e: PointerMoveEvent): void {
@@ -845,9 +877,15 @@ class DraggingResize extends StateNode {
   }
 
   override onPointerUp(e: PointerUpEvent): void {
-    this.editor.history.batch('Resize Shapes', () => {
+    this.editor.history.batch('Resize Shapes Preview', () => {
       this._applyResize(e.point, (e as any).shiftKey ?? false);
-    });
+    }, { history: 'ignore' });
+
+    const before = new Map<string, AnyRecord | null>();
+    for (const [id, { shape }] of this._info.initialGeom) {
+      before.set(id, shape as unknown as AnyRecord);
+    }
+    this.editor.history.recordPreview('Resize Shapes', before);
     this.parent!.transition('idle');
   }
 
@@ -862,8 +900,13 @@ class DraggingResize extends StateNode {
           });
         }
       }, { history: 'ignore' });
+      this.editor.history.cancelPreview();
       this.parent!.transition('idle');
     }
+  }
+
+  override onExit(): void {
+    this.editor.history.cancelPreview();
   }
 
   private _applyResize(cursor: Vec2, constrainAspect: boolean): void {
@@ -941,6 +984,7 @@ class DraggingRotation extends StateNode {
 
   override onEnter(info: RotationInfo): void {
     this._info = info;
+    this.editor.history.beginPreview();
   }
 
   override onPointerMove(e: PointerMoveEvent): void {
@@ -950,9 +994,15 @@ class DraggingRotation extends StateNode {
   }
 
   override onPointerUp(e: PointerUpEvent): void {
-    this.editor.history.batch('Rotate Shapes', () => {
+    this.editor.history.batch('Rotate Shapes Preview', () => {
       this._applyRotation(e.point, (e as any).shiftKey ?? false);
-    });
+    }, { history: 'ignore' });
+
+    const before = new Map<string, AnyRecord | null>();
+    for (const [id, shape] of this._info.initialShapes) {
+      before.set(id, shape as unknown as AnyRecord);
+    }
+    this.editor.history.recordPreview('Rotate Shapes', before);
     this.parent!.transition('idle');
   }
 
@@ -970,8 +1020,13 @@ class DraggingRotation extends StateNode {
           }
         }
       }, { history: 'ignore' });
+      this.editor.history.cancelPreview();
       this.parent!.transition('idle');
     }
+  }
+
+  override onExit(): void {
+    this.editor.history.cancelPreview();
   }
 
   private _applyRotation(cursor: Vec2, snap: boolean): void {

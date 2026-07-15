@@ -10,6 +10,7 @@ export interface AIShapeContext {
   y: number;
   w: number;
   h: number;
+  rotation: number;
 }
 
 export interface AIConnectionContext {
@@ -62,6 +63,7 @@ function toAIShape(editor: GlideEditor, shape: GlideShape): AIShapeContext {
     y: bounds.minY,
     w: bounds.w,
     h: bounds.h,
+    rotation: shape.rotation,
   };
 }
 

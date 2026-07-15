@@ -1,4 +1,9 @@
-import type { GlideEditor, GlideShape, GlideBinding } from '@durgakiran/glideline';
+import type {
+  GlideEditor,
+  GlideShape,
+  GlideBinding,
+  StoreChangeSet,
+} from '@durgakiran/glideline';
 import type {
   GlideboardCollaborationConfig,
   GlideboardMapEvent,
@@ -25,12 +30,10 @@ function applyFullMapState(editor: GlideEditor, recordsMap: GlideboardSharedMap<
   const existingIds = getAllRecordIds(editor);
   const removeIds = existingIds.filter(id => !nextIds.has(id));
 
-  if (removeIds.length > 0) {
-    editor.store.remove(removeIds);
-  }
-  if (nextRecords.length > 0) {
-    editor.store.put(nextRecords as Record<string, unknown>[]);
-  }
+  editor.store.transact({ origin: 'remote', history: 'ignore' }, tx => {
+    for (const id of removeIds) tx.remove(id);
+    for (const record of nextRecords) tx.upsert(record as Record<string, unknown>);
+  });
 }
 
 export function bindGlideboardCollaboration(
@@ -38,8 +41,6 @@ export function bindGlideboardCollaboration(
   config: GlideboardCollaborationConfig,
 ) {
   const recordsMap = config.doc.getMap<AnyRecord>(RECORDS_KEY);
-  const originalPut = editor.store.put.bind(editor.store);
-  const originalRemove = editor.store.remove.bind(editor.store);
   let applyingRemote = false;
 
   if (recordsMap.size > 0) {
@@ -60,25 +61,16 @@ export function bindGlideboardCollaboration(
     }
   }
 
-  editor.store.put = ((records: Record<string, unknown>[]) => {
-    originalPut(records);
-    if (applyingRemote) return;
+  const publishLocalChanges = (changes: StoreChangeSet) => {
+    if (applyingRemote || changes.origin === 'remote' || changes.scope === 'ephemeral') return;
     config.doc.transact(() => {
-      for (const record of records) {
-        recordsMap.set(String(record.id), cloneRecord(record as AnyRecord));
+      for (const delta of changes.deltas) {
+        if (delta.after === null) recordsMap.delete(delta.id);
+        else recordsMap.set(delta.id, cloneRecord(delta.after as AnyRecord));
       }
     });
-  }) as typeof editor.store.put;
-
-  editor.store.remove = ((ids: string[]) => {
-    originalRemove(ids);
-    if (applyingRemote) return;
-    config.doc.transact(() => {
-      for (const id of ids) {
-        recordsMap.delete(id);
-      }
-    });
-  }) as typeof editor.store.remove;
+  };
+  const stopPublishingLocalChanges = editor.store.listen(publishLocalChanges);
 
   const handleRemoteChange = (event: GlideboardMapEvent, transaction: any) => {
     if (transaction && transaction.local) return;
@@ -100,12 +92,10 @@ export function bindGlideboardCollaboration(
         }
       });
 
-      if (toRemove.length > 0) {
-        originalRemove(toRemove);
-      }
-      if (toPut.length > 0) {
-        originalPut(toPut);
-      }
+      editor.store.transact({ origin: 'remote', history: 'ignore' }, tx => {
+        for (const id of toRemove) tx.remove(id);
+        for (const record of toPut) tx.upsert(record);
+      });
     } finally {
       applyingRemote = false;
     }
@@ -113,18 +103,8 @@ export function bindGlideboardCollaboration(
 
   recordsMap.observe(handleRemoteChange);
 
-  if (config.provider?.awareness && config.user) {
-    config.provider.awareness.setLocalStateField('user', {
-      id: config.user.id,
-      name: config.user.name,
-      color: config.user.color,
-    });
-  }
-
   return () => {
     recordsMap.unobserve(handleRemoteChange);
-    editor.store.put = originalPut;
-    editor.store.remove = originalRemove;
-    config.provider?.awareness?.setLocalStateField('user', null);
+    stopPublishingLocalChanges();
   };
 }

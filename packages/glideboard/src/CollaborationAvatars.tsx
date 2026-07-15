@@ -1,15 +1,19 @@
 import React, { useEffect, useState } from 'react';
-import { awarenessSignal } from './editor';
+import { useGlideboardController } from './GlideboardContext';
 import { useSignalValue } from './useSignalValue';
 import { wbTheme } from './theme';
 import type { GlideboardUser } from './types';
 
 export function CollaborationAvatars() {
+  const controller = useGlideboardController();
   const [users, setUsers] = useState<Map<number, GlideboardUser>>(new Map());
-  const awareness = useSignalValue(awarenessSignal);
+  const awareness = useSignalValue(controller.awarenessSignal);
 
   useEffect(() => {
-    if (!awareness) return;
+    if (!awareness) {
+      setUsers(new Map());
+      return;
+    }
 
     const handleAwarenessChange = () => {
       const states = awareness.getStates();

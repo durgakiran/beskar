@@ -4,14 +4,16 @@
 
 // Types
 export type {
-  ShapeId, BindingId, PageId,
-  GlideShape, GlideBinding, BaseRecord, AnyRecord,
+  ShapeId, BindingId, PageId, AssetId,
+  GlideShape, GlideBinding, GlidePage, GlideAsset, BaseRecord, AnyRecord, DeepReadonly,
+  KnownRecordKind, RecordKind,
+  RecordReferenceDescriptor,
   Box2d, Vec2, EdgeName,
   GlideDocument,
   Validator, GlideProps,
   GlideMigrations, GlideMigrator,
 } from './types';
-export { sid, bid, pid, makeBox, isGlideBinding } from './types';
+export { sid, bid, pid, aid, makeBox, isGlideBinding, isGlideShape } from './types';
 
 // Validators
 export { T } from './validators';
@@ -20,10 +22,20 @@ export { T } from './validators';
 export { defineMigrations, migrateRecord, migrateRecordDown } from './migrations';
 
 // Schema
-export { GlideSchema, CURRENT_STORE_VERSION } from './schema';
+export {
+  GlideSchema, DocumentValidationError, CURRENT_STORE_VERSION, DEFAULT_DOCUMENT_LIMITS,
+} from './schema';
+export type { DocumentLimits, LoadReport, LoadedDocument } from './schema';
 
 // Store
-export { GlideStore } from './store';
+export {
+  GlideStore, AsyncTransactionError, TransactionAbortedError, TransactionReentryError,
+} from './store';
+export type {
+  ChangeOrigin, JsonPointer, StoreRecord, RecordDelta, StoreChangeSet, TransactionScope,
+  TransactionOptions, StoreTransaction, TransactionResult, StoreChangeListener,
+  ReplaceDocumentOptions, ImportOptions, ImportReport,
+} from './store';
 
 // Shapes (base)
 export { ShapeUtil, BindingUtil } from './shapes/ShapeUtil';

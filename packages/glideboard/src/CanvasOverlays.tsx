@@ -1,14 +1,13 @@
 import React, { useEffect, useRef } from 'react';
-import { effect } from '@preact/signals';
 import {
   getArrowBendHandlePoint,
   type ArrowShape,
+  type GlideEditor,
   type GlideShape,
   type ResizeHandle,
-  type Vec2,
 } from '@durgakiran/glideline';
+import { useGlideboardController } from './GlideboardContext';
 import { wbTheme } from './theme';
-import { wbEditor } from './editor';
 
 const HANDLE_SIZE = 8;
 const ROTATION_HANDLE_OFFSET = 20;
@@ -44,16 +43,16 @@ interface OverlayBounds {
   rotation: number;
 }
 
-function getSelectionData() {
-  const selectedIds = wbEditor.getSelectionSignal().value;
+function getSelectionData(editor: GlideEditor) {
+  const selectedIds = editor.getSelectionSignal().value;
   if (!selectedIds || selectedIds.length === 0) return null;
 
   const boxes: OverlayBounds[] = [];
   const shapes: GlideShape[] = [];
   for (const id of selectedIds) {
-    const shape = wbEditor.store.getSignal(id)?.value as GlideShape | null;
+    const shape = editor.store.getSignal(id)?.value as GlideShape | null;
     if (!shape) continue;
-    const localBounds = wbEditor.getShapeUtil(shape.type).getGeometry(shape as any).getBounds();
+    const localBounds = editor.getShapeUtil(shape.type).getGeometry(shape as any).getBounds();
     boxes.push({
       minX: localBounds.minX + shape.x,
       minY: localBounds.minY + shape.y,
@@ -89,12 +88,12 @@ export function getCursorForHandle(handleId: string): string {
   return map[handleId] || 'default';
 }
 
-export function getHandleAtPagePoint(pageX: number, pageY: number): string | null {
-  const selData = getSelectionData();
+export function getHandleAtPagePoint(editor: GlideEditor, pageX: number, pageY: number): string | null {
+  const selData = getSelectionData(editor);
   if (!selData || selData.boxes.length === 0) return null;
 
   const { boxes, shapes } = selData;
-  const camera = wbEditor.camera.signal.value;
+  const camera = editor.camera.signal.value;
   const zoom = camera.z;
 
   // Single arrow check
@@ -115,7 +114,7 @@ export function getHandleAtPagePoint(pageX: number, pageY: number): string | nul
     if (distEnd <= 8) return 'end';
 
     // Bend handle
-    const bendPoint = getArrowBendHandlePoint(wbEditor as any, arrow);
+    const bendPoint = getArrowBendHandlePoint(editor as any, arrow);
     if (bendPoint) {
       const distBend = Math.hypot((pageX - bendPoint.x) * zoom, (pageY - bendPoint.y) * zoom);
       if (distBend <= 8) return 'bend';
@@ -155,7 +154,7 @@ export function getHandleAtPagePoint(pageX: number, pageY: number): string | nul
   let showRotate = true;
   let showResize = true;
   if (boxes.length === 1) {
-    const util = wbEditor.getShapeUtil(shapes[0]!.type);
+    const util = editor.getShapeUtil(shapes[0]!.type);
     showRotate = !util.hideRotateHandle(shapes[0] as any);
     showResize = !util.hideResizeHandles(shapes[0] as any);
   }
@@ -190,6 +189,7 @@ export function getHandleAtPagePoint(pageX: number, pageY: number): string | nul
 }
 
 function drawGeometryOutline(
+  editor: GlideEditor,
   ctx: CanvasRenderingContext2D,
   shape: GlideShape,
   stroke: string,
@@ -197,7 +197,7 @@ function drawGeometryOutline(
   strokeWidth: number,
   zoom: number,
 ) {
-  const geometry = wbEditor.getShapeUtil(shape.type).getGeometry(shape as any);
+  const geometry = editor.getShapeUtil(shape.type).getGeometry(shape as any);
   const outline = geometry.getOutline();
   if (outline.length === 0) return;
 
@@ -225,6 +225,7 @@ function drawGeometryOutline(
 }
 
 function drawCandidate(
+  editor: GlideEditor,
   ctx: CanvasRenderingContext2D,
   shape: GlideShape,
   candidate: any,
@@ -235,7 +236,7 @@ function drawCandidate(
   activeRadius: number,
   zoom: number,
 ) {
-  const localBounds = wbEditor.getShapeUtil(shape.type).getGeometry(shape as any).getBounds();
+  const localBounds = editor.getShapeUtil(shape.type).getGeometry(shape as any).getBounds();
   const cx = localBounds.minX + localBounds.w / 2;
   const cy = localBounds.minY + localBounds.h / 2;
 
@@ -246,7 +247,7 @@ function drawCandidate(
     ctx.rotate(shape.rotation);
     ctx.translate(-cx, -cy);
   }
-  drawGeometryOutline(ctx, shape, stroke, fill, strokeWidth, zoom);
+  drawGeometryOutline(editor, ctx, shape, stroke, fill, strokeWidth, zoom);
   ctx.restore();
 
   ctx.save();
@@ -269,8 +270,8 @@ function drawCandidate(
   ctx.restore();
 }
 
-function drawSelection(ctx: CanvasRenderingContext2D, zoom: number) {
-  const selData = getSelectionData();
+function drawSelection(editor: GlideEditor, ctx: CanvasRenderingContext2D, zoom: number) {
+  const selData = getSelectionData(editor);
   if (!selData || selData.boxes.length === 0) return;
 
   const { boxes, shapes } = selData;
@@ -279,7 +280,7 @@ function drawSelection(ctx: CanvasRenderingContext2D, zoom: number) {
   if (shapes.length === 1 && shapes[0]?.type === 'arrow') {
     const arrow = shapes[0] as ArrowShape;
     const { start, end } = arrow.props;
-    const bendPoint = getArrowBendHandlePoint(wbEditor as any, arrow);
+    const bendPoint = getArrowBendHandlePoint(editor as any, arrow);
     const startWorldX = arrow.x + start.point.x;
     const startWorldY = arrow.y + start.point.y;
     const endWorldX = arrow.x + end.point.x;
@@ -351,7 +352,7 @@ function drawSelection(ctx: CanvasRenderingContext2D, zoom: number) {
     let showRotate = true;
     let showResize = true;
     if (boxes.length === 1) {
-      const util = wbEditor.getShapeUtil(shapes[0]!.type);
+      const util = editor.getShapeUtil(shapes[0]!.type);
       showRotate = !util.hideRotateHandle(shapes[0] as any);
       showResize = !util.hideResizeHandles(shapes[0] as any);
     }
@@ -406,8 +407,8 @@ function drawSelection(ctx: CanvasRenderingContext2D, zoom: number) {
   ctx.restore();
 }
 
-function drawMarquee(ctx: CanvasRenderingContext2D, zoom: number) {
-  const selectTool = wbEditor.getCurrentTool();
+function drawMarquee(editor: GlideEditor, ctx: CanvasRenderingContext2D, zoom: number) {
+  const selectTool = editor.getCurrentTool();
   const marqueeState = (selectTool as any)._childMap?.get('marqueeSelecting');
   const rect = marqueeState?.marqueeBoxSignal?.value as { minX: number; minY: number; w: number; h: number } | undefined;
 
@@ -423,19 +424,20 @@ function drawMarquee(ctx: CanvasRenderingContext2D, zoom: number) {
   ctx.restore();
 }
 
-function drawBindingPreview(ctx: CanvasRenderingContext2D, zoom: number) {
-  const preview = wbEditor.bindingPreview.value;
+function drawBindingPreview(editor: GlideEditor, ctx: CanvasRenderingContext2D, zoom: number) {
+  const preview = editor.bindingPreview.value;
   if (!preview) return;
 
-  const activeSig = wbEditor.store.getSignal(preview.targetId);
+  const activeSig = editor.store.getSignal(preview.targetId);
   const activeShape = activeSig?.value as GlideShape | null;
   if (!activeShape) return;
 
-  const sourceSig = preview.sourceCandidate ? wbEditor.store.getSignal(preview.sourceCandidate.targetId) : undefined;
+  const sourceSig = preview.sourceCandidate ? editor.store.getSignal(preview.sourceCandidate.targetId) : undefined;
   const sourceShape = sourceSig?.value as GlideShape | null;
 
   if (preview.sourceCandidate && sourceShape) {
     drawCandidate(
+      editor,
       ctx,
       sourceShape,
       preview.sourceCandidate,
@@ -449,6 +451,7 @@ function drawBindingPreview(ctx: CanvasRenderingContext2D, zoom: number) {
   }
 
   drawCandidate(
+    editor,
     ctx,
     activeShape,
     preview,
@@ -462,17 +465,45 @@ function drawBindingPreview(ctx: CanvasRenderingContext2D, zoom: number) {
 }
 
 export function CanvasOverlays() {
+  const controller = useGlideboardController();
+  const { editor } = controller;
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    const dispose = effect(() => {
+    let marqueeSignal: { subscribe(callback: () => void): () => void } | null = null;
+    let disposeMarquee: (() => void) | null = null;
+    let subscribingMarquee = false;
+
+    const syncMarqueeSubscription = () => {
+      const selectTool = editor.currentToolId.peek() === 'select'
+        ? editor.getCurrentTool()
+        : null;
+      const nextSignal = (selectTool as any)?._childMap
+        ?.get('marqueeSelecting')
+        ?.marqueeBoxSignal as typeof marqueeSignal;
+      if (nextSignal === marqueeSignal) return;
+
+      disposeMarquee?.();
+      marqueeSignal = nextSignal ?? null;
+      disposeMarquee = null;
+      if (marqueeSignal) {
+        subscribingMarquee = true;
+        disposeMarquee = marqueeSignal.subscribe(() => {
+          if (!subscribingMarquee) draw();
+        });
+        subscribingMarquee = false;
+      }
+    };
+
+    const draw = () => {
+      syncMarqueeSubscription();
       const ctx = canvas.getContext('2d');
       if (!ctx) return;
 
-      const { x: cx, y: cy, z: zoom } = wbEditor.camera.signal.value;
+      const { x: cx, y: cy, z: zoom } = editor.camera.signal.value;
       const dpr = window.devicePixelRatio || 1;
 
       // Get bounds and adjust dimensions for high-DPI scaling
@@ -493,19 +524,36 @@ export function CanvasOverlays() {
       ctx.scale(zoom * dpr, zoom * dpr);
       ctx.translate(-cx, -cy);
 
-      // Force Preact tracking
-      wbEditor.store.getVersionSignal().value;
-      wbEditor.bindingPreview.value;
+      drawSelection(editor, ctx, zoom);
+      drawMarquee(editor, ctx, zoom);
+      drawBindingPreview(editor, ctx, zoom);
+    };
 
-      drawSelection(ctx, zoom);
-      drawMarquee(ctx, zoom);
-      drawBindingPreview(ctx, zoom);
-    });
+    const observedSignals = [
+      editor.camera.signal,
+      editor.store.getVersionSignal(),
+      editor.bindingPreview,
+      editor.getSelectionSignal(),
+      editor.currentToolId,
+    ];
+    let subscribingBaseSignals = true;
+    const disposers = observedSignals.map(observed => observed.subscribe(() => {
+      if (!subscribingBaseSignals) draw();
+    }));
+    subscribingBaseSignals = false;
+
+    const resizeObserver = typeof ResizeObserver === 'undefined'
+      ? null
+      : new ResizeObserver(() => draw());
+    resizeObserver?.observe(canvas);
+    draw();
 
     return () => {
-      dispose();
+      resizeObserver?.disconnect();
+      disposeMarquee?.();
+      for (const dispose of disposers) dispose();
     };
-  }, []);
+  }, [editor]);
 
   return (
     <canvas

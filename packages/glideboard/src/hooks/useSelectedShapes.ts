@@ -1,16 +1,17 @@
 import { useMemo } from 'react';
-import { computed } from '@preact/signals';
 import type { GlideShape } from '@durgakiran/glideline';
 import { useSignalValue } from '../useSignalValue';
-import { wbEditor } from '../editor';
+import { useGlideboardController } from '../GlideboardContext';
 
 export function useSelectedShapes(): GlideShape[] {
-  const signal = useMemo(() => computed(() => {
-    const ids = wbEditor.getSelectionSignal().value;
-    return ids
-      .map(id => wbEditor.store.getSignal(id)?.value as GlideShape | null | undefined)
-      .filter(Boolean) as GlideShape[];
-  }), []);
+  const { editor } = useGlideboardController();
+  const selectedIds = useSignalValue(editor.getSelectionSignal());
+  const storeVersion = useSignalValue(editor.store.getVersionSignal());
 
-  return useSignalValue(signal) ?? [];
+  return useMemo(() => {
+    void storeVersion;
+    return (selectedIds ?? [])
+      .map(id => editor.store.getSignal(id)?.value as GlideShape | null | undefined)
+      .filter(Boolean) as GlideShape[];
+  }, [editor, selectedIds, storeVersion]);
 }

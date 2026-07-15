@@ -57,6 +57,7 @@ describe('T3.3-02: preview created on drag', () => {
     pd(editor, 100, 100);
     pm(editor, 120, 100); // 20px — crosses threshold
     expect(shapeCount(editor)).toBe(before + 1);
+    expect(editor.serialize().records).toHaveLength(0);
     // Cleanup
     esc(editor);
   });

@@ -56,14 +56,15 @@ describe('Phase Infinity MCP tool server', () => {
     expect(shape.y).toBe(100);
   });
 
-  it('T∞.2-02: AI-created shapes bypass the local undo stack', async () => {
+  it('T∞.2-02: AI-created shapes are one local undo command', async () => {
     const editor = makeEditor();
     const server = createCanvasToolServer(editor);
 
     const result = await server.callTool('create_shape', { type: 'box', x: 60, y: 80 }) as { id: ShapeId };
+    expect(editor.history.undoStack.at(-1)?.label).toBe('AI: Create Shape');
     editor.undo();
 
-    expect(editor.getShape(result.id)).toBeDefined();
+    expect(editor.getShape(result.id)).toBeUndefined();
   });
 
   it('T∞.2-03: invalid params return a structured error instead of throwing', async () => {
@@ -144,5 +145,11 @@ describe('Phase Infinity MCP tool server', () => {
     expect(updated).toEqual({ ok: true });
     expect(deleted).toEqual({ deleted: 1 });
     expect(editor.getShape(created.id)).toBeUndefined();
+
+    expect(editor.history.undoStack.at(-1)?.label).toBe('AI: Delete Shapes');
+    editor.undo();
+    expect(editor.getShape(created.id)).toMatchObject({ x: 180, y: 60 });
+    editor.undo();
+    expect(editor.getShape(created.id)).toMatchObject({ x: 20, y: 20 });
   });
 });

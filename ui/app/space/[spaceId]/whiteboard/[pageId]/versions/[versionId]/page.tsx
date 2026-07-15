@@ -1,33 +1,130 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Flex, Text, Button, Spinner } from '@radix-ui/themes';
 import { ArrowLeft } from 'lucide-react';
 import { Glideboard } from '@durgakiran/glideboard';
+import * as Y from 'yjs';
+import { base64ToUint8Array } from 'app/core/utils/base64';
+
+interface WhiteboardVersionData {
+  docId: number;
+  data?: string | null;
+  pageId: number;
+  spaceId: string;
+}
+
+interface WhiteboardVersionResponse {
+  data?: WhiteboardVersionData | null;
+}
+
+type LoadState = {
+  sessionKey: string;
+  status: 'loading' | 'ready' | 'error';
+  doc: Y.Doc | null;
+  errorKind: 'corrupt-version' | 'request-failed' | null;
+};
+
+class CorruptWhiteboardVersionError extends Error {}
 
 export default function WhiteboardVersionViewPage() {
   const { spaceId, pageId, versionId } = useParams();
   const navigate = useNavigate();
-  const [content, setContent] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const versionSessionKey = `${spaceId ?? 'missing-space'}:${pageId ?? 'missing-page'}:version:${versionId ?? 'missing-version'}`;
+  const [loadState, setLoadState] = useState<LoadState>({
+    sessionKey: versionSessionKey,
+    status: 'loading',
+    doc: null,
+    errorKind: null,
+  });
+
+  const status = loadState.sessionKey === versionSessionKey
+    ? loadState.status
+    : 'loading';
+  const versionDoc = loadState.sessionKey === versionSessionKey
+    ? loadState.doc
+    : null;
+  const errorKind = loadState.sessionKey === versionSessionKey
+    ? loadState.errorKind
+    : null;
+  const collaboration = useMemo(
+    () => versionDoc ? { doc: versionDoc } : null,
+    [versionDoc],
+  );
 
   useEffect(() => {
+    const abortController = new AbortController();
+    let active = true;
+    let loadedDoc: Y.Doc | null = null;
+
+    setLoadState({ sessionKey: versionSessionKey, status: 'loading', doc: null, errorKind: null });
+
     const fetchVersion = async () => {
       try {
-        const res = await fetch(`/api/v1/editor/space/${spaceId}/whiteboard/${pageId}/version/${versionId}`, {
-          credentials: 'include',
-        });
-        if (res.ok) {
-          const json = await res.json();
-          setContent(json.data?.data || null);
+        if (!spaceId || !pageId || !versionId) {
+          throw new Error('Missing whiteboard version route parameters');
         }
+
+        const res = await fetch(`/api/v1/editor/space/${spaceId}/whiteboard/${pageId}/versions/${versionId}`, {
+          credentials: 'include',
+          signal: abortController.signal,
+        });
+
+        if (!res.ok) {
+          throw new Error(`Failed to fetch whiteboard version (${res.status})`);
+        }
+
+        const json = await res.json() as WhiteboardVersionResponse;
+        const version = json.data;
+        if (
+          !version ||
+          typeof version.data !== 'string' ||
+          version.data.length === 0 ||
+          String(version.spaceId).toLowerCase() !== spaceId.toLowerCase() ||
+          String(version.pageId) !== pageId ||
+          String(version.docId) !== versionId
+        ) {
+          throw new Error('Whiteboard version response does not match the requested version');
+        }
+
+        const nextDoc = new Y.Doc();
+        try {
+          Y.applyUpdate(nextDoc, base64ToUint8Array(version.data));
+        } catch (err) {
+          nextDoc.destroy();
+          throw new CorruptWhiteboardVersionError(
+            err instanceof Error ? err.message : 'Invalid historical whiteboard update',
+          );
+        }
+
+        if (!active) {
+          nextDoc.destroy();
+          return;
+        }
+
+        loadedDoc = nextDoc;
+        setLoadState({ sessionKey: versionSessionKey, status: 'ready', doc: nextDoc, errorKind: null });
       } catch (err) {
+        if (!active || abortController.signal.aborted) return;
         console.error('Failed to fetch version', err);
-      } finally {
-        setLoading(false);
+        setLoadState({
+          sessionKey: versionSessionKey,
+          status: 'error',
+          doc: null,
+          errorKind: err instanceof CorruptWhiteboardVersionError
+            ? 'corrupt-version'
+            : 'request-failed',
+        });
       }
     };
-    fetchVersion();
-  }, [spaceId, pageId, versionId]);
+
+    void fetchVersion();
+
+    return () => {
+      active = false;
+      abortController.abort();
+      loadedDoc?.destroy();
+    };
+  }, [pageId, spaceId, versionId, versionSessionKey]);
 
   return (
     <Flex direction="column" style={{ height: '100vh', overflow: 'hidden' }}>
@@ -39,18 +136,23 @@ export default function WhiteboardVersionViewPage() {
       </Flex>
 
       <Flex flexGrow="1" style={{ position: 'relative' }}>
-        {loading ? (
+        {status === 'loading' ? (
           <Flex align="center" justify="center" style={{ width: '100%', height: '100%' }}>
             <Spinner size="3" />
           </Flex>
-        ) : content ? (
+        ) : status === 'ready' && collaboration ? (
           <Glideboard
-            initialDocument={content}
-            readOnly={true}
+            sessionKey={versionSessionKey}
+            collaboration={collaboration}
+            readOnly
           />
         ) : (
           <Flex align="center" justify="center" style={{ width: '100%', height: '100%' }}>
-            <Text color="red">Failed to load whiteboard data.</Text>
+            <Text color="red">
+              {errorKind === 'corrupt-version'
+                ? 'This historical whiteboard version is corrupt and cannot be opened.'
+                : 'Failed to load whiteboard data.'}
+            </Text>
           </Flex>
         )}
       </Flex>

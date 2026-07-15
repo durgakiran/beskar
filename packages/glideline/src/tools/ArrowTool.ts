@@ -181,7 +181,7 @@ class Drawing extends StateNode {
         arrowheadStart,
         arrowheadEnd,
       }) as unknown as AnyRecord);
-    }, { history: 'ignore' });
+    }, { history: 'ignore', scope: 'ephemeral' });
   }
 
   override onPointerMove(e: PointerMoveEvent): void {
@@ -230,7 +230,7 @@ class Drawing extends StateNode {
           },
         },
       });
-    }, { history: 'ignore' });
+    }, { history: 'ignore', scope: 'ephemeral' });
   }
 
   override onPointerUp(e: PointerUpEvent): void {
@@ -242,7 +242,7 @@ class Drawing extends StateNode {
     // Remove preview
     this.editor.history.batch('Arrow Preview Cleanup', () => {
       this.editor.deleteShapes([PREVIEW_ID]);
-    }, { history: 'ignore' });
+    }, { history: 'ignore', scope: 'ephemeral' });
 
     const routeStyle = (this.editor as any).arrowRouteStyle ?? 'curve';
     const arrowheadStart = (this.editor as any).arrowheadStart ?? 'none';
@@ -361,7 +361,7 @@ class Drawing extends StateNode {
       this.editor.clearBindingPreview();
       this.editor.history.batch('Arrow Preview Cleanup', () => {
         this.editor.deleteShapes([PREVIEW_ID]);
-      }, { history: 'ignore' });
+    }, { history: 'ignore', scope: 'ephemeral' });
       this.parent!.transition('idle');
     }
   }

@@ -6,7 +6,10 @@
  * Instance methods are called at runtime by the rendering pipeline.
  */
 
-import type { GlideShape, GlideBinding, Box2d, Vec2, GlideProps, GlideMigrations, ShapeId } from '../types';
+import type {
+  GlideShape, GlideBinding, Box2d, Vec2, GlideProps, GlideMigrations, ShapeId,
+  RecordReferenceDescriptor,
+} from '../types';
 import type { Geometry2d } from '../geometry';
 import { getMinHeightForShape, type LabelProps } from '../styles';
 
@@ -53,6 +56,7 @@ export abstract class ShapeUtil<S extends GlideShape = GlideShape> {
    *   static migrations = defineMigrations({ currentVersion: 2, migrators: { ... } });
    */
   static readonly migrations?: GlideMigrations;
+  static readonly references?: readonly RecordReferenceDescriptor[];
 
   /** Injected by the editor after registration. */
   editor!: ShapeUtilEditor;
@@ -162,6 +166,7 @@ export abstract class BindingUtil<B extends GlideBinding = GlideBinding> {
   static readonly type: string;
   static readonly props: GlideProps<Record<string, unknown>>;
   static readonly migrations?: GlideMigrations;
+  static readonly references?: readonly RecordReferenceDescriptor[];
 
   editor!: ShapeUtilEditor;
 

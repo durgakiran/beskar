@@ -139,6 +139,7 @@ describe('createSvgPathShape factory', () => {
     const { util: UtilClass, tool: ToolClass, plugin } = createSvgPathShape({
       type: 'test-custom',
       defaultSize: { w: 100, h: 60 },
+      defaultFillStyle: 'solid',
       getPathD: (w, h) => `M 0 0 L ${w} 0 L ${w} ${h} L 0 ${h} Z`,
     });
     expect(plugin.id).toBe('custom-shape-test-custom');
@@ -150,6 +151,7 @@ describe('createSvgPathShape factory', () => {
     expect(bounds.w).toBe(100);
     expect(bounds.h).toBe(60);
     expect(util.getLabelProps(shape)).not.toBeNull();
+    expect(util.getDefaultProps().fillStyle).toBe('solid');
 
     const editor = createEditor({ plugins: [plugin], tools: [SelectTool] });
     editor.setCurrentTool('test-custom');

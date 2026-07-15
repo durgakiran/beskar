@@ -1,4 +1,4 @@
-import type { GlideDocument, GlidePlugin } from '@durgakiran/glideline';
+import type { GlideDocument, GlidePlugin, LoadReport, ShapeId } from '@durgakiran/glideline';
 
 export interface GlideboardUser {
   id: string;
@@ -15,6 +15,7 @@ export interface GlideboardAwareness {
 }
 
 export interface GlideboardCollaborationProvider {
+  /** Awareness providers are session-owned and must not be shared by mounted boards. */
   awareness?: GlideboardAwareness;
 }
 
@@ -49,13 +50,45 @@ export interface GlideboardCollaborationConfig {
   user?: GlideboardUser | null;
 }
 
+export type InitialDocumentDisposition =
+  | { kind: 'acknowledged-baseline'; durableRevision: string }
+  | { kind: 'local-recovery'; recoveryCheckpoint: string }
+  | { kind: 'new-unsaved-seed' };
+
 export interface GlideboardProps {
+  /** Changing this value starts a new, isolated board session. */
+  sessionKey?: string;
   initialDocument?: GlideDocument | null;
+  /** Required when initialDocument is provided; determines initial durability state. */
+  initialDocumentDisposition?: InitialDocumentDisposition;
   collaboration?: GlideboardCollaborationConfig | null;
   readOnly?: boolean;
-  onDocumentChange?: (document: GlideDocument) => void;
+  onDocumentChange?: (
+    document: GlideDocument,
+    context: GlideboardDocumentChangeContext,
+  ) => void | Promise<void>;
   documentChangeDebounceMs?: number;
+  /** What to do with a dirty standalone snapshot when this board unmounts. */
+  pendingSaveOnUnmount?: 'cancel' | 'flush';
   debugApiKey?: string;
-  /** Additional shape plugins registered before the first board session starts. */
-  customShapes?: GlidePlugin[];
+  /** Startup-only plugins. Change sessionKey to construct a board with a new plugin set. */
+  customShapes?: readonly GlidePlugin[];
+}
+
+export interface GlideboardDocumentChangeContext {
+  /** Aborted when this board is disposed with the cancel policy. */
+  signal: AbortSignal;
+}
+
+export interface GlideboardExportSvgOptions {
+  shapeIds?: readonly ShapeId[];
+}
+
+/** Imperative operations scoped to this rendered Glideboard instance. */
+export interface GlideboardHandle {
+  serialize(): GlideDocument;
+  replaceDocument(document: GlideDocument): LoadReport;
+  exportSvg(options?: GlideboardExportSvgOptions): Promise<string>;
+  setCurrentTool(toolId: string): void;
+  flush(): Promise<void>;
 }

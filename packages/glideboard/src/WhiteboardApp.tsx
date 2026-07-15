@@ -1,12 +1,7 @@
 import React from 'react';
 import { Canvas } from './Canvas';
 import { ContextMenu } from './ContextMenu';
-import {
-  isCanvasDraggingRef,
-  deferredToolRestoreRef,
-  readOnlySignal,
-  wbEditor,
-} from './editor';
+import { useGlideboardController } from './GlideboardContext';
 import { StylePanel } from './StylePanel';
 import { wbTheme } from './theme';
 import { Toolbar } from './Toolbar';
@@ -28,9 +23,12 @@ const TOOL_KEYS: Record<string, string> = {
 };
 
 export function WhiteboardApp() {
-  const shapeCount = useSignalValue(wbEditor.store.getShapeIdsSignal())?.length ?? 0;
-  const camera = useSignalValue(wbEditor.camera.signal);
-  const readOnly = useSignalValue(readOnlySignal) ?? false;
+  const controller = useGlideboardController();
+  const editor = controller.editor;
+  const rootRef = React.useRef<HTMLDivElement>(null);
+  const shapeCount = useSignalValue(editor.store.getShapeIdsSignal())?.length ?? 0;
+  const camera = useSignalValue(editor.camera.signal);
+  const readOnly = useSignalValue(controller.readOnlySignal) ?? false;
   const [contextMenuPosition, setContextMenuPosition] = React.useState<{ x: number; y: number } | null>(null);
 
   const isSpacebarHeldRef = React.useRef(false);
@@ -40,10 +38,11 @@ export function WhiteboardApp() {
     if (readOnly) return;
 
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) return;
       if (
         event.target instanceof HTMLTextAreaElement ||
         event.target instanceof HTMLInputElement ||
-        wbEditor.editingShapeId.peek()
+        editor.editingShapeId.peek()
       ) {
         return;
       }
@@ -54,10 +53,10 @@ export function WhiteboardApp() {
         if (isSpacebarHeldRef.current) return;
         isSpacebarHeldRef.current = true;
 
-        const currentTool = wbEditor.currentToolId.peek();
+        const currentTool = editor.currentToolId.peek();
         if (currentTool !== 'hand') {
           previousToolRef.current = currentTool;
-          wbEditor.setCurrentTool('hand');
+          editor.setCurrentTool('hand');
         }
       }
     };
@@ -68,11 +67,11 @@ export function WhiteboardApp() {
           event.preventDefault();
           isSpacebarHeldRef.current = false;
           if (previousToolRef.current) {
-            if (isCanvasDraggingRef.current) {
+            if (controller.isCanvasDraggingRef.current) {
               // Pointer is still captured — defer restoration until pointerUp fires
-              deferredToolRestoreRef.current = previousToolRef.current;
+              controller.deferredToolRestoreRef.current = previousToolRef.current;
             } else {
-              wbEditor.setCurrentTool(previousToolRef.current);
+              editor.setCurrentTool(previousToolRef.current);
             }
             previousToolRef.current = null;
           }
@@ -84,10 +83,10 @@ export function WhiteboardApp() {
       if (isSpacebarHeldRef.current) {
         isSpacebarHeldRef.current = false;
         if (previousToolRef.current) {
-          if (isCanvasDraggingRef.current) {
-            deferredToolRestoreRef.current = previousToolRef.current;
+          if (controller.isCanvasDraggingRef.current) {
+            controller.deferredToolRestoreRef.current = previousToolRef.current;
           } else {
-            wbEditor.setCurrentTool(previousToolRef.current);
+            editor.setCurrentTool(previousToolRef.current);
           }
           previousToolRef.current = null;
         }
@@ -103,7 +102,7 @@ export function WhiteboardApp() {
       window.removeEventListener('keyup', handleKeyUp, { capture: true });
       window.removeEventListener('blur', handleBlur);
     };
-  }, [readOnly]);
+  }, [controller, editor, readOnly]);
 
   const onContextMenu = (event: React.MouseEvent) => {
     if (readOnly) return;
@@ -113,60 +112,68 @@ export function WhiteboardApp() {
 
   const onKeyDown = (event: React.KeyboardEvent) => {
     if (event.target instanceof HTMLTextAreaElement || event.target instanceof HTMLInputElement) return;
-    if (wbEditor.editingShapeId.peek()) return;
+    if (editor.editingShapeId.peek()) return;
 
     if (!readOnly) {
       const toolId = TOOL_KEYS[event.key.toLowerCase()];
       if (toolId && !event.metaKey && !event.ctrlKey && !event.altKey) {
-        wbEditor.setCurrentTool(toolId);
+        editor.setCurrentTool(toolId);
         return;
       }
 
       if ((event.key === 'Delete' || event.key === 'Backspace') && !event.metaKey) {
-        const ids = wbEditor.getSelectedShapeIds();
-        if (ids.length > 0) wbEditor.deleteShapes(ids);
+        const ids = editor.getSelectedShapeIds();
+        if (ids.length > 0) {
+          event.preventDefault();
+          editor.history.batch('Delete Shapes', () => editor.deleteShapes(ids));
+        }
       }
 
       if (event.metaKey || event.ctrlKey) {
-        const ids = wbEditor.getSelectedShapeIds();
+        const ids = editor.getSelectedShapeIds();
         if (event.key === 'c' && ids.length > 0) {
-          wbEditor.copy(ids);
+          editor.copy(ids);
         } else if (event.key === 'x' && ids.length > 0) {
-          wbEditor.copy(ids);
-          wbEditor.deleteShapes(ids);
+          event.preventDefault();
+          editor.history.batch('Cut Shapes', () => {
+            editor.copy(ids);
+            editor.deleteShapes(ids);
+          });
         } else if (event.key === 'v') {
-          wbEditor.paste();
+          editor.paste();
         } else if (event.key === 'd' && ids.length > 0) {
           event.preventDefault();
-          wbEditor.duplicateShapes(ids, { x: 20, y: 20 });
+          editor.duplicateShapes(ids, { x: 20, y: 20 });
         } else if (event.key === ']' && ids.length > 0) {
           event.preventDefault();
-          wbEditor.reorderShapes(ids, event.shiftKey ? 'front' : 'forward');
+          editor.reorderShapes(ids, event.shiftKey ? 'front' : 'forward');
         } else if (event.key === '[' && ids.length > 0) {
           event.preventDefault();
-          wbEditor.reorderShapes(ids, event.shiftKey ? 'back' : 'backward');
+          editor.reorderShapes(ids, event.shiftKey ? 'back' : 'backward');
         }
       }
 
       if (event.key === 'Escape') {
-        wbEditor.setCurrentTool('select');
-        wbEditor.setSelectedShapeIds([]);
+        editor.setCurrentTool('select');
+        editor.setSelectedShapeIds([]);
+      }
+
+      if (event.key === 'z' && (event.metaKey || event.ctrlKey)) {
+        if (event.shiftKey) editor.redo();
+        else editor.undo();
       }
     }
 
-    if (event.key === 'z' && (event.metaKey || event.ctrlKey)) {
-      if (event.shiftKey) wbEditor.redo();
-      else wbEditor.undo();
-    }
-
     if (event.key === '1' && event.shiftKey) {
-      fitToScreen();
+      fitToScreen(controller);
     }
   };
 
   return (
     <div
-      id="whiteboard-app"
+      ref={rootRef}
+      id={controller.domId('app')}
+      data-glideboard-role="app"
       style={{
         width: '100%',
         height: '100%',
@@ -190,7 +197,8 @@ export function WhiteboardApp() {
       ) : null}
       <BackToContentButton />
       <div
-        id="wb-statusbar"
+        id={controller.domId('statusbar')}
+        data-glideboard-role="statusbar"
         style={{
           position: 'absolute',
           bottom: 16,

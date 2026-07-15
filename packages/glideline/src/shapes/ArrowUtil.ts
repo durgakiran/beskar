@@ -105,6 +105,10 @@ const arrowheadStyleValidator = {
 
 export class ArrowUtil extends ShapeUtil<ArrowShape> {
   static override readonly type = 'arrow';
+  static override readonly references = [
+    { path: '/props/start/boundShapeId', targetKind: 'shape', onDetach: 'null' },
+    { path: '/props/end/boundShapeId', targetKind: 'shape', onDetach: 'null' },
+  ] as const;
 
   static override readonly props: GlideProps<ArrowProps> = {
     start:       terminalValidator,

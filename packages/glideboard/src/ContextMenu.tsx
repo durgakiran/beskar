@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { wbEditor } from './editor';
+import { useGlideboardController } from './GlideboardContext';
 import { wbTheme } from './theme';
 
 interface ContextMenuProps {
@@ -8,6 +8,8 @@ interface ContextMenuProps {
 }
 
 export function ContextMenu({ position, onClose }: ContextMenuProps) {
+  const controller = useGlideboardController();
+  const editor = controller.editor;
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -23,18 +25,18 @@ export function ContextMenu({ position, onClose }: ContextMenuProps) {
 
   if (!position) return null;
 
-  const selectedIds = wbEditor.getSelectedShapeIds();
+  const selectedIds = editor.getSelectedShapeIds();
   const hasSelection = selectedIds.length > 0;
 
   const handlePaste = () => {
-    const canvas = document.getElementById('wb-canvas');
+    const canvas = controller.getCanvasElement();
     if (!canvas) return;
     const rect = canvas.getBoundingClientRect();
-    const pagePoint = wbEditor.screenToPage({
+    const pagePoint = editor.screenToPage({
       x: position.x - rect.left,
       y: position.y - rect.top,
     });
-    wbEditor.paste(pagePoint);
+    editor.paste(pagePoint);
     onClose();
   };
 
@@ -59,16 +61,25 @@ export function ContextMenu({ position, onClose }: ContextMenuProps) {
       }}
       onContextMenu={event => event.preventDefault()}
     >
-      <MenuItem label="Copy" shortcut="Cmd+C" disabled={!hasSelection} onClick={() => { wbEditor.copy(selectedIds); onClose(); }} />
+      <MenuItem label="Copy" shortcut="Cmd+C" disabled={!hasSelection} onClick={() => { editor.copy(selectedIds); onClose(); }} />
       <MenuItem label="Paste" shortcut="Cmd+V" disabled={false} onClick={handlePaste} />
-      <MenuItem label="Duplicate" shortcut="Cmd+D" disabled={!hasSelection} onClick={() => { wbEditor.duplicateShapes(selectedIds, { x: 20, y: 20 }); onClose(); }} />
+      <MenuItem label="Duplicate" shortcut="Cmd+D" disabled={!hasSelection} onClick={() => { editor.duplicateShapes(selectedIds, { x: 20, y: 20 }); onClose(); }} />
       <div style={{ height: 1, background: wbTheme.border, margin: '6px 0' }} />
-      <MenuItem label="Bring to front" shortcut="Cmd+Shift+]" disabled={!hasSelection} onClick={() => { wbEditor.reorderShapes(selectedIds, 'front'); onClose(); }} />
-      <MenuItem label="Bring forward" shortcut="Cmd+]" disabled={!hasSelection} onClick={() => { wbEditor.reorderShapes(selectedIds, 'forward'); onClose(); }} />
-      <MenuItem label="Send backward" shortcut="Cmd+[" disabled={!hasSelection} onClick={() => { wbEditor.reorderShapes(selectedIds, 'backward'); onClose(); }} />
-      <MenuItem label="Send to back" shortcut="Cmd+Shift+[" disabled={!hasSelection} onClick={() => { wbEditor.reorderShapes(selectedIds, 'back'); onClose(); }} />
+      <MenuItem label="Bring to front" shortcut="Cmd+Shift+]" disabled={!hasSelection} onClick={() => { editor.reorderShapes(selectedIds, 'front'); onClose(); }} />
+      <MenuItem label="Bring forward" shortcut="Cmd+]" disabled={!hasSelection} onClick={() => { editor.reorderShapes(selectedIds, 'forward'); onClose(); }} />
+      <MenuItem label="Send backward" shortcut="Cmd+[" disabled={!hasSelection} onClick={() => { editor.reorderShapes(selectedIds, 'backward'); onClose(); }} />
+      <MenuItem label="Send to back" shortcut="Cmd+Shift+[" disabled={!hasSelection} onClick={() => { editor.reorderShapes(selectedIds, 'back'); onClose(); }} />
       <div style={{ height: 1, background: wbTheme.border, margin: '6px 0' }} />
-      <MenuItem label="Delete" shortcut="Backspace" disabled={!hasSelection} color={wbTheme.dangerText} onClick={() => { wbEditor.deleteShapes(selectedIds); onClose(); }} />
+      <MenuItem
+        label="Delete"
+        shortcut="Backspace"
+        disabled={!hasSelection}
+        color={wbTheme.dangerText}
+        onClick={() => {
+          editor.history.batch('Delete Shapes', () => editor.deleteShapes(selectedIds));
+          onClose();
+        }}
+      />
     </div>
   );
 }
