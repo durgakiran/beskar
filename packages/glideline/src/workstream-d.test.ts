@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { createEditor, type GlidePlugin } from './editor';
+import {
+  createEditor,
+  getHistoryManagerForTesting,
+  getMutableStoreForTesting,
+  type GlidePlugin,
+} from './editor';
 import { RecordIdService } from './id';
 import { GlideSchema } from './schema';
 import { GlideStore } from './store';
@@ -80,7 +85,7 @@ function createBoundArrow(
 describe('Workstream D derived indices and graph integrity', () => {
   it('tracks page, parent, asset, binding, and spatial deltas and can rebuild corruption', () => {
     const editor = makeEditor();
-    editor.store.transact({ origin: 'system', history: 'ignore' }, tx => {
+    getMutableStoreForTesting(editor).transact({ origin: 'system', history: 'ignore' }, tx => {
       tx.insert({ id: 'page:a', kind: 'page', type: 'page', name: 'A', meta: {} });
       tx.insert({ id: 'page:b', kind: 'page', type: 'page', name: 'B', meta: {} });
       tx.insert({ id: 'asset:one', kind: 'asset', type: 'image', props: { src: 'one' }, meta: {} });
@@ -94,7 +99,7 @@ describe('Workstream D derived indices and graph integrity', () => {
       props: { w: 40, h: 30, assetId: 'asset:one' },
     });
 
-    editor.store.transact({ origin: 'user' }, tx => {
+    getMutableStoreForTesting(editor).transact({ origin: 'user' }, tx => {
       tx.update('child', record => ({
         ...record,
         x: 350,
@@ -117,7 +122,7 @@ describe('Workstream D derived indices and graph integrity', () => {
     expect(editor.store.assertIntegrity().issues.map(issue => issue.code))
       .toContain('parent-membership-mismatch');
 
-    editor.store.rebuildIndices();
+    getMutableStoreForTesting(editor).rebuildIndices();
     expect(editor.store.assertIntegrity()).toMatchObject({ ok: true });
     expect(editor.store.getChildren(parentB).map(record => record['id'])).toEqual(['child']);
   });
@@ -126,7 +131,7 @@ describe('Workstream D derived indices and graph integrity', () => {
     const editor = makeEditor();
     const id = createBox(editor, 'geometry', 0);
     expect(editor.getShapesAtPoint({ x: 10, y: 10 }).map(shape => shape.id)).toContain(id);
-    editor.store.getGeometry = () => undefined;
+    getMutableStoreForTesting(editor).getGeometry = () => undefined;
     editor.updateShape(id, { x: 20 });
     expect(editor.getShapesAtPoint({ x: 10, y: 10 }).map(shape => shape.id)).not.toContain(id);
     expect(editor.store.assertIntegrity().ok).toBe(true);
@@ -134,7 +139,7 @@ describe('Workstream D derived indices and graph integrity', () => {
 
   it('rejects dangling util-declared references and direct bound-shape deletion atomically', () => {
     const editor = makeEditor();
-    editor.store.transact({ origin: 'system', history: 'ignore' }, tx => {
+    getMutableStoreForTesting(editor).transact({ origin: 'system', history: 'ignore' }, tx => {
       tx.insert({ id: 'asset:one', kind: 'asset', type: 'image', props: { src: 'one' }, meta: {} });
     });
     const source = createBox(editor, 'source', 0);
@@ -147,13 +152,13 @@ describe('Workstream D derived indices and graph integrity', () => {
     });
     const revision = editor.store.revision;
 
-    expect(() => editor.store.transact({ origin: 'user' }, tx => {
+    expect(() => getMutableStoreForTesting(editor).transact({ origin: 'user' }, tx => {
       tx.update('asset-shape', record => ({
         ...record,
         props: { ...(record['props'] as AnyRecord), assetId: 'asset:missing' },
       }));
     })).toThrow('must reference an existing asset record');
-    expect(() => editor.store.remove([target])).toThrow('must reference an existing shape record');
+    expect(() => getMutableStoreForTesting(editor).remove([target])).toThrow('must reference an existing shape record');
 
     expect(editor.store.revision).toBe(revision);
     expect((editor.store.get('asset-shape')!['props'] as AnyRecord)['assetId']).toBe('asset:one');
@@ -175,7 +180,7 @@ describe('Workstream D derived indices and graph integrity', () => {
     editor.createShape(arrow as unknown as AnyRecord);
     const revision = editor.store.revision;
 
-    expect(() => editor.store.transact({ origin: 'user' }, tx => {
+    expect(() => getMutableStoreForTesting(editor).transact({ origin: 'user' }, tx => {
       tx.insert(buildArrowBindingRecord({
         id: 'binding:contradiction',
         fromId: arrow.id,
@@ -196,7 +201,7 @@ describe('Workstream D derived indices and graph integrity', () => {
     const target = createBox(editor, 'target', 300);
     const arrowId = sid('arrow');
     createBoundArrow(editor, arrowId, child, target);
-    editor.history.clear();
+    getHistoryManagerForTesting(editor).clear();
 
     editor.deleteShapes([parent]);
 
@@ -222,7 +227,7 @@ describe('Workstream D graph-aware clipboard and duplication', () => {
     const target = createBox(editor, 'target', 300);
     const arrowId = sid('arrow');
     createBoundArrow(editor, arrowId, source, target);
-    editor.history.clear();
+    getHistoryManagerForTesting(editor).clear();
 
     const [newSource, newTarget, newArrow] = editor.duplicateShapes([source, target, arrowId], { x: 20, y: 15 });
     const arrow = editor.getShape<ArrowShape>(newArrow!)!;
@@ -264,7 +269,7 @@ describe('Workstream D graph-aware clipboard and duplication', () => {
 
   it('copies descendants and assets, rewrites ownership, and does not alias props', () => {
     const editor = makeEditor();
-    editor.store.transact({ origin: 'system', history: 'ignore' }, tx => {
+    getMutableStoreForTesting(editor).transact({ origin: 'system', history: 'ignore' }, tx => {
       tx.insert({ id: 'asset:source', kind: 'asset', type: 'image', props: { src: 'image.png' }, meta: {} });
     });
     const parent = createBox(editor, 'parent', 0);

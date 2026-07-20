@@ -37,7 +37,7 @@ class Idle extends StateNode {
 
     // Create a new text shape at click position and start editing
     const newId: ShapeId = this.editor.createShapeId('text');
-    this.editor.history.batch('Create Text', () => {
+    this.editor.batch('Create Text', () => {
       this.editor.createShape({
         id:       newId,
         type:     'text',

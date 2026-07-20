@@ -79,7 +79,7 @@ class Drawing extends StateNode {
     const w = info.current.x - info.origin.x;
     const h = info.current.y - info.origin.y;
 
-    this.editor.history.batch('Geo Shape Preview', () => {
+    this.editor.batch('Geo Shape Preview', () => {
       this.editor.createShape(makeShape(this, getPreviewId(this), info.origin.x, info.origin.y, w, h));
     }, { history: 'ignore', scope: 'ephemeral' });
   }
@@ -88,7 +88,7 @@ class Drawing extends StateNode {
     const w = e.point.x - this._origin.x;
     const h = e.point.y - this._origin.y;
 
-    this.editor.history.batch('Geo Shape Preview Update', () => {
+    this.editor.batch('Geo Shape Preview Update', () => {
       this.editor.updateShape(getPreviewId(this), {
         x: Math.min(this._origin.x, this._origin.x + w),
         y: Math.min(this._origin.y, this._origin.y + h),
@@ -106,11 +106,11 @@ class Drawing extends StateNode {
     const shapeType = getToolClass(this).shapeType;
     const finalId = this.editor.createShapeId(shapeType);
 
-    this.editor.history.batch('Geo Shape Preview Cleanup', () => {
+    this.editor.batch('Geo Shape Preview Cleanup', () => {
       this.editor.deleteShapes([getPreviewId(this)]);
     }, { history: 'ignore', scope: 'ephemeral' });
 
-    this.editor.history.batch(`Create ${shapeType}`, () => {
+    this.editor.batch(`Create ${shapeType}`, () => {
       this.editor.createShape(makeShape(this, finalId, this._origin.x, this._origin.y, w, h));
     });
 
@@ -121,7 +121,7 @@ class Drawing extends StateNode {
 
   override onKeyDown(e: KeyDownEvent): void {
     if (e.key === 'Escape') {
-      this.editor.history.batch('Geo Shape Preview Cleanup', () => {
+      this.editor.batch('Geo Shape Preview Cleanup', () => {
         this.editor.deleteShapes([getPreviewId(this)]);
     }, { history: 'ignore', scope: 'ephemeral' });
       this.parent!.transition('idle');

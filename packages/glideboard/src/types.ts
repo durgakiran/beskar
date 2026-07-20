@@ -84,11 +84,17 @@ export interface GlideboardExportSvgOptions {
   shapeIds?: readonly ShapeId[];
 }
 
+export interface RecoverableTextDraft {
+  readonly shapeId: string;
+  readonly text: string;
+}
+
 /** Imperative operations scoped to this rendered Glideboard instance. */
 export interface GlideboardHandle {
   serialize(): GlideDocument;
   replaceDocument(document: GlideDocument): LoadReport;
   exportSvg(options?: GlideboardExportSvgOptions): Promise<string>;
+  getRecoverableTextDraft(): RecoverableTextDraft | null;
   setCurrentTool(toolId: string): void;
   flush(): Promise<void>;
 }

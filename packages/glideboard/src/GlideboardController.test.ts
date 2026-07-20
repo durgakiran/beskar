@@ -1,5 +1,5 @@
 import * as Y from 'yjs';
-import { createSvgPathShape, type GlideDocument } from '@durgakiran/glideline';
+import { createSvgPathShape, MutationPermissionError, type GlideDocument } from '@durgakiran/glideline';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { GlideboardController } from './GlideboardController';
 
@@ -80,7 +80,7 @@ describe('GlideboardController', () => {
       expect(controllerA.editor.store).not.toBe(controllerB.editor.store);
       expect(controllerA.editor.camera).not.toBe(controllerB.editor.camera);
 
-      controllerA.editor.history.batch('Create A', () => {
+      controllerA.editor.batch('Create A', () => {
         controllerA.editor.createShape(createBoxRecord('shape:a', 40, 80) as any);
       });
       controllerA.editor.camera.setCamera({ x: 120, y: 240, z: 2 });
@@ -159,7 +159,8 @@ describe('GlideboardController', () => {
       controller.clearDocument();
 
       expect(controller.editor.serialize().records).toHaveLength(0);
-      expect(controller.editor.history.undoStack.at(-1)?.label).toBe('Clear Document');
+      const undoStack = controller.editor.history.undoStack;
+      expect(undoStack[undoStack.length - 1]?.label).toBe('Clear Document');
       controller.editor.undo();
       expect(getRecordIds(controller.editor.serialize())).toEqual(['shape:clear-a', 'shape:clear-b']);
     } finally {
@@ -210,8 +211,8 @@ describe('GlideboardController', () => {
     vi.useFakeTimers();
     const controllerA = new GlideboardController({ sessionKey: 'board-a' });
     const controllerB = new GlideboardController({ sessionKey: 'board-b' });
-    const onDocumentChangeA = vi.fn((_document: GlideDocument) => {});
-    const onDocumentChangeB = vi.fn((_document: GlideDocument) => {});
+    const onDocumentChangeA = vi.fn((_document: GlideDocument) => { });
+    const onDocumentChangeB = vi.fn((_document: GlideDocument) => { });
 
     try {
       controllerA.configureDocumentChanges(onDocumentChangeA, 50);
@@ -244,12 +245,12 @@ describe('GlideboardController', () => {
   it('does not mark the document dirty for ephemeral preview changes', async () => {
     vi.useFakeTimers();
     const controller = new GlideboardController({ sessionKey: 'ephemeral-preview' });
-    const onDocumentChange = vi.fn((_document: GlideDocument) => {});
+    const onDocumentChange = vi.fn((_document: GlideDocument) => { });
 
     try {
       controller.configureDocumentChanges(onDocumentChange, 25);
       controller.startDocumentChangeTracking();
-      controller.editor.history.batch('Preview', () => {
+      controller.editor.batch('Preview', () => {
         controller.editor.createShape(createBoxRecord('shape:preview', 10, 20) as any);
       }, { history: 'ignore', scope: 'ephemeral' });
 
@@ -272,8 +273,8 @@ describe('GlideboardController', () => {
   it('uses the latest callback without restarting a pending debounce', async () => {
     vi.useFakeTimers();
     const controller = new GlideboardController({ sessionKey: 'live-callback' });
-    const firstCallback = vi.fn((_document: GlideDocument) => {});
-    const latestCallback = vi.fn((_document: GlideDocument) => {});
+    const firstCallback = vi.fn((_document: GlideDocument) => { });
+    const latestCallback = vi.fn((_document: GlideDocument) => { });
 
     try {
       controller.configureDocumentChanges(firstCallback, 50);
@@ -303,7 +304,7 @@ describe('GlideboardController', () => {
     const firstCallback = vi.fn(async (_document: GlideDocument) => {
       await firstSave.promise;
     });
-    const latestCallback = vi.fn((_document: GlideDocument) => {});
+    const latestCallback = vi.fn((_document: GlideDocument) => { });
 
     try {
       controller.configureDocumentChanges(firstCallback, 10);
@@ -405,7 +406,7 @@ describe('GlideboardController', () => {
   it('saves dirty state when a document callback is configured later', async () => {
     vi.useFakeTimers();
     const controller = new GlideboardController({ sessionKey: 'late-callback' });
-    const onDocumentChange = vi.fn((_document: GlideDocument) => {});
+    const onDocumentChange = vi.fn((_document: GlideDocument) => { });
 
     try {
       controller.startDocumentChangeTracking();
@@ -427,7 +428,7 @@ describe('GlideboardController', () => {
   it('retries rejected automatic saves until one succeeds', async () => {
     vi.useFakeTimers();
     const controller = new GlideboardController({ sessionKey: 'retry-save' });
-    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => { });
     let attempt = 0;
     const snapshots: string[][] = [];
     const onDocumentChange = vi.fn(async (document: GlideDocument) => {
@@ -472,8 +473,8 @@ describe('GlideboardController', () => {
     vi.useFakeTimers();
     const controllerA = new GlideboardController({ sessionKey: 'board-a' });
     const controllerB = new GlideboardController({ sessionKey: 'board-b' });
-    const onDocumentChangeA = vi.fn((_document: GlideDocument) => {});
-    const onDocumentChangeB = vi.fn((_document: GlideDocument) => {});
+    const onDocumentChangeA = vi.fn((_document: GlideDocument) => { });
+    const onDocumentChangeB = vi.fn((_document: GlideDocument) => { });
 
     try {
       controllerA.configureDocumentChanges(onDocumentChangeA, 50);
@@ -498,7 +499,7 @@ describe('GlideboardController', () => {
   it('can flush a dirty snapshot while disposing', async () => {
     vi.useFakeTimers();
     const controller = new GlideboardController({ sessionKey: 'flush-on-dispose' });
-    const onDocumentChange = vi.fn((_document: GlideDocument) => {});
+    const onDocumentChange = vi.fn((_document: GlideDocument) => { });
 
     controller.configureDocumentChanges(onDocumentChange, 1_000);
     controller.startDocumentChangeTracking();
@@ -624,6 +625,250 @@ describe('GlideboardController', () => {
     } finally {
       controllerA.dispose();
       controllerB.dispose();
+    }
+  });
+  it('updates mutation permission when switching between edit and view modes', () => {
+    const controller = new GlideboardController({
+      sessionKey: 'mutation-policy-transition',
+    });
+
+    try {
+      const id = controller.editor.createShape(
+        createBoxRecord('shape:existing', 10, 20) as any,
+      );
+
+      expect(controller.editor.currentToolId.peek()).toBe('select');
+
+      controller.setReadOnly(true);
+
+      expect(controller.readOnlySignal.peek()).toBe(true);
+      expect(controller.editor.currentToolId.peek()).toBe('hand');
+
+      const beforeRevision = controller.editor.store.revision;
+      const beforeDocument = controller.editor.serialize();
+
+      expect(() => {
+        controller.editor.createShape(
+          createBoxRecord('shape:denied', 30, 40) as any,
+        );
+      }).toThrow(MutationPermissionError);
+
+      expect(() => controller.editor.undo())
+        .toThrow(MutationPermissionError);
+
+      expect(controller.editor.store.revision).toBe(beforeRevision);
+      expect(controller.editor.serialize()).toEqual(beforeDocument);
+
+      controller.setReadOnly(false);
+
+      expect(controller.readOnlySignal.peek()).toBe(false);
+      expect(controller.editor.currentToolId.peek()).toBe('select');
+
+      expect(() => {
+        controller.editor.updateShape(id, { x: 100 });
+      }).not.toThrow();
+
+      expect(controller.editor.getShape(id)?.x).toBe(100);
+    } finally {
+      void controller.dispose();
+    }
+  });
+
+  it('starts with local mutations denied when initially read-only', () => {
+    const controller = new GlideboardController({
+      sessionKey: 'initially-read-only',
+      readOnly: true,
+    });
+
+    try {
+      expect(controller.readOnlySignal.peek()).toBe(true);
+      expect(controller.editor.currentToolId.peek()).toBe('hand');
+
+      expect(() => {
+        controller.editor.createShape(
+          createBoxRecord('shape:denied', 10, 20) as any,
+        );
+      }).toThrow(MutationPermissionError);
+    } finally {
+      void controller.dispose();
+    }
+  });
+
+  it('rejects every exposed local durable mutation path in viewer mode', async () => {
+    const controller = new GlideboardController({
+      sessionKey: 'viewer-mutation-matrix',
+    });
+    const debugKey = '__glideboardViewerPolicyTest';
+    const detachDebug = controller.attachDebugApi(debugKey);
+
+    try {
+      const firstId = controller.editor.createShape(
+        createBoxRecord('shape:first', 10, 20) as any,
+      );
+      controller.editor.createShape(
+        createBoxRecord('shape:redo', 30, 40, 'a0002') as any,
+      );
+      controller.editor.copy([firstId]);
+      expect(controller.editor.undo().status).toBe('applied');
+
+      controller.setReadOnly(true);
+
+      const beforeRevision = controller.editor.store.revision;
+      const beforeDocument = controller.editor.serialize();
+      const beforeUndo = controller.editor.history.undoStack;
+      const beforeRedo = controller.editor.history.redoStack;
+      const listener = vi.fn();
+      const stopListening = controller.editor.store.listen(listener);
+
+      const attempts: Array<() => unknown> = [
+        () => controller.editor.createShape(createBoxRecord('shape:create', 50, 60) as any),
+        () => controller.editor.updateShape(firstId, { x: 100 }),
+        () => controller.editor.deleteShapes([firstId]),
+        () => controller.editor.batch('Style change', () => {
+          controller.editor.updateShape(firstId, { props: { color: 'red' } } as any);
+        }),
+        () => controller.editor.paste(),
+        () => controller.editor.duplicateShapes([firstId], { x: 20, y: 20 }),
+        () => controller.editor.reorderShapes([firstId], 'front'),
+        () => controller.editor.undo(),
+        () => controller.editor.redo(),
+        () => controller.editor.batch('Text commit', () => {
+          controller.editor.updateShape(firstId, { props: { label: 'Denied' } } as any);
+        }),
+        () => controller.editor.run(() => {
+          controller.editor.createShape(createBoxRecord('shape:run', 70, 80) as any);
+        }),
+        () => controller.editor.importRecords([
+          createBoxRecord('shape:import', 90, 100) as any,
+        ]),
+        () => controller.clearDocument(),
+        () => controller.setCurrentTool('box'),
+        () => (controller.editor.store as any).remove([firstId]),
+        () => (controller.editor.store as any).transact(
+          { origin: 'remote', commandId: 'forged.remote' },
+          () => undefined,
+        ),
+        () => (controller.editor.history as any).undo(),
+      ];
+
+      for (const attempt of attempts) {
+        expect(attempt).toThrow(MutationPermissionError);
+      }
+
+      const debugApi = (window as any)[debugKey];
+      expect(() => debugApi.reset()).toThrow(MutationPermissionError);
+      const mcpResult = await debugApi.callTool('create_shape', {
+        type: 'box',
+        x: 120,
+        y: 140,
+      });
+      expect(mcpResult).toMatchObject({
+        code: 'MUTATION_PERMISSION_DENIED',
+      });
+
+      expect(() => {
+        controller.editor.setSelectedShapeIds([firstId]);
+        controller.editor.camera.setCamera({ x: 25, y: 35, z: 1.5 });
+        controller.editor.copy([firstId]);
+        controller.editor.serialize();
+      }).not.toThrow();
+      expect(controller.editor.getSelectedShapeIds()).toEqual([firstId]);
+
+      expect(controller.editor.store.revision).toBe(beforeRevision);
+      expect(controller.editor.serialize()).toEqual(beforeDocument);
+      expect(controller.editor.history.undoStack).toEqual(beforeUndo);
+      expect(controller.editor.history.redoStack).toEqual(beforeRedo);
+      expect(listener).not.toHaveBeenCalled();
+
+      stopListening();
+    } finally {
+      detachDebug();
+      void controller.dispose();
+    }
+  });
+
+  it('continues applying trusted remote updates in viewer mode', async () => {
+    const editorController = new GlideboardController({ sessionKey: 'remote-editor' });
+    const viewerController = new GlideboardController({
+      sessionKey: 'remote-viewer',
+      readOnly: true,
+    });
+    const editorDoc = new Y.Doc();
+    const viewerDoc = new Y.Doc();
+
+    editorDoc.on('update', (update, origin) => {
+      if (origin !== viewerDoc) Y.applyUpdate(viewerDoc, update, editorDoc);
+    });
+    viewerDoc.on('update', (update, origin) => {
+      if (origin !== editorDoc) Y.applyUpdate(editorDoc, update, viewerDoc);
+    });
+
+    try {
+      editorController.attachCollaboration({ doc: editorDoc });
+      viewerController.attachCollaboration({ doc: viewerDoc });
+
+      editorController.editor.createShape(
+        createBoxRecord('shape:remote', 200, 240) as any,
+      );
+      await Promise.resolve();
+
+      expect(viewerController.readOnlySignal.peek()).toBe(true);
+      expect(viewerController.editor.getShape('shape:remote' as any)).toMatchObject({
+        x: 200,
+        y: 240,
+      });
+      expect(viewerController.editor.history.undoStack).toHaveLength(0);
+    } finally {
+      void editorController.dispose();
+      void viewerController.dispose();
+      editorDoc.destroy();
+      viewerDoc.destroy();
+    }
+  });
+
+  it('discards gesture previews, retains a text draft, and releases capture on downgrade', () => {
+    const controller = new GlideboardController({ sessionKey: 'viewer-downgrade-cleanup' });
+
+    try {
+      const id = controller.editor.createShape(
+        createBoxRecord('shape:downgrade', 10, 20) as any,
+      );
+      controller.editor.interactions.begin();
+      controller.editor.interactions.runPreview(() => {
+        controller.editor.updateShape(id, { x: 300 });
+      });
+      controller.editor.startEditing(id);
+
+      const canvas = document.createElement('div');
+      const editable = document.createElement('div');
+      editable.setAttribute('contenteditable', 'true');
+      editable.textContent = 'Recover this text';
+      canvas.appendChild(editable);
+      const releasePointerCapture = vi.fn();
+      Object.assign(canvas, {
+        hasPointerCapture: (pointerId: number) => pointerId === 7,
+        releasePointerCapture,
+      });
+      controller.setCanvasElement(canvas);
+      controller.activePointerIdRef.current = 7;
+
+      expect(controller.editor.getShape(id)?.x).toBe(300);
+      expect(controller.editor.store.get(id)?.['x']).toBe(10);
+
+      controller.setReadOnly(true);
+
+      expect(controller.editor.interactions.active).toBe(false);
+      expect(controller.editor.getShape(id)?.x).toBe(10);
+      expect(controller.editor.editingShapeId.peek()).toBeNull();
+      expect(controller.recoverableTextDraftSignal.peek()).toEqual({
+        shapeId: id,
+        text: 'Recover this text',
+      });
+      expect(releasePointerCapture).toHaveBeenCalledWith(7);
+      expect(controller.activePointerIdRef.current).toBeNull();
+      expect(controller.editor.currentToolId.peek()).toBe('hand');
+    } finally {
+      void controller.dispose();
     }
   });
 });

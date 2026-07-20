@@ -18,11 +18,20 @@
 
 import { signal, type Signal, type ReadonlySignal } from '@preact/signals';
 import { bid, isGlideShape, sid } from './types';
-import { GlideStore, type ImportOptions, type ImportReport, type StoreTransaction } from './store';
+import {
+  GlideStore,
+  createReadonlyStoreView,
+  type ImportOptions,
+  type ImportReport,
+  type ReadonlyGlideStore,
+  type StoreTransaction,
+  type TransactionOptions,
+  type TransactionResult,
+} from './store';
 import { CURRENT_STORE_VERSION, GlideSchema } from './schema';
 import { GlideCamera } from './camera';
-import { HistoryManager, commandIdFromLabel } from './history';
-import type { BatchOptions, HistoryResult } from './history';
+import { HistoryManager, commandIdFromLabel, createReadonlyHistoryView } from './history';
+import type { BatchOptions, HistoryResult, ReadonlyHistoryManager } from './history';
 import { Rectangle2d } from './geometry';
 import { StateNode } from './state-node';
 import { SelectTool } from './tools/SelectTool';
@@ -37,6 +46,15 @@ import { getMinHeightForShape } from './styles';
 import { createTopIndex } from './arrow-records';
 import { RecordIdService } from './id';
 import { InteractionManager } from './interaction';
+import {
+  allowAllMutations,
+  createMutationCapability,
+  MutationPermissionError,
+  type MutationCapability,
+  type MutationCapabilityGrant,
+  type MutationPolicy,
+  type MutationRequest,
+} from './mutation-policy';
 
 // ─────────────────────────────────────────────────────────────
 // GlidePlugin — unit of extension
@@ -45,9 +63,9 @@ import { InteractionManager } from './interaction';
 
 export interface GlidePlugin {
   id: string;
-  shapes?:   (abstract new() => ShapeUtil<any>)[];
-  bindings?: (abstract new() => BindingUtil<any>)[];
-  tools?:    (typeof StateNode)[];
+  shapes?: (abstract new () => ShapeUtil<any>)[];
+  bindings?: (abstract new () => BindingUtil<any>)[];
+  tools?: (typeof StateNode)[];
   onInstall?(editor: GlideEditor): void;
 }
 
@@ -146,11 +164,30 @@ function toGlideShapes(records: readonly AnyRecord[]): GlideShape[] {
 // GlideEditor
 // ─────────────────────────────────────────────────────────────
 
+const mutableEditorStores = new WeakMap<GlideEditor, GlideStore>();
+const mutableEditorHistories = new WeakMap<GlideEditor, HistoryManager>();
+
+/** @internal Source-only helper for low-level store tests; not exported publicly. */
+export function getMutableStoreForTesting(editor: GlideEditor): GlideStore {
+  const store = mutableEditorStores.get(editor);
+  if (!store) throw new Error('GlideEditor store is unavailable');
+  return store;
+}
+
+/** @internal Source-only helper for low-level history tests; not exported publicly. */
+export function getHistoryManagerForTesting(editor: GlideEditor): HistoryManager {
+  const history = mutableEditorHistories.get(editor);
+  if (!history) throw new Error('GlideEditor history is unavailable');
+  return history;
+}
+
 export class GlideEditor {
-  readonly store:   GlideStore;
-  readonly schema:  GlideSchema;
-  readonly camera:  GlideCamera;
-  readonly history: HistoryManager;
+  readonly store: ReadonlyGlideStore;
+  private readonly _store: GlideStore;
+  readonly schema: GlideSchema;
+  readonly camera: GlideCamera;
+  readonly history: ReadonlyHistoryManager;
+  private readonly _history: HistoryManager;
   readonly interactions: InteractionManager;
   private _clipboard: ClipboardPayload | null = null;
   arrowRouteStyle: ArrowRouteStyle = 'curve';
@@ -158,10 +195,10 @@ export class GlideEditor {
   arrowheadEnd: ArrowheadStyle = 'arrow';
   private _smartRouter = new SmartRouterCache();
 
-  private _utils        = new Map<string, ShapeUtil<any>>();
+  private _utils = new Map<string, ShapeUtil<any>>();
   private _bindingUtils = new Map<string, BindingUtil<any>>();
   private _selection: Signal<Set<ShapeId>>;
-  private _tools    = new Map<string, StateNode>();
+  private _tools = new Map<string, StateNode>();
   private _currentToolSignal: Signal<StateNode | null> = signal(null);
 
   /** Reactive signal of the active tool id — subscribe in UI for live highlight. */
@@ -180,14 +217,28 @@ export class GlideEditor {
   /** Signal carrying the active/last-selected styles. */
   readonly activeStyles = signal<Record<string, any>>({ ...DEFAULT_ACTIVE_STYLES });
 
-  constructor(store: GlideStore, schema: GlideSchema, camera: GlideCamera) {
-    this.store   = store;
-    this.schema  = schema;
-    this.camera  = camera;
-    this.interactions = new InteractionManager(store);
-    this.history = new HistoryManager(store);
+  private readonly _mutationPolicy: MutationPolicy;
+
+  constructor(
+    store: GlideStore,
+    schema: GlideSchema,
+    camera: GlideCamera,
+    mutationPolicy: MutationPolicy,
+    private readonly _localMutationCapability: MutationCapability,
+    private readonly _loadMutationCapability: MutationCapability,
+  ) {
+    this._store = store;
+    this.store = createReadonlyStoreView(store);
+    mutableEditorStores.set(this, store);
+    this.schema = schema;
+    this.camera = camera;
+    this._mutationPolicy = mutationPolicy;
+    this.interactions = new InteractionManager(store, this._localMutationCapability);
+    this._history = new HistoryManager(store, this._localMutationCapability);
+    this.history = createReadonlyHistoryView(this._history);
+    mutableEditorHistories.set(this, this._history);
     const interactionManager = this.interactions;
-    this.history.attachInteractionAdapter({
+    this._history.attachInteractionAdapter({
       get active() { return interactionManager.active; },
       get kind() { return interactionManager.kind; },
       begin: () => interactionManager.begin('document'),
@@ -362,7 +413,7 @@ export class GlideEditor {
       const defaultProps = util.getDefaultProps();
       const activeStyles = this.activeStyles.peek();
       const userProps = partial['props'] as AnyRecord || {};
-      
+
       const mergedProps = { ...defaultProps, ...userProps };
       const shapePropsSchema = (util.constructor as any).props || {};
       for (const [key, val] of Object.entries(activeStyles)) {
@@ -716,7 +767,7 @@ export class GlideEditor {
       label,
       affectedIds: payload.records.map(record => String(record['id'])),
       execute: () => {
-        report = this.store.importRecords(records, {
+        report = this._store.importRecords(records, {
           label,
           relationshipPolicy: 'detach-external',
           preserveExternalKinds: ['page'],
@@ -768,12 +819,12 @@ export class GlideEditor {
 
     const idSet = new Set(ids);
     const targets = all.filter(s => idSet.has(s.id as ShapeId));
-    const rest    = all.filter(s => !idSet.has(s.id as ShapeId));
+    const rest = all.filter(s => !idSet.has(s.id as ShapeId));
 
     let reordered: GlideShape[];
     switch (position) {
-      case 'front':    reordered = [...rest, ...targets]; break;
-      case 'back':     reordered = [...targets, ...rest]; break;
+      case 'front': reordered = [...rest, ...targets]; break;
+      case 'back': reordered = [...targets, ...rest]; break;
       case 'forward': {
         // Move each target one step toward the end, relative to non-targets
         reordered = [...all];
@@ -867,18 +918,25 @@ export class GlideEditor {
    * derived indices, and history preparation either all succeed or all abort.
    */
   executeCommand<T>(command: EditorCommand<T>, options: ExecuteCommandOptions = {}): T {
+    const mutationRequest: MutationRequest = {
+      origin: 'local-user',
+      command: command.id,
+      affectedIds: command.affectedIds ?? [],
+    };
+    this.assertMutationAllowed(mutationRequest);
+
     if (this.interactions.previewing) {
       return this.interactions.transact(command.execute);
     }
-    return this.store.transact({
+    return this._store.transact({
       origin: 'user',
       label: command.label,
       commandId: command.id,
-      affectedIds: command.affectedIds,
+      ...(command.affectedIds === undefined ? {} : { affectedIds: command.affectedIds }),
       ...(options.actorId === undefined ? {} : { actorId: options.actorId }),
       history: options.history === 'ignore' ? 'ignore' : 'record',
       scope: options.scope ?? 'document',
-    }, command.execute).value;
+    }, command.execute, this._localMutationCapability).value;
   }
 
   /**
@@ -895,7 +953,12 @@ export class GlideEditor {
     opts?: BatchOptions,
   ): void {
     if (typeof labelOrFn === 'function') {
-      this.executeCommand({ id: 'editor.batch', label: 'Batch', execute: () => labelOrFn() });
+      this.assertMutationAllowed({
+        origin: 'local-user',
+        command: 'editor.batch',
+        affectedIds: [],
+      });
+      this._history.batch('Batch', labelOrFn, { commandId: 'editor.batch' });
       return;
     }
 
@@ -903,10 +966,13 @@ export class GlideEditor {
       throw new Error('GlideEditor.batch(label, fn): missing callback');
     }
 
-    this.executeCommand(
-      { id: opts?.commandId ?? commandIdFromLabel(labelOrFn), label: labelOrFn, execute: () => fn() },
-      opts,
-    );
+    const commandId = opts?.commandId ?? commandIdFromLabel(labelOrFn);
+    this.assertMutationAllowed({
+      origin: 'local-user',
+      command: commandId,
+      affectedIds: [],
+    });
+    this._history.batch(labelOrFn, fn, { ...opts, commandId });
   }
 
   /**
@@ -921,11 +987,53 @@ export class GlideEditor {
   }
 
   undo(): HistoryResult {
-    return this.history.undo();
+    const mutationRequest: MutationRequest = {
+      origin: 'local-user',
+      command: 'history.undo',
+      affectedIds: [],
+    };
+    this.assertMutationAllowed(mutationRequest);
+
+    return this._history.undo();
   }
 
   redo(): HistoryResult {
-    return this.history.redo();
+    const mutationRequest: MutationRequest = {
+      origin: 'local-user',
+      command: 'history.redo',
+      affectedIds: [],
+    };
+    this.assertMutationAllowed(mutationRequest);
+
+    return this._history.redo();
+  }
+
+  /** @internal Compatibility lifecycle for tools migrating to InteractionManager. */
+  beginHistoryPreview(): void {
+    this.assertMutationAllowed({
+      origin: 'local-user',
+      command: 'history.preview.begin',
+      affectedIds: [],
+    });
+    this._history.beginPreview();
+  }
+
+  /** @internal Compatibility lifecycle for tools migrating to InteractionManager. */
+  recordHistoryPreview(
+    label: string,
+    before: ReadonlyMap<string, AnyRecord | null> = new Map(),
+  ): void {
+    this.assertMutationAllowed({
+      origin: 'local-user',
+      command: commandIdFromLabel(label, 'interaction'),
+      affectedIds: [...before.keys()],
+    });
+    this._history.recordPreview(label, before);
+  }
+
+  /** @internal Compatibility lifecycle for tools migrating to InteractionManager. */
+  cancelHistoryPreview(): void {
+    this._history.cancelPreview();
   }
 
   // ── Tool management (Phase 3) ──────────────────────────────
@@ -973,9 +1081,9 @@ export class GlideEditor {
 
   // ── Camera delegates ───────────────────────────────────────
 
-  screenToPage(point: Vec2): Vec2  { return this.camera.screenToPage(point); }
-  pageToScreen(point: Vec2): Vec2  { return this.camera.pageToScreen(point); }
-  getViewportBounds(): Box2d       { return this.camera.getViewportBounds(); }
+  screenToPage(point: Vec2): Vec2 { return this.camera.screenToPage(point); }
+  pageToScreen(point: Vec2): Vec2 { return this.camera.pageToScreen(point); }
+  getViewportBounds(): Box2d { return this.camera.getViewportBounds(); }
   getSmartRoutingSnapshot(): SmartRoutingSnapshot { return this._smartRouter.getSnapshot(); }
 
   getShapeWorldBounds(shapeOrId: GlideShape | ShapeId): Box2d {
@@ -1006,7 +1114,7 @@ export class GlideEditor {
 
   // ── Persistence ────────────────────────────────────────────
 
-  serialize()                                { return this.store.serialize(); }
+  serialize() { return this.store.serialize(); }
 
   /**
    * Hydrate the editor from a complete document snapshot.
@@ -1021,7 +1129,7 @@ export class GlideEditor {
    * old board's records from surviving a hydration or board switch.
    */
   replaceDocument(doc: ReturnType<GlideStore['serialize']>) {
-    const report = this.store.replaceDocument(doc);
+    const report = this._store.replaceDocument(doc, {}, this._loadMutationCapability);
     this._smartRouter.markDirty();
     return report;
   }
@@ -1035,14 +1143,22 @@ export class GlideEditor {
   }
 
   importRecords(payload: Parameters<GlideStore['importRecords']>[0], options?: ImportOptions): ImportReport {
-    const report = this.store.importRecords(payload, options);
+    const records = Array.isArray(payload)
+      ? payload as readonly AnyRecord[]
+      : (payload as { records: readonly AnyRecord[] }).records;
+    this.assertMutationAllowed({
+      origin: 'local-api',
+      command: 'document.import',
+      affectedIds: records.map(record => String(record['id'] ?? '')),
+    });
+    const report = this._store.importRecords(payload, options);
     this._smartRouter.markDirty();
     return report;
   }
 
   resetSessionState(): void {
     this.interactions.cancel();
-    this.history.clear();
+    this._history.clear();
     this._clipboard = null;
     this.setSelectedShapeIds([]);
     this.editingShapeId.value = null;
@@ -1143,6 +1259,21 @@ export class GlideEditor {
 </svg>`;
   }
 
+  private assertMutationAllowed(request: MutationRequest): void {
+    if (this._mutationPolicy.authorize(request) === 'deny') {
+      throw new MutationPermissionError(request);
+    }
+  }
+
+  /** @internal Host integration requiring a capability registered at creation. */
+  transactWithCapability<T>(
+    capability: MutationCapability,
+    options: TransactionOptions,
+    fn: (tx: StoreTransaction) => T,
+  ): TransactionResult<T> {
+    return this._store.transactTrusted(options, fn, capability);
+  }
+
   private _svgToPngBlob(svgStr: string, scale = 1): Promise<Blob> {
     return new Promise((resolve, reject) => {
       const svgMatch = svgStr.match(/width="([^"]+)"\s+height="([^"]+)"/);
@@ -1152,7 +1283,7 @@ export class GlideEditor {
       if (widthValue === undefined || heightValue === undefined) {
         return reject(new Error('Invalid SVG bounds'));
       }
-      
+
       const width = parseFloat(widthValue);
       const height = parseFloat(heightValue);
 
@@ -1166,10 +1297,10 @@ export class GlideEditor {
         canvas.height = height * scale;
         const ctx = canvas.getContext('2d');
         if (!ctx) return reject(new Error('No 2d context'));
-        
+
         ctx.scale(scale, scale);
         ctx.drawImage(img, 0, 0);
-        
+
         canvas.toBlob(blob => {
           URL.revokeObjectURL(url);
           if (blob) resolve(blob);
@@ -1237,11 +1368,13 @@ async function blobToDataUrl(blob: Blob): Promise<string> {
 // ─────────────────────────────────────────────────────────────
 
 export interface CreateEditorOptions {
-  plugins?:  GlidePlugin[];
-  tools?:    (typeof StateNode)[];
+  plugins?: GlidePlugin[];
+  tools?: (typeof StateNode)[];
   viewport?: { width: number; height: number };
-  camera?:   { x?: number; y?: number; z?: number };
+  camera?: { x?: number; y?: number; z?: number };
   idService?: RecordIdService;
+  mutationPolicy?: MutationPolicy;
+  trustedMutationCapabilities?: readonly MutationCapabilityGrant[];
 }
 
 /**
@@ -1258,7 +1391,14 @@ export interface CreateEditorOptions {
  * 10. Return editor
  */
 export function createEditor(opts: CreateEditorOptions = {}): GlideEditor {
-  const { plugins = [], tools, viewport, camera: camInit } = opts;
+  const {
+    plugins = [],
+    tools,
+    viewport,
+    camera: camInit,
+    mutationPolicy = allowAllMutations,
+    trustedMutationCapabilities = [],
+  } = opts;
 
   // 1. Schema
   const schema = new GlideSchema();
@@ -1299,9 +1439,25 @@ export function createEditor(opts: CreateEditorOptions = {}): GlideEditor {
   schema.freeze();
 
   // 5–7. Store + Camera + Editor
-  const store  = new GlideStore(schema, opts.idService ?? new RecordIdService());
-  const cam    = new GlideCamera(camInit ?? {}, viewport?.width ?? 1000, viewport?.height ?? 600);
-  const editor = new GlideEditor(store, schema, cam);
+  const localMutationCapability = createMutationCapability();
+  const loadMutationCapability = createMutationCapability();
+  const store = new GlideStore(schema, opts.idService ?? new RecordIdService(), {
+    policy: mutationPolicy,
+    grants: [
+      { capability: localMutationCapability, origins: ['local-user'] },
+      { capability: loadMutationCapability, origins: ['load'] },
+      ...trustedMutationCapabilities,
+    ],
+  });
+  const cam = new GlideCamera(camInit ?? {}, viewport?.width ?? 1000, viewport?.height ?? 600);
+  const editor = new GlideEditor(
+    store,
+    schema,
+    cam,
+    mutationPolicy,
+    localMutationCapability,
+    loadMutationCapability,
+  );
 
   // Inject geometric hooks for RBush integration
   // getGeometry() returns LOCAL bounds; RBush needs WORLD bounds.

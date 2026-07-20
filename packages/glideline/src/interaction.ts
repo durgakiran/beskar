@@ -8,6 +8,7 @@ import {
 } from '@preact/signals';
 import type { GlideStore, JsonPointer, StoreRecord, StoreTransaction } from './store';
 import type { AnyRecord, ShapeId } from './types';
+import type { MutationCapability } from './mutation-policy';
 
 export interface InteractionConflict {
   readonly id: string;
@@ -147,7 +148,10 @@ export class InteractionManager {
     return Object.freeze(ids);
   });
 
-  constructor(private _store: GlideStore) {
+  constructor(
+    private _store: GlideStore,
+    private _localMutationCapability?: MutationCapability,
+  ) {
     this._store.listen(changes => {
       if (!this.active) return;
       const deletedOwnedRecord = changes.deltas.some(delta =>
@@ -308,7 +312,7 @@ export class InteractionManager {
           for (const path of paths) writePointer(next, path, readPointer(after, path));
           tx.update(id, () => next);
         }
-      });
+      }, this._localMutationCapability);
       this._clear(true);
     });
   }

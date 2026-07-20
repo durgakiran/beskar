@@ -4,7 +4,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { createEditor } from '../editor';
+import { createEditor, getMutableStoreForTesting } from '../editor';
 import { BoxUtil } from '../shapes/BoxUtil';
 import { sid } from '../types';
 import type { GlidePlugin } from '../editor';
@@ -72,7 +72,7 @@ function keyDown(e: ReturnType<typeof makeEditor>, key: string): void {
 describe('T3.2-01: click selects shape', () => {
   it('pointerDown + pointerUp on shape → selected', () => {
     const editor = makeEditor();
-    editor.store.put([boxShape('s1', 0, 0)]);
+    getMutableStoreForTesting(editor).put([boxShape('s1', 0, 0)]);
 
     pointerDown(editor, 50, 40, { shapeId: 's1' });
     pointerUp(editor, 50, 40);
@@ -88,7 +88,7 @@ describe('T3.2-01: click selects shape', () => {
 describe('T3.2-02: click canvas deselects', () => {
   it('pointerDown on empty canvas → selection empty', () => {
     const editor = makeEditor();
-    editor.store.put([boxShape('s2', 0, 0)]);
+    getMutableStoreForTesting(editor).put([boxShape('s2', 0, 0)]);
     editor.setSelectedShapeIds([sid('s2')]);
 
     pointerDown(editor, 500, 500); // no shapeId → canvas
@@ -105,7 +105,7 @@ describe('T3.2-02: click canvas deselects', () => {
 describe('T3.2-03: shift-click adds to selection', () => {
   it('A selected; shift+click B → [A, B]', () => {
     const editor = makeEditor();
-    editor.store.put([boxShape('a', 0, 0), boxShape('b', 200, 0)]);
+    getMutableStoreForTesting(editor).put([boxShape('a', 0, 0), boxShape('b', 200, 0)]);
     editor.setSelectedShapeIds([sid('a')]);
 
     pointerDown(editor, 250, 40, { shapeId: 'b', shiftKey: true });
@@ -124,7 +124,7 @@ describe('T3.2-03: shift-click adds to selection', () => {
 describe('T3.2-04: drag translates shape', () => {
   it('pointerDown → move +50px → pointerUp: x increases by 50', () => {
     const editor = makeEditor();
-    editor.store.put([boxShape('drag1', 100, 100)]);
+    getMutableStoreForTesting(editor).put([boxShape('drag1', 100, 100)]);
     editor.setSelectedShapeIds([sid('drag1')]);
 
     pointerDown(editor, 150, 150, { shapeId: 'drag1' });
@@ -166,7 +166,7 @@ describe('T3.2-04: drag translates shape', () => {
 describe('T3.2-05: escape cancels drag', () => {
   it('shape x unchanged from original after Escape', () => {
     const editor = makeEditor();
-    editor.store.put([boxShape('esc1', 100, 100)]);
+    getMutableStoreForTesting(editor).put([boxShape('esc1', 100, 100)]);
     editor.setSelectedShapeIds([sid('esc1')]);
 
     pointerDown(editor, 150, 150, { shapeId: 'esc1' });
@@ -186,7 +186,7 @@ describe('T3.2-05: escape cancels drag', () => {
 describe('T3.2-06: marquee selects intersecting', () => {
   it('marquee over A and B but not C', () => {
     const editor = makeEditor();
-    editor.store.put([
+    getMutableStoreForTesting(editor).put([
       boxShape('ma', 10, 10, 50, 50),
       boxShape('mb', 80, 10, 50, 50),
       boxShape('mc', 500, 500, 50, 50),
@@ -212,7 +212,7 @@ describe('T3.2-06: marquee selects intersecting', () => {
 describe('T3.2-07: drag threshold 4px', () => {
   it('2px move stays in PointingShape, no drag initiated', () => {
     const editor = makeEditor();
-    editor.store.put([boxShape('thr1', 100, 100)]);
+    getMutableStoreForTesting(editor).put([boxShape('thr1', 100, 100)]);
     editor.setSelectedShapeIds([sid('thr1')]);
 
     const origX = editor.getShape(sid('thr1'))!.x;
@@ -237,7 +237,7 @@ describe('T3.2-07: drag threshold 4px', () => {
 describe('T3.2-08: Escape deselects (common across states)', () => {
   it('Escape in Idle clears selection', () => {
     const editor = makeEditor();
-    editor.store.put([boxShape('esc-idle', 0, 0)]);
+    getMutableStoreForTesting(editor).put([boxShape('esc-idle', 0, 0)]);
     editor.setSelectedShapeIds([sid('esc-idle')]);
 
     keyDown(editor, 'Escape');
@@ -248,7 +248,7 @@ describe('T3.2-08: Escape deselects (common across states)', () => {
 
   it('Escape after marquee selection deselects all', () => {
     const editor = makeEditor();
-    editor.store.put([boxShape('esc-mq1', 10, 10, 50, 50), boxShape('esc-mq2', 80, 10, 50, 50)]);
+    getMutableStoreForTesting(editor).put([boxShape('esc-mq1', 10, 10, 50, 50), boxShape('esc-mq2', 80, 10, 50, 50)]);
 
     // Draw marquee to select both
     pointerDown(editor, 0, 0);
@@ -264,7 +264,7 @@ describe('T3.2-08: Escape deselects (common across states)', () => {
 
   it('Escape in PointingShape (before drag) deselects and returns to Idle', () => {
     const editor = makeEditor();
-    editor.store.put([boxShape('esc-ps', 100, 100)]);
+    getMutableStoreForTesting(editor).put([boxShape('esc-ps', 100, 100)]);
 
     pointerDown(editor, 150, 150, { shapeId: 'esc-ps' });
     // No move (still in PointingShape)
@@ -276,7 +276,7 @@ describe('T3.2-08: Escape deselects (common across states)', () => {
 
   it('Escape during drag restores positions (NOT deselect — Dragging owns Escape)', () => {
     const editor = makeEditor();
-    editor.store.put([boxShape('esc-drag', 100, 100)]);
+    getMutableStoreForTesting(editor).put([boxShape('esc-drag', 100, 100)]);
     editor.setSelectedShapeIds([sid('esc-drag')]);
 
     pointerDown(editor, 150, 150, { shapeId: 'esc-drag' });

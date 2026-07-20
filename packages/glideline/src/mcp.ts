@@ -10,6 +10,7 @@ import {
 } from './arrow-records';
 import type { ArrowRouteStyle } from './shapes/ArrowUtil';
 import type { AnyRecord, ShapeId } from './types';
+import { MutationPermissionError } from './mutation-policy';
 
 const recordSchema = z.record(z.string(), z.unknown());
 const finiteNumber = z.number().finite();
@@ -181,6 +182,7 @@ export type CanvasToolResult =
 
 export interface CanvasToolError {
   error: string;
+  code?: string;
   issues?: Array<{ path: string; message: string }>;
 }
 
@@ -560,6 +562,7 @@ export function createCanvasToolServer(editor: GlideEditor) {
       } catch (error) {
         return {
           error: error instanceof Error ? error.message : String(error),
+          ...(error instanceof MutationPermissionError ? { code: error.code } : {}),
         };
       }
     },

@@ -186,7 +186,7 @@ export function createSvgPathShape(def: CreateSvgPathShapeDef): {
       this._origin = info.origin;
       const w = info.current.x - info.origin.x;
       const h = info.current.y - info.origin.y;
-      this.editor.history.batch('Custom Shape Preview', () => {
+      this.editor.batch('Custom Shape Preview', () => {
         this.editor.createShape({
           id: this._previewId, type,
           x: Math.min(info.origin.x, info.origin.x + w),
@@ -200,7 +200,7 @@ export function createSvgPathShape(def: CreateSvgPathShapeDef): {
     override onPointerMove(e: PointerMoveEvent): void {
       const w = e.point.x - this._origin.x;
       const h = e.point.y - this._origin.y;
-      this.editor.history.batch('Custom Shape Preview Update', () => {
+      this.editor.batch('Custom Shape Preview Update', () => {
         this.editor.updateShape(this._previewId, {
           x: Math.min(this._origin.x, this._origin.x + w),
           y: Math.min(this._origin.y, this._origin.y + h),
@@ -213,10 +213,10 @@ export function createSvgPathShape(def: CreateSvgPathShapeDef): {
       const w = e.point.x - this._origin.x;
       const h = e.point.y - this._origin.y;
       const finalId = this.editor.createShapeId(type);
-      this.editor.history.batch('Custom Shape Cleanup', () => {
+      this.editor.batch('Custom Shape Cleanup', () => {
         this.editor.deleteShapes([this._previewId]);
     }, { history: 'ignore', scope: 'ephemeral' });
-      this.editor.history.batch(`Create ${type}`, () => {
+      this.editor.batch(`Create ${type}`, () => {
         this.editor.createShape({
           id: finalId, type,
           x: Math.min(this._origin.x, this._origin.x + w),
@@ -232,7 +232,7 @@ export function createSvgPathShape(def: CreateSvgPathShapeDef): {
 
     override onKeyDown(e: KeyDownEvent): void {
       if (e.key === 'Escape') {
-        this.editor.history.batch('Custom Shape Cleanup', () => {
+        this.editor.batch('Custom Shape Cleanup', () => {
           this.editor.deleteShapes([this._previewId]);
     }, { history: 'ignore', scope: 'ephemeral' });
         this.parent!.transition('idle');

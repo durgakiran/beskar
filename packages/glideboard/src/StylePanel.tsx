@@ -109,7 +109,7 @@ export function StylePanel() {
       [key]: value,
     };
     if (shapes.length > 0) {
-      editor.history.batch('Style change', () => {
+      editor.batch('Style change', () => {
         for (const shape of shapes) {
           if (key in shape.props) {
             editor.updateShape(shape.id as ShapeId, {

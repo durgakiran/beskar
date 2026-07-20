@@ -172,7 +172,7 @@ class Drawing extends StateNode {
     }
 
     // Create preview arrow (not recorded in history)
-    this.editor.history.batch('Arrow Preview', () => {
+    this.editor.batch('Arrow Preview', () => {
       this.editor.createShape(buildArrowShapeRecord({
         id: PREVIEW_ID,
         startWorld: startPt,
@@ -219,7 +219,7 @@ class Drawing extends StateNode {
     const localEndX = endWorldPt.x - existing.x;
     const localEndY = endWorldPt.y - existing.y;
 
-    this.editor.history.batch('Arrow Preview Update', () => {
+    this.editor.batch('Arrow Preview Update', () => {
       this.editor.updateShape<ArrowShape>(PREVIEW_ID, {
         props: {
           ...existing.props,
@@ -240,7 +240,7 @@ class Drawing extends StateNode {
     const toShapeId: ShapeId | null = hovered ? (hovered.shape.id as ShapeId) : null;
 
     // Remove preview
-    this.editor.history.batch('Arrow Preview Cleanup', () => {
+    this.editor.batch('Arrow Preview Cleanup', () => {
       this.editor.deleteShapes([PREVIEW_ID]);
     }, { history: 'ignore', scope: 'ephemeral' });
 
@@ -250,7 +250,7 @@ class Drawing extends StateNode {
 
     // Commit final arrow + bindings
     const finalId = this.editor.createShapeId('arrow');
-    this.editor.history.batch('Create Arrow', () => {
+    this.editor.batch('Create Arrow', () => {
       // Compute start world point
       let startAnchor = { x: 0.5, y: 0.5 };
       let startPt = this._origin;
@@ -359,7 +359,7 @@ class Drawing extends StateNode {
   override onKeyDown(e: KeyDownEvent): void {
     if (e.key === 'Escape') {
       this.editor.clearBindingPreview();
-      this.editor.history.batch('Arrow Preview Cleanup', () => {
+      this.editor.batch('Arrow Preview Cleanup', () => {
         this.editor.deleteShapes([PREVIEW_ID]);
     }, { history: 'ignore', scope: 'ephemeral' });
       this.parent!.transition('idle');

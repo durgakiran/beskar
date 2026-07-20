@@ -88,7 +88,7 @@ class Drawing extends StateNode {
 
     const w = info.current.x - info.origin.x;
     const h = info.current.y - info.origin.y;
-    this.editor.history.batch('Ellipse Preview', () => {
+    this.editor.batch('Ellipse Preview', () => {
       this.editor.createShape(makeEllipseShape(PREVIEW_ID, info.origin.x, info.origin.y, w, h));
     }, { history: 'ignore', scope: 'ephemeral' });
   }
@@ -105,7 +105,7 @@ class Drawing extends StateNode {
       h = h < 0 ? -s : s;
     }
 
-    this.editor.history.batch('Ellipse Preview Update', () => {
+    this.editor.batch('Ellipse Preview Update', () => {
       this.editor.updateShape(PREVIEW_ID, {
         x:    Math.min(this._origin.x, this._origin.x + w),
         y:    Math.min(this._origin.y, this._origin.y + h),
@@ -127,13 +127,13 @@ class Drawing extends StateNode {
     }
 
     // Remove preview
-    this.editor.history.batch('Ellipse Preview Cleanup', () => {
+    this.editor.batch('Ellipse Preview Cleanup', () => {
       this.editor.deleteShapes([PREVIEW_ID]);
     }, { history: 'ignore', scope: 'ephemeral' });
 
     // Commit final shape
     const finalId = this.editor.createShapeId('ellipse');
-    this.editor.history.batch('Create Ellipse', () => {
+    this.editor.batch('Create Ellipse', () => {
       this.editor.createShape(makeEllipseShape(finalId, this._origin.x, this._origin.y, w, h));
     });
 
@@ -146,7 +146,7 @@ class Drawing extends StateNode {
 
   override onKeyDown(e: KeyDownEvent): void {
     if (e.key === 'Escape') {
-      this.editor.history.batch('Ellipse Preview Cleanup', () => {
+      this.editor.batch('Ellipse Preview Cleanup', () => {
         this.editor.deleteShapes([PREVIEW_ID]);
     }, { history: 'ignore', scope: 'ephemeral' });
       this.parent!.transition('idle');

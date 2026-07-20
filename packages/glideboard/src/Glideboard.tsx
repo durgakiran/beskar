@@ -32,6 +32,7 @@ function MountedGlideboardSession({
         : controller.editor.getShapes().map(shape => shape.id);
       return controller.editor.exportToSvg(shapeIds);
     },
+    getRecoverableTextDraft: () => controller.recoverableTextDraftSignal.peek(),
     setCurrentTool: (toolId) => controller.setCurrentTool(toolId),
     flush: () => controller.flush(),
   }), [controller]);

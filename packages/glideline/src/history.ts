@@ -11,6 +11,8 @@ import type {
   TransactionScope,
 } from './store';
 import type { AnyRecord, DeepReadonly } from './types';
+import type { MutationCapability } from './mutation-policy';
+import { MutationPermissionError } from './mutation-policy';
 
 const MAX_STACK = 100;
 const MAX_HISTORY_BYTES = 16 * 1024 * 1024;
@@ -109,6 +111,47 @@ export interface InteractionPreviewAdapter {
   runEphemeral<T>(fn: () => T): T;
   commit(label: string, commandId: string): void;
   cancel(): void;
+}
+
+type MutableHistoryMember =
+  | 'batch'
+  | 'undo'
+  | 'redo'
+  | 'clear'
+  | 'attachInteractionAdapter'
+  | 'beginPreview'
+  | 'recordPreview'
+  | 'cancelPreview';
+
+export type ReadonlyHistoryManager = Omit<HistoryManager, MutableHistoryMember>;
+
+const BLOCKED_PUBLIC_HISTORY_MEMBERS = new Set<PropertyKey>([
+  'batch',
+  'undo',
+  'redo',
+  'clear',
+  'attachInteractionAdapter',
+  'beginPreview',
+  'recordPreview',
+  'cancelPreview',
+]);
+
+export function createReadonlyHistoryView(history: HistoryManager): ReadonlyHistoryManager {
+  return new Proxy(history, {
+    get(target, property) {
+      if (BLOCKED_PUBLIC_HISTORY_MEMBERS.has(property)) {
+        return () => {
+          throw new MutationPermissionError(Object.freeze({
+            origin: 'local-api',
+            command: `history.${String(property)}`,
+            affectedIds: Object.freeze([]),
+          }));
+        };
+      }
+      const value = Reflect.get(target, property, target);
+      return typeof value === 'function' ? value.bind(target) : value;
+    },
+  }) as ReadonlyHistoryManager;
 }
 
 interface PointerValue {
@@ -387,7 +430,10 @@ export class HistoryManager {
   private _pending: PendingTransition | null = null;
   private _interaction: InteractionPreviewAdapter | null = null;
 
-  constructor(private _store: GlideStore) {
+  constructor(
+    private _store: GlideStore,
+    private _localMutationCapability?: MutationCapability,
+  ) {
     this._store.participateInCommits(changes => this._prepareCommit(changes));
     // Compatibility capture for tools not yet migrated to InteractionManager.
     this._store.listen(changes => {
@@ -419,7 +465,7 @@ export class HistoryManager {
       commandId: opts?.commandId ?? commandIdFromLabel(label),
       history: opts?.history === 'ignore' ? 'ignore' : 'record',
       scope: opts?.scope ?? 'document',
-    }, () => fn());
+    }, () => fn(), this._localMutationCapability);
   }
 
   attachInteractionAdapter(adapter: InteractionPreviewAdapter): void {
@@ -509,13 +555,13 @@ export class HistoryManager {
       this._store.transact({
         origin: kind,
         label: entry.label,
-        commandId: entry.commandId,
+        commandId: entry.commandId as string,
         history: 'ignore',
       }, tx => {
         const conflicts = checkPreconditions(this._store, tx, entry.preconditions);
         if (conflicts.length > 0) throw new HistoryConflictError(conflicts);
         applyDeltas(tx, kind === 'undo' ? entry.inverse : entry.forward);
-      });
+      }, this._localMutationCapability);
       return Object.freeze({ status: 'applied', entry });
     } catch (error) {
       this._pending = null;

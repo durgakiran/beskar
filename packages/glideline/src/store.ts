@@ -28,6 +28,14 @@ import type {
 import type { Geometry2d } from './geometry';
 import { GlideSchema, DocumentValidationError, type LoadReport } from './schema';
 import { RecordIdService } from './id';
+import {
+  MutationPermissionError,
+  allowAllMutations,
+  type MutationCapability,
+  type MutationCapabilityGrant,
+  type MutationOrigin,
+  type MutationPolicy,
+} from './mutation-policy';
 
 interface RBushEntry {
   id: string;
@@ -84,6 +92,64 @@ export interface TransactionOptions {
   actorId?: string;
   history?: 'record' | 'ignore';
   scope?: TransactionScope;
+}
+
+export interface StoreMutationAuthorization {
+  readonly policy: MutationPolicy;
+  readonly grants?: readonly MutationCapabilityGrant[];
+}
+
+type MutableStoreMember =
+  | 'put'
+  | 'remove'
+  | 'batch'
+  | 'transact'
+  | 'transactTrusted'
+  | 'replaceDocument'
+  | 'deserialize'
+  | 'importRecords'
+  | 'rebuildIndices'
+  | 'participateInCommits';
+
+/** Public canonical-store surface. Durable writes belong to GlideEditor commands. */
+export type ReadonlyGlideStore = Omit<GlideStore, MutableStoreMember>;
+
+const BLOCKED_PUBLIC_STORE_MEMBERS = new Set<PropertyKey>([
+  'put',
+  'remove',
+  'batch',
+  'transact',
+  'transactTrusted',
+  'replaceDocument',
+  'deserialize',
+  'importRecords',
+  'rebuildIndices',
+  'participateInCommits',
+]);
+
+export function createReadonlyStoreView(store: GlideStore): ReadonlyGlideStore {
+  return new Proxy(store, {
+    get(target, property) {
+      if (BLOCKED_PUBLIC_STORE_MEMBERS.has(property)) {
+        return () => {
+          throw new MutationPermissionError(Object.freeze({
+            origin: 'local-api',
+            command: `store.${String(property)}`,
+            affectedIds: Object.freeze([]),
+          }));
+        };
+      }
+      const value = Reflect.get(target, property, target);
+      return typeof value === 'function' ? value.bind(target) : value;
+    },
+    set() {
+      throw new MutationPermissionError(Object.freeze({
+        origin: 'local-api',
+        command: 'store.assign',
+        affectedIds: Object.freeze([]),
+      }));
+    },
+  }) as ReadonlyGlideStore;
 }
 
 export interface StoreTransaction {
@@ -365,6 +431,8 @@ export class GlideStore {
   private _changeSequence = 0;
   private _preparingCommit = false;
   private _fatalIntegrityError: StoreFatalIntegrityError | null = null;
+  private readonly _mutationPolicy: MutationPolicy;
+  private readonly _mutationCapabilities = new Map<MutationCapability, ReadonlySet<MutationOrigin>>();
 
   public getGeometry?: (shape: AnyRecord) => Geometry2d | undefined;
   public hitTestPoint?: (shape: AnyRecord, x: number, y: number) => boolean;
@@ -372,7 +440,13 @@ export class GlideStore {
   constructor(
     public readonly schema: GlideSchema = new GlideSchema(),
     public readonly ids: RecordIdService = new RecordIdService(),
-  ) {}
+    authorization: StoreMutationAuthorization = { policy: allowAllMutations },
+  ) {
+    this._mutationPolicy = authorization.policy;
+    for (const grant of authorization.grants ?? []) {
+      this._mutationCapabilities.set(grant.capability, new Set(grant.origins));
+    }
+  }
 
   get revision(): number { return this._versionSignal.peek(); }
 
@@ -487,25 +561,34 @@ export class GlideStore {
   }
 
   put(records: AnyRecord[]): void {
-    this.transact({ origin: 'user' }, tx => {
+    this.transact({
+      origin: 'user',
+      commandId: 'store.put',
+      affectedIds: records.map(record => String(record['id'])),
+    }, tx => {
       for (const record of records) tx.upsert(record);
     });
   }
 
   remove(ids: string[]): void {
-    this.transact({ origin: 'user' }, tx => {
+    this.transact({ origin: 'user', commandId: 'store.remove', affectedIds: ids }, tx => {
       for (const id of ids) tx.remove(id);
     });
   }
 
   batch(fn: () => void): void {
-    this.transact({ origin: 'system', history: 'ignore' }, () => fn());
+    this.transact({ origin: 'system', commandId: 'store.batch', history: 'ignore' }, () => fn());
   }
 
-  transact<T>(options: TransactionOptions, fn: (tx: StoreTransaction) => T): TransactionResult<T> {
+  transact<T>(
+    options: TransactionOptions,
+    fn: (tx: StoreTransaction) => T,
+    capability?: MutationCapability,
+  ): TransactionResult<T> {
     if (this._fatalIntegrityError) throw this._fatalIntegrityError;
     if (this._preparingCommit) throw new TransactionReentryError();
     if (this._activeTransaction) return this._runNested(fn);
+    this._authorizeMutation(options, capability);
 
     const state: TransactionState = {
       options: frozenOptions(options),
@@ -527,6 +610,50 @@ export class GlideStore {
       throw error;
     } finally {
       this._activeTransaction = null;
+    }
+  }
+
+  transactTrusted<T>(
+    options: TransactionOptions,
+    fn: (tx: StoreTransaction) => T,
+    capability: MutationCapability,
+  ): TransactionResult<T> {
+    const requestedOrigin = this._policyOriginFor(options.origin);
+    if (!this._mutationCapabilities.get(capability)?.has(requestedOrigin)) {
+      throw new MutationPermissionError(Object.freeze({
+        origin: 'local-api',
+        command: options.commandId ?? options.label ?? 'store.transaction',
+        affectedIds: Object.freeze([...(options.affectedIds ?? [])]),
+      }));
+    }
+    return this.transact(options, fn, capability);
+  }
+
+  private _authorizeMutation(options: TransactionOptions, capability?: MutationCapability): void {
+    const privilegedOrigin = this._policyOriginFor(options.origin);
+    const grantedOrigins = capability
+      ? this._mutationCapabilities.get(capability)
+      : undefined;
+    const origin = grantedOrigins?.has(privilegedOrigin)
+      ? privilegedOrigin
+      : 'local-api';
+    const request = Object.freeze({
+      origin,
+      command: options.commandId ?? options.label ?? 'store.transaction',
+      affectedIds: Object.freeze([...(options.affectedIds ?? [])]),
+    });
+    if (this._mutationPolicy.authorize(request) === 'deny') {
+      throw new MutationPermissionError(request);
+    }
+  }
+
+  private _policyOriginFor(origin: ChangeOrigin): MutationOrigin {
+    switch (origin) {
+      case 'remote': return 'remote';
+      case 'load': return 'load';
+      case 'system':
+      case 'repair': return 'system';
+      default: return 'local-user';
     }
   }
 
@@ -1081,7 +1208,11 @@ export class GlideStore {
    * Atomically replace the complete store snapshot after migration and full
    * graph validation. This is deliberately different from import/merge.
    */
-  replaceDocument(doc: GlideDocument, options: ReplaceDocumentOptions = {}): LoadReport {
+  replaceDocument(
+    doc: GlideDocument,
+    options: ReplaceDocumentOptions = {},
+    capability?: MutationCapability,
+  ): LoadReport {
     const detached = cloneJsonValue(doc) as GlideDocument;
     const loaded = this.schema.loadDocument(detached);
     this.transact({ origin: options.origin ?? 'load', label: 'Replace Document', history: 'ignore' }, tx => {
@@ -1089,7 +1220,7 @@ export class GlideStore {
         if (recordSignal.peek()) tx.remove(id);
       }
       for (const record of loaded.records) tx.upsert(record);
-    });
+    }, capability);
     return loaded.report;
   }
 

@@ -89,7 +89,7 @@ class Drawing extends StateNode {
     const { x, y } = info.origin;
     const w = info.current.x - x;
     const h = info.current.y - y;
-    this.editor.history.batch('Preview', () => {
+    this.editor.batch('Preview', () => {
       this.editor.createShape(makeBoxShape(PREVIEW_ID, x, y, w, h));
     }, { history: 'ignore', scope: 'ephemeral' });
   }
@@ -100,7 +100,7 @@ class Drawing extends StateNode {
     const w = e.point.x - x;
     const h = e.point.y - y;
 
-    this.editor.history.batch('Preview Update', () => {
+    this.editor.batch('Preview Update', () => {
       this.editor.updateShape(PREVIEW_ID, {
         x: Math.min(x, x + w),
         y: Math.min(y, y + h),
@@ -119,13 +119,13 @@ class Drawing extends StateNode {
     const h = e.point.y - y;
 
     // Remove preview without history
-    this.editor.history.batch('Preview Cleanup', () => {
+    this.editor.batch('Preview Cleanup', () => {
       this.editor.deleteShapes([PREVIEW_ID]);
     }, { history: 'ignore', scope: 'ephemeral' });
 
     // Commit final shape as a single undo entry
     const finalId = this.editor.createShapeId('box');
-    this.editor.history.batch('Create Box', () => {
+    this.editor.batch('Create Box', () => {
       this.editor.createShape(makeBoxShape(finalId, x, y, w, h));
     });
 
@@ -137,7 +137,7 @@ class Drawing extends StateNode {
   override onKeyDown(e: KeyDownEvent): void {
     if (e.key === 'Escape') {
       // Delete preview without history
-      this.editor.history.batch('Preview Cleanup', () => {
+      this.editor.batch('Preview Cleanup', () => {
         this.editor.deleteShapes([PREVIEW_ID]);
     }, { history: 'ignore', scope: 'ephemeral' });
 

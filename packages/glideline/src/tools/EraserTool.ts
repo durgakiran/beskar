@@ -53,7 +53,7 @@ class Erasing extends StateNode {
 
   override onPointerUp(_e: PointerUpEvent): void {
     if (this.erasedIds.size > 0) {
-      this.editor.history.batch('Erase Shapes', () => {
+      this.editor.batch('Erase Shapes', () => {
         this.editor.deleteShapes(Array.from(this.erasedIds));
       });
     }

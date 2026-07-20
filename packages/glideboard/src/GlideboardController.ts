@@ -1,12 +1,15 @@
-import { signal } from '@preact/signals';
+import { signal, type ReadonlySignal } from '@preact/signals';
 import {
   createCanvasToolServer,
+  createMutationCapability,
+  MutationPermissionError,
   resolveArrowRoute,
   type Box2d,
   type CanvasToolName,
   type GlideDocument,
   type GlidePlugin,
   type LoadReport,
+  type MutationPolicy,
   type Vec2,
 } from '@durgakiran/glideline';
 import { bindGlideboardCollaboration } from './collaboration';
@@ -17,6 +20,7 @@ import type {
   GlideboardDocumentChangeContext,
   GlideboardUser,
   InitialDocumentDisposition,
+  RecoverableTextDraft,
 } from './types';
 
 export type ConnectorPreset = 'line' | 'arrow' | 'double-arrow';
@@ -74,6 +78,22 @@ function getPresetArrowheads(
   }
 }
 
+function createMutationPolicy(readonlySignal: ReadonlySignal<boolean>): MutationPolicy {
+  return {
+    authorize(request) {
+      if (!readonlySignal.peek()) {
+        return 'allow';
+      }
+
+      if (request.origin === 'remote' || request.origin === 'load') {
+        return 'allow';
+      }
+
+      return 'deny';
+    },
+  };
+}
+
 /**
  * Owns every mutable value that belongs to one mounted whiteboard session.
  * Nothing in this class is shared by another controller instance.
@@ -84,7 +104,9 @@ export class GlideboardController {
   readonly readOnlySignal = signal(false);
   readonly awarenessSignal = signal<any | null>(null);
   readonly isCanvasDraggingRef = { current: false };
+  readonly activePointerIdRef = { current: null as number | null };
   readonly deferredToolRestoreRef = { current: null as string | null };
+  readonly recoverableTextDraftSignal = signal<RecoverableTextDraft | null>(null);
   readonly arrowRouteStyleSignal;
   readonly arrowPresetSignal;
   readonly arrowheadStartSignal;
@@ -93,6 +115,7 @@ export class GlideboardController {
   private readonly toolServer;
   private readonly domIdPrefix: string;
   private readonly presenceOwner = {};
+  private readonly remoteMutationCapability = createMutationCapability();
   private canvasElement: HTMLElement | null = null;
   private collaborationCleanup: (() => void) | null = null;
   private presenceBinding: PresenceBinding | null = null;
@@ -112,7 +135,12 @@ export class GlideboardController {
   constructor(options: GlideboardControllerOptions) {
     this.sessionKey = options.sessionKey;
     this.domIdPrefix = `glideboard-${++nextControllerId}`;
-    this.editor = createGlideboardEditorInstance([...(options.customShapes ?? [])]);
+    const mutationPolicy = createMutationPolicy(this.readOnlySignal);
+    this.editor = createGlideboardEditorInstance(
+      [...(options.customShapes ?? [])],
+      mutationPolicy,
+      this.remoteMutationCapability,
+    );
     this.toolServer = createCanvasToolServer(this.editor);
 
     this.arrowRouteStyleSignal = signal<ArrowRouteStyle>(this.editor.arrowRouteStyle);
@@ -170,20 +198,53 @@ export class GlideboardController {
   }
 
   setReadOnly(readOnly: boolean): void {
-    if (this.readOnlySignal.peek() === readOnly) return;
-    this.readOnlySignal.value = readOnly;
-    this.editor.setCurrentTool(readOnly ? 'hand' : 'select');
+    if (this.readOnlySignal.peek() === readOnly) {
+      return;
+    }
+
     if (readOnly) {
+      const editingShapeId = this.editor.editingShapeId.peek();
+      const editable = this.canvasElement?.querySelector<HTMLElement>('[contenteditable="true"]');
+      if (editingShapeId && editable) {
+        this.recoverableTextDraftSignal.value = Object.freeze({
+          shapeId: editingShapeId,
+          text: editable.textContent ?? '',
+        });
+      }
+    }
+
+    // Change authorization before any downgrade cleanup can trigger callbacks.
+    this.readOnlySignal.value = readOnly;
+
+    if (readOnly) {
+      // Edit → View
+      this.editor.interactions.cancel();
       this.editor.stopEditing();
       this.editor.clearBindingPreview();
+
+      const pointerId = this.activePointerIdRef.current;
+      if (pointerId !== null && this.canvasElement?.hasPointerCapture?.(pointerId)) {
+        this.canvasElement.releasePointerCapture(pointerId);
+      }
+      this.activePointerIdRef.current = null;
+
       this.isCanvasDraggingRef.current = false;
       this.deferredToolRestoreRef.current = null;
+
+      this.editor.setCurrentTool('hand');
+    } else {
+      // View → Edit
+      this.editor.setCurrentTool('select');
     }
   }
 
   setCurrentTool(toolId: string): void {
     if (this.readOnlySignal.peek() && toolId !== 'hand') {
-      throw new Error(`Glideboard: cannot select tool "${toolId}" while the board is read-only.`);
+      throw new MutationPermissionError(Object.freeze({
+        origin: 'local-user',
+        command: 'tool.select',
+        affectedIds: Object.freeze([]),
+      }));
     }
     this.editor.setCurrentTool(toolId);
   }
@@ -222,8 +283,13 @@ export class GlideboardController {
       .map(record => String(record.id ?? ''))
       .filter(Boolean);
     if (ids.length > 0) {
-      this.editor.batch('Clear Document', () => {
-        this.editor.store.remove(ids);
+      this.editor.executeCommand({
+        id: 'document.clear',
+        label: 'Clear Document',
+        affectedIds: ids,
+        execute: tx => {
+          for (const id of ids) tx.remove(id);
+        },
       });
     }
     this.editor.setSelectedShapeIds([]);
@@ -235,7 +301,11 @@ export class GlideboardController {
   attachCollaboration(config: GlideboardCollaborationConfig): () => void {
     this.detachCollaboration();
 
-    const cleanupBinding = bindGlideboardCollaboration(this.editor, config);
+    const cleanupBinding = bindGlideboardCollaboration(
+      this.editor,
+      config,
+      this.remoteMutationCapability,
+    );
     const cleanupPresence = config.provider || config.user
       ? this.attachPresence(config.provider, config.user)
       : null;
@@ -304,10 +374,10 @@ export class GlideboardController {
       awarenessPresenceOwners.set(awareness, binding.owner);
       awareness.setLocalStateField('user', user
         ? {
-            id: user.id,
-            name: user.name,
-            color: user.color,
-          }
+          id: user.id,
+          name: user.name,
+          color: user.color,
+        }
         : null);
     }
 
@@ -405,7 +475,7 @@ export class GlideboardController {
   }
 
   attachDebugApi(debugApiKey: string): () => void {
-    if (typeof window === 'undefined' || !debugApiKey) return () => {};
+    if (typeof window === 'undefined' || !debugApiKey) return () => { };
 
     const api = {
       reset: () => this.clearDocument(),

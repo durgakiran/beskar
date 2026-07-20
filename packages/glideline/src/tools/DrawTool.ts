@@ -60,7 +60,7 @@ class Drawing extends StateNode {
     this._points    = [firstPt];
     this._lastPt    = info.point;
 
-    this.editor.history.batch('Draw Preview', () => {
+    this.editor.batch('Draw Preview', () => {
       this.editor.createShape({
         id:       PREVIEW_ID,
         type:     'freehand',
@@ -93,7 +93,7 @@ class Drawing extends StateNode {
     };
     this._points = [...this._points, newPt];
 
-    this.editor.history.batch('Draw Preview Update', () => {
+    this.editor.batch('Draw Preview Update', () => {
       this.editor.updateShape(PREVIEW_ID, {
         props: {
           points:     this._points,
@@ -109,7 +109,7 @@ class Drawing extends StateNode {
 
   override onPointerUp(_e: PointerUpEvent): void {
     // Remove preview always
-    this.editor.history.batch('Draw Preview Cleanup', () => {
+    this.editor.batch('Draw Preview Cleanup', () => {
       this.editor.deleteShapes([PREVIEW_ID]);
     }, { history: 'ignore', scope: 'ephemeral' });
 
@@ -125,7 +125,7 @@ class Drawing extends StateNode {
         if (p.y < minY) minY = p.y;
       }
 
-      this.editor.history.batch('Draw Stroke', () => {
+      this.editor.batch('Draw Stroke', () => {
         this.editor.createShape({
           id:       finalId,
           type:     'freehand',
@@ -152,7 +152,7 @@ class Drawing extends StateNode {
 
   override onKeyDown(e: KeyDownEvent): void {
     if (e.key === 'Escape') {
-      this.editor.history.batch('Draw Preview Cleanup', () => {
+      this.editor.batch('Draw Preview Cleanup', () => {
         this.editor.deleteShapes([PREVIEW_ID]);
     }, { history: 'ignore', scope: 'ephemeral' });
       this.parent!.transition('idle');

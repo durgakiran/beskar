@@ -76,7 +76,7 @@ export function ContextMenu({ position, onClose }: ContextMenuProps) {
         disabled={!hasSelection}
         color={wbTheme.dangerText}
         onClick={() => {
-          editor.history.batch('Delete Shapes', () => editor.deleteShapes(selectedIds));
+          editor.batch('Delete Shapes', () => editor.deleteShapes(selectedIds));
           onClose();
         }}
       />

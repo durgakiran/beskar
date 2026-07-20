@@ -8,5 +8,6 @@ export type {
   GlideboardCollaborationConfig,
   GlideboardCollaborationProvider,
   InitialDocumentDisposition,
+  RecoverableTextDraft,
 } from './types';
 export { createSvgPathShape } from '@durgakiran/glideline';

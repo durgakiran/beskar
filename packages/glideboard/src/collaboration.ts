@@ -2,6 +2,7 @@ import type {
   GlideEditor,
   GlideShape,
   GlideBinding,
+  MutationCapability,
   StoreChangeSet,
 } from '@durgakiran/glideline';
 import type {
@@ -24,13 +25,17 @@ function getAllRecordIds(editor: GlideEditor): string[] {
     .filter(Boolean);
 }
 
-function applyFullMapState(editor: GlideEditor, recordsMap: GlideboardSharedMap<AnyRecord>) {
+function applyFullMapState(
+  editor: GlideEditor,
+  recordsMap: GlideboardSharedMap<AnyRecord>,
+  capability: MutationCapability,
+) {
   const nextRecords = Array.from(recordsMap.values()).map(record => cloneRecord(record));
   const nextIds = new Set(nextRecords.map(record => String(record.id ?? '')));
   const existingIds = getAllRecordIds(editor);
   const removeIds = existingIds.filter(id => !nextIds.has(id));
 
-  editor.store.transact({ origin: 'remote', history: 'ignore' }, tx => {
+  editor.transactWithCapability(capability, { origin: 'remote', history: 'ignore' }, tx => {
     for (const id of removeIds) tx.remove(id);
     for (const record of nextRecords) tx.upsert(record as Record<string, unknown>);
   });
@@ -39,6 +44,7 @@ function applyFullMapState(editor: GlideEditor, recordsMap: GlideboardSharedMap<
 export function bindGlideboardCollaboration(
   editor: GlideEditor,
   config: GlideboardCollaborationConfig,
+  capability: MutationCapability,
 ) {
   const recordsMap = config.doc.getMap<AnyRecord>(RECORDS_KEY);
   let applyingRemote = false;
@@ -46,7 +52,7 @@ export function bindGlideboardCollaboration(
   if (recordsMap.size > 0) {
     applyingRemote = true;
     try {
-      applyFullMapState(editor, recordsMap);
+      applyFullMapState(editor, recordsMap, capability);
     } finally {
       applyingRemote = false;
     }
@@ -92,7 +98,7 @@ export function bindGlideboardCollaboration(
         }
       });
 
-      editor.store.transact({ origin: 'remote', history: 'ignore' }, tx => {
+      editor.transactWithCapability(capability, { origin: 'remote', history: 'ignore' }, tx => {
         for (const id of toRemove) tx.remove(id);
         for (const record of toPut) tx.upsert(record);
       });

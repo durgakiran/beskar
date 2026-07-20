@@ -862,6 +862,17 @@ When editor becomes viewer:
 
 In viewer mode attempt create, update, delete, style, paste, duplicate, reorder, undo, redo, text commit, mutating keyboard shortcut, tool dispatch, debug reset, MCP mutation, exported-editor write, and direct store write. Every local durable path must fail with a typed permission result and emit no change set. Repeat while a remote transaction succeeds.
 
+### 12.5 Implementation status — complete
+
+Workstream F is implemented across `packages/glideline` and `packages/glideboard`:
+
+- `MutationPolicy` is enforced before editor commands and again at the root store transaction boundary. Undo, redo, compatibility history batches, interaction commits, imports, AI/MCP operations, debug commands, and direct API attempts return a typed `MutationPermissionError` without publishing a change set.
+- Public editor store and history references are runtime and TypeScript read-only facades. Internal tests use source-only accessors that are not exported from the package root.
+- Remote collaboration uses an identity-checked `MutationCapability` registered when the editor is created. Merely claiming `origin: 'remote'` or presenting an unregistered capability is rejected; trusted remote transactions remain active for viewers and stay out of local history.
+- Trusted document replacement retains load capability in viewer mode. Selection, camera, copy, serialization/export, presence, and remote awareness remain available.
+- Permission downgrade closes the policy gate before cleanup, cancels interaction overlays, retains a recoverable text draft, releases pointer capture, clears editing/binding state, and switches to the hand tool. Returning to edit mode switches safely to select.
+- Viewer-mode regression coverage exercises create, update, delete, style, paste, duplicate, reorder, undo, redo, text commit, generic/AI execution, import, debug reset, MCP mutation, tool selection, exported-editor writes, direct store/history writes, forged remote origin, unregistered capability, active-gesture downgrade, and trusted remote/load success.
+
 ## 13. Workstream G — Persistence Coordinator and Host Integration
 
 ### 13.1 Current client failure

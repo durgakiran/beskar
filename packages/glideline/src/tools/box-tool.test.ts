@@ -130,7 +130,7 @@ describe('T3.3-06: single undo entry for drawn box', () => {
     pu(editor, 100, 80);
 
     expect(shapeCount(editor)).toBe(1);
-    editor.history.undo();
+    editor.undo();
     expect(shapeCount(editor)).toBe(0);
   });
 });

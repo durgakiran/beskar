@@ -151,11 +151,11 @@ const ShapeLayer = memo(({ id, zIndex }: { id: ShapeId; zIndex: number }) => {
   const commitEdit = (text: string) => {
     const key = shape.type === 'sticky-note' ? 'text' : shape.type === 'text' ? 'text' : 'label';
     if (shape.type === 'text' && text.trim() === '') {
-      editor.history.batch('Delete Empty Text', () => {
+      editor.batch('Delete Empty Text', () => {
         editor.deleteShapes([id]);
       });
     } else {
-      editor.history.batch('Edit Text', () => {
+      editor.batch('Edit Text', () => {
         editor.updateShape(id, { props: { ...shape.props, [key]: text } });
       });
     }
@@ -224,7 +224,9 @@ const ShapeLayer = memo(({ id, zIndex }: { id: ShapeId; zIndex: number }) => {
           ref={labelRef}
           contentEditable={isEditing && !readOnly ? true : undefined}
           suppressContentEditableWarning
-          onBlur={isEditing ? (e) => commitEdit(e.currentTarget.textContent ?? '') : undefined}
+          onBlur={isEditing && !readOnly
+            ? (e) => commitEdit(e.currentTarget.textContent ?? '')
+            : undefined}
           onKeyDown={isEditing ? handleLabelKeyDown : undefined}
           style={{
             position: 'absolute',
@@ -372,6 +374,7 @@ export function Canvas() {
 
     isPointerDownRef.current = true;
     controller.isCanvasDraggingRef.current = true;
+    controller.activePointerIdRef.current = event.pointerId;
     containerRef.current!.setPointerCapture(event.pointerId);
 
     const { screen, page } = getPagePoint(event);
@@ -429,6 +432,7 @@ export function Canvas() {
 
   const onPointerUp = useCallback((event: React.PointerEvent) => {
     isPointerDownRef.current = false;
+    controller.activePointerIdRef.current = null;
     if (containerRef.current?.hasPointerCapture?.(event.pointerId)) {
       containerRef.current.releasePointerCapture(event.pointerId);
     }
@@ -458,6 +462,7 @@ export function Canvas() {
     if (!isPointerDownRef.current && !editor.interactions.active) return;
     isPointerDownRef.current = false;
     controller.isCanvasDraggingRef.current = false;
+    controller.activePointerIdRef.current = null;
     if (pointerId !== undefined && containerRef.current?.hasPointerCapture?.(pointerId)) {
       containerRef.current.releasePointerCapture(pointerId);
     }

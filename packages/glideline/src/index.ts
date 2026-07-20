@@ -39,7 +39,7 @@ export type {
   TransactionOptions, StoreTransaction, TransactionResult, StoreChangeListener,
   StoreCommitPreparation, StoreCommitParticipant,
   ReplaceDocumentOptions, ImportOptions, ImportReport,
-  IntegrityIssue, IntegrityReport,
+  IntegrityIssue, IntegrityReport, ReadonlyGlideStore,
 } from './store';
 
 // Shapes (base)
@@ -54,7 +54,7 @@ export type { GlideEvent, PointerDownEvent, PointerMoveEvent, PointerUpEvent, Ke
 export { HistoryManager, HistoryConflictError, commandIdFromLabel } from './history';
 export type {
   HistoryEntry, HistoryDelta, FieldPrecondition, HistoryConflict, HistoryResult,
-  BatchOptions, InteractionPreviewAdapter,
+  BatchOptions, InteractionPreviewAdapter, ReadonlyHistoryManager,
 } from './history';
 export { InteractionManager, InteractionConflictError } from './interaction';
 export type { InteractionConflict, InteractionCommitOptions } from './interaction';
@@ -177,3 +177,12 @@ export type { RotationInfo } from './tools/SelectTool';
 
 export { createSvgPathShape } from './shapes/createSvgPathShape';
 export type { CreateSvgPathShapeDef } from './shapes/createSvgPathShape';
+
+export { MutationPermissionError, allowAllMutations, createMutationCapability } from './mutation-policy';
+export type {
+  MutationOrigin,
+  MutationRequest,
+  MutationPolicy,
+  MutationCapability,
+  MutationCapabilityGrant,
+} from './mutation-policy';

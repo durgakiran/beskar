@@ -301,7 +301,7 @@ class Dragging extends StateNode {
     this._origin         = info.origin;
     this._startPositions = info.startPositions;
     this._axis           = null;
-    this.editor.history.beginPreview();
+    this.editor.beginHistoryPreview();
   }
 
   override onPointerMove(e: PointerMoveEvent): void {
@@ -322,7 +322,7 @@ class Dragging extends StateNode {
       this._axis = null;
     }
 
-    this.editor.history.batch('Drag', () => {
+    this.editor.batch('Drag', () => {
       for (const [id, start] of this._startPositions) {
         this.editor.updateShape(id, { x: start.x + dx, y: start.y + dy });
       }
@@ -341,7 +341,7 @@ class Dragging extends StateNode {
     // The store may correctly treat this as a no-op when the last move event
     // already reached the same point, so history is recorded from the initial
     // snapshots explicitly below.
-    this.editor.history.batch('Move Shapes Preview', () => {
+    this.editor.batch('Move Shapes Preview', () => {
       for (const [id, start] of startPositions) {
         this.editor.updateShape(id, { x: start.x + fdx, y: start.y + fdy });
       }
@@ -352,7 +352,7 @@ class Dragging extends StateNode {
       const current = this.editor.getShape(id);
       if (current) before.set(id, { ...current, x: start.x, y: start.y });
     }
-    this.editor.history.recordPreview('Move Shapes', before);
+    this.editor.recordHistoryPreview('Move Shapes', before);
 
     this.parent!.transition('idle');
   }
@@ -360,18 +360,18 @@ class Dragging extends StateNode {
   override onKeyDown(e: KeyDownEvent): void {
     if (e.key === 'Escape') {
       const startPositions = this._startPositions;
-      this.editor.history.batch('Cancel Drag', () => {
+      this.editor.batch('Cancel Drag', () => {
         for (const [id, start] of startPositions) {
           this.editor.updateShape(id, { x: start.x, y: start.y });
         }
       }, { history: 'ignore' });
-      this.editor.history.cancelPreview();
+      this.editor.cancelHistoryPreview();
       this.parent!.transition('idle');
     }
   }
 
   override onExit(): void {
-    this.editor.history.cancelPreview();
+    this.editor.cancelHistoryPreview();
   }
 }
 
@@ -410,14 +410,14 @@ class DraggingHandle extends StateNode {
     this._initialArrow = JSON.parse(JSON.stringify(arrow)) as ArrowShape;
     this._initialArrowX = arrow?.x ?? 0;
     this._initialArrowY = arrow?.y ?? 0;
-    this.editor.history.beginPreview();
+    this.editor.beginHistoryPreview();
   }
 
   override onPointerMove(e: PointerMoveEvent): void {
     const arrow = this.editor.getShape(this._arrowId) as ArrowShape;
     if (!arrow) return;
 
-    this.editor.history.batch('Drag Handle', () => {
+    this.editor.batch('Drag Handle', () => {
       if (this._handleType === 'bend') {
         const { start, end, routeStyle } = this._initialProps;
         if (routeStyle !== 'curve') {
@@ -624,7 +624,7 @@ class DraggingHandle extends StateNode {
     // Finalize bindings and the last pointer position as one publication. The
     // live arrow preview is already in the store, so history is synthesized
     // from the snapshots captured when the interaction began.
-    this.editor.history.batch(
+    this.editor.batch(
       'Finalize Arrow Handle Preview',
       () => {
         if (this._handleType !== 'bend' && this._initialBinding) {
@@ -727,7 +727,7 @@ class DraggingHandle extends StateNode {
     if (newBindingId) {
       before.set(newBindingId, null);
     }
-    this.editor.history.recordPreview(
+    this.editor.recordHistoryPreview(
       this._handleType === 'bend' ? 'Adjust Arrow Bend' : 'Move Arrow Handle',
       before,
     );
@@ -739,7 +739,7 @@ class DraggingHandle extends StateNode {
   override onKeyDown(e: KeyDownEvent): void {
     if (e.key === 'Escape') {
       this.editor.clearBindingPreview();
-      this.editor.history.batch('Cancel Drag Handle', () => {
+      this.editor.batch('Cancel Drag Handle', () => {
         this.editor.updateShape(this._arrowId, {
           x: this._initialArrowX,
           y: this._initialArrowY,
@@ -748,18 +748,18 @@ class DraggingHandle extends StateNode {
           }
         });
         if (this._initialBinding) {
-          this.editor.store.put([this._initialBinding]);
+          this.editor.createBinding(this._initialBinding);
         }
       }, { history: 'ignore' });
 
-      this.editor.history.cancelPreview();
+      this.editor.cancelHistoryPreview();
       this.parent!.transition('idle');
     }
   }
 
   override onExit(): void {
     this.editor.clearBindingPreview();
-    this.editor.history.cancelPreview();
+    this.editor.cancelHistoryPreview();
   }
 }
 
@@ -856,17 +856,17 @@ class DraggingResize extends StateNode {
 
   override onEnter(info: DraggingResizeState): void {
     this._info = info;
-    this.editor.history.beginPreview();
+    this.editor.beginHistoryPreview();
   }
 
   override onPointerMove(e: PointerMoveEvent): void {
-    this.editor.history.batch('Resize Preview', () => {
+    this.editor.batch('Resize Preview', () => {
       this._applyResize(e.point, (e as any).shiftKey ?? false);
     }, { history: 'ignore' });
   }
 
   override onPointerUp(e: PointerUpEvent): void {
-    this.editor.history.batch('Resize Shapes Preview', () => {
+    this.editor.batch('Resize Shapes Preview', () => {
       this._applyResize(e.point, (e as any).shiftKey ?? false);
     }, { history: 'ignore' });
 
@@ -874,14 +874,14 @@ class DraggingResize extends StateNode {
     for (const [id, { shape }] of this._info.initialGeom) {
       before.set(id, shape as unknown as AnyRecord);
     }
-    this.editor.history.recordPreview('Resize Shapes', before);
+    this.editor.recordHistoryPreview('Resize Shapes', before);
     this.parent!.transition('idle');
   }
 
   override onKeyDown(e: KeyDownEvent): void {
     if (e.key === 'Escape') {
       // Restore all shapes to their initial geometry
-      this.editor.history.batch('Cancel Resize', () => {
+      this.editor.batch('Cancel Resize', () => {
         for (const [id, { shape }] of this._info.initialGeom) {
           this.editor.updateShape(id, {
             x: shape.x, y: shape.y,
@@ -889,13 +889,13 @@ class DraggingResize extends StateNode {
           });
         }
       }, { history: 'ignore' });
-      this.editor.history.cancelPreview();
+      this.editor.cancelHistoryPreview();
       this.parent!.transition('idle');
     }
   }
 
   override onExit(): void {
-    this.editor.history.cancelPreview();
+    this.editor.cancelHistoryPreview();
   }
 
   private _applyResize(cursor: Vec2, constrainAspect: boolean): void {
@@ -973,17 +973,17 @@ class DraggingRotation extends StateNode {
 
   override onEnter(info: RotationInfo): void {
     this._info = info;
-    this.editor.history.beginPreview();
+    this.editor.beginHistoryPreview();
   }
 
   override onPointerMove(e: PointerMoveEvent): void {
-    this.editor.history.batch('Rotate Preview', () => {
+    this.editor.batch('Rotate Preview', () => {
       this._applyRotation(e.point, (e as any).shiftKey ?? false);
     }, { history: 'ignore' });
   }
 
   override onPointerUp(e: PointerUpEvent): void {
-    this.editor.history.batch('Rotate Shapes Preview', () => {
+    this.editor.batch('Rotate Shapes Preview', () => {
       this._applyRotation(e.point, (e as any).shiftKey ?? false);
     }, { history: 'ignore' });
 
@@ -991,13 +991,13 @@ class DraggingRotation extends StateNode {
     for (const [id, shape] of this._info.initialShapes) {
       before.set(id, shape as unknown as AnyRecord);
     }
-    this.editor.history.recordPreview('Rotate Shapes', before);
+    this.editor.recordHistoryPreview('Rotate Shapes', before);
     this.parent!.transition('idle');
   }
 
   override onKeyDown(e: KeyDownEvent): void {
     if (e.key === 'Escape') {
-      this.editor.history.batch('Cancel Rotate', () => {
+      this.editor.batch('Cancel Rotate', () => {
         for (const [id, r] of this._info.initialRotation) {
           const shape = this._info.initialShapes.get(id);
           if (shape) {
@@ -1009,13 +1009,13 @@ class DraggingRotation extends StateNode {
           }
         }
       }, { history: 'ignore' });
-      this.editor.history.cancelPreview();
+      this.editor.cancelHistoryPreview();
       this.parent!.transition('idle');
     }
   }
 
   override onExit(): void {
-    this.editor.history.cancelPreview();
+    this.editor.cancelHistoryPreview();
   }
 
   private _applyRotation(cursor: Vec2, snap: boolean): void {

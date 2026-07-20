@@ -4,7 +4,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { createEditor } from './editor';
+import { createEditor, getHistoryManagerForTesting, getMutableStoreForTesting } from './editor';
 import { BoxUtil } from './shapes/BoxUtil';
 import { BindingUtil } from './shapes/ShapeUtil';
 import { sid } from './types';
@@ -178,7 +178,7 @@ describe('editor mutation history defaults', () => {
   it('records direct low-level store mutations by default', () => {
     const editor = makeEditor();
 
-    editor.store.put([boxShape('direct-store')]);
+    getMutableStoreForTesting(editor).put([boxShape('direct-store')]);
 
     expect(editor.history.undoStack).toHaveLength(1);
     expect(editor.history.undoStack[0]?.label).toBe('Store Change');
@@ -258,14 +258,14 @@ describe('editor lifecycle atomicity', () => {
       props: {},
       meta: {},
     });
-    editor.history.clear();
+    getHistoryManagerForTesting(editor).clear();
 
     const targetBefore = editor.store.get('target')!;
-    editor.history.beginPreview();
-    editor.history.batch('Move Preview', () => {
+    editor.beginHistoryPreview();
+    editor.batch('Move Preview', () => {
       editor.updateShape(sid('target'), { x: 100 });
     }, { history: 'ignore' });
-    editor.history.recordPreview(
+    editor.recordHistoryPreview(
       'Move Shapes',
       new Map([['target', targetBefore as any]]),
     );

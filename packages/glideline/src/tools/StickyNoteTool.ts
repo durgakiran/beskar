@@ -39,7 +39,7 @@ class Idle extends StateNode {
     const W = 200;
     const H = 200;
 
-    this.editor.history.batch('Create Sticky Note', () => {
+    this.editor.batch('Create Sticky Note', () => {
       this.editor.createShape({
         id:       newId,
         type:     'sticky-note',

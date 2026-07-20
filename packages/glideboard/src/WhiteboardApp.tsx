@@ -125,7 +125,7 @@ export function WhiteboardApp() {
         const ids = editor.getSelectedShapeIds();
         if (ids.length > 0) {
           event.preventDefault();
-          editor.history.batch('Delete Shapes', () => editor.deleteShapes(ids));
+          editor.batch('Delete Shapes', () => editor.deleteShapes(ids));
         }
       }
 
@@ -135,7 +135,7 @@ export function WhiteboardApp() {
           editor.copy(ids);
         } else if (event.key === 'x' && ids.length > 0) {
           event.preventDefault();
-          editor.history.batch('Cut Shapes', () => {
+          editor.batch('Cut Shapes', () => {
             editor.copy(ids);
             editor.deleteShapes(ids);
           });
@@ -158,7 +158,8 @@ export function WhiteboardApp() {
         editor.setSelectedShapeIds([]);
       }
 
-      if (event.key === 'z' && (event.metaKey || event.ctrlKey)) {
+      if (!readOnly && event.key === 'z' && (event.metaKey || event.ctrlKey)) {
+        event.preventDefault();
         if (event.shiftKey) editor.redo();
         else editor.undo();
       }
@@ -188,7 +189,7 @@ export function WhiteboardApp() {
       onContextMenu={onContextMenu}
     >
       <Canvas />
-      {!readOnly ? <CollaborationCursors /> : null}
+      <CollaborationCursors />
       {!readOnly ? <Toolbar /> : null}
       <ZoomWidget />
       {!readOnly ? <StylePanel /> : null}

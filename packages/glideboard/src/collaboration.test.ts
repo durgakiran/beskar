@@ -1,4 +1,5 @@
 import * as Y from 'yjs';
+import { createMutationCapability } from '@durgakiran/glideline';
 import { describe, expect, it } from 'vitest';
 import { bindGlideboardCollaboration } from './collaboration';
 import { createGlideboardEditorInstance } from './editor';
@@ -33,14 +34,16 @@ function createBoxRecord(id: string, x: number, y: number) {
 
 describe('bindGlideboardCollaboration', () => {
   it('synchronizes shape creates and updates between editors', async () => {
-    const editorA = createGlideboardEditorInstance();
-    const editorB = createGlideboardEditorInstance();
+    const capabilityA = createMutationCapability();
+    const capabilityB = createMutationCapability();
+    const editorA = createGlideboardEditorInstance([], undefined, capabilityA);
+    const editorB = createGlideboardEditorInstance([], undefined, capabilityB);
     const docA = new Y.Doc();
     const docB = new Y.Doc();
 
     connectDocs(docA, docB);
-    const cleanupA = bindGlideboardCollaboration(editorA, { doc: docA });
-    const cleanupB = bindGlideboardCollaboration(editorB, { doc: docB });
+    const cleanupA = bindGlideboardCollaboration(editorA, { doc: docA }, capabilityA);
+    const cleanupB = bindGlideboardCollaboration(editorB, { doc: docB }, capabilityB);
 
     editorA.createShape(createBoxRecord('shape:one', 40, 80) as any);
     await Promise.resolve();
@@ -59,11 +62,12 @@ describe('bindGlideboardCollaboration', () => {
   });
 
   it('seeds an empty shared doc from existing local records', () => {
-    const editor = createGlideboardEditorInstance();
+    const capability = createMutationCapability();
+    const editor = createGlideboardEditorInstance([], undefined, capability);
     editor.createShape(createBoxRecord('shape:seed', 12, 24) as any);
 
     const doc = new Y.Doc();
-    const cleanup = bindGlideboardCollaboration(editor, { doc });
+    const cleanup = bindGlideboardCollaboration(editor, { doc }, capability);
 
     const records = doc.getMap('glideboard-records');
     expect(records.size).toBe(1);
@@ -73,16 +77,18 @@ describe('bindGlideboardCollaboration', () => {
   });
 
   it('does not synchronize or serialize ephemeral preview records', async () => {
-    const editorA = createGlideboardEditorInstance();
-    const editorB = createGlideboardEditorInstance();
+    const capabilityA = createMutationCapability();
+    const capabilityB = createMutationCapability();
+    const editorA = createGlideboardEditorInstance([], undefined, capabilityA);
+    const editorB = createGlideboardEditorInstance([], undefined, capabilityB);
     const docA = new Y.Doc();
     const docB = new Y.Doc();
 
     connectDocs(docA, docB);
-    const cleanupA = bindGlideboardCollaboration(editorA, { doc: docA });
-    const cleanupB = bindGlideboardCollaboration(editorB, { doc: docB });
+    const cleanupA = bindGlideboardCollaboration(editorA, { doc: docA }, capabilityA);
+    const cleanupB = bindGlideboardCollaboration(editorB, { doc: docB }, capabilityB);
 
-    editorA.history.batch('Preview', () => {
+    editorA.batch('Preview', () => {
       editorA.createShape(createBoxRecord('shape:preview', 20, 30) as any);
     }, { history: 'ignore', scope: 'ephemeral' });
     await Promise.resolve();
