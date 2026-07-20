@@ -26,7 +26,7 @@ export function WhiteboardApp() {
   const controller = useGlideboardController();
   const editor = controller.editor;
   const rootRef = React.useRef<HTMLDivElement>(null);
-  const shapeCount = useSignalValue(editor.store.getShapeIdsSignal())?.length ?? 0;
+  const shapeCount = useSignalValue(editor.getShapeIdsSignal())?.length ?? 0;
   const camera = useSignalValue(editor.camera.signal);
   const readOnly = useSignalValue(controller.readOnlySignal) ?? false;
   const [contextMenuPosition, setContextMenuPosition] = React.useState<{ x: number; y: number } | null>(null);

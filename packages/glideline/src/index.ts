@@ -32,10 +32,12 @@ export type { DocumentLimits, LoadReport, LoadedDocument } from './schema';
 // Store
 export {
   GlideStore, AsyncTransactionError, TransactionAbortedError, TransactionReentryError,
+  StoreFatalIntegrityError,
 } from './store';
 export type {
   ChangeOrigin, JsonPointer, StoreRecord, RecordDelta, StoreChangeSet, TransactionScope,
   TransactionOptions, StoreTransaction, TransactionResult, StoreChangeListener,
+  StoreCommitPreparation, StoreCommitParticipant,
   ReplaceDocumentOptions, ImportOptions, ImportReport,
   IntegrityIssue, IntegrityReport,
 } from './store';
@@ -49,8 +51,13 @@ export { TextUtil } from './shapes/TextUtil';
 // Phase 3 — State machine + history + tools
 export { StateNode } from './state-node';
 export type { GlideEvent, PointerDownEvent, PointerMoveEvent, PointerUpEvent, KeyDownEvent, DoubleClickEvent } from './state-node';
-export { HistoryManager } from './history';
-export type { HistoryEntry, BatchOptions } from './history';
+export { HistoryManager, HistoryConflictError, commandIdFromLabel } from './history';
+export type {
+  HistoryEntry, HistoryDelta, FieldPrecondition, HistoryConflict, HistoryResult,
+  BatchOptions, InteractionPreviewAdapter,
+} from './history';
+export { InteractionManager, InteractionConflictError } from './interaction';
+export type { InteractionConflict, InteractionCommitOptions } from './interaction';
 export { SelectTool } from './tools/SelectTool';
 export { BoxTool } from './tools/BoxTool';
 
@@ -58,6 +65,7 @@ export { BoxTool } from './tools/BoxTool';
 export { GlideEditor, createEditor } from './editor';
 export type {
   GlidePlugin, CreateEditorOptions, ClipboardSchemaHeader, ClipboardPayload,
+  EditorCommand, ExecuteCommandOptions,
 } from './editor';
 
 // Phase 4 — Bindings & Arrow Routing

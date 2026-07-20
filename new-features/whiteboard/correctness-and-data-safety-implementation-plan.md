@@ -802,6 +802,20 @@ This bridge fixes data leakage but still lets preview state occupy the canonical
 - Concurrent unrelated style changes survive movement and cancellation.
 - A thrown commit leaves the overlay recoverable and canonical state unchanged.
 
+### 11.6 Implementation status — complete
+
+Workstream E is implemented in `packages/glideline` and integrated into `packages/glideboard`:
+
+- `GlideStore` now supports pre-publication commit participants. History derives its frozen entry and next bounded stacks before record publication, then publishes them in the same signal batch. A preparation failure aborts the entire command. A violation of the non-throwing publication contract rolls back participant state when possible and permanently places the store in a typed fatal-integrity state.
+- Record deltas carry monotonic generations. History records only local user/document changes, retains stable command metadata, enforces both a 100-entry limit and a 16 MiB byte limit, and rejects async transactions.
+- Undo and redo apply only the original command's `changedPaths`. They check field values and whole-record generations before writing, preserve unrelated remote fields, and return a typed conflict without moving either stack or changing canonical records when an owned field changed.
+- `editor.executeCommand()` is the durable mutation gateway. Shape, binding, clipboard, duplication, reorder, generic batch, AI/MCP `run`, and nested lifecycle mutations join one root store transaction with a stable `commandId`, label, and declared affected IDs.
+- `InteractionManager` owns a reactive record overlay. Select-tool move, resize, rotate, and arrow-handle previews are redirected through the overlay by the existing preview lifecycle. Shape, ellipse, draw, arrow, geo-shape, and custom SVG creation previews are likewise redirected from their ephemeral batches. They are visible through the editor's composed queries/signals but absent from the canonical store, schema graph, serialization, persistence listeners, collaboration, and history.
+- Interaction commit derives owned paths from pointer-down baselines, rebases them onto the latest committed records, rejects overlapping remote edits with `InteractionConflictError`, and publishes one canonical command/history entry. Cancellation discards overlay state rather than restoring stale snapshots.
+- Glideboard renders and draws selection/binding overlays from composed editor signals. Pointer cancel, lost pointer capture, window blur, unmount, tool changes, read-only changes, session reset/replacement, controller disposal, and deletion of an interaction-owned record cancel the overlay.
+
+Regression coverage lives in `packages/glideline/src/workstream-e.test.ts`, the existing tool/history suites, and the Glideboard controller/lifecycle suites. It covers selective undo, unrelated and overlapping remote edits, local-only history, prepare/publication failures, fatal integrity state, command metadata, preview isolation, one-commit gestures, recoverable interaction conflicts, creation previews, and undo/redo behavior.
+
 ## 12. Workstream F — Mutation Policy and Read-Only Safety
 
 ### 12.1 Decision

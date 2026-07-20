@@ -50,7 +50,7 @@ function getSelectionData(editor: GlideEditor) {
   const boxes: OverlayBounds[] = [];
   const shapes: GlideShape[] = [];
   for (const id of selectedIds) {
-    const shape = editor.store.getSignal(id)?.value as GlideShape | null;
+    const shape = editor.getShapeSignal(id).value as GlideShape | null;
     if (!shape) continue;
     const localBounds = editor.getShapeUtil(shape.type).getGeometry(shape as any).getBounds();
     boxes.push({
@@ -428,11 +428,11 @@ function drawBindingPreview(editor: GlideEditor, ctx: CanvasRenderingContext2D, 
   const preview = editor.bindingPreview.value;
   if (!preview) return;
 
-  const activeSig = editor.store.getSignal(preview.targetId);
-  const activeShape = activeSig?.value as GlideShape | null;
+  const activeSig = editor.getShapeSignal(preview.targetId);
+  const activeShape = activeSig.value as GlideShape | null;
   if (!activeShape) return;
 
-  const sourceSig = preview.sourceCandidate ? editor.store.getSignal(preview.sourceCandidate.targetId) : undefined;
+  const sourceSig = preview.sourceCandidate ? editor.getShapeSignal(preview.sourceCandidate.targetId) : undefined;
   const sourceShape = sourceSig?.value as GlideShape | null;
 
   if (preview.sourceCandidate && sourceShape) {
@@ -531,7 +531,7 @@ export function CanvasOverlays() {
 
     const observedSignals = [
       editor.camera.signal,
-      editor.store.getVersionSignal(),
+      editor.getDocumentVersionSignal(),
       editor.bindingPreview,
       editor.getSelectionSignal(),
       editor.currentToolId,

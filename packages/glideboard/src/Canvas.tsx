@@ -62,7 +62,7 @@ function Grid() {
 const ShapeLayer = memo(({ id, zIndex }: { id: ShapeId; zIndex: number }) => {
   const controller = useGlideboardController();
   const editor = controller.editor;
-  const sig = editor.store.getSignal(id);
+  const sig = editor.getShapeSignal(id);
   const shape = useSignalValue(sig as any) as GlideShape | null;
   const divRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
@@ -268,7 +268,7 @@ const ShapeLayer = memo(({ id, zIndex }: { id: ShapeId; zIndex: number }) => {
 export function Canvas() {
   const controller = useGlideboardController();
   const editor = controller.editor;
-  const shapeIds = useSignalValue(editor.store.getShapeIdsSignal())!;
+  const shapeIds = useSignalValue(editor.getShapeIdsSignal())!;
   const camera = useSignalValue(editor.camera.signal)!;
   const readOnly = useSignalValue(controller.readOnlySignal) ?? false;
   const containerRef = useRef<HTMLDivElement>(null);
@@ -428,13 +428,13 @@ export function Canvas() {
   }, [controller, editor, getPagePoint]);
 
   const onPointerUp = useCallback((event: React.PointerEvent) => {
+    isPointerDownRef.current = false;
     if (containerRef.current?.hasPointerCapture?.(event.pointerId)) {
       containerRef.current.releasePointerCapture(event.pointerId);
     }
     const { screen, page } = getPagePoint(event);
     editor.dispatchEvent({ type: 'pointerUp', point: page, screenPoint: screen, shiftKey: event.shiftKey } as any);
 
-    isPointerDownRef.current = false;
     controller.isCanvasDraggingRef.current = false;
 
     if (isMiddleDraggingRef.current) {
@@ -453,6 +453,29 @@ export function Canvas() {
       controller.setCurrentTool(deferredTool);
     }
   }, [controller, editor, getPagePoint]);
+
+  const cancelPointerInteraction = useCallback((pointerId?: number) => {
+    if (!isPointerDownRef.current && !editor.interactions.active) return;
+    isPointerDownRef.current = false;
+    controller.isCanvasDraggingRef.current = false;
+    if (pointerId !== undefined && containerRef.current?.hasPointerCapture?.(pointerId)) {
+      containerRef.current.releasePointerCapture(pointerId);
+    }
+    editor.dispatchEvent({ type: 'keyDown', key: 'Escape' } as any);
+    if (editor.interactions.active) editor.interactions.cancel();
+    isMiddleDraggingRef.current = false;
+    originalToolBeforeMiddleDragRef.current = null;
+    controller.deferredToolRestoreRef.current = null;
+  }, [controller, editor]);
+
+  useEffect(() => {
+    const handleWindowBlur = () => cancelPointerInteraction();
+    window.addEventListener('blur', handleWindowBlur);
+    return () => {
+      window.removeEventListener('blur', handleWindowBlur);
+      cancelPointerInteraction();
+    };
+  }, [cancelPointerInteraction]);
 
   const onDoubleClick = useCallback((event: React.MouseEvent) => {
     if (readOnly) return;
@@ -506,7 +529,8 @@ export function Canvas() {
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
-      onPointerCancel={onPointerUp}
+      onPointerCancel={event => cancelPointerInteraction(event.pointerId)}
+      onLostPointerCapture={event => cancelPointerInteraction(event.pointerId)}
       onPointerLeave={onPointerLeave}
       onDoubleClick={onDoubleClick}
       onKeyDown={onKeyDown}

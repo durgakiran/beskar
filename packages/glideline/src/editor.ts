@@ -21,8 +21,8 @@ import { bid, isGlideShape, sid } from './types';
 import { GlideStore, type ImportOptions, type ImportReport, type StoreTransaction } from './store';
 import { CURRENT_STORE_VERSION, GlideSchema } from './schema';
 import { GlideCamera } from './camera';
-import { HistoryManager } from './history';
-import type { BatchOptions } from './history';
+import { HistoryManager, commandIdFromLabel } from './history';
+import type { BatchOptions, HistoryResult } from './history';
 import { Rectangle2d } from './geometry';
 import { StateNode } from './state-node';
 import { SelectTool } from './tools/SelectTool';
@@ -36,6 +36,7 @@ import type { GlideEvent } from './state-node';
 import { getMinHeightForShape } from './styles';
 import { createTopIndex } from './arrow-records';
 import { RecordIdService } from './id';
+import { InteractionManager } from './interaction';
 
 // ─────────────────────────────────────────────────────────────
 // GlidePlugin — unit of extension
@@ -99,6 +100,20 @@ export interface ClipboardPayload {
   readonly sourceBounds: Box2d;
 }
 
+export interface EditorCommand<T = void> {
+  /** Stable machine-readable intent name, e.g. `shape.move`. */
+  readonly id: string;
+  readonly label: string;
+  readonly affectedIds?: readonly string[];
+  readonly execute: (tx: StoreTransaction) => T;
+}
+
+export interface ExecuteCommandOptions {
+  readonly history?: 'ignore';
+  readonly scope?: import('./store').TransactionScope;
+  readonly actorId?: string;
+}
+
 function cloneRecord<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
 }
@@ -136,6 +151,7 @@ export class GlideEditor {
   readonly schema:  GlideSchema;
   readonly camera:  GlideCamera;
   readonly history: HistoryManager;
+  readonly interactions: InteractionManager;
   private _clipboard: ClipboardPayload | null = null;
   arrowRouteStyle: ArrowRouteStyle = 'curve';
   arrowheadStart: ArrowheadStyle = 'none';
@@ -168,14 +184,25 @@ export class GlideEditor {
     this.store   = store;
     this.schema  = schema;
     this.camera  = camera;
+    this.interactions = new InteractionManager(store);
     this.history = new HistoryManager(store);
+    const interactionManager = this.interactions;
+    this.history.attachInteractionAdapter({
+      get active() { return interactionManager.active; },
+      get kind() { return interactionManager.kind; },
+      begin: () => interactionManager.begin('document'),
+      runPreview: fn => interactionManager.runPreview(fn),
+      runEphemeral: fn => interactionManager.runEphemeral(fn),
+      commit: (label, commandId) => interactionManager.commit({ label, commandId }),
+      cancel: () => interactionManager.cancel(),
+    });
     this._selection = signal(new Set<ShapeId>());
 
     // Update activeStyles based on the newly selected shape's props
     this._selection.subscribe(set => {
       if (set.size === 1) {
         const shapeId = Array.from(set)[0]!;
-        const shape = this.store.get(shapeId) as GlideShape | undefined;
+        const shape = this.getShape(shapeId);
         if (shape && shape.props) {
           const nextActive = { ...this.activeStyles.peek() };
           let changed = false;
@@ -246,11 +273,19 @@ export class GlideEditor {
   // ── Shape queries ──────────────────────────────────────────
 
   getShape<S extends GlideShape>(id: ShapeId): S | undefined {
-    return this.store.get(id) as S | undefined;
+    return this.interactions.get(id) as S | undefined;
   }
 
   getShapeIdsSignal(): ReadonlySignal<readonly ShapeId[]> {
-    return this.store.getShapeIdsSignal();
+    return this.interactions.getShapeIdsSignal();
+  }
+
+  getShapeSignal(id: ShapeId): ReadonlySignal<import('./store').StoreRecord | null> {
+    return this.interactions.getSignal(id);
+  }
+
+  getDocumentVersionSignal(): ReadonlySignal<number> {
+    return this.interactions.getVersionSignal();
   }
 
   getShapesInViewport(): GlideShape[] {
@@ -259,17 +294,38 @@ export class GlideEditor {
   }
 
   getShapesAtPoint(point: Vec2): GlideShape[] {
-    return toGlideShapes(this.store.getShapesAtPoint(point.x, point.y));
+    const changed = new Set(this.interactions.changedIds);
+    const committed = toGlideShapes(this.store.getShapesAtPoint(point.x, point.y))
+      .filter(shape => !changed.has(shape.id));
+    const transient = this.interactions.changedIds
+      .map(id => toGlideShape(this.interactions.get(id)))
+      .filter((shape): shape is GlideShape => shape !== null)
+      .filter(shape => this.getShapeUtil(shape.type).hitTestPoint(
+        shape,
+        { x: point.x - shape.x, y: point.y - shape.y },
+      ));
+    return [...committed, ...transient];
   }
 
   getShapesInBox(box: Pick<Box2d, 'minX' | 'minY' | 'maxX' | 'maxY'> & Partial<Pick<Box2d, 'x' | 'y' | 'w' | 'h'>>): GlideShape[] {
-    return toGlideShapes(this.store.getShapesInBox(box.minX, box.minY, box.maxX, box.maxY));
+    const changed = new Set(this.interactions.changedIds);
+    const committed = toGlideShapes(this.store.getShapesInBox(box.minX, box.minY, box.maxX, box.maxY))
+      .filter(shape => !changed.has(shape.id));
+    const transient = this.interactions.changedIds
+      .map(id => toGlideShape(this.interactions.get(id)))
+      .filter((shape): shape is GlideShape => shape !== null)
+      .filter(shape => {
+        const bounds = getWorldBounds(this, shape);
+        return bounds.maxX >= box.minX && bounds.minX <= box.maxX
+          && bounds.maxY >= box.minY && bounds.minY <= box.maxY;
+      });
+    return [...committed, ...transient];
   }
 
   // ── Binding queries ────────────────────────────────────────
 
   getBinding<B extends GlideBinding>(id: BindingId): B | undefined {
-    return this.store.get(id) as B | undefined;
+    return this.interactions.get(id) as B | undefined;
   }
 
   getBindingsFromShape(shapeId: ShapeId): GlideBinding[] {
@@ -334,17 +390,22 @@ export class GlideEditor {
       }
       partial['props'] = mergedProps;
     }
-    this.history.batch('Create Shape', () => {
-      this.store.transact({ origin: 'user' }, tx => tx.insert(partial));
-      if (type !== 'arrow') {
-        this._smartRouter.markDirty();
-      }
+    this.executeCommand({
+      id: 'shape.create',
+      label: 'Create Shape',
+      affectedIds: [partial['id'] as string],
+      execute: tx => {
+        tx.insert(partial);
+      },
     });
+    if (type !== 'arrow') {
+      this._smartRouter.markDirty();
+    }
     return partial['id'] as ShapeId;
   }
 
   updateShape<S extends GlideShape>(id: ShapeId, partial: Partial<Omit<S, 'id' | 'type'>>): void {
-    const existing = this.store.get(id);
+    const existing = this.interactions.get(id);
     if (!existing) throw new Error(`GlideEditor: shape "${id}" not found`);
     const newShape = { ...existing, ...partial } as any;
     if (partial.props && existing.props) {
@@ -359,8 +420,11 @@ export class GlideEditor {
       }
     }
 
-    this.history.batch('Update Shape', () => {
-      this.store.transact({ origin: 'user' }, tx => {
+    this.executeCommand({
+      id: 'shape.update',
+      label: 'Update Shape',
+      affectedIds: [id],
+      execute: tx => {
         tx.update(id, () => newShape);
         if ((existing['type'] as string) !== 'arrow') {
           this._smartRouter.markDirty();
@@ -372,7 +436,7 @@ export class GlideEditor {
           const util = this._bindingUtils.get(binding.type);
           util?.onAfterChangeToShape?.(binding);
         }
-      });
+      },
     });
   }
 
@@ -380,7 +444,7 @@ export class GlideEditor {
     const closure = new Set<ShapeId>();
     const visit = (id: ShapeId) => {
       if (closure.has(id)) return;
-      const record = this.store.get(id);
+      const record = this.interactions.get(id);
       if (!record || record['kind'] !== 'shape') return;
       closure.add(id);
       for (const child of this.store.getChildren(id)) {
@@ -390,8 +454,11 @@ export class GlideEditor {
     for (const id of ids) visit(id);
     const deleteIds = Array.from(closure);
     let shouldInvalidateSmartRoutes = false;
-    this.history.batch('Delete Shapes', () => {
-      this.store.transact({ origin: 'user' }, tx => {
+    this.executeCommand({
+      id: 'shape.delete',
+      label: 'Delete Shapes',
+      affectedIds: deleteIds,
+      execute: tx => {
         for (const id of deleteIds) {
           const existing = tx.get(id);
           if (existing && existing['type'] !== 'arrow') {
@@ -417,7 +484,7 @@ export class GlideEditor {
         }
         // 3. Finally remove the shapes themselves
         for (const id of deleteIds) tx.remove(id);
-      });
+      },
     });
     if (shouldInvalidateSmartRoutes) {
       this._smartRouter.markDirty();
@@ -434,38 +501,47 @@ export class GlideEditor {
       id: partial['id'] ?? this.createBindingId(String(partial['type'] ?? 'binding')),
       props: partial['props'] ?? {},
     };
-    this.history.batch('Create Binding', () => {
-      this.store.transact({ origin: 'user' }, tx => {
+    this.executeCommand({
+      id: 'binding.create',
+      label: 'Create Binding',
+      affectedIds: [partial['id'] as string, partial['fromId'] as string],
+      execute: tx => {
         tx.insert(partial);
         // Binding records are authoritative. If the source shape exposes an
         // arrow-style terminal cache, derive its boundShapeId in the same
         // staged command so no contradictory graph is ever published.
         this._stageBindingTerminal(tx, partial, partial['toId']);
-      });
+      },
     });
     return partial['id'] as BindingId;
   }
 
   updateBinding(id: BindingId, partialProps: AnyRecord): void {
-    const existing = this.store.get(id);
+    const existing = this.interactions.get(id);
     if (!existing) return; // binding may have been deleted; silent no-op
-    this.history.batch('Update Binding', () => {
-      this.store.transact({ origin: 'user' }, tx => {
+    this.executeCommand({
+      id: 'binding.update',
+      label: 'Update Binding',
+      affectedIds: [id],
+      execute: tx => {
         tx.update(id, record => ({
           ...record,
           props: { ...(record['props'] as object), ...partialProps },
         }));
-      });
+      },
     });
   }
 
   deleteBinding(id: BindingId): void {
-    this.history.batch('Delete Binding', () => {
-      this.store.transact({ origin: 'user' }, tx => {
+    this.executeCommand({
+      id: 'binding.delete',
+      label: 'Delete Binding',
+      affectedIds: [id],
+      execute: tx => {
         const binding = tx.get(id);
         if (binding) this._stageBindingTerminal(tx, binding as unknown as AnyRecord, null);
         tx.remove(id);
-      });
+      },
     });
   }
 
@@ -523,7 +599,7 @@ export class GlideEditor {
   }
 
   selectAll(): void {
-    this._selection.value = new Set(this.store.getShapeIds());
+    this._selection.value = new Set(this.interactions.getShapeIdsSignal().peek());
   }
 
   // ── Clipboard ──────────────────────────────────────────────
@@ -543,16 +619,16 @@ export class GlideEditor {
   }
 
   private _createClipboardPayload(ids: readonly ShapeId[]): ClipboardPayload | null {
-    const selected = new Set(ids.filter(id => this.store.get(id)?.['kind'] === 'shape'));
+    const selected = new Set(ids.filter(id => this.interactions.get(id)?.['kind'] === 'shape'));
     const rootIds = Array.from(selected).filter(id => {
-      let cursor = this.store.get(id);
+      let cursor = this.interactions.get(id);
       const seen = new Set<string>();
       while (typeof cursor?.['parentId'] === 'string') {
         const parentId = cursor['parentId'] as string;
         if (selected.has(parentId as ShapeId)) return false;
         if (seen.has(parentId)) break;
         seen.add(parentId);
-        cursor = this.store.get(parentId);
+        cursor = this.interactions.get(parentId);
       }
       return true;
     });
@@ -561,7 +637,7 @@ export class GlideEditor {
     const shapeIds = new Set<ShapeId>();
     const visit = (id: ShapeId) => {
       if (shapeIds.has(id)) return;
-      const record = this.store.get(id);
+      const record = this.interactions.get(id);
       if (!record || record['kind'] !== 'shape') return;
       shapeIds.add(id);
       for (const child of this.store.getChildren(id)) {
@@ -635,12 +711,17 @@ export class GlideEditor {
     }
 
     let report!: ImportReport;
-    this.history.batch(label, () => {
-      report = this.store.importRecords(records, {
-        label,
-        relationshipPolicy: 'detach-external',
-        preserveExternalKinds: ['page'],
-      });
+    this.executeCommand({
+      id: label === 'Paste' ? 'clipboard.paste' : 'shape.duplicate',
+      label,
+      affectedIds: payload.records.map(record => String(record['id'])),
+      execute: () => {
+        report = this.store.importRecords(records, {
+          label,
+          relationshipPolicy: 'detach-external',
+          preserveExternalKinds: ['page'],
+        });
+      },
     });
     return payload.rootIds.map(id => report.idMap[id] as ShapeId);
   }
@@ -652,10 +733,10 @@ export class GlideEditor {
    * fractional `index` field for z-ordered rendering.
    */
   getShapes(sorted = false): GlideShape[] {
-    const ids = this.store.getShapeIds();
+    const ids = this.interactions.getShapeIdsSignal().peek();
     const shapes: GlideShape[] = [];
     for (const id of ids) {
-      const s = this.store.get(id);
+      const s = this.interactions.get(id);
       const shape = toGlideShape(s);
       if (shape) shapes.push(shape);
     }
@@ -724,13 +805,18 @@ export class GlideEditor {
     }
 
     // Assign new sequential indices
-    this.history.batch('Reorder Shapes', () => {
-      reordered.forEach((shape, i) => {
-        const newIndex = `a${String(i + 1).padStart(4, '0')}`;
-        if (shape.index !== newIndex) {
-          this.store.put([{ ...shape, index: newIndex }]);
-        }
-      });
+    this.executeCommand({
+      id: 'shape.reorder',
+      label: 'Reorder Shapes',
+      affectedIds: reordered.map(shape => shape.id),
+      execute: tx => {
+        reordered.forEach((shape, i) => {
+          const newIndex = `a${String(i + 1).padStart(4, '0')}`;
+          if (shape.index !== newIndex) {
+            tx.update(shape.id, record => ({ ...record, index: newIndex }));
+          }
+        });
+      },
     });
   }
 
@@ -761,7 +847,7 @@ export class GlideEditor {
   stopEditing(selectAgain = false): void {
     const id = this.editingShapeId.peek();
     this.editingShapeId.value = null;
-    if (selectAgain && id && this.store.get(id)) {
+    if (selectAgain && id && this.getShape(id)) {
       this.setSelectedShapeIds([id]);
     }
   }
@@ -777,6 +863,25 @@ export class GlideEditor {
   // ── Batch / history ────────────────────────────────────────
 
   /**
+   * The single durable command gateway. Validation, canonical publication,
+   * derived indices, and history preparation either all succeed or all abort.
+   */
+  executeCommand<T>(command: EditorCommand<T>, options: ExecuteCommandOptions = {}): T {
+    if (this.interactions.previewing) {
+      return this.interactions.transact(command.execute);
+    }
+    return this.store.transact({
+      origin: 'user',
+      label: command.label,
+      commandId: command.id,
+      affectedIds: command.affectedIds,
+      ...(options.actorId === undefined ? {} : { actorId: options.actorId }),
+      history: options.history === 'ignore' ? 'ignore' : 'record',
+      scope: options.scope ?? 'document',
+    }, command.execute).value;
+  }
+
+  /**
    * Execute a mutation block at the editor API level.
    *
    * - `batch(fn)` records one generically-labelled undo entry.
@@ -790,7 +895,7 @@ export class GlideEditor {
     opts?: BatchOptions,
   ): void {
     if (typeof labelOrFn === 'function') {
-      this.history.batch('Batch', labelOrFn);
+      this.executeCommand({ id: 'editor.batch', label: 'Batch', execute: () => labelOrFn() });
       return;
     }
 
@@ -798,7 +903,10 @@ export class GlideEditor {
       throw new Error('GlideEditor.batch(label, fn): missing callback');
     }
 
-    this.history.batch(labelOrFn, fn, opts);
+    this.executeCommand(
+      { id: opts?.commandId ?? commandIdFromLabel(labelOrFn), label: labelOrFn, execute: () => fn() },
+      opts,
+    );
   }
 
   /**
@@ -806,15 +914,18 @@ export class GlideEditor {
    * Used by AI/MCP and remote sync to bypass the local undo stack.
    */
   run(fn: () => void, opts?: BatchOptions): void {
-    this.history.batch('Run', fn, opts);
+    this.executeCommand(
+      { id: opts?.commandId ?? 'editor.run', label: 'Run', execute: () => fn() },
+      opts,
+    );
   }
 
-  undo(): void {
-    this.history.undo();
+  undo(): HistoryResult {
+    return this.history.undo();
   }
 
-  redo(): void {
-    this.history.redo();
+  redo(): HistoryResult {
+    return this.history.redo();
   }
 
   // ── Tool management (Phase 3) ──────────────────────────────
@@ -840,6 +951,9 @@ export class GlideEditor {
     if (!tool) throw new Error(`GlideEditor: unknown tool "${id}"`);
     const prev = this._currentToolSignal.peek();
     if (prev) prev.current?.onExit();
+    // Tool changes are a hard interaction boundary. Tool-specific onExit gets
+    // the first chance to clean up; this catches every remaining overlay.
+    if (this.interactions.active) this.interactions.cancel();
     this.clearBindingPreview();
     this._currentToolSignal.value = tool;
     this.currentToolId.value = id;
@@ -927,6 +1041,7 @@ export class GlideEditor {
   }
 
   resetSessionState(): void {
+    this.interactions.cancel();
     this.history.clear();
     this._clipboard = null;
     this.setSelectedShapeIds([]);

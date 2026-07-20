@@ -445,6 +445,7 @@ export class GlideboardController {
     this.cancelPendingDocumentChange();
 
     const finishDisposal = () => {
+      this.editor.interactions.cancel();
       this.documentChangeHandler = null;
       this.documentDirty = false;
       this.documentSaveRetryAttempt = 0;

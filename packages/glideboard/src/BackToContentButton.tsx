@@ -7,7 +7,7 @@ export function BackToContentButton() {
   const controller = useGlideboardController();
   const editor = controller.editor;
   const camera = useSignalValue(editor.camera.signal);
-  const shapeIds = useSignalValue(editor.store.getShapeIdsSignal());
+  const shapeIds = useSignalValue(editor.getShapeIdsSignal());
 
   const isOffscreen = useMemo(() => {
     if (!shapeIds || shapeIds.length === 0) return false;

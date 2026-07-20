@@ -6,12 +6,12 @@ import { useGlideboardController } from '../GlideboardContext';
 export function useSelectedShapes(): GlideShape[] {
   const { editor } = useGlideboardController();
   const selectedIds = useSignalValue(editor.getSelectionSignal());
-  const storeVersion = useSignalValue(editor.store.getVersionSignal());
+  const storeVersion = useSignalValue(editor.getDocumentVersionSignal());
 
   return useMemo(() => {
     void storeVersion;
     return (selectedIds ?? [])
-      .map(id => editor.store.getSignal(id)?.value as GlideShape | null | undefined)
+      .map(id => editor.getShapeSignal(id).value as GlideShape | null | undefined)
       .filter(Boolean) as GlideShape[];
   }, [editor, selectedIds, storeVersion]);
 }

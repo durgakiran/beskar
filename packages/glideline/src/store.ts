@@ -54,6 +54,10 @@ export interface RecordDelta {
   readonly id: string;
   readonly before: StoreRecord | null;
   readonly after: StoreRecord | null;
+  /** Monotonic identity generation before this change (0 means never published). */
+  readonly beforeGeneration: number;
+  /** Monotonic identity generation after this change, including deletions. */
+  readonly afterGeneration: number;
   readonly changedPaths: readonly JsonPointer[];
 }
 
@@ -62,6 +66,8 @@ export interface StoreChangeSet {
   readonly revision: number;
   readonly origin: ChangeOrigin;
   readonly label?: string;
+  readonly commandId?: string;
+  readonly affectedIds?: readonly string[];
   readonly actorId?: string;
   readonly scope: TransactionScope;
   readonly history: 'record' | 'ignore';
@@ -73,6 +79,8 @@ export interface StoreChangeSet {
 export interface TransactionOptions {
   origin: ChangeOrigin;
   label?: string;
+  commandId?: string;
+  affectedIds?: readonly string[];
   actorId?: string;
   history?: 'record' | 'ignore';
   scope?: TransactionScope;
@@ -123,6 +131,21 @@ export interface IntegrityReport {
 
 export type StoreChangeListener = (changes: StoreChangeSet) => void;
 
+/**
+ * Prepared before canonical records are published. `publish` must be a small,
+ * non-throwing assignment so participant state and record signals become
+ * observable at the same commit boundary.
+ */
+export interface StoreCommitPreparation {
+  publish(): void;
+  /** Restore participant state if publication fails before canonical writes begin. */
+  rollback?(): void;
+}
+
+export type StoreCommitParticipant = (
+  changes: StoreChangeSet,
+) => StoreCommitPreparation | null;
+
 export class AsyncTransactionError extends Error {
   constructor() {
     super('GlideStore transaction callbacks must be synchronous');
@@ -142,6 +165,14 @@ export class TransactionReentryError extends Error {
   constructor() {
     super('GlideStore mutation is not allowed from validation or derived-data hooks');
     this.name = 'TransactionReentryError';
+  }
+}
+
+export class StoreFatalIntegrityError extends Error {
+  constructor(cause: unknown) {
+    super('GlideStore entered a fatal integrity state during commit publication');
+    this.name = 'StoreFatalIntegrityError';
+    Object.defineProperty(this, 'cause', { value: cause });
   }
 }
 
@@ -329,8 +360,11 @@ export class GlideStore {
   private _versionReadonly = computed(() => this._versionSignal.value);
   private _activeTransaction: TransactionState | null = null;
   private _listeners = new Set<StoreChangeListener>();
+  private _commitParticipants = new Set<StoreCommitParticipant>();
+  private _recordGenerations = new Map<string, number>();
   private _changeSequence = 0;
   private _preparingCommit = false;
+  private _fatalIntegrityError: StoreFatalIntegrityError | null = null;
 
   public getGeometry?: (shape: AnyRecord) => Geometry2d | undefined;
   public hitTestPoint?: (shape: AnyRecord, x: number, y: number) => boolean;
@@ -376,27 +410,47 @@ export class GlideStore {
     return () => this._listeners.delete(listener);
   }
 
-  getBindingsFromShape(shapeId: ShapeId): GlideBinding[] {
-    if (this._activeTransaction) {
-      return this._candidateValues()
-        .filter(record => this.schema.isBindingRecord(record as AnyRecord)
-          && this.schema.hasRuntimeCapability(record as AnyRecord)
-          && record['fromId'] === shapeId) as unknown as GlideBinding[];
+  participateInCommits(participant: StoreCommitParticipant): () => void {
+    if (this._activeTransaction || this._preparingCommit) {
+      throw new TransactionReentryError();
     }
-    const ids = this._bindingsByFrom.get(shapeId);
-    if (!ids) return [];
-    return Array.from(ids, id => this.get(id)).filter(Boolean) as unknown as GlideBinding[];
+    this._commitParticipants.add(participant);
+    return () => this._commitParticipants.delete(participant);
+  }
+
+  /** Generation remains available after deletion so an ID reuse is detectable. */
+  getRecordGeneration(id: string): number {
+    return this._recordGenerations.get(id) ?? 0;
+  }
+
+  getBindingsFromShape(shapeId: ShapeId): GlideBinding[] {
+    return this._getBindingsForEndpoint(this._bindingsByFrom, 'fromId', shapeId);
   }
 
   getBindingsToShape(shapeId: ShapeId): GlideBinding[] {
+    return this._getBindingsForEndpoint(this._bindingsByTo, 'toId', shapeId);
+  }
+
+  private _getBindingsForEndpoint(
+    index: Map<ShapeId, Set<BindingId>>,
+    field: 'fromId' | 'toId',
+    shapeId: ShapeId,
+  ): GlideBinding[] {
+    const ids = new Set(index.get(shapeId));
     if (this._activeTransaction) {
-      return this._candidateValues()
-        .filter(record => this.schema.isBindingRecord(record as AnyRecord)
-          && this.schema.hasRuntimeCapability(record as AnyRecord)
-          && record['toId'] === shapeId) as unknown as GlideBinding[];
+      // The committed endpoint index is already complete. Reconcile only the
+      // handful of records staged by this command instead of scanning the
+      // entire document on every drag tick.
+      for (const [id, after] of this._activeTransaction.overlay) {
+        const before = this._signals.get(id)?.peek() ?? null;
+        if (before && this.schema.isBindingRecord(before as AnyRecord)
+          && this.schema.hasRuntimeCapability(before as AnyRecord)
+          && before[field] === shapeId) ids.delete(id as BindingId);
+        if (after && this.schema.isBindingRecord(after as AnyRecord)
+          && this.schema.hasRuntimeCapability(after as AnyRecord)
+          && after[field] === shapeId) ids.add(id as BindingId);
+      }
     }
-    const ids = this._bindingsByTo.get(shapeId);
-    if (!ids) return [];
     return Array.from(ids, id => this.get(id)).filter(Boolean) as unknown as GlideBinding[];
   }
 
@@ -449,6 +503,7 @@ export class GlideStore {
   }
 
   transact<T>(options: TransactionOptions, fn: (tx: StoreTransaction) => T): TransactionResult<T> {
+    if (this._fatalIntegrityError) throw this._fatalIntegrityError;
     if (this._preparingCommit) throw new TransactionReentryError();
     if (this._activeTransaction) return this._runNested(fn);
 
@@ -544,7 +599,15 @@ export class GlideStore {
       const changedPaths = before === null || after === null
         ? Object.freeze([''])
         : Object.freeze(collectChangedPaths(before, after));
-      deltas.push(Object.freeze({ id, before, after, changedPaths }));
+      const beforeGeneration = this.getRecordGeneration(id);
+      deltas.push(Object.freeze({
+        id,
+        before,
+        after,
+        beforeGeneration,
+        afterGeneration: beforeGeneration + 1,
+        changedPaths,
+      }));
     }
     if (deltas.length === 0) return null;
 
@@ -588,6 +651,10 @@ export class GlideStore {
       scope: state.options.scope ?? 'document',
       history: state.options.history ?? (state.options.origin === 'user' ? 'record' : 'ignore'),
       ...(state.options.label === undefined ? {} : { label: state.options.label }),
+      ...(state.options.commandId === undefined ? {} : { commandId: state.options.commandId }),
+      ...(state.options.affectedIds === undefined
+        ? {}
+        : { affectedIds: Object.freeze([...state.options.affectedIds]) }),
       ...(state.options.actorId === undefined ? {} : { actorId: state.options.actorId }),
       deltas: Object.freeze(deltas),
       changedIds,
@@ -595,22 +662,49 @@ export class GlideStore {
     } satisfies StoreChangeSet;
     const changes = deepFreeze(rawChanges) as StoreChangeSet;
 
-    preactBatch(() => {
-      this._applyDerivedState(derived);
-      for (const delta of deltas) {
-        if (changes.scope === 'ephemeral') {
-          if (delta.after === null) this._ephemeralIds.delete(delta.id);
-          else if (delta.before === null || this._ephemeralIds.has(delta.id)) {
-            this._ephemeralIds.add(delta.id);
-          }
-        } else {
-          this._ephemeralIds.delete(delta.id);
+    let preparations: readonly StoreCommitPreparation[];
+    this._preparingCommit = true;
+    try {
+      preparations = Object.freeze(Array.from(this._commitParticipants, participant => participant(changes))
+        .filter((value): value is StoreCommitPreparation => value !== null));
+    } finally {
+      this._preparingCommit = false;
+    }
+
+    let canonicalPublicationStarted = false;
+    const publishedPreparations: StoreCommitPreparation[] = [];
+    try {
+      preactBatch(() => {
+        for (const preparation of preparations) {
+          preparation.publish();
+          publishedPreparations.push(preparation);
         }
-        const writable = this._ensureSignal(delta.id);
-        writable.value = delta.after;
+        canonicalPublicationStarted = true;
+        this._applyDerivedState(derived);
+        for (const delta of deltas) {
+          this._recordGenerations.set(delta.id, delta.afterGeneration);
+          if (changes.scope === 'ephemeral') {
+            if (delta.after === null) this._ephemeralIds.delete(delta.id);
+            else if (delta.before === null || this._ephemeralIds.has(delta.id)) {
+              this._ephemeralIds.add(delta.id);
+            }
+          } else {
+            this._ephemeralIds.delete(delta.id);
+          }
+          const writable = this._ensureSignal(delta.id);
+          writable.value = delta.after;
+        }
+        this._versionSignal.value = revision;
+      });
+    } catch (error) {
+      if (!canonicalPublicationStarted) {
+        for (const preparation of publishedPreparations.reverse()) {
+          try { preparation.rollback?.(); } catch { /* fatal state below is authoritative */ }
+        }
       }
-      this._versionSignal.value = revision;
-    });
+      this._fatalIntegrityError = new StoreFatalIntegrityError(error);
+      throw this._fatalIntegrityError;
+    }
 
     // Observers run outside the transaction and may start subsequent commands.
     this._activeTransaction = null;
