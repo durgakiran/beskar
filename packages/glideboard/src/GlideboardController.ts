@@ -22,6 +22,7 @@ import type {
   InitialDocumentDisposition,
   RecoverableTextDraft,
 } from './types';
+import type { CollaborationCheckpointSource, MutationFence, ProjectionTarget } from './durability/types';
 
 export type ConnectorPreset = 'line' | 'arrow' | 'double-arrow';
 export type ArrowheadStyle = 'none' | 'arrow';
@@ -78,10 +79,14 @@ function getPresetArrowheads(
   }
 }
 
-function createMutationPolicy(readonlySignal: ReadonlySignal<boolean>): MutationPolicy {
+function createMutationPolicy(
+  readonlySignal: ReadonlySignal<boolean>,
+  mutationFenceDepth: ReadonlySignal<number>,
+  fencedSettlement: ReadonlySignal<boolean>,
+): MutationPolicy {
   return {
     authorize(request) {
-      if (!readonlySignal.peek()) {
+      if (!readonlySignal.peek() && (mutationFenceDepth.peek() === 0 || fencedSettlement.peek())) {
         return 'allow';
       }
 
@@ -107,6 +112,7 @@ export class GlideboardController {
   readonly activePointerIdRef = { current: null as number | null };
   readonly deferredToolRestoreRef = { current: null as string | null };
   readonly recoverableTextDraftSignal = signal<RecoverableTextDraft | null>(null);
+  readonly mutationFenceDepthSignal = signal(0);
   readonly arrowRouteStyleSignal;
   readonly arrowPresetSignal;
   readonly arrowheadStartSignal;
@@ -116,8 +122,10 @@ export class GlideboardController {
   private readonly domIdPrefix: string;
   private readonly presenceOwner = {};
   private readonly remoteMutationCapability = createMutationCapability();
+  private readonly fencedSettlementSignal = signal(false);
   private canvasElement: HTMLElement | null = null;
   private collaborationCleanup: (() => void) | null = null;
+  private collaborationCheckpoints: CollaborationCheckpointSource | null = null;
   private presenceBinding: PresenceBinding | null = null;
   private documentChangeDispose: (() => void) | null = null;
   private documentChangeHandler: DocumentChangeHandler | null = null;
@@ -135,7 +143,11 @@ export class GlideboardController {
   constructor(options: GlideboardControllerOptions) {
     this.sessionKey = options.sessionKey;
     this.domIdPrefix = `glideboard-${++nextControllerId}`;
-    const mutationPolicy = createMutationPolicy(this.readOnlySignal);
+    const mutationPolicy = createMutationPolicy(
+      this.readOnlySignal,
+      this.mutationFenceDepthSignal,
+      this.fencedSettlementSignal,
+    );
     this.editor = createGlideboardEditorInstance(
       [...(options.customShapes ?? [])],
       mutationPolicy,
@@ -306,7 +318,8 @@ export class GlideboardController {
       config,
       this.remoteMutationCapability,
     );
-    const cleanupPresence = config.provider || config.user
+    this.collaborationCheckpoints = cleanupBinding.checkpoints;
+    const cleanupPresence = config.provider?.awareness || config.user
       ? this.attachPresence(config.provider, config.user)
       : null;
     let active = true;
@@ -314,6 +327,9 @@ export class GlideboardController {
       if (!active) return;
       active = false;
       cleanupBinding();
+      if (this.collaborationCheckpoints === cleanupBinding.checkpoints) {
+        this.collaborationCheckpoints = null;
+      }
       cleanupPresence?.();
       if (this.collaborationCleanup === cleanup) {
         this.collaborationCleanup = null;
@@ -328,6 +344,77 @@ export class GlideboardController {
     const cleanup = this.collaborationCleanup;
     this.collaborationCleanup = null;
     cleanup?.();
+  }
+
+  getCollaborationCheckpoints(): CollaborationCheckpointSource {
+    const checkpoints = this.collaborationCheckpoints;
+    if (!checkpoints) {
+      throw new Error('Glideboard collaboration projection is not attached.');
+    }
+    return checkpoints;
+  }
+
+  captureProjectionTarget(): Promise<ProjectionTarget> {
+    return this.getCollaborationCheckpoints().captureTarget();
+  }
+
+  acquireMutationFence(reason: 'close' | 'publish'): MutationFence {
+    this.mutationFenceDepthSignal.value += 1;
+    let active = true;
+    return Object.freeze({
+      reason,
+      release: () => {
+        if (!active) return;
+        active = false;
+        this.mutationFenceDepthSignal.value = Math.max(0, this.mutationFenceDepthSignal.peek() - 1);
+      },
+    });
+  }
+
+  async settleActiveEdit(policy: 'commit' | 'cancel'): Promise<void> {
+    this.editor.interactions.cancel();
+    this.editor.clearBindingPreview();
+    const editingShapeId = this.editor.editingShapeId.peek();
+    const editable = this.canvasElement?.querySelector<HTMLElement>('[contenteditable="true"]');
+    if (editingShapeId && editable && policy === 'cancel') {
+      this.recoverableTextDraftSignal.value = Object.freeze({
+        shapeId: editingShapeId,
+        text: editable.textContent ?? '',
+      });
+    }
+
+    if (policy === 'commit' && editable) {
+      this.fencedSettlementSignal.value = true;
+      try {
+        editable.blur();
+      } finally {
+        this.fencedSettlementSignal.value = false;
+      }
+    } else {
+      this.editor.stopEditing();
+    }
+    await Promise.resolve();
+  }
+
+  async exportSvgAtTarget(options: import('./types').GlideboardExportSvgOptions = {}): Promise<string> {
+    const expected = options.target;
+    if (expected) this.assertProjectionTarget(await this.captureProjectionTarget(), expected);
+    const shapeIds = options.shapeIds
+      ? [...options.shapeIds]
+      : this.editor.getShapes().map(shape => shape.id);
+    const svg = await this.editor.exportToSvg(shapeIds);
+    if (expected) this.assertProjectionTarget(await this.captureProjectionTarget(), expected);
+    return svg;
+  }
+
+  private assertProjectionTarget(actual: ProjectionTarget, expected: ProjectionTarget): void {
+    if (
+      actual.storeRevision !== expected.storeRevision ||
+      actual.yjs.transactionSequence !== expected.yjs.transactionSequence ||
+      actual.yjs.stateDigest !== expected.yjs.stateDigest
+    ) {
+      throw new Error('Glideboard projection changed while capturing the requested target.');
+    }
   }
 
   attachPresence(

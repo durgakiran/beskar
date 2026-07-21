@@ -1,4 +1,5 @@
 import type { GlideDocument, GlidePlugin, LoadReport, ShapeId } from '@durgakiran/glideline';
+import type { CollaborationCheckpointSource, MutationFence, ProjectionTarget } from './durability/types';
 
 export interface GlideboardUser {
   id: string;
@@ -17,6 +18,10 @@ export interface GlideboardAwareness {
 export interface GlideboardCollaborationProvider {
   /** Awareness providers are session-owned and must not be shared by mounted boards. */
   awareness?: GlideboardAwareness;
+  /** Provider readiness gates seeding of a genuinely empty shared document. */
+  synced?: boolean;
+  on?(event: 'sync' | 'synced', handler: (synced: boolean) => void): void;
+  off?(event: 'sync' | 'synced', handler: (synced: boolean) => void): void;
 }
 
 export interface GlideboardMapKeyChange {
@@ -37,6 +42,8 @@ export interface GlideboardSharedMap<T> {
   delete(key: string): void;
   observe(listener: (event: GlideboardMapEvent, transaction: any) => void): void;
   unobserve(listener: (event: GlideboardMapEvent, transaction: any) => void): void;
+  observeDeep?(listener: (events: readonly unknown[], transaction: any) => void): void;
+  unobserveDeep?(listener: (events: readonly unknown[], transaction: any) => void): void;
 }
 
 export interface GlideboardCollaborationDoc {
@@ -48,6 +55,10 @@ export interface GlideboardCollaborationConfig {
   doc: GlideboardCollaborationDoc;
   provider?: GlideboardCollaborationProvider | null;
   user?: GlideboardUser | null;
+  /** Stable logical board identity used to reject a Y.Doc from another board. */
+  boardIdentity?: string;
+  /** Server revision from which an otherwise-empty shared document was bootstrapped. */
+  bootstrapRevision?: string;
 }
 
 export type InitialDocumentDisposition =
@@ -82,6 +93,8 @@ export interface GlideboardDocumentChangeContext {
 
 export interface GlideboardExportSvgOptions {
   shapeIds?: readonly ShapeId[];
+  /** Reject export if the board no longer represents this projection target. */
+  target?: ProjectionTarget;
 }
 
 export interface RecoverableTextDraft {
@@ -91,10 +104,15 @@ export interface RecoverableTextDraft {
 
 /** Imperative operations scoped to this rendered Glideboard instance. */
 export interface GlideboardHandle {
+  readonly checkpoints: CollaborationCheckpointSource;
   serialize(): GlideDocument;
   replaceDocument(document: GlideDocument): LoadReport;
   exportSvg(options?: GlideboardExportSvgOptions): Promise<string>;
   getRecoverableTextDraft(): RecoverableTextDraft | null;
   setCurrentTool(toolId: string): void;
+  settleActiveEdit(policy: 'commit' | 'cancel'): Promise<void>;
+  acquireMutationFence(reason: 'close' | 'publish'): MutationFence;
+  captureProjectionTarget(): Promise<ProjectionTarget>;
+  /** @deprecated Observational callback flush only; not a durability acknowledgement. */
   flush(): Promise<void>;
 }

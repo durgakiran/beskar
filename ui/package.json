@@ -24,7 +24,7 @@
     "license": "ISC",
     "dependencies": {
         "@durgakiran/editor": "file:../packages/editor",
-        "@durgakiran/glideboard": "0.0.5",
+        "@durgakiran/glideboard": "file:../packages/glideboard",
         "@floating-ui/react": "^0.26.16",
         "@hocuspocus/provider": "^3.0.8-rc.0",
         "@hocuspocus/transformer": "^3.0.8-rc.0",

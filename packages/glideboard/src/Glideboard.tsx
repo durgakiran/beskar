@@ -24,16 +24,17 @@ function MountedGlideboardSession({
   debugApiKey,
 }: MountedGlideboardSessionProps) {
   React.useImperativeHandle(forwardedRef, () => ({
+    get checkpoints() {
+      return controller.getCollaborationCheckpoints();
+    },
     serialize: () => controller.editor.serialize(),
     replaceDocument: (document) => controller.replaceDocument(document),
-    exportSvg: async (options) => {
-      const shapeIds = options?.shapeIds
-        ? [...options.shapeIds]
-        : controller.editor.getShapes().map(shape => shape.id);
-      return controller.editor.exportToSvg(shapeIds);
-    },
+    exportSvg: (options) => controller.exportSvgAtTarget(options),
     getRecoverableTextDraft: () => controller.recoverableTextDraftSignal.peek(),
     setCurrentTool: (toolId) => controller.setCurrentTool(toolId),
+    settleActiveEdit: (policy) => controller.settleActiveEdit(policy),
+    acquireMutationFence: (reason) => controller.acquireMutationFence(reason),
+    captureProjectionTarget: () => controller.captureProjectionTarget(),
     flush: () => controller.flush(),
   }), [controller]);
 
@@ -56,8 +57,15 @@ function MountedGlideboardSession({
     if (!collaborationDoc) return;
     return controller.attachCollaboration({
       doc: collaborationDoc,
+      provider: collaborationProvider
+        ? {
+          synced: collaborationProvider.synced,
+          on: collaborationProvider.on?.bind(collaborationProvider),
+          off: collaborationProvider.off?.bind(collaborationProvider),
+        }
+        : null,
     });
-  }, [collaborationDoc, controller]);
+  }, [collaborationDoc, collaborationProvider, controller]);
 
   React.useEffect(() => controller.attachPresence(
     collaborationProvider,

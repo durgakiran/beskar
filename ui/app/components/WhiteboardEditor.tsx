@@ -1,6 +1,6 @@
 
 import { useGet, Response } from "@http/hooks";
-import { useCallback, useEffect, useMemo, useState, useRef, type RefObject } from "react";
+import { useEffect, useMemo, useState, useRef, type MutableRefObject } from "react";
 import * as Y from "yjs";
 import { WebrtcProvider } from "y-webrtc";
 import { Spinner, Flex, Button, IconButton, Avatar, HoverCard, Box, Text } from "@radix-ui/themes";
@@ -9,10 +9,16 @@ import { useNavigate } from "react-router-dom";
 import { HiHome } from "react-icons/hi";
 import { FiStar } from "react-icons/fi";
 import { getSignalingUrl } from "app/core/signaling";
-import { Glideboard, type GlideboardHandle } from "@durgakiran/glideboard";
+import { Glideboard, safeAwarenessEntries, type GlideboardHandle } from "@durgakiran/glideboard";
+import { IndexedDbYjsRecoveryAdapter } from "app/core/whiteboard/durability/IndexedDbYjsRecoveryAdapter";
+import { UnavailableYjsRecoveryAdapter } from "app/core/whiteboard/durability/UnavailableYjsRecoveryAdapter";
+import { WhiteboardCheckpointHttpAdapter } from "app/core/whiteboard/durability/WhiteboardCheckpointHttpAdapter";
+import { YjsDurabilityCoordinator } from "app/core/whiteboard/durability/YjsDurabilityCoordinator";
+import type { DurabilityStatus, YjsRecoveryAdapter } from "app/core/whiteboard/durability/types";
 
 const USER_URI = (import.meta.env.VITE_USER_SERVER_URL || "").replace(/\/+$/, "");
 const INITIAL_DATABASE_LOAD = Symbol('whiteboard-initial-database-load');
+const CONFLICT_MERGE_ORIGIN = Symbol('whiteboard-conflict-merge');
 
 interface WhiteboardData {
     id: number;
@@ -21,6 +27,9 @@ interface WhiteboardData {
     title: string;
     pageId: number;
     spaceId: string;
+    durableRevision?: string;
+    stateDigest?: string;
+    serverUpdateSequence?: number;
 }
 
 interface BoardLoadState {
@@ -32,11 +41,20 @@ interface BoardLoadState {
 
 interface DocumentSession {
     doc: Y.Doc;
-    save: {
-        dirty: boolean;
-        revision: number;
-        inFlight: Promise<void> | null;
-    };
+    durability: YjsDurabilityCoordinator | null;
+}
+
+function getOrCreateWhiteboardClientId(): string {
+    const key = "beskar:whiteboard-client-id";
+    try {
+        const existing = localStorage.getItem(key);
+        if (existing) return existing;
+        const created = crypto.randomUUID();
+        localStorage.setItem(key, created);
+        return created;
+    } catch {
+        return crypto.randomUUID();
+    }
 }
 
 export default function WhiteboardEditor({
@@ -80,6 +98,10 @@ export default function WhiteboardEditor({
     } | null>(null);
     const yDocLifetimeGenerationsRef = useRef(new WeakMap<Y.Doc, number>());
     const boardRef = useRef<GlideboardHandle | null>(null);
+    const activeDraftIdRef = useRef<string | null>(null);
+    const draftTransitionInFlightRef = useRef<string | null>(null);
+    const [durabilityStatus, setDurabilityStatus] = useState<DurabilityStatus | null>(null);
+    const whiteboardClientId = useMemo(getOrCreateWhiteboardClientId, []);
     const getProfileRef = useRef(getProfile);
     getProfileRef.current = getProfile;
     // React preserves state while route props change. Until the new session's
@@ -107,7 +129,7 @@ export default function WhiteboardEditor({
 
     const documentSession = useMemo<DocumentSession>(() => ({
         doc: new Y.Doc(),
-        save: { dirty: false, revision: 0, inFlight: null },
+        durability: null,
     }), [documentSessionKey]);
     const yDoc = documentSession.doc;
 
@@ -124,13 +146,7 @@ export default function WhiteboardEditor({
             //    keep the document alive until that save has finished.
             queueMicrotask(async () => {
                 if (generations.get(yDoc) !== generation) return;
-                while (documentSession.save.inFlight) {
-                    try {
-                        await documentSession.save.inFlight;
-                    } catch {
-                        break;
-                    }
-                }
+                await documentSession.durability?.dispose("cancel");
                 if (generations.get(yDoc) !== generation) return;
                 generations.delete(yDoc);
                 yDoc.destroy();
@@ -139,7 +155,7 @@ export default function WhiteboardEditor({
     }, [documentSession, yDoc]);
 
     useEffect(() => {
-        if (readOnly) return; // no collaboration in view mode
+        if (readOnly || !isDbLoaded) return; // hydrate persistence before joining collaboration
         const _provider = new WebrtcProvider(pageId + "-space-" + spaceId, yDoc, {
             signaling: [getSignalingUrl()],
             filterBcConns: false
@@ -150,11 +166,12 @@ export default function WhiteboardEditor({
             _provider.destroy();
             setProviderSession(current => current?.provider === _provider ? null : current);
         };
-    }, [documentSessionKey, yDoc, spaceId, pageId, readOnly]);
+    }, [documentSessionKey, isDbLoaded, yDoc, spaceId, pageId, readOnly]);
 
     useEffect(() => {
         const abortController = new AbortController();
         let active = true;
+        let ownedDurability: YjsDurabilityCoordinator | null = null;
         setBoardLoad({
             sessionKey: boardRequest.sessionKey,
             status: 'loading',
@@ -185,12 +202,61 @@ export default function WhiteboardEditor({
                     throw new Error('Whiteboard response does not match the requested session');
                 }
 
+                let recovery: YjsRecoveryAdapter;
+                if (!readOnly) {
+                    const recoverySessionKey = `${USER_URI}:${spaceId}:${pageId}:${data.docId}`;
+                    try {
+                        recovery = new IndexedDbYjsRecoveryAdapter(recoverySessionKey, String(data.docId));
+                        await recovery.hydrate(yDoc);
+                    } catch (recoveryError) {
+                        console.error("Local whiteboard recovery is unavailable", recoveryError);
+                        recovery = new UnavailableYjsRecoveryAdapter(
+                            recoveryError instanceof Error ? recoveryError : new Error(String(recoveryError)),
+                        );
+                    }
+                } else {
+                    recovery = new UnavailableYjsRecoveryAdapter();
+                }
+
                 if (data.data) {
                     Y.applyUpdate(
                         yDoc,
                         base64ToUint8Array(data.data),
                         INITIAL_DATABASE_LOAD,
                     );
+                }
+
+                if (!readOnly) {
+                    const durabilitySessionKey = `${USER_URI}:${spaceId}:${pageId}:${data.docId}`;
+                    ownedDurability = new YjsDurabilityCoordinator({
+                        sessionKey: durabilitySessionKey,
+                        draftId: String(data.docId),
+                        clientId: whiteboardClientId,
+                        durableRevision: data.durableRevision ?? "0",
+                        acknowledgedStateDigest: data.stateDigest,
+                        acknowledgedServerUpdateSequence: data.serverUpdateSequence,
+                        persistence: new WhiteboardCheckpointHttpAdapter({
+                            baseUrl: USER_URI,
+                            spaceId,
+                            pageId,
+                        }),
+                        recovery,
+                        resolveConflict: async (remoteState, localState) => {
+                            const mergedDoc = new Y.Doc();
+                            try {
+                                Y.applyUpdate(mergedDoc, remoteState);
+                                Y.applyUpdate(mergedDoc, localState);
+                                Y.applyUpdate(yDoc, Y.encodeStateAsUpdate(mergedDoc), CONFLICT_MERGE_ORIGIN);
+                            } finally {
+                                mergedDoc.destroy();
+                            }
+                            const board = boardRef.current;
+                            if (!board) throw new Error("Whiteboard is unavailable while resolving a save conflict.");
+                            return board.captureProjectionTarget();
+                        },
+                    });
+                    documentSession.durability = ownedDurability;
+                    activeDraftIdRef.current = String(data.docId);
                 }
 
                 if (!active) return;
@@ -216,79 +282,85 @@ export default function WhiteboardEditor({
         return () => {
             active = false;
             abortController.abort();
+            if (documentSession.durability === ownedDurability) {
+                documentSession.durability = null;
+            }
+            void ownedDurability?.dispose("cancel");
         };
-    }, [boardRequest, documentSession, pageId, spaceId, yDoc]);
-
-    const persistYDoc = useCallback(async (keepalive = false): Promise<void> => {
-        const save = documentSession.save;
-        if (readOnly || !isDbLoaded) return;
-
-        while (save.dirty) {
-            if (save.inFlight) {
-                await save.inFlight;
-                continue;
-            }
-
-            const revision = save.revision;
-            const data = uint8ArrayToBase64(Y.encodeStateAsUpdate(yDoc));
-            const savePromise = (async () => {
-                const response = await fetch(
-                    `${USER_URI}/editor/space/${spaceId}/whiteboard/${pageId}`,
-                    {
-                        method: 'PUT',
-                        credentials: 'include',
-                        keepalive,
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ data }),
-                    },
-                );
-                if (!response.ok) {
-                    throw new Error(`Failed to save whiteboard (${response.status})`);
-                }
-            })();
-            save.inFlight = savePromise;
-
-            try {
-                await savePromise;
-                if (save.revision === revision) save.dirty = false;
-            } finally {
-                if (save.inFlight === savePromise) save.inFlight = null;
-            }
-        }
-    }, [documentSession, isDbLoaded, pageId, readOnly, spaceId, yDoc]);
+    }, [boardRequest, documentSession, pageId, readOnly, spaceId, whiteboardClientId, yDoc]);
 
     useEffect(() => {
-        if (readOnly) return;
+        const durability = documentSession.durability;
+        const board = boardRef.current;
+        if (!durability || !board || !isDbLoaded || readOnly) return;
+        return durability.attach(board.checkpoints);
+    }, [documentSession, isDbLoaded, provider, readOnly]);
 
-        const handleUpdate = (_update: Uint8Array, origin: unknown) => {
-            if (origin === INITIAL_DATABASE_LOAD) return;
-            documentSession.save.dirty = true;
-            documentSession.save.revision += 1;
+    useEffect(() => {
+        const durability = documentSession.durability;
+        if (!durability) {
+            setDurabilityStatus(null);
+            return;
+        }
+        const update = () => setDurabilityStatus(durability.getSnapshot());
+        update();
+        return durability.subscribeStatus(update);
+    }, [documentSession, isDbLoaded]);
+
+    useEffect(() => {
+        const durability = documentSession.durability;
+        const board = boardRef.current;
+        if (!durability || !board || !provider || !isDbLoaded || readOnly) return;
+        const metadata = yDoc.getMap("glideboard-meta");
+        const verifyActiveDraft = async (expectedDraftId?: string) => {
+            if (draftTransitionInFlightRef.current) return;
+            const operationId = expectedDraftId || "server-poll";
+            draftTransitionInFlightRef.current = operationId;
+            try {
+                const response = await fetch(`${USER_URI}/editor/space/${spaceId}/whiteboard/${pageId}/edit`, {
+                    credentials: "include",
+                    headers: { "Content-Type": "application/json" },
+                });
+                if (!response.ok) throw new Error(`Failed to verify active draft (${response.status})`);
+                const body = await response.json() as Response<WhiteboardData>;
+                const nextDraftId = String(body.data.docId);
+                if (expectedDraftId && nextDraftId !== expectedDraftId) return;
+                if (nextDraftId === activeDraftIdRef.current) return;
+                if (body.data.data) {
+                    Y.applyUpdate(yDoc, base64ToUint8Array(body.data.data), CONFLICT_MERGE_ORIGIN);
+                }
+                const mergedTarget = await board.captureProjectionTarget();
+                await durability.adoptAuthoritativeDraft({
+                    sessionKey: `${USER_URI}:${spaceId}:${pageId}:${nextDraftId}`,
+                    draftId: nextDraftId,
+                    durableRevision: body.data.durableRevision ?? "0",
+                }, mergedTarget);
+                activeDraftIdRef.current = nextDraftId;
+            } catch (error) {
+                console.error("Failed to switch to the authoritative whiteboard draft", error);
+            } finally {
+                if (draftTransitionInFlightRef.current === operationId) {
+                    draftTransitionInFlightRef.current = null;
+                }
+            }
         };
-        yDoc.on('update', handleUpdate);
-
-        const syncInterval = setInterval(() => {
-            void persistYDoc().catch(error => {
-                console.error('Error saving whiteboard', error);
-            });
-        }, 5000);
-
-        const handlePageHide = () => {
-            void persistYDoc(true).catch(() => {
-                // The browser may terminate the page before reporting failure.
-            });
+        const handleDraftTransition = () => {
+            const transition = metadata.get("draftTransition") as {
+                draftId?: string;
+                publishedFrom?: string;
+            } | undefined;
+            const nextDraftId = transition?.draftId ? String(transition.draftId) : "";
+            if (!nextDraftId || nextDraftId === activeDraftIdRef.current) return;
+            void verifyActiveDraft(nextDraftId); // Yjs is only a hint; the server verifies the identity.
         };
-        window.addEventListener('pagehide', handlePageHide);
-
+        metadata.observe(handleDraftTransition);
+        handleDraftTransition();
+        const poll = setInterval(() => { void verifyActiveDraft(); }, 5_000);
         return () => {
-            yDoc.off('update', handleUpdate);
-            clearInterval(syncInterval);
-            window.removeEventListener('pagehide', handlePageHide);
-            void persistYDoc(true).catch(error => {
-                console.error('Error flushing whiteboard during cleanup', error);
-            });
+            clearInterval(poll);
+            metadata.unobserve(handleDraftTransition);
         };
-    }, [documentSession, persistYDoc, readOnly, yDoc]);
+    }, [documentSession, isDbLoaded, pageId, provider, readOnly, spaceId, yDoc]);
 
     const [isPublishing, setIsPublishing] = useState(false);
     const [isClosing, setIsClosing] = useState(false);
@@ -303,10 +375,8 @@ export default function WhiteboardEditor({
         }
 
         const syncCollaborators = () => {
-            const states = Array.from(provider.awareness.getStates().values());
-            const nextCollaborators = states
-                .map((state) => state?.user as { id?: string; name?: string; email?: string; color?: string } | undefined)
-                .filter((candidate): candidate is { id: string; name: string; email?: string; color?: string } => Boolean(candidate?.id && candidate?.name));
+            const nextCollaborators = safeAwarenessEntries(provider.awareness.getStates())
+                .map(({ user }) => user);
 
             const deduped = Array.from(
                 new Map(nextCollaborators.map((candidate) => [candidate.id, candidate])).values(),
@@ -338,31 +408,43 @@ export default function WhiteboardEditor({
 
     const handleClose = async () => {
         setIsClosing(true);
+        let fence: ReturnType<GlideboardHandle["acquireMutationFence"]> | null = null;
         try {
-            await boardRef.current?.flush();
-            await persistYDoc();
+            const board = boardRef.current;
+            const durability = documentSession.durability;
+            if (!board || !durability) throw new Error("Whiteboard durability is not ready");
+            fence = board.acquireMutationFence("close");
+            await board.settleActiveEdit("commit");
+            const target = await board.captureProjectionTarget();
+            await durability.flush(target);
             setIsClosing(false);
             navigate(`/space/${spaceId}/view/${pageId}`);
         } catch (error) {
             console.error('Failed to save before closing whiteboard', error);
             alert('Could not save the latest whiteboard changes. Please try again.');
             setIsClosing(false);
+        } finally {
+            fence?.release();
         }
     };
 
     const handlePublish = async () => {
         setIsPublishing(true);
+        let fence: ReturnType<GlideboardHandle["acquireMutationFence"]> | null = null;
         try {
             // 1. SVG snapshot
             const board = boardRef.current;
-            if (!board) throw new Error('Whiteboard is not ready');
-            await board.flush();
-            await persistYDoc();
+            const durability = documentSession.durability;
+            if (!board || !durability) throw new Error('Whiteboard durability is not ready');
+            fence = board.acquireMutationFence("publish");
+            await board.settleActiveEdit("commit");
+            const target = await board.captureProjectionTarget();
+            const checkpoint = await durability.flush(target);
             const hasShapes = board.serialize().records.some((record) => 'x' in record && 'y' in record);
             
             let previewAssetName = '';
             if (hasShapes) {
-                const svgString = await board.exportSvg();
+                const svgString = await board.exportSvg({ target });
                 const svgBlob = new Blob([svgString], { type: 'image/svg+xml' });
                 
                 const formData = new FormData();
@@ -381,24 +463,58 @@ export default function WhiteboardEditor({
             }
 
             // 2. Yjs state
-            const encoded = uint8ArrayToBase64(Y.encodeStateAsUpdate(yDoc));
+            const encoded = uint8ArrayToBase64(durability.getAcknowledgedState(checkpoint));
 
             // 3. Publish
-            const publishRes = await fetch(
-                `/api/v1/editor/space/${spaceId}/whiteboard/${pageId}/publish`,
-                {
-                    method: 'PUT', // Route in editorController.go is PUT
+            const publishUrl = `${USER_URI}/editor/space/${spaceId}/whiteboard/${pageId}/publish`;
+            const publishRequest: RequestInit = {
+                    method: 'PUT',
+                    credentials: 'include',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ data: encoded, previewAssetName }),
-                }
-            );
+                    body: JSON.stringify({
+                        data: encoded,
+                        previewAssetName,
+                        draftId: checkpoint.draftId,
+                        expectedDraftRevision: checkpoint.durableRevision,
+                        checkpoint: checkpoint.yjs,
+                        clientId: whiteboardClientId,
+                        requestId: crypto.randomUUID(),
+                    }),
+                };
+            let publishRes: Awaited<ReturnType<typeof fetch>>;
+            try {
+                publishRes = await fetch(publishUrl, publishRequest);
+            } catch {
+                // Retry ambiguous transport failure with the same idempotency key.
+                publishRes = await fetch(publishUrl, publishRequest);
+            }
 
-            if (!publishRes.ok) throw new Error('Publish failed');
+            if (publishRes.status === 409) {
+                throw new Error('Publish stopped because this draft changed on the server. Reload before trying again.');
+            }
+            if (!publishRes.ok) throw new Error(`Publish failed (${publishRes.status})`);
+            const publishBody = await publishRes.json() as Response<{
+                nextDraftId: number;
+                nextRevision: string;
+            }>;
+            const nextDraftId = String(publishBody.data.nextDraftId);
+            await durability.advanceDraft({
+                sessionKey: `${USER_URI}:${spaceId}:${pageId}:${nextDraftId}`,
+                draftId: nextDraftId,
+                durableRevision: publishBody.data.nextRevision,
+            }, checkpoint);
+            activeDraftIdRef.current = nextDraftId;
+            yDoc.getMap("glideboard-meta").set("draftTransition", {
+                draftId: nextDraftId,
+                publishedFrom: checkpoint.draftId,
+                nonce: crypto.randomUUID(),
+            });
             
         } catch (e: any) {
             console.error(e);
             alert(e.message ?? 'Publish failed');
         } finally {
+            fence?.release();
             setIsPublishing(false);
         }
     };
@@ -535,6 +651,16 @@ export default function WhiteboardEditor({
                                     ? `${activeCollaborators.length} editing`
                                     : "Solo editing"}
                             </Text>
+                            {durabilityStatus ? (
+                                <Text size="1" className="text-[#898492]">
+                                    {durabilityStatus.phase === "clean" ? "Saved" :
+                                        durabilityStatus.phase === "saving" ? "Saving…" :
+                                            durabilityStatus.phase === "offline" ? "Saved locally" :
+                                                durabilityStatus.phase === "conflict" ? "Save conflict" :
+                                                    durabilityStatus.phase === "quarantined" ? "Editing paused" :
+                                                        durabilityStatus.phase === "error" ? "Save error" : "Unsaved"}
+                                </Text>
+                            ) : null}
                         </Flex>
 
                         <Flex align="center" gap="2">
@@ -557,7 +683,7 @@ export default function WhiteboardEditor({
 
                 {/* Canvas */}
                 <div style={{ flex: 1, position: 'relative', minWidth: 0 }}>
-                    <WhiteboardCanvas boardRef={boardRef} sessionKey={documentSessionKey} yDoc={yDoc} provider={provider} fetchErr={fetchErr} readOnly={readOnly} collaborationUser={collaborationUser} />
+                    <WhiteboardCanvas boardRef={boardRef} sessionKey={documentSessionKey} yDoc={yDoc} provider={provider} fetchErr={fetchErr} readOnly={readOnly} collaborationUser={collaborationUser} bootstrapRevision={boardData?.durableRevision ?? "0"} />
                 </div>
             </div>
         );
@@ -566,7 +692,7 @@ export default function WhiteboardEditor({
     // View mode: render canvas directly, no sub-header
     return (
         <div style={{ width: '100%', height: fillParent ? '100%' : 'calc(100vh - 120px)' }}>
-            <WhiteboardCanvas boardRef={boardRef} sessionKey={documentSessionKey} yDoc={yDoc} provider={provider} fetchErr={fetchErr} readOnly={readOnly} collaborationUser={collaborationUser} />
+            <WhiteboardCanvas boardRef={boardRef} sessionKey={documentSessionKey} yDoc={yDoc} provider={provider} fetchErr={fetchErr} readOnly={readOnly} collaborationUser={collaborationUser} bootstrapRevision={boardData?.durableRevision ?? "0"} />
         </div>
     );
 }
@@ -579,14 +705,16 @@ function WhiteboardCanvas({
     fetchErr,
     readOnly,
     collaborationUser,
+    bootstrapRevision,
 }: {
-    boardRef: RefObject<GlideboardHandle | null>;
+    boardRef: MutableRefObject<GlideboardHandle | null>;
     sessionKey: string;
     yDoc: Y.Doc;
     provider: WebrtcProvider | null;
     fetchErr: any;
     readOnly: boolean;
     collaborationUser: { id: string; name: string; color: string } | null;
+    bootstrapRevision: string;
 }) {
     if (fetchErr) {
         return <Flex>Error loading whiteboard.</Flex>;
@@ -596,12 +724,14 @@ function WhiteboardCanvas({
         doc: yDoc,
         provider: provider as any,
         user: collaborationUser,
-    }), [yDoc, provider, collaborationUser]);
+        boardIdentity: sessionKey,
+        bootstrapRevision,
+    }), [yDoc, provider, collaborationUser, sessionKey, bootstrapRevision]);
 
     return (
         <div style={{ width: "100%", height: "100%", position: "relative" }}>
             <Glideboard
-                ref={boardRef}
+                ref={boardRef as any}
                 sessionKey={sessionKey}
                 collaboration={collaborationProps}
                 readOnly={readOnly}

@@ -573,8 +573,8 @@ describe('GlideboardController', () => {
 
       expect(controllerA.awarenessSignal.peek()).toBe(awarenessA);
       expect(controllerB.awarenessSignal.peek()).toBe(awarenessB);
-      expect(docA.getMap('glideboard-records').size).toBe(1);
-      expect(docB.getMap('glideboard-records').size).toBe(1);
+      expect(docA.getMap('glideboard-records-v2').size).toBe(1);
+      expect(docB.getMap('glideboard-records-v2').size).toBe(1);
 
       controllerA.dispose();
 
@@ -584,8 +584,8 @@ describe('GlideboardController', () => {
       expect(awarenessB.setLocalStateField).toHaveBeenCalledTimes(1);
 
       controllerB.editor.createShape(createBoxRecord('shape:b2', 50, 60, 'a0002') as any);
-      expect(docA.getMap('glideboard-records').size).toBe(1);
-      expect(docB.getMap('glideboard-records').size).toBe(2);
+      expect(docA.getMap('glideboard-records-v2').size).toBe(1);
+      expect(docB.getMap('glideboard-records-v2').size).toBe(2);
     } finally {
       controllerA.dispose();
       controllerB.dispose();
@@ -823,6 +823,50 @@ describe('GlideboardController', () => {
       void viewerController.dispose();
       editorDoc.destroy();
       viewerDoc.destroy();
+    }
+  });
+
+  it('blocks local durable commands behind a close fence until release', () => {
+    const controller = new GlideboardController({ sessionKey: 'close-fence' });
+    try {
+      const fence = controller.acquireMutationFence('close');
+      expect(controller.mutationFenceDepthSignal.peek()).toBe(1);
+      expect(() => controller.editor.createShape(
+        createBoxRecord('shape:blocked', 10, 20) as any,
+      )).toThrow(MutationPermissionError);
+      expect(controller.editor.serialize().records).toHaveLength(0);
+
+      fence.release();
+      fence.release();
+      expect(controller.mutationFenceDepthSignal.peek()).toBe(0);
+      controller.editor.createShape(createBoxRecord('shape:allowed', 10, 20) as any);
+      expect(controller.editor.getShape('shape:allowed' as any)).toBeDefined();
+    } finally {
+      void controller.dispose();
+    }
+  });
+
+  it('retains a recoverable text draft when an active edit is cancelled for close', async () => {
+    const controller = new GlideboardController({ sessionKey: 'cancel-edit-for-close' });
+    try {
+      const id = controller.editor.createShape(createBoxRecord('shape:text-draft', 10, 20) as any);
+      controller.editor.startEditing(id);
+      const canvas = document.createElement('div');
+      const editable = document.createElement('div');
+      editable.setAttribute('contenteditable', 'true');
+      editable.textContent = 'Unsaved local draft';
+      canvas.appendChild(editable);
+      controller.setCanvasElement(canvas);
+
+      await controller.settleActiveEdit('cancel');
+
+      expect(controller.editor.editingShapeId.peek()).toBeNull();
+      expect(controller.recoverableTextDraftSignal.peek()).toEqual({
+        shapeId: id,
+        text: 'Unsaved local draft',
+      });
+    } finally {
+      void controller.dispose();
     }
   });
 

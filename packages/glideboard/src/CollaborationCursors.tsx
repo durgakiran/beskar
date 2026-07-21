@@ -3,6 +3,7 @@ import { useGlideboardController } from './GlideboardContext';
 import { useSignalValue } from './useSignalValue';
 import type { Vec2 } from '@durgakiran/glideline';
 import type { GlideboardUser } from './types';
+import { safeAwarenessEntries } from './collaboration/awareness';
 
 interface CursorState {
   user: GlideboardUser;
@@ -23,13 +24,10 @@ export function CollaborationCursors() {
     }
 
     const handleAwarenessChange = () => {
-      const states = awareness.getStates();
       const nextCursors = new Map<number, CursorState>();
-      states.forEach((state: any, clientID: number) => {
-        if (clientID !== awareness.clientID && state.user && state.cursor) {
-          nextCursors.set(clientID, { user: state.user, cursor: state.cursor });
-        }
-      });
+      for (const { clientId, user, cursor } of safeAwarenessEntries(awareness.getStates())) {
+        if (clientId !== awareness.clientID && cursor) nextCursors.set(clientId, { user, cursor });
+      }
       setCursors(nextCursors);
     };
 

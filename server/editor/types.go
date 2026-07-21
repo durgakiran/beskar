@@ -71,23 +71,23 @@ type Editor interface {
 }
 
 type Document struct {
-	Title             string    `json:"title"`
-	OwnerId           uuid.UUID `json:"ownerId"`
-	ParentId          int64     `json:"parentId"`
-	Id                int64     `json:"id"`
-	DocId             int64     `json:"docId"`
-	SpaceId           uuid.UUID `json:"spaceId"`
-	DraftGeneration   int64     `json:"draftGeneration,omitempty"`
+	Title           string    `json:"title"`
+	OwnerId         uuid.UUID `json:"ownerId"`
+	ParentId        int64     `json:"parentId"`
+	Id              int64     `json:"id"`
+	DocId           int64     `json:"docId"`
+	SpaceId         uuid.UUID `json:"spaceId"`
+	DraftGeneration int64     `json:"draftGeneration,omitempty"`
 }
 
 // EditDocumentMeta is a lightweight payload for GET …/edit/meta and page events (draftGeneration idempotency).
 type EditDocumentMeta struct {
-	DocID             int64     `json:"docId"`
-	DraftGeneration   int64     `json:"draftGeneration"`
-	UpdatedAt         time.Time `json:"updatedAt"`
-	Title             string    `json:"title"`
-	ParentID          int64     `json:"parentId"`
-	Draft             bool      `json:"draft"`
+	DocID           int64     `json:"docId"`
+	DraftGeneration int64     `json:"draftGeneration"`
+	UpdatedAt       time.Time `json:"updatedAt"`
+	Title           string    `json:"title"`
+	ParentID        int64     `json:"parentId"`
+	Draft           bool      `json:"draft"`
 }
 
 type InputDocument struct {
@@ -172,31 +172,78 @@ type Sequence interface {
 }
 
 type WhiteboardInput struct {
-	Id       int64     `json:"id"`
-	Title    string    `json:"title"`
-	SpaceId  uuid.UUID `json:"spaceId"`
-	ParentId int64     `json:"parentId"`
-	OwnerId  uuid.UUID `json:"ownerId"`
-	Data     []byte    `json:"data"` // base64-decoded Yjs state
-	PreviewAssetName string `json:"previewAssetName,omitempty"`
+	Id               int64     `json:"id"`
+	Title            string    `json:"title"`
+	SpaceId          uuid.UUID `json:"spaceId"`
+	ParentId         int64     `json:"parentId"`
+	OwnerId          uuid.UUID `json:"ownerId"`
+	Data             []byte    `json:"data"` // base64-decoded Yjs state
+	PreviewAssetName string    `json:"previewAssetName,omitempty"`
 }
 
 type WhiteboardData struct {
-	Id               int64     `json:"id" db:"id"`
-	DocId            int64     `json:"docId" db:"doc_id"`
-	Data             []byte    `json:"data" db:"data"`
-	Title            string    `json:"title" db:"title"`
-	PageId           int64     `json:"pageId" db:"id"`
-	SpaceId          uuid.UUID `json:"spaceId" db:"spaceId"`
-	PreviewAssetName string    `json:"previewAssetName"`
+	Id                   int64     `json:"id" db:"id"`
+	DocId                int64     `json:"docId" db:"doc_id"`
+	Data                 []byte    `json:"data" db:"data"`
+	Title                string    `json:"title" db:"title"`
+	PageId               int64     `json:"pageId" db:"id"`
+	SpaceId              uuid.UUID `json:"spaceId" db:"spaceId"`
+	PreviewAssetName     string    `json:"previewAssetName"`
+	DurableRevision      string    `json:"durableRevision"`
+	StateDigest          string    `json:"stateDigest"`
+	ServerUpdateSequence int64     `json:"serverUpdateSequence"`
+}
+
+type WhiteboardCheckpointInput struct {
+	DraftId             int64     `json:"draftId"`
+	Data                []byte    `json:"data"`
+	TransactionSequence int64     `json:"transactionSequence"`
+	StateDigest         string    `json:"stateDigest"`
+	ExpectedRevision    string    `json:"expectedRevision"`
+	ClientId            string    `json:"clientId"`
+	RequestId           string    `json:"requestId"`
+	OwnerId             uuid.UUID `json:"-"`
+	PageId              int64     `json:"-"`
+	SpaceId             uuid.UUID `json:"-"`
+}
+
+type WhiteboardAcknowledgedCheckpoint struct {
+	TransactionSequence  int64  `json:"transactionSequence"`
+	ServerUpdateSequence int64  `json:"serverUpdateSequence"`
+	StateDigest          string `json:"stateDigest"`
+}
+
+type WhiteboardCheckpointResult struct {
+	DraftId                int64                            `json:"draftId"`
+	Revision               string                           `json:"revision"`
+	AcknowledgedCheckpoint WhiteboardAcknowledgedCheckpoint `json:"acknowledgedCheckpoint"`
+}
+
+type WhiteboardCheckpointConflict struct {
+	DraftId              int64  `json:"draftId"`
+	Revision             string `json:"revision"`
+	StateDigest          string `json:"stateDigest"`
+	ServerUpdateSequence int64  `json:"serverUpdateSequence"`
+	Data                 []byte `json:"data,omitempty"`
 }
 
 type WhiteboardPublishInput struct {
-	Id               int64     `json:"id"`
-	SpaceId          uuid.UUID `json:"spaceId"`
-	OwnerId          uuid.UUID `json:"ownerId"`
-	Data             []byte    `json:"data"`
-	PreviewAssetName string    `json:"previewAssetName"`
+	Id                    int64                            `json:"id"`
+	SpaceId               uuid.UUID                        `json:"spaceId"`
+	OwnerId               uuid.UUID                        `json:"ownerId"`
+	DraftId               int64                            `json:"draftId"`
+	Data                  []byte                           `json:"data"`
+	PreviewAssetName      string                           `json:"previewAssetName"`
+	ExpectedDraftRevision string                           `json:"expectedDraftRevision"`
+	Checkpoint            WhiteboardAcknowledgedCheckpoint `json:"checkpoint"`
+	ClientId              string                           `json:"clientId"`
+	RequestId             string                           `json:"requestId"`
+}
+
+type WhiteboardPublishResult struct {
+	PublishedDocId int64  `json:"publishedDocId"`
+	NextDraftId    int64  `json:"nextDraftId"`
+	NextRevision   string `json:"nextRevision"`
 }
 
 type WhiteboardVersion struct {

@@ -22,7 +22,7 @@ This document turns the correctness findings in the broader whiteboard roadmap i
 This plan distinguishes three concepts that the current implementation sometimes conflates:
 
 1. **Visible state:** what the user sees during a gesture or text edit.
-2. **Canonical editing state:** the committed in-memory store used by rendering, commands, history, and standalone serialization; in collaborative mode it is a validated projection of Yjs at a tracked transaction checkpoint.
+2. **Canonical editing state:** the committed in-memory store used by rendering, commands, history, and serialization; for every editable Beskar whiteboard it is a validated projection of Yjs at a tracked transaction checkpoint.
 3. **Locally recoverable state:** a canonical revision whose IndexedDB/Yjs journal transaction has completed.
 4. **Server-durable state:** a canonical revision or Yjs update/checkpoint digest that the server persistence authority has acknowledged.
 
@@ -49,7 +49,7 @@ The current system has several P0 correctness risks:
 
 The central design decision is:
 
-> Every durable mutation must pass through one instance-owned commit coordinator that validates a complete candidate state and prepares every required participant. It publishes one runtime-immutable store change set with its undo state; in collaborative mode that publication is a tracked projection of the corresponding Yjs transaction. Persistence advances only through an exact mode-specific durability checkpoint.
+> Every durable mutation must pass through one instance-owned commit coordinator that validates a complete candidate state and prepares every required participant. It publishes one runtime-immutable store change set with its undo state; for every editable Beskar whiteboard that publication is a tracked projection of the corresponding Yjs transaction. Persistence advances only through an exact Glideline-revision/Yjs durability checkpoint.
 
 Transient interaction and text drafts stay outside that durable path until commit.
 
@@ -64,7 +64,7 @@ Transient interaction and text drafts stay outside that durable path until commi
 | Term                  | Definition                                                                                                                                                |
 | --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Record                | A persisted shape, binding, page, asset, or opaque future record.                                                                                         |
-| Canonical store       | The committed in-memory editing database. In collaborative mode it is a validated projection of Yjs at a tracked transaction checkpoint.                  |
+| Canonical store       | The committed in-memory editing database. For every editable Beskar whiteboard it is a validated projection of Yjs at a tracked transaction checkpoint.   |
 | Transient overlay     | Gesture, eraser, binding, or edit preview state that affects display but is not serializable or durable.                                                  |
 | Transaction           | A staged candidate-state computation that publishes all changes or none.                                                                                  |
 | Change set            | The immutable description of one successful non-empty canonical commit.                                                                                   |
@@ -73,7 +73,7 @@ Transient interaction and text drafts stay outside that durable path until commi
 | Merge/import          | Intentionally adding or remapping incoming records while retaining existing records.                                                                      |
 | Persistence authority | The one component responsible for durable storage for a board mode.                                                                                       |
 | Revision              | A monotonic canonical commit number in memory, or an opaque durable version token from the server.                                                        |
-| Durability checkpoint | The exact store revision and, in collaborative mode, Yjs transaction sequence plus canonical-state/update digest acknowledged by a persistence authority. |
+| Durability checkpoint | The exact store revision and Yjs transaction sequence plus canonical-state/update digest acknowledged by local recovery and server persistence.           |
 | Read-only             | A mutation policy that rejects local durable changes at the command boundary; it is not merely hidden UI.                                                 |
 
 ## 4. Required Invariants
@@ -150,7 +150,7 @@ Validation, migration, collaboration, save, conflict, offline, and recovery fail
 
 ### INV-18. Collaboration projection coherence
 
-In collaborative mode, every editable Glideline store revision maps to a known Yjs transaction checkpoint. The checkpoint includes a sequence and canonical-state/update digest; a state vector may be retained only to calculate diffs because deletion-only changes need not advance it. Local commands prepare and validate their store projection before changing Yjs, then publish the prepared projection as a required part of that Yjs transaction. Missed events, adapter failure, or invalid shared state freezes local editing and triggers deterministic reprojection or quarantine; the two models cannot drift silently.
+For every editable Beskar whiteboard, each Glideline store revision maps to a known Yjs transaction checkpoint. The checkpoint includes a sequence and canonical-state/update digest; a state vector may be retained only to calculate diffs because deletion-only changes need not advance it. Local commands prepare and validate their store projection before changing Yjs, then publish the prepared projection as a required part of that Yjs transaction. Missed events, adapter failure, or invalid shared state freezes local editing and triggers deterministic reprojection or quarantine; the two models cannot drift silently.
 
 ## 5. Current Gap Register
 
@@ -201,7 +201,7 @@ flowchart LR
     CMD --> POLICY["Mutation policy"]
     POLICY --> COORD["Board-scoped commit coordinator"]
     LOAD["Migrate and validate document"] --> COORD
-    REMOTE["Remote provider updates"] --> YDOC["Yjs authority in collaborative mode"]
+    REMOTE["Remote provider updates"] --> YDOC["Yjs authority for editable boards"]
     COORD --> YDOC
     YDOC --> COORD
     COORD --> TX["Staged store transaction and history"]
@@ -224,7 +224,7 @@ flowchart LR
 The command gateway, commit coordinator, and store transaction are separate boundaries:
 
 - The **command gateway** answers whether a local actor may perform an operation and supplies user-facing labels.
-- The **commit coordinator** prepares required participants. In standalone mode it commits store plus history. In collaborative mode it stages the store/history projection, changes Yjs, and then publishes that prepared projection at a tracked transaction checkpoint.
+- The **commit coordinator** prepares required participants. For every editable Beskar whiteboard it stages the store/history projection, changes Yjs, and then publishes that prepared projection at a tracked transaction checkpoint.
 - The **transaction** guarantees data validity and atomicity regardless of origin. Remote and load paths do not bypass validation; they use internal capabilities with different policy and history metadata.
 
 ## 7. Workstream A — Board-Scoped Lifecycle
@@ -308,7 +308,7 @@ interface GlideboardHandle {
 }
 ```
 
-The host publishing flow must use the handle for the rendered board, never a module-global import. `flush()` delegates to the mode-specific durability handle: a snapshot save in standalone mode and an acknowledged Yjs transaction/digest checkpoint in collaborative mode.
+The host publishing flow must use the handle for the rendered board, never a module-global import. `flush(target)` delegates to the board's Yjs durability handle and awaits local and server acknowledgement of that exact transaction/digest checkpoint.
 
 ### 7.5 Acceptance tests
 
@@ -402,7 +402,7 @@ The outer transaction owns a copy-on-write overlay:
 9. In one Preact batch, publish stable record signals/tombstones, all derived indices, ordered-ID signals, and the revision.
 10. After publication, emit one frozen `StoreChangeSet`.
 
-Observational listeners such as analytics, router invalidation, and UI status are isolated and reported; they cannot roll back an already-committed store. History is not merely an observational listener: its entry is prepared from the staged change set and installed as a required command participant. In collaborative mode, Yjs projection is also a required coordinator participant as defined in Workstream I. Network/server persistence remains asynchronous, but the durability handle retains dirty/outbox state and never claims acknowledgement after failure.
+Observational listeners such as analytics, router invalidation, and UI status are isolated and reported; they cannot roll back an already-committed store. History is not merely an observational listener: its entry is prepared from the staged change set and installed as a required command participant. For every editable Beskar whiteboard, Yjs projection is also a required coordinator participant as defined in Workstream I. Network/server persistence remains asynchronous, but the durability handle retains dirty/outbox state and never claims acknowledgement after failure.
 
 Validators, migrators, geometry functions, and derived-index hooks used during staging must be synchronous, deterministic, and side-effect free. They cannot perform I/O, mutate the store, dispatch commands, or depend on camera/UI state. Development builds should detect transaction re-entry from these hooks, and plugin documentation/tests must make purity part of the compatibility contract.
 
@@ -877,11 +877,13 @@ Workstream F is implemented across `packages/glideline` and `packages/glideboard
 
 ### 13.1 Current client failure
 
-The Glideboard debounce timer is global, serializes the live global editor when it fires, and is not canceled by unsubscribe. The host's Yjs interval sets `dirtyRef` to false before starting a fire-and-forget request, has no retry, does not flush on close, and cannot distinguish stale completion from current durability.
+The original global Glideboard debounce timer has been replaced by controller-scoped tracking with detached serialization, one in-flight callback, retry, cancellation, and `flush()`. Those callbacks still acknowledge only callback completion, not durability of an exact Glideline revision or Yjs state, and `onDocumentChange` must remain observational.
+
+The host now retains dirty state while a full-Yjs-state request is in flight and explicitly flushes on Close and Publish. It still has no server revision precondition, request identity, exact server-computed digest acknowledgement, local recovery journal, or mapping from a Glideline revision to the saved Yjs checkpoint. A successful request can therefore not prove that the preview, editor projection, Yjs document, local recovery record, and server draft cover the same state.
 
 An empty board is valid, so a check such as “do not save zero records” is not a safe solution. The correct guard is session identity, canonical generation, and scheduler state.
 
-### 13.2 Persistence contract
+### 13.2 Glideboard projection and host durability contracts
 
 ```ts
 interface YjsProjectionCheckpoint {
@@ -894,36 +896,70 @@ interface YjsProjectionCheckpoint {
 
 interface DurabilityCheckpoint {
   sessionKey: string;
+  draftId: string;
   storeRevision: number;
   durableRevision: string;
-  yjs?: YjsProjectionCheckpoint;
+  yjs: YjsProjectionCheckpoint;
+}
+
+interface ProjectionTarget {
+  storeRevision: number;
+  yjs: Pick<YjsProjectionCheckpoint, "transactionSequence" | "stateDigest">;
+}
+
+interface ProjectedYjsState {
+  target: ProjectionTarget;
+  // Detached bytes whose digest is target.yjs.stateDigest.
+  encodedState: Uint8Array;
+}
+
+interface CollaborationCheckpointSource {
+  readonly status: ReadonlySignal<"healthy" | "catching-up" | "quarantined">;
+  subscribe(listener: (state: ProjectedYjsState) => void): () => void;
+  captureTarget(): Promise<ProjectionTarget>;
+  waitForStoreRevision(storeRevision: number): Promise<ProjectionTarget>;
+}
+
+interface MutationFence {
+  release(): void;
+}
+
+interface GlideboardHandle {
+  readonly checkpoints: CollaborationCheckpointSource;
+  settleActiveEdit(policy: "commit" | "cancel"): Promise<void>;
+  captureProjectionTarget(): Promise<ProjectionTarget>;
+  acquireMutationFence(reason: "close" | "publish"): MutationFence;
+  exportSvg(options: { target: ProjectionTarget }): Promise<string>;
 }
 
 interface DurabilityHandle {
   readonly status: ReadonlySignal<DurabilityStatus>;
-  flush(target?: {
-    storeRevision?: number;
-    yjs?: Pick<YjsProjectionCheckpoint, "transactionSequence" | "stateDigest">;
-  }): Promise<DurabilityCheckpoint>;
+  flush(target: ProjectionTarget): Promise<DurabilityCheckpoint>;
+  getAcknowledgedState(checkpoint: DurabilityCheckpoint): Uint8Array;
+  advanceDraft(
+    next: { sessionKey: string; draftId: string; durableRevision: string },
+    publishedBaseline: DurabilityCheckpoint,
+  ): Promise<void>;
   dispose(policy: "flush" | "cancel"): Promise<void>;
 }
 
-interface SaveRequest {
+interface YjsSaveRequest {
   sessionKey: string;
-  document: GlideDocument;
-  canonicalRevision: number;
+  draftId: string;
+  clientId: string;
+  expectedDurableRevision: string;
+  transactionSequence: number;
+  stateDigest: string;
+  encodedState: Uint8Array;
   generation: number;
-  expectedDurableRevision?: string;
   requestId: string;
   signal: AbortSignal;
 }
 
-interface SaveResult {
+interface YjsSaveResult {
+  draftId: string;
   durableRevision: string;
-}
-
-interface SnapshotPersistenceAdapter {
-  save(request: SaveRequest): Promise<SaveResult>;
+  acknowledgedCheckpoint: YjsProjectionCheckpoint;
 }
 
 interface DurabilityStatus {
@@ -936,88 +972,146 @@ interface DurabilityStatus {
     | "conflict"
     | "quarantined";
   latestGeneration: number;
-  localRecovery: "not-required" | "pending" | "acknowledged" | "error";
+  localRecovery: "pending" | "acknowledged" | "error";
   localCheckpointGeneration?: number;
   durableRevision?: string;
   acknowledgedYjsCheckpoint?: YjsProjectionCheckpoint;
-  projection?: "standalone" | "healthy" | "catching-up" | "quarantined";
+  projection: "healthy" | "catching-up" | "quarantined";
   error?: Error;
   remoteRevision?: string;
 }
 ```
 
-`DurabilityHandle` is the mode-neutral contract used by Close and Publish. The standalone implementation wraps the snapshot scheduler below. The collaborative implementation waits until the target Glideline revision has been projected into Yjs and the corresponding transaction sequence plus canonical-state/update digest has been acknowledged by local recovery and the server persistence authority. A provider's “connected” event or matching Yjs state vector alone is not a durability acknowledgement.
+The contracts have a strict ownership boundary:
+
+- Glideboard owns editing, the validated Glideline projection, transaction/digest accounting, projection health, active-edit settlement, and mutation fences. Its checkpoint source emits detached encoded state with the matching target so the host never has to serialize a different live Y.Doc. Glideboard can prove that a store revision corresponds to that Yjs checkpoint, but it does not know whether the checkpoint is locally or remotely durable.
+- Beskar UI owns `DurabilityHandle`, local recovery adapters, HTTP/API details, authentication, request IDs, retries, online/offline state, revision conflicts, saved-status UI, draft identity changes, and Close/Publish orchestration.
+- `ProjectionTarget` is the handoff between those layers. Neither layer re-encodes or substitutes a different live state after the target is captured.
+
+Every editable Beskar whiteboard uses this host Yjs durability contract, whether one user or many users are present. `flush(target)` waits until the target supplied by Glideboard has been acknowledged by local recovery and the server persistence authority. A provider's “connected” event or matching Yjs state vector alone is not a durability acknowledgement. Historical read-only whiteboards have neither a mutation fence nor a durability handle.
 
 `onDocumentChange` remains an observational callback and must not imply durability.
 
-### 13.3 Standalone snapshot scheduler algorithm
+The existing `GlideboardHandle.flush()` is a compatibility API for pending observational callbacks only. It is deprecated for persistence and must be replaced in Beskar UI by `captureProjectionTarget()` plus the host-owned `durability.flush(target)`.
 
-1. Hydrate with an explicit baseline disposition. Only an `acknowledged-baseline` starts clean; `local-recovery` and `new-unsaved-seed` immediately establish dirty journal/save generations.
-2. Subscribe to later committed canonical change sets after that baseline decision. Transient state never schedules durability; later explicit imports are user commands, not silently ignored load origins.
-3. Increment a local generation and mark dirty.
-4. Debounce per controller.
-5. Before a request, capture a detached canonical snapshot, session key, canonical revision, generation, expected durable revision, and request ID.
-6. Allow at most one in-flight save.
-7. If new commits arrive, retain only the newest pending generation and run it after the in-flight request settles.
-8. Mark clean only if the acknowledged generation is still the newest dirty generation.
-9. On failure, remain dirty and retry with bounded exponential backoff plus jitter.
-10. On `409`, enter conflict state; do not overwrite. Fetch/apply/merge according to the chosen representation, then retry with a fresh precondition.
-11. Ignore or abort completions after controller disposal/session generation change.
+### 13.3 Beskar UI Yjs durability coordinator algorithm
 
-`flush()` disarms debounce and awaits the latest generation. `cancel()` aborts pending work without claiming durability. React cleanup cannot reliably wait for asynchronous flush, so Close, Publish, and intentional navigation must call and await `flush()` before navigation. `beforeunload` is best-effort only; local recovery storage protects the remaining crash window.
+1. Create one Y.Doc-backed session for every editable whiteboard, including solo editing, and identify it by account/workspace/page/draft rather than participant count.
+2. Hydrate local recovery and the server baseline into that Y.Doc before bootstrap decides whether an empty shared document is authoritative. Later explicit imports are user commands, not silently ignored load origins.
+3. Glideboard advances a controller-owned transaction sequence for each accepted Yjs transaction and maps the resulting exact state/update digest to the Glideline store revision published by the validated projection. Transient editor state never enters Yjs or schedules durability.
+4. The Beskar UI coordinator subscribes to Glideboard's checkpoint source before editing becomes available. For each `ProjectedYjsState`, it increments a local durability generation, copies/owns the supplied detached encoded bytes, verifies their digest, and marks dirty. The same detached bytes are used for local recovery, the server request, acknowledgement comparison, and later Publish; do not re-encode a newer live Y.Doc for an older target.
+5. Commit the generation to the configured local recovery adapter and distinguish a queued write from an acknowledged local checkpoint.
+6. Debounce server persistence per controller and allow at most one in-flight request.
+7. Before a request, capture the session key, draft ID, client ID, transaction sequence, state digest, generation, expected durable revision, request ID, and abort signal.
+8. If new transactions arrive, retain only the newest pending generation and run it after the in-flight request settles.
+9. Mark clean only if both the locally acknowledged and server-acknowledged generations cover the newest dirty generation and the projection remains healthy.
+10. On failure, remain dirty and retry with bounded exponential backoff plus jitter. Offline status may report “saved locally” only after local acknowledgement.
+11. On `409`, enter conflict state; fetch the current server Yjs state, merge it with the captured local update in a Y.Doc, capture a new checkpoint, and retry with a fresh revision and request ID. Never resend the stale complete state unchanged.
+12. Ignore or abort completions after controller disposal, session generation change, or draft identity change.
 
-The collaborative durability implementation does not call `SnapshotPersistenceAdapter`. Its generation is a projected Yjs transaction checkpoint; it awaits local-journal and server acknowledgement for that transaction/update digest and follows the same stale-completion, error, retry, conflict, flush, and disposal rules.
+The Beskar UI coordinator's `flush(target)` disarms debounce and awaits the local and server acknowledgements that cover that exact Glideboard projection target. It must reject if the target digest cannot be mapped to a captured durability generation; saving whichever Y.Doc state happens to be current is not a substitute. `cancel()` aborts pending work without claiming durability. React cleanup cannot reliably wait for asynchronous flush, so Close, Publish, and intentional navigation must capture a Glideboard projection target and await the host coordinator's `flush(target)` before navigation. `beforeunload` is best-effort only; platform local recovery protects the remaining crash window.
 
-### 13.4 One authority by mode
+The first server transition may persist revisioned complete Yjs states rather than an append-only update log, but it must still return a server-computed digest of the exact stored decoded bytes and bind that acknowledgement to the request ID and draft revision.
 
-| Mode                 | Canonical collaboration source                                                                              | Durable authority                   |
-| -------------------- | ----------------------------------------------------------------------------------------------------------- | ----------------------------------- |
-| Standalone snapshot  | Glideline store                                                                                             | `GlideDocument` persistence adapter |
-| Live collaborative   | Yjs shared document; Glideline store is its validated projection at a tracked transaction/digest checkpoint | Host Yjs persistence service        |
-| Historical read-only | Version-scoped Y.Doc                                                                                        | None                                |
+### 13.4 Authority by lifecycle
 
-In collaborative mode, Glideboard snapshot callbacks may drive previews or analytics but must not race the Yjs persistence path. The host must expose save/sync/error state to the controller UI.
+| Lifecycle                                         | Canonical source                                                                                             | Durable authority            |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ | ---------------------------- |
+| Editable whiteboard, one or many active users     | Yjs shared document; Glideline store is its validated projection at a tracked transaction/digest checkpoint | Host Yjs persistence service |
+| Historical or published read-only whiteboard      | Version-scoped Y.Doc                                                                                         | None                         |
+
+Participant count and provider connectivity do not change the persistence model. Glideboard snapshot callbacks may drive previews or analytics but must not race the Yjs persistence path. Beskar UI derives and displays save/sync/recovery/error state from its durability coordinator; Glideboard may render host-supplied presentation state but does not calculate whether a checkpoint is saved.
 
 ### 13.5 Local recovery
 
-Both editable modes need local recovery:
+Every editable whiteboard needs a Yjs local recovery journal. Recovery is platform-adapted rather than hard-wired into the core Glideboard package:
 
-- collaborative mode uses `y-indexeddb` or an equivalent Yjs update journal;
-- standalone mode journals detached snapshots or committed change sets to IndexedDB immediately, without waiting for the network debounce.
+```ts
+interface RecoveryCheckpoint {
+  sessionKey: string;
+  generation: number;
+  transactionSequence: number;
+  stateDigest: string;
+}
 
-Recovery data is keyed by account/workspace/page/session/generation and cleared only after an acknowledged server revision that covers the corresponding local checkpoint. The durability status distinguishes `visible`, `locally journaled`, and `server acknowledged`; a queued IndexedDB write is not yet local durability. Quota, transaction, and privacy-cleanup failures surface to the user.
+interface YjsRecoveryAdapter {
+  hydrate(doc: Y.Doc, sessionKey: string): Promise<RecoveryCheckpoint | null>;
+  acknowledge(checkpoint: YjsProjectionCheckpoint): Promise<RecoveryCheckpoint>;
+  clearThrough(checkpoint: YjsProjectionCheckpoint): Promise<void>;
+  dispose(): Promise<void>;
+}
+```
 
-Browser storage is asynchronous, so an OS/process failure in the small interval before the local transaction commits cannot be claimed recoverable. The implementation minimizes and measures that interval, and Close/Publish await the local checkpoint as well as the required server checkpoint.
+- Browser and WebView hosts use `y-indexeddb` or an equivalent IndexedDB journal.
+- Native hosts may use SQLite or a filesystem-backed journal implementing the same contract.
+- An in-memory adapter is test-only and must never be reported as durable recovery.
+- Missing or failed platform storage does not crash the editor, but status reports `localRecovery: "error"` and the UI cannot offer “leave with local recovery.”
+
+Recovery data is keyed by account/workspace/page/draft/session/generation and cleared only after an acknowledged server revision that covers the corresponding local checkpoint. The durability status distinguishes `visible`, `locally journaled`, and `server acknowledged`; a queued adapter write is not yet local durability. Quota, transaction, filesystem, and privacy-cleanup failures surface to the user.
+
+Local storage is asynchronous, so an OS/process failure in the small interval before the local transaction commits cannot be claimed recoverable. The implementation minimizes and measures that interval, and Close/Publish await the local checkpoint as well as the required server checkpoint.
 
 On restart:
 
 - compare local and server state;
-- apply Yjs updates to merge collaborative state; for standalone snapshots, compare the journal generation and server revision and enter explicit recovery/conflict handling rather than overwriting;
+- apply local and server Yjs updates into the session document and compare the resulting checkpoint with the acknowledged server revision;
 - show a recovery notice if unsaved local state existed;
 - never upload one stale complete snapshot as an unconditional overwrite.
 
-Tests terminate and recreate the page after local-journal acknowledgement but before debounce/network acknowledgement in both modes, and separately inject IndexedDB quota/failure before acknowledgement.
+Tests terminate and recreate the page after local-journal acknowledgement but before debounce/network acknowledgement, inject browser adapter quota/failure before acknowledgement, exercise an unavailable adapter without crashing, and run the same recovery contract against a native/mock adapter.
 
 ### 13.6 Close and publish
 
 Close:
 
-1. stop accepting new durable commands;
-2. commit/cancel active edit according to policy;
-3. flush latest save;
-4. if flush fails, offer retry or explicit “leave with local recovery”;
-5. navigate only after the choice.
+1. Beskar UI acquires a Glideboard `close` mutation fence so new durable commands are rejected while camera, selection, and awareness may continue according to policy;
+2. Beskar UI asks Glideboard to commit/cancel the active edit according to policy;
+3. Beskar UI calls `board.captureProjectionTarget()` and passes the returned target to its own `durability.flush(target)`;
+4. if host durability fails, Beskar UI offers retry or explicit “leave with local recovery” only when the recovery adapter has acknowledged that target;
+5. Beskar UI navigates only after success or the explicit choice, then releases/disposes the appropriate session resources.
 
 Publish:
 
-1. acquire a client publish fence;
-2. cancel previews and commit the active text policy;
-3. in collaborative mode, wait for synchronization and the projection barrier that maps the latest Glideline revision to a Yjs transaction sequence and digest;
-4. call the mode-neutral durability handle for that exact store revision/Yjs checkpoint and retain its returned server-acknowledged checkpoint;
-5. capture the preview and standalone document or Yjs update from that same checkpoint;
-6. call publish with `expectedDraftRevision` and checkpoint metadata;
-7. on success, advance to a new draft identity before accepting later edits;
-8. release the fence.
+1. Beskar UI acquires a Glideboard `publish` mutation fence;
+2. Beskar UI asks Glideboard to cancel previews and apply the active text policy;
+3. Beskar UI captures the exact projection target from Glideboard, which waits for the projection barrier mapping the latest Glideline revision to a Yjs transaction sequence and digest;
+4. Beskar UI passes that target to its durability coordinator and retains the returned local- and server-acknowledged checkpoint;
+5. Glideboard exports the preview for that same target, while the host calls `durability.getAcknowledgedState(checkpoint)` for the detached encoded Yjs state bound to the acknowledgement;
+6. Beskar UI calls Publish with `expectedDraftRevision`, draft ID, and checkpoint metadata;
+7. on success, Beskar UI advances the durability coordinator to the returned draft identity before releasing the Glideboard fence and accepting later durable edits;
+8. Beskar UI releases the fence in all success/failure paths.
+
+The intended host flow is therefore:
+
+```ts
+const fence = board.acquireMutationFence("publish");
+try {
+  await board.settleActiveEdit("commit");
+  const target = await board.captureProjectionTarget();
+  const checkpoint = await durability.flush(target);
+  const preview = await board.exportSvg({ target });
+  const data = durability.getAcknowledgedState(checkpoint);
+  const result = await publish({ checkpoint, data, preview });
+  await durability.advanceDraft(result.nextDraft, checkpoint);
+} finally {
+  fence.release();
+}
+```
+
+### 13.7 Implementation status — complete
+
+The collaboration-based persistence path is now implemented across Glideboard, Beskar UI, and the editor server:
+
+- Glideboard emits detached, SHA-256-verified Yjs projection checkpoints, exposes target capture, settles active edits, fences local mutations for Close/Publish, and verifies target-bound SVG export.
+- Beskar UI owns a per-draft `YjsDurabilityCoordinator`, an IndexedDB recovery journal with acknowledged transactions, stable client identity, one in-flight revisioned save, stable idempotency keys across ambiguous retries, bounded retry, automatic Yjs conflict merge/reprojection, quarantine states, and saved-status presentation.
+- Board bootstrap hydrates local recovery and the server state before joining the WebRTC room. Participant count never selects a different persistence path.
+- Close captures and flushes an exact projection target before navigation. Publish flushes the target, exports that target, submits the acknowledged bytes with the draft revision, then advances to the server-created draft identity. Projections arriving during Publish are rebased onto that next draft rather than discarded.
+- The server checkpoint route verifies decoded bytes against the digest, locks the active draft, performs a revision compare-and-swap, persists scoped idempotency responses, and returns the stored revision/checkpoint acknowledgement.
+- Publish locks the same draft/revision authority, verifies the exact checkpoint bytes and server sequence, makes the published mapping immutable, creates and seeds the next draft in the same transaction, and persists an idempotent publish result. The legacy unconditional whiteboard update route is no longer registered.
+- The publishing peer announces the next draft through collaboration metadata. Every peer verifies that hint against the server before rekeying its recovery/outbox state; a periodic authoritative-draft check covers a publisher that exits before announcing. The merged live Y.Doc is then saved against the new draft rather than the immutable published one.
+- Browser and WebView hosts use the IndexedDB adapter. A native host can provide a different `YjsRecoveryAdapter` without changing Glideboard.
+
+The durability contract ends at an acknowledged exact checkpoint. Glideboard never labels content saved and does not know whether persistence is IndexedDB, SQLite, a filesystem, or a server; Beskar UI owns those adapters, retry/conflict policy, Close/Publish orchestration, and saved-status UX.
 
 ## 14. Workstream H — Server Revisions, Yjs Durability, and Published Immutability
 
@@ -1031,6 +1125,7 @@ Save request:
 
 ```json
 {
+  "draftId": "draft-id",
   "data": "base64-yjs-update",
   "transactionSequence": 42,
   "stateDigest": "sha256-of-canonical-encoded-state",
@@ -1054,14 +1149,14 @@ Response:
 }
 ```
 
-A Yjs-aware persistence service returns its update-log sequence and digest of the accepted/merged canonical state. During the revisioned-snapshot transition, the server at minimum binds the new revision and request ID to a server-computed hash of the exact stored bytes; the client maps that acknowledged request to its local transaction checkpoint. Neither path treats a blindly echoed client field as proof. A Yjs state vector is carried only to optimize diff generation and cannot identify exact state because deletion-only transactions may leave it unchanged. Standalone snapshot mode returns the corresponding canonical generation/checkpoint instead.
+A Yjs-aware persistence service returns its update-log sequence and digest of the accepted/merged canonical state. During the revisioned-full-state transition, the server at minimum binds the draft ID, new revision, client/request ID, and a server-computed hash of the exact stored decoded bytes; the client maps that acknowledged request to its local transaction checkpoint. Neither path treats a blindly echoed client field as proof. A Yjs state vector is carried only to optimize diff generation and cannot identify exact state because deletion-only transactions may leave it unchanged.
 
 Return:
 
 - `200` for success or idempotent replay;
 - `409` with current revision/state metadata for a stale precondition;
 - `413` before unbounded body allocation;
-- typed validation errors for corrupt base64/Yjs data.
+- typed validation errors for corrupt base64 or digest-mismatched transport data; in the revisioned full-state transition, semantic Yjs validation remains at the client projection boundary.
 
 ### 14.3 Transactional server rules
 
@@ -1073,6 +1168,7 @@ Return:
 - Check idempotency before expected-revision conflict handling: same key plus same payload hash returns the original success after a lost response; same key plus different hash is rejected as misuse and never performs a write.
 - Retain idempotency records for at least the maximum offline/retry window and define cleanup independently from document-version retention.
 - Publish locks the same authority, checks `expectedDraftRevision`, writes data/preview, flips the row immutable, and commits in one transaction.
+- Publish creates and returns the next draft identity before any client may resume durable editing; remaining collaborative clients switch through the authoritative draft-generation event.
 - A late autosave targeting the old draft ID/revision receives conflict; it cannot update a published row.
 - Published data is append-only/immutable. Corrections create a new version.
 
@@ -1094,6 +1190,15 @@ Acceptable transition: retain snapshots but use revision conflicts. On conflict,
 - Cancellation propagates through database work.
 - Reload and version history reproduce the acknowledged state.
 
+### 14.6 Implementation status — complete for revisioned full-state storage
+
+- `PUT …/checkpoint` is the only editable save route. It bounds the body, decodes base64, verifies SHA-256 over the exact decoded bytes, carries request cancellation into database work, locks the active draft, and performs a revision compare-and-swap.
+- Save idempotency is scoped by draft, authenticated owner, client, and request ID. The persisted request hash binds canonical fields and decoded bytes; same-content replay returns the original acknowledgement even after the revision advances, while key reuse with different content is rejected.
+- Publish uses the same draft/revision authority, verifies the acknowledged digest and server update sequence, makes the published mapping immutable, seeds a separately identified next draft, and records an idempotent result in the same transaction.
+- A late save can update only an active draft with its expected revision, so it cannot mutate a published version. Fetch and version-history reads expose the stored durability metadata.
+- The Liquibase migration adds revision/digest/server-sequence columns and indexed save/publish idempotency records. Idempotency records are retained independently of version data; `created_at` indexes support the deployment cleanup policy, whose retention must be at least the supported offline retry window.
+- This implementation deliberately uses the acceptable revisioned full-state transition from 14.4. The Go service verifies byte integrity but does not claim to semantically parse Yjs. Client conflict handling loads both valid Yjs states into a fresh `Y.Doc`, merges, reprojects, and retries against the returned revision. A future Yjs-aware update-log service may replace this storage representation without changing the acknowledgement contract.
+
 ## 15. Workstream I — Collaboration Convergence
 
 ### 15.1 Current failure
@@ -1102,7 +1207,7 @@ The collaboration adapter and history independently monkey-patch store writes. I
 
 ### 15.2 Adapter contract
 
-In collaborative mode Yjs is the replicated authority and the Glideline store is a validated editing projection, not an independently writable model followed by a best-effort Yjs subscriber.
+For every editable whiteboard, whether one user or many users are active, Yjs is the replicated authority and the Glideline store is a validated editing projection, not an independently writable model followed by a best-effort Yjs subscriber. Provider connectivity may change without changing that authority; historical read-only documents use a version-scoped Y.Doc and attach no durability coordinator.
 
 Local command flow:
 
@@ -1110,7 +1215,7 @@ Local command flow:
 2. apply the prevalidated operations in one Yjs transaction with a local command origin;
 3. synchronously publish the already-prepared Glideline projection and history state for that Yjs transaction;
 4. record `store revision → Yjs transaction sequence/update digest → local journal checkpoint`;
-5. let provider/server acknowledgement advance the mode-neutral durability checkpoint.
+5. let local recovery and provider/server acknowledgement advance the Yjs durability checkpoint.
 
 `Y.Doc.transact()` is not a rollback boundary: an observer can throw after Yjs has already mutated. Yjs mutation operations contain no plugin/user callbacks, but after any transaction exception the coordinator must inspect an exact encoded-state/update digest, not assume “throw means unchanged.” If Yjs exactly reflects the prepared command, publish the prepared projection and mark provider/journal delivery dirty for replay. If it differs or cannot be proven, stop editing and rebuild the complete projection from the Y.Doc. A failed provider or local-journal observer triggers replay/full-state persistence and cannot drop the durability generation.
 
@@ -1163,14 +1268,14 @@ An incompatible client enters read-only compatibility mode or refuses to edit. I
 
 ### 15.5 Bootstrap
 
-Collaborative mode has an explicit state machine:
+Every editable whiteboard has an explicit bootstrap state machine:
 
 ```text
 created → loading-local-recovery → connecting → synchronized
         → validating-shared-state → ready
 ```
 
-Seed a shared document only after synchronization confirms it has no authoritative content and the bootstrap revision still matches. Snapshot mode and collaborative mode cannot both seed without a declared precedence policy.
+Seed a shared document only after local recovery hydration, server-baseline application, and provider synchronization confirm it has no authoritative content and the bootstrap revision still matches. These sources merge into one Y.Doc under a declared precedence/bootstrap policy; none may independently seed a competing complete state.
 
 ### 15.6 Presence and awareness safety
 
@@ -1200,6 +1305,16 @@ Tests cover spoofed role/identity, HTML-like names, oversized payloads, cursor f
 - An offline stale peer cannot overwrite merged durable state on reconnect.
 - Repeated attach/detach leaves no wrapper, listener, provider, or awareness leak.
 - Empty-map seeding waits for provider readiness.
+
+### 15.8 Implementation status — complete
+
+- Glideline exposes a capability-protected required commit participant. Glideboard uses it to apply every durable local command to Yjs in one transaction before publishing the prepared store/history commit; origin suppression prevents reflected local changes from entering remote history.
+- Remote Yjs changes materialize a complete candidate and enter Glideline through one trusted atomic transaction. Invalid state leaves the previous store projection intact, retries one deterministic full reprojection, and then quarantines editing and durability acknowledgement if it still fails.
+- Shared schema v2 stores one nested `Y.Map` per known record, recursively addressable object fields, `Y.Text` for text fields, protected opaque blobs for unknown records, and generation-scoped tombstones. Tombstones win over concurrent edits to a deleted generation; explicit restore creates a new generation.
+- Metadata carries the shared schema/record model, document shape and binding versions, client capability range, logical board identity, and bootstrap revision. Unsupported schema/capability or a mismatched board identity enters `incompatible`; a legacy whole-record writer detected after migration also freezes rather than silently forking the board.
+- Empty documents seed only after provider readiness. Checkpoints bind the exact full encoded Yjs state to a controller transaction sequence and Glideline store revision, including deletion-only changes; attach performs a full projection so pre-attach updates are not missed.
+- Awareness is validated as bounded, display-only peer input. Malformed/oversized state and peer-asserted roles are ignored, retained peers are capped, cursor writes are animation-frame throttled, and presence/listeners are cleared on detach.
+- Tests cover local/remote sync, exact checkpoints, invalid remote quarantine, throwing observers, different-field and same-field convergence, delete/update tombstones, provider readiness, schema and board-identity incompatibility, legacy migration freeze, awareness validation, and repeated lifecycle cleanup.
 
 ## 16. Workstream J — Canonical Ordering
 
@@ -1448,14 +1563,20 @@ These controls need named owners and evidence. They must not be inferred from cl
 | Other Glideline tools                             | Remove fixed canonical preview records; use overlay sessions and canonical order-key allocation.                                                                 |
 | `packages/glideline/src/smart-router.ts`          | Consume canonical world bounds/outlines and commit-driven invalidation.                                                                                          |
 | Arrow record/binding utilities                    | Binding registry/migrations, relationship authority, local anchors, arrow rotation normalization.                                                                |
-| `packages/glideboard/src/GlideboardController.ts` | New board-owned lifecycle, commands, collaboration, persistence, presence, state machine, disposal.                                                              |
+| `packages/glideboard/src/GlideboardController.ts` | Board-owned lifecycle, commands, projection checkpoints, mutation fences, presence, active-edit settlement, and disposal; no network/local-storage durability.  |
 | `packages/glideboard/src/GlideboardContext.tsx`   | Controller provider and scoped hooks.                                                                                                                            |
-| `packages/glideboard/src/Glideboard.tsx`          | Create controller by session key; separate startup and live props; expose imperative handle.                                                                     |
+| `packages/glideboard/src/Glideboard.tsx`          | Create controller by session key; expose target capture, active-edit settlement, fences, and target-bound export through the scoped imperative handle.          |
+| `packages/glideboard/src/types.ts`                | `ProjectionTarget`, detached projected-state/checkpoint-source/fence types, and the persistence-neutral `GlideboardHandle`; deprecate handle `flush()`.          |
 | `packages/glideboard/src/editor.ts`               | Remove globals; migrate helpers into controller/services; deprecate singleton exports.                                                                           |
 | `packages/glideboard/src/collaboration.ts`        | Yjs authority/projection coordinator, transaction/digest checkpoints, diff state vectors, full reprojection/quarantine, readiness, schema handshake, status.     |
+| `packages/glideboard/src/collaboration/CollaborationProjectionCoordinator.ts` | Projection barrier mapping each Glideline revision to an exact Yjs transaction sequence/digest and exposing target capture; no save transport.       |
 | `packages/glideboard/src/Canvas.tsx`              | Composed record view, canonical order and transforms, dedicated text editor, pointer cancellation, later virtualization.                                         |
 | `packages/glideboard/src/WhiteboardApp.tsx`       | Context consumption and command routing; remove global editor/signal imports; enforce viewer shortcuts.                                                          |
-| `ui/app/components/WhiteboardEditor.tsx`          | Promise-based save coordinator integration, scoped handle, flush-on-close, publish fence, recovery/status UI.                                                    |
+| `ui/app/components/WhiteboardEditor.tsx`          | Construct/own host durability for the current draft; orchestrate target-specific Close/Publish, status UI, recovery choices, and draft-identity transition.      |
+| `ui/app/core/whiteboard/durability/types.ts`      | Host-owned durability status/checkpoint/save types and typed offline/conflict/recovery/disposal errors.                                                         |
+| `ui/app/core/whiteboard/durability/YjsDurabilityCoordinator.ts` | Detached checkpoint generations, local/server acknowledgement, serialized revisioned writes, retry/conflict/flush/disposal state machine.           |
+| `ui/app/core/whiteboard/durability/YjsRecoveryAdapter.ts` | Platform-neutral Yjs recovery contract and conformance-test helpers.                                                                                  |
+| `ui/app/core/whiteboard/durability/IndexedDbYjsRecoveryAdapter.ts` | Browser/WebView `y-indexeddb` implementation loaded only in a supported client environment.                                                        |
 | Whiteboard HTTP hooks                             | Promise results, abort, typed errors/conflicts, revision headers/tokens.                                                                                         |
 | Historical version page                           | Correct route and base64 Yjs hydration into a disposable read-only document.                                                                                     |
 | Asset/media ingestion and serving                 | MIME sniffing, isolated sanitization, complexity limits, immutable hash records, CSP-safe delivery, SSRF prevention, and malicious-corpus tests.                 |
@@ -1542,18 +1663,23 @@ These are intentionally replaceable containment fixes. Keep their characterizati
 
 - Remove store-method patching.
 - Make Yjs the collaborative authority with a prepared Glideline/history projection, transaction/update sequence plus digest checkpoints, full attach/reprojection, gap detection, quarantine, origin suppression, readiness/bootstrap, status, and cleanup.
-- Introduce the mode-neutral durability checkpoint contract and map store revisions to Yjs transaction/digest checkpoints; state vectors remain diff-only and server acknowledgement follows in PR 10.
+- Apply this authority to every editable board, including solo sessions; participant count and temporary provider connectivity do not select another persistence mode.
+- Introduce the Glideboard-owned projection target/checkpoint-source contract, map store revisions to Yjs transaction/digest checkpoints, and expose active-edit settlement plus Close/Publish mutation fences; state vectors remain diff-only.
+- Keep persistence transport, recovery adapters, server revisions, retry/conflict state, and “saved” status out of Glideboard.
 
 **PR 9: Additive server revisions and immutable publish**
 
 - Add CAS/revision endpoints alongside the legacy contract, common locking, request context, size limits, idempotency, Yjs merge strategy, immutable published rows, and concurrency tests.
 - Repair the version route/payload contract without requiring the old client to opt in immediately.
 
-**PR 10: Save coordinator and host integration**
+**PR 10: Beskar UI durability coordinator and host integration**
 
-- Adopt the revision API through a promise-based adapter with generations, single in-flight request, retry/conflict/status, flush/cancel, local recovery, close and publish fencing.
-- Implement standalone and collaborative `DurabilityHandle`s, including exact update-log sequence/digest acknowledgement and deletion-only tests.
-- Ensure one durability authority by mode, repair historical hydration, then disable unconditional legacy writes after compatibility telemetry is clean.
+- Add the host-owned durability modules under `ui/app/core/whiteboard/durability`, construct one coordinator per account/workspace/page/draft session in `WhiteboardEditor`, and subscribe it to Glideboard's detached projected-state stream before enabling editing.
+- Adopt the revision API through that coordinator with detached checkpoint generations, one in-flight request, retry/conflict/status, target-specific flush/cancel, local recovery, and stale session/draft rejection.
+- Implement one host `DurabilityHandle` for all editable Beskar whiteboards, including exact update-log or revisioned-full-state sequence/digest acknowledgement and deletion-only tests.
+- Put local recovery behind a platform adapter: IndexedDB for browser/WebView, replaceable SQLite/filesystem implementations for native hosts, and no false durability claim when storage is unavailable.
+- Replace `board.flush()` plus the host interval with `board.captureProjectionTarget()` plus `durability.flush(target)`; move Close, Publish, save-status UI, recovery choices, and new-draft activation into Beskar UI.
+- Repair historical hydration, keep `onDocumentChange` observational, then disable unconditional legacy writes after compatibility telemetry is clean.
 
 **Exit gate:** Store/Yjs projection gaps are detected and recoverable; kill, close, route switch, retry, offline reconnect, conflict, and publish races cannot silently lose or overwrite acknowledged content.
 
@@ -1617,7 +1743,7 @@ Grouping, frames, asset libraries, and rich text may prototype in parallel, but 
 - future and unknown load-save-load;
 - strict versus explicit repair behavior;
 - deterministic serialization and migration;
-- acknowledged baseline remains clean, while local recovery and new unsaved seed journal and schedule durability.
+- an acknowledged server/Yjs baseline remains clean, while recovered or newly seeded Yjs state journals and schedules durability.
 
 **Indices**
 
@@ -1646,6 +1772,9 @@ Grouping, frames, asset libraries, and rich text may prototype in parallel, but 
 - two simultaneous boards and rapid route overlap;
 - StrictMode mount/cleanup;
 - callback and policy prop changes;
+- Glideboard target capture and projected-state events carry matching store-revision/Yjs checkpoints and detached bytes, while performing no HTTP, IndexedDB, retry, or saved-status work;
+- Close/Publish mutation fences reject new durable commands while leaving allowed camera, selection, and awareness behavior available;
+- target-bound preview export cannot silently use a newer or older store revision;
 - gesture commit, Escape, pointer cancel, lost capture, blur, tool switch, and unmount;
 - read-only keyboard/context menu/debug/imperative paths;
 - text IME, multiline paste, conflict, remote deletion, blur idempotency;
@@ -1673,15 +1802,21 @@ Assert in-memory convergence, projection checkpoint equality, and durable reload
 
 ### 23.4 Persistence and server tests
 
+- Beskar UI, not Glideboard, constructs and disposes the durability coordinator for each draft session;
 - slow, failed, aborted, out-of-order, duplicated, and conflicting saves;
 - edit during in-flight save;
 - unmount under flush and cancel policies;
 - route A callback never sees route B data;
 - close immediately after edit;
-- standalone and collaborative process termination after local journal acknowledgement but before network acknowledgement;
-- IndexedDB quota/failure before local acknowledgement;
+- solo and multi-user sessions use the same Yjs durability coordinator and checkpoint semantics;
+- process termination after local Yjs journal acknowledgement but before network acknowledgement;
+- IndexedDB quota/failure before local acknowledgement, plus unavailable browser storage without an editor crash or false recovery claim;
+- the recovery contract passes against a native/mock adapter; an in-memory test adapter is never reported as durable;
+- exact-target flush cannot resolve from an older or newer checkpoint;
+- server acknowledgement without local acknowledgement is not fully durable, while local acknowledgement without server acknowledgement reports “saved locally,” not “saved”;
 - autosave racing publish;
 - delayed old-client save after publish;
+- publish returns a new draft identity and all continuing editors switch before accepting later durable commands;
 - idempotent retry;
 - historical-version decode and corrupt-data state.
 
@@ -1713,8 +1848,8 @@ Compare Canvas screenshots with SVG and PNG for:
 | Pointer capture is lost                           | Overlay cancels; canonical state and history are unchanged.                                                                                    |
 | Read-only toggles during drag/text                | Gesture cancels; draft is recoverable; no local commit.                                                                                        |
 | Publish and autosave overlap                      | Revision fence serializes them; published row remains immutable.                                                                               |
-| Process closes after local but before network ack | Standalone or collaborative local journal restores the acknowledged local checkpoint.                                                          |
-| IndexedDB write fails or exceeds quota            | Status never claims local durability; Close/Publish surfaces the failure and recovery choices.                                                 |
+| Process closes after local but before network ack | The configured Yjs recovery adapter restores the acknowledged local checkpoint.                                                               |
+| Local recovery write fails or exceeds quota       | Status never claims local durability; Close/Publish surfaces the failure and recovery choices.                                                 |
 
 ## 25. Rollout and Backward Compatibility
 
@@ -1722,6 +1857,9 @@ Compare Canvas screenshots with SVG and PNG for:
 
 - Keep `put/remove` temporarily only behind an internal compatibility façade implemented as implicit transactions; do not preserve an unrestricted public mutation bypass for API compatibility.
 - Keep `onDocumentChange` as notification only.
+- Deprecate `GlideboardHandle.flush()` as a persistence primitive; migrate Beskar UI to `captureProjectionTarget()` plus its host-owned `durability.flush(target)` before removing the compatibility method.
+- Do not export Beskar HTTP, server-revision, IndexedDB, retry, conflict, or save-status behavior from the core Glideboard package.
+- Keep browser/WebView recovery as an optional host adapter; do not make `y-indexeddb` a top-level requirement for core Glideboard or native/SSR consumers.
 - Replace `wbEditor` with a scoped handle; provide a short deprecation window with development warnings.
 - Reject ambiguous `deserialize` in new code; compatibility wrapper must choose and document legacy merge behavior.
 - Version the GlideDocument envelope and collaboration schema.
@@ -1748,7 +1886,7 @@ Core atomicity should not have a long-lived “off” mode once shipped. Use:
 
 - Application rollback must retain the ability to read both old and new envelopes during the migration window.
 - Server schema changes are additive first, then clients use revisions, then old unconditional writes are disabled.
-- Keep update journals/snapshots until the migrated revision has been opened, edited, saved, and reloaded successfully.
+- Keep Yjs update journals and retained server snapshots until the migrated revision has been opened, edited, saved, and reloaded successfully.
 - Provide an administrative export of raw Yjs updates and normalized GlideDocument for incident recovery.
 
 ## 26. Decisions, Remaining Gaps, and Owners to Assign
@@ -1767,7 +1905,10 @@ Core atomicity should not have a long-lived “off” mode once shipped. Use:
 | Binding authority        | Binding record is canonical; duplicate terminal data is derived or checked.                                                                     |
 | Read-only                | Enforced at command/transaction policy boundary.                                                                                                |
 | Persistence              | One in-flight save per board, generation acknowledgement, revision conflicts.                                                                   |
-| Collaborative durability | Yjs service is the one durable authority; snapshot callback is observational.                                                                   |
+| Editable persistence     | Every editable Beskar whiteboard uses the Yjs durability path, regardless of participant count or temporary provider connectivity.              |
+| Editable durability      | Yjs service is the one server-durable authority; snapshot callback is observational.                                                            |
+| Persistence ownership    | Glideboard produces projection targets and fences; Beskar UI owns recovery, transport, conflicts, status, Close, Publish, and draft transitions. |
+| Local recovery           | Platform adapter: IndexedDB for browser/WebView, replaceable SQLite/filesystem storage for native hosts, and no false claim when unavailable.   |
 | Collaborative projection | Glideline store is a validated Yjs projection at a transaction sequence/digest checkpoint; state vectors are diff-only and gaps freeze editing. |
 | Server conflict          | Compare-and-swap revision; no silent last-write-wins.                                                                                           |
 | Publish                  | Same revision/lock boundary as autosave; published rows immutable.                                                                              |
@@ -1778,15 +1919,15 @@ Core atomicity should not have a long-lived “off” mode once shipped. Use:
 
 ### 26.2 Product/backend choices still required
 
-| Question                                                  | Recommended default                                                               | Blocks                        |
-| --------------------------------------------------------- | --------------------------------------------------------------------------------- | ----------------------------- |
-| On navigation save failure, may the user leave?           | Offer retry or explicit leave with verified local recovery.                       | Host close UX                 |
-| How long are local recovery updates retained?             | Until acknowledged server revision plus a short safety retention window.          | Recovery/privacy policy       |
-| Snapshot-conflict transition or update-log service first? | Revisioned snapshots first, then append-only Yjs updates.                         | Backend scheduling            |
-| Same-field plain-text conflict policy before Y.Text       | Preserve local draft and ask user to choose/merge.                                | Text collaboration            |
-| Delete versus concurrent edit CRDT policy                 | Tombstone wins until explicit restore generation.                                 | Collaboration v2              |
-| Final engine document limits                              | Start with proposed configurable limits, then tune using 10k/50k/100k benchmarks. | Public compatibility contract |
-| Repair mode availability                                  | Admin/import tool only; ordinary open remains strict and non-destructive.         | Support tooling               |
+| Question                                                       | Recommended default                                                               | Blocks                        |
+| -------------------------------------------------------------- | --------------------------------------------------------------------------------- | ----------------------------- |
+| On navigation save failure, may the user leave?                | Offer retry or explicit leave with verified local recovery.                       | Host close UX                 |
+| How long are local recovery updates retained?                  | Until acknowledged server revision plus a short safety retention window.          | Recovery/privacy policy       |
+| Revisioned-full-state transition or update-log service first?  | Revisioned complete Yjs states first, then append-only Yjs updates.                | Backend scheduling            |
+| Same-field plain-text conflict policy before Y.Text            | Preserve local draft and ask user to choose/merge.                                | Text collaboration            |
+| Delete versus concurrent edit CRDT policy                      | Tombstone wins until explicit restore generation.                                 | Collaboration v2              |
+| Final engine document limits                                   | Start with proposed configurable limits, then tune using 10k/50k/100k benchmarks. | Public compatibility contract |
+| Repair mode availability                                       | Admin/import tool only; ordinary open remains strict and non-destructive.         | Support tooling               |
 
 Each choice needs a named owner before the dependent PR begins. None should be implicitly decided by whichever component happens to receive the event first.
 
@@ -1800,11 +1941,11 @@ The correctness program is complete when:
 4. each completed user command installs its path-aware history state atomically, while transient interaction and text drafts cannot appear in serialization, autosave, durable collaboration, or history;
 5. two boards and rapid route changes are isolated;
 6. viewer mode rejects every local mutation surface;
-7. save state reflects an exact mode-neutral durability checkpoint, standalone and collaborative local recovery survive termination after local acknowledgement, and close/offline/retry/conflict behavior is explicit;
+7. Glideboard exposes exact Glideline-revision/Yjs projection targets without owning storage or save status, and Beskar UI turns those targets into durability results whose platform-backed local recovery and server acknowledgement survive the defined termination, close, offline, retry, and conflict cases;
 8. late saves cannot alter published versions;
 9. unknown and forward-versioned records round-trip safely;
 10. binding, page, parent, order, and RBush indices pass randomized integrity checks;
-11. every collaborative store revision maps to a Yjs transaction/update sequence and digest, including deletion-only changes; projection gaps freeze/reproject/quarantine, and offline/concurrent scenarios converge and survive durable reload;
+11. every editable store revision maps to a Yjs transaction/update sequence and digest, including deletion-only changes; projection gaps freeze/reproject/quarantine, and offline/concurrent scenarios converge and survive durable reload;
 12. rendering, hits, selection, routing, export, and viewport queries agree on order and transforms;
 13. old documents migrate deterministically with recoverable source data;
 14. status, metrics, and recovery paths are available for production incidents;

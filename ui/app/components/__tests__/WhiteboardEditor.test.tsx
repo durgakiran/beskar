@@ -7,23 +7,76 @@ import WhiteboardEditor from "../WhiteboardEditor";
 
 const useGet = vi.fn();
 const providerInstances: Array<{ room: string; doc: Y.Doc; options: unknown }> = [];
-const glideboardMock = vi.hoisted(() => ({ flush: vi.fn() }));
+const glideboardMock = vi.hoisted(() => ({
+    settleActiveEdit: vi.fn(),
+    acquireMutationFence: vi.fn(),
+}));
 
 vi.mock("@http/hooks", () => ({
     useGet: (...args: unknown[]) => useGet(...args),
 }));
 
 vi.mock("@durgakiran/glideboard", () => ({
+    safeAwarenessEntries: (states: Map<number, any>) => Array.from(states.entries())
+        .filter(([, state]) => Boolean(state?.user))
+        .map(([clientId, state]) => ({ clientId, user: state.user, cursor: state.cursor ?? null })),
     Glideboard: React.forwardRef(function MockGlideboard(
         { readOnly, collaboration, sessionKey }: any,
         ref: React.ForwardedRef<unknown>,
     ) {
+        const checkpointSource = React.useMemo(() => {
+            let sequence = 0;
+            let latest: any = null;
+            let active = true;
+            const listeners = new Set<(state: any) => void>();
+            let pending = Promise.resolve();
+            const project = () => {
+                pending = pending.then(async () => {
+                    if (!active) return;
+                    const encodedState = Y.encodeStateAsUpdate(collaboration.doc);
+                    const digest = await crypto.subtle.digest("SHA-256", Uint8Array.from(encodedState));
+                    const stateDigest = `sha256:${Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, "0")).join("")}`;
+                    sequence += 1;
+                    latest = {
+                        target: {
+                            storeRevision: sequence,
+                            yjs: { transactionSequence: sequence, stateDigest },
+                        },
+                        encodedState,
+                    };
+                    listeners.forEach(listener => listener(latest));
+                });
+            };
+            collaboration.doc.on("update", project);
+            project();
+            return {
+                source: {
+                    subscribe(listener: (state: any) => void) {
+                        listeners.add(listener);
+                        if (latest) listener(latest);
+                        return () => listeners.delete(listener);
+                    },
+                    async captureTarget() {
+                        await pending;
+                        return latest.target;
+                    },
+                },
+                dispose() {
+                    active = false;
+                    collaboration.doc.off("update", project);
+                },
+            };
+        }, [collaboration.doc]);
+        React.useEffect(() => () => checkpointSource.dispose(), [checkpointSource]);
         React.useImperativeHandle(ref, () => ({
-            flush: glideboardMock.flush,
+            checkpoints: checkpointSource.source,
+            captureProjectionTarget: checkpointSource.source.captureTarget,
+            settleActiveEdit: glideboardMock.settleActiveEdit,
+            acquireMutationFence: glideboardMock.acquireMutationFence,
             serialize: () => ({ records: [] }),
             exportSvg: async () => '<svg />',
             setCurrentTool: vi.fn(),
-        }));
+        }), [checkpointSource]);
         return React.createElement("div", {
             "data-testid": "glideboard",
             "data-readonly": String(readOnly),
@@ -89,7 +142,8 @@ describe("WhiteboardEditor", () => {
     beforeEach(() => {
         vi.clearAllMocks();
         providerInstances.length = 0;
-        glideboardMock.flush.mockResolvedValue(undefined);
+        glideboardMock.settleActiveEdit.mockResolvedValue(undefined);
+        glideboardMock.acquireMutationFence.mockReturnValue({ release: vi.fn() });
         useGet.mockReturnValue([
             {
                 data: { data: { id: "user-1", name: "Asha", email: "asha@example.com" } },
@@ -223,7 +277,7 @@ describe("WhiteboardEditor", () => {
             resolveSave = resolve;
         });
         const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
-            if (init?.method === "PUT") return saveResponse;
+            if (String(input).endsWith("/checkpoint") && init?.method === "PUT") return saveResponse;
             return Promise.resolve(jsonResponse(boardData("space-1", "2")));
         });
         vi.stubGlobal("fetch", fetchMock);
@@ -239,13 +293,29 @@ describe("WhiteboardEditor", () => {
         fireEvent.click(closeButton);
 
         await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
-            "/editor/space/space-1/whiteboard/2",
-            expect.objectContaining({ method: "PUT", keepalive: false }),
+            "/editor/space/space-1/whiteboard/2/checkpoint",
+            expect.objectContaining({ method: "PUT", credentials: "include" }),
         ));
-        expect(glideboardMock.flush).toHaveBeenCalledTimes(1);
+        expect(glideboardMock.settleActiveEdit).toHaveBeenCalledWith("commit");
         expect(closeButton.hasAttribute("disabled")).toBe(true);
 
-        resolveSave({ ok: true, status: 200 } as Response);
+        const checkpointRequest = fetchMock.mock.calls.find(([url]) => String(url).endsWith("/checkpoint"));
+        const checkpointBody = JSON.parse(String(checkpointRequest?.[1]?.body));
+        resolveSave({
+            ok: true,
+            status: 200,
+            json: async () => ({
+                data: {
+                    draftId: checkpointBody.draftId,
+                    revision: "1",
+                    acknowledgedCheckpoint: {
+                        transactionSequence: checkpointBody.transactionSequence,
+                        stateDigest: checkpointBody.stateDigest,
+                        serverUpdateSequence: 1,
+                    },
+                },
+            }),
+        } as Response);
         await waitFor(() => expect(closeButton.hasAttribute("disabled")).toBe(false));
     });
 });

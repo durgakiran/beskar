@@ -109,7 +109,8 @@ type MutableStoreMember =
   | 'deserialize'
   | 'importRecords'
   | 'rebuildIndices'
-  | 'participateInCommits';
+  | 'participateInCommits'
+  | 'participateInCommitsTrusted';
 
 /** Public canonical-store surface. Durable writes belong to GlideEditor commands. */
 export type ReadonlyGlideStore = Omit<GlideStore, MutableStoreMember>;
@@ -125,6 +126,7 @@ const BLOCKED_PUBLIC_STORE_MEMBERS = new Set<PropertyKey>([
   'importRecords',
   'rebuildIndices',
   'participateInCommits',
+  'participateInCommitsTrusted',
 ]);
 
 export function createReadonlyStoreView(store: GlideStore): ReadonlyGlideStore {
@@ -490,6 +492,21 @@ export class GlideStore {
     }
     this._commitParticipants.add(participant);
     return () => this._commitParticipants.delete(participant);
+  }
+
+  /** @internal Registers a commit participant only for a capability granted at store creation. */
+  participateInCommitsTrusted(
+    capability: MutationCapability,
+    participant: StoreCommitParticipant,
+  ): () => void {
+    if (!this._mutationCapabilities.has(capability)) {
+      throw new MutationPermissionError(Object.freeze({
+        origin: 'local-api',
+        command: 'store.participateInCommits',
+        affectedIds: Object.freeze([]),
+      }));
+    }
+    return this.participateInCommits(participant);
   }
 
   /** Generation remains available after deletion so an ID reuse is detectable. */

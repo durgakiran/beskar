@@ -278,6 +278,8 @@ export function Canvas() {
   const isMiddleDraggingRef = useRef(false);
   const originalToolBeforeMiddleDragRef = useRef<string | null>(null);
   const isPointerDownRef = useRef(false);
+  const awarenessCursorFrameRef = useRef<number | null>(null);
+  const latestAwarenessCursorRef = useRef<Vec2 | null>(null);
   const activeTool = useSignalValue(editor.currentToolId);
 
   useEffect(() => {
@@ -285,6 +287,10 @@ export function Canvas() {
     isMiddleDraggingRef.current = false;
     originalToolBeforeMiddleDragRef.current = null;
   }, [readOnly]);
+
+  useEffect(() => () => {
+    if (awarenessCursorFrameRef.current !== null) cancelAnimationFrame(awarenessCursorFrameRef.current);
+  }, []);
 
   useEffect(() => {
     const el = containerRef.current;
@@ -426,7 +432,13 @@ export function Canvas() {
     
     const awareness = controller.awarenessSignal.peek();
     if (awareness) {
-      awareness.setLocalStateField('cursor', page);
+      latestAwarenessCursorRef.current = page;
+      if (awarenessCursorFrameRef.current === null) {
+        awarenessCursorFrameRef.current = requestAnimationFrame(() => {
+          awarenessCursorFrameRef.current = null;
+          awareness.setLocalStateField('cursor', latestAwarenessCursorRef.current);
+        });
+      }
     }
   }, [controller, editor, getPagePoint]);
 
@@ -500,6 +512,11 @@ export function Canvas() {
   const onPointerLeave = useCallback(() => {
     const awareness = controller.awarenessSignal.peek();
     if (awareness) {
+      if (awarenessCursorFrameRef.current !== null) {
+        cancelAnimationFrame(awarenessCursorFrameRef.current);
+        awarenessCursorFrameRef.current = null;
+      }
+      latestAwarenessCursorRef.current = null;
       awareness.setLocalStateField('cursor', null);
     }
   }, [controller]);

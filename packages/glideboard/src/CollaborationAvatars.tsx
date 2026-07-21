@@ -3,6 +3,7 @@ import { useGlideboardController } from './GlideboardContext';
 import { useSignalValue } from './useSignalValue';
 import { wbTheme } from './theme';
 import type { GlideboardUser } from './types';
+import { safeAwarenessEntries } from './collaboration/awareness';
 
 export function CollaborationAvatars() {
   const controller = useGlideboardController();
@@ -16,13 +17,10 @@ export function CollaborationAvatars() {
     }
 
     const handleAwarenessChange = () => {
-      const states = awareness.getStates();
       const nextUsers = new Map<number, GlideboardUser>();
-      states.forEach((state: any, clientID: number) => {
-        if (state.user) {
-          nextUsers.set(clientID, state.user);
-        }
-      });
+      for (const { clientId, user } of safeAwarenessEntries(awareness.getStates())) {
+        nextUsers.set(clientId, user);
+      }
       setUsers(nextUsers);
     };
 

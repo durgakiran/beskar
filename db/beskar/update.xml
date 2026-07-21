@@ -23,5 +23,6 @@
     <include file="updates/user.xml" />
     <include file="updates/comments.xml" />
     <include file="updates/whiteboard_versioning.xml" />
+    <include file="updates/whiteboard_durability.xml" />
 
 </databaseChangeLog>

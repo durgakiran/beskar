@@ -1,7 +1,9 @@
 package editor
 
 import (
+	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	"time"
@@ -57,11 +59,10 @@ func CreateWhiteboard(d WhiteboardInput) (int64, error) {
 
 // FetchPublishedWhiteboard fetches the latest published (draft=0) version.
 // Used by the VIEW route. Returns pgx.ErrNoRows if the whiteboard has never been published.
-func FetchPublishedWhiteboard(d WhiteboardInput) (WhiteboardData, error) {
-	ctx := context.Background()
+func FetchPublishedWhiteboard(ctx context.Context, d WhiteboardInput) (WhiteboardData, error) {
 	var output WhiteboardData
 	row := core.GetPool().QueryRow(ctx, getWhiteboardPublishedData, d.Id, d.SpaceId)
-	err := row.Scan(&output.Id, &output.DocId, &output.Data, &output.Title, &output.PageId, &output.SpaceId, &output.PreviewAssetName)
+	err := row.Scan(&output.Id, &output.DocId, &output.Data, &output.Title, &output.PageId, &output.SpaceId, &output.PreviewAssetName, &output.DurableRevision, &output.StateDigest, &output.ServerUpdateSequence)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return WhiteboardData{}, err
@@ -75,27 +76,26 @@ func FetchPublishedWhiteboard(d WhiteboardInput) (WhiteboardData, error) {
 // FetchWhiteboardToEdit fetches the active draft (draft=1) for the EDIT route.
 // If no draft exists, it falls back to the published version.
 // The next auto-save will naturally create a new draft=1 row.
-func FetchWhiteboardToEdit(d WhiteboardInput) (WhiteboardData, error) {
-	ctx := context.Background()
+func FetchWhiteboardToEdit(ctx context.Context, d WhiteboardInput) (WhiteboardData, error) {
 	var output WhiteboardData
-	
+
 	row := core.GetPool().QueryRow(ctx, getWhiteboardDraftData, d.Id, d.SpaceId)
-	err := row.Scan(&output.Id, &output.DocId, &output.Data, &output.Title, &output.PageId, &output.SpaceId)
-	
+	err := row.Scan(&output.Id, &output.DocId, &output.Data, &output.Title, &output.PageId, &output.SpaceId, &output.DurableRevision, &output.StateDigest, &output.ServerUpdateSequence)
+
 	if err == nil {
 		return output, nil
 	}
-	
+
 	if err == pgx.ErrNoRows {
 		// Fallback to published
 		row = core.GetPool().QueryRow(ctx, getWhiteboardPublishedData, d.Id, d.SpaceId)
-		err = row.Scan(&output.Id, &output.DocId, &output.Data, &output.Title, &output.PageId, &output.SpaceId, &output.PreviewAssetName)
+		err = row.Scan(&output.Id, &output.DocId, &output.Data, &output.Title, &output.PageId, &output.SpaceId, &output.PreviewAssetName, &output.DurableRevision, &output.StateDigest, &output.ServerUpdateSequence)
 		if err != nil {
 			return WhiteboardData{}, err
 		}
 		return output, nil
 	}
-	
+
 	logger().Error(fmt.Sprintf("FetchWhiteboardToEdit err: %s", err.Error()))
 	return WhiteboardData{}, err
 }
@@ -155,39 +155,95 @@ func UpdateWhiteboard(d WhiteboardInput) error {
 	return tx.Commit(ctx)
 }
 
-func PublishWhiteboard(d WhiteboardPublishInput) error {
-	ctx := context.Background()
+func PublishWhiteboard(ctx context.Context, d WhiteboardPublishInput) (WhiteboardPublishResult, *WhiteboardCheckpointConflict, error) {
+	expectedRevision, err := strconv.ParseInt(d.ExpectedDraftRevision, 10, 64)
+	if err != nil || expectedRevision < 0 {
+		return WhiteboardPublishResult{}, nil, errors.New("invalid expected whiteboard publish revision")
+	}
 	tx, err := core.GetPool().Begin(ctx)
 	if err != nil {
-		return err
+		return WhiteboardPublishResult{}, nil, err
 	}
 	defer tx.Rollback(ctx)
 
-	var publishedDocId int64
-	err = tx.QueryRow(ctx, publishWhiteboardFlipDraft, d.Id).Scan(&publishedDocId)
-	if err == pgx.ErrNoRows {
-		// No draft row exists — this is an edge case (publish called twice rapidly).
-		// Treat as a no-op rather than an error.
-		tx.Rollback(ctx)
-		return nil
+	requestHash := hashWhiteboardPublishRequest(d)
+	replay := func() (WhiteboardPublishResult, error) {
+		var storedHash string
+		var result WhiteboardPublishResult
+		err := tx.QueryRow(ctx, getWhiteboardPublishRequest,
+			d.Id, d.OwnerId, d.ClientId, d.RequestId,
+		).Scan(&storedHash, &result.PublishedDocId, &result.NextDraftId)
+		if err != nil {
+			return WhiteboardPublishResult{}, err
+		}
+		if storedHash != requestHash {
+			return WhiteboardPublishResult{}, ErrWhiteboardRequestIDMisuse
+		}
+		result.NextRevision = "0"
+		return result, nil
 	}
-	if err != nil {
-		logger().Error(fmt.Sprintf("PublishWhiteboard flip draft: %s", err.Error()))
-		return err
+	if result, err := replay(); err == nil {
+		return result, nil, nil
+	} else if !errors.Is(err, pgx.ErrNoRows) {
+		return WhiteboardPublishResult{}, nil, err
 	}
 
-	// Upsert whiteboard_data for the now-published doc_id.
-	_, err = tx.Exec(ctx, publishWhiteboardUpsertData, publishedDocId, d.Data, d.PreviewAssetName)
+	var currentRevision int64
+	var currentDigest string
+	var currentServerSequence int64
+	var currentData []byte
+	err = tx.QueryRow(ctx, lockWhiteboardDraftForPublish, d.Id, d.DraftId).
+		Scan(&currentRevision, &currentDigest, &currentServerSequence, &currentData)
+	if errors.Is(err, pgx.ErrNoRows) {
+		if result, replayErr := replay(); replayErr == nil {
+			return result, nil, nil
+		}
+		return WhiteboardPublishResult{}, nil, pgx.ErrNoRows
+	}
 	if err != nil {
-		logger().Error(fmt.Sprintf("PublishWhiteboard upsert data: %s", err.Error()))
-		return err
+		return WhiteboardPublishResult{}, nil, err
+	}
+	if currentRevision != expectedRevision ||
+		currentServerSequence != d.Checkpoint.ServerUpdateSequence ||
+		!bytes.Equal(currentData, d.Data) ||
+		(currentDigest != "" && currentDigest != d.Checkpoint.StateDigest) {
+		return WhiteboardPublishResult{}, &WhiteboardCheckpointConflict{
+			DraftId:              d.DraftId,
+			Revision:             strconv.FormatInt(currentRevision, 10),
+			StateDigest:          currentDigest,
+			ServerUpdateSequence: currentServerSequence,
+			Data:                 currentData,
+		}, nil
 	}
 
-	return tx.Commit(ctx)
+	if _, err := tx.Exec(ctx, publishCheckedWhiteboardDraft, d.Id, d.DraftId); err != nil {
+		return WhiteboardPublishResult{}, nil, err
+	}
+	if _, err := tx.Exec(ctx, updatePublishedWhiteboardPreview, d.DraftId, d.PreviewAssetName); err != nil {
+		return WhiteboardPublishResult{}, nil, err
+	}
+
+	result := WhiteboardPublishResult{PublishedDocId: d.DraftId, NextRevision: "0"}
+	if err := tx.QueryRow(ctx, insertNextWhiteboardDraft, d.DraftId, d.OwnerId).Scan(&result.NextDraftId); err != nil {
+		return WhiteboardPublishResult{}, nil, err
+	}
+	if _, err := tx.Exec(ctx, seedNextWhiteboardDraft, result.NextDraftId, d.Data, d.Checkpoint.StateDigest); err != nil {
+		return WhiteboardPublishResult{}, nil, err
+	}
+	if _, err := tx.Exec(ctx, insertWhiteboardPublishRequest,
+		d.Id, d.OwnerId, d.ClientId, d.RequestId, requestHash,
+		d.DraftId, result.PublishedDocId, result.NextDraftId,
+	); err != nil {
+		return WhiteboardPublishResult{}, nil, err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return WhiteboardPublishResult{}, nil, err
+	}
+	return result, nil, nil
 }
 
-func ListWhiteboardVersions(pageId int64) ([]WhiteboardVersion, error) {
-	ctx := context.Background()
+func ListWhiteboardVersions(ctx context.Context, pageId int64) ([]WhiteboardVersion, error) {
 	rows, err := core.GetPool().Query(ctx, getWhiteboardVersions, pageId)
 	if err != nil {
 		return nil, err
@@ -205,11 +261,10 @@ func ListWhiteboardVersions(pageId int64) ([]WhiteboardVersion, error) {
 	return versions, rows.Err()
 }
 
-func FetchWhiteboardByDocId(docId int64, spaceId uuid.UUID) (WhiteboardData, error) {
-	ctx := context.Background()
+func FetchWhiteboardByDocId(ctx context.Context, docId int64, spaceId uuid.UUID) (WhiteboardData, error) {
 	var output WhiteboardData
 	row := core.GetPool().QueryRow(ctx, getWhiteboardDataByDocId, docId, spaceId)
-	err := row.Scan(&output.Id, &output.DocId, &output.Data, &output.Title, &output.PageId, &output.SpaceId)
+	err := row.Scan(&output.Id, &output.DocId, &output.Data, &output.Title, &output.PageId, &output.SpaceId, &output.DurableRevision, &output.StateDigest, &output.ServerUpdateSequence)
 	if err != nil {
 		return WhiteboardData{}, err
 	}

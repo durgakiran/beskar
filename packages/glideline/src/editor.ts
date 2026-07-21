@@ -25,6 +25,7 @@ import {
   type ImportReport,
   type ReadonlyGlideStore,
   type StoreTransaction,
+  type StoreCommitParticipant,
   type TransactionOptions,
   type TransactionResult,
 } from './store';
@@ -1272,6 +1273,14 @@ export class GlideEditor {
     fn: (tx: StoreTransaction) => T,
   ): TransactionResult<T> {
     return this._store.transactTrusted(options, fn, capability);
+  }
+
+  /** @internal Collaboration integration for atomic Yjs-before-store publication. */
+  participateInCommitsWithCapability(
+    capability: MutationCapability,
+    participant: StoreCommitParticipant,
+  ): () => void {
+    return this._store.participateInCommitsTrusted(capability, participant);
   }
 
   private _svgToPngBlob(svgStr: string, scale = 1): Promise<Blob> {

@@ -63,9 +63,57 @@ const (
 	newPageWithType = "INSERT INTO core.page (space_id, owner_id, parent_id, date_created, status, type) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id"
 
 	// Whiteboard data
-	insertWhiteboardData = `INSERT INTO core.whiteboard_data (doc_id, data, updated_at) VALUES ($1, $2, NOW()) RETURNING id`
-	upsertWhiteboardData = `INSERT INTO core.whiteboard_data (doc_id, data, updated_at) VALUES ($1, $2, NOW()) ON CONFLICT (doc_id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW() RETURNING id`
-	
+	insertWhiteboardData     = `INSERT INTO core.whiteboard_data (doc_id, data, updated_at) VALUES ($1, $2, NOW()) RETURNING id`
+	upsertWhiteboardData     = `INSERT INTO core.whiteboard_data (doc_id, data, updated_at) VALUES ($1, $2, NOW()) ON CONFLICT (doc_id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW() RETURNING id`
+	getWhiteboardSaveRequest = `SELECT request_hash, response_revision, response_state_digest, response_server_sequence
+		FROM core.whiteboard_save_request
+		WHERE draft_doc_id = $1 AND owner_id = $2 AND client_id = $3 AND request_id = $4`
+	lockWhiteboardDraftCheckpoint = `SELECT COALESCE(wd.revision, 0), COALESCE(wd.state_digest, ''),
+		COALESCE(wd.server_update_sequence, 0), COALESCE(wd.data, ''::bytea)
+		FROM core.page p
+		JOIN core.page_doc_map d ON d.page_id = p.id
+		LEFT JOIN core.whiteboard_data wd ON wd.doc_id = d.doc_id
+		WHERE p.id = $1 AND p.space_id = $2 AND d.doc_id = $3 AND d.draft = 1
+		FOR UPDATE OF d`
+	upsertWhiteboardCheckpoint = `INSERT INTO core.whiteboard_data
+		(doc_id, data, updated_at, revision, state_digest, server_update_sequence)
+		VALUES ($1, $2, NOW(), 1, $3, 1)
+		ON CONFLICT (doc_id) DO UPDATE SET
+			data = EXCLUDED.data,
+			updated_at = NOW(),
+			revision = core.whiteboard_data.revision + 1,
+			state_digest = EXCLUDED.state_digest,
+			server_update_sequence = core.whiteboard_data.server_update_sequence + 1
+		WHERE core.whiteboard_data.revision = $4
+		RETURNING revision, server_update_sequence`
+	insertWhiteboardSaveRequest = `INSERT INTO core.whiteboard_save_request
+		(draft_doc_id, owner_id, client_id, request_id, request_hash, response_revision, response_state_digest, response_server_sequence)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`
+	getWhiteboardPublishRequest = `SELECT request_hash, published_doc_id, next_draft_doc_id
+		FROM core.whiteboard_publish_request
+		WHERE page_id = $1 AND owner_id = $2 AND client_id = $3 AND request_id = $4`
+	lockWhiteboardDraftForPublish = `SELECT COALESCE(wd.revision, 0), COALESCE(wd.state_digest, ''),
+		COALESCE(wd.server_update_sequence, 0), COALESCE(wd.data, ''::bytea)
+		FROM core.page_doc_map d
+		LEFT JOIN core.whiteboard_data wd ON wd.doc_id = d.doc_id
+		WHERE d.page_id = $1 AND d.doc_id = $2 AND d.draft = 1
+		FOR UPDATE OF d`
+	publishCheckedWhiteboardDraft = `UPDATE core.page_doc_map
+		SET draft = 0, version = NOW()
+		WHERE page_id = $1 AND doc_id = $2 AND draft = 1`
+	updatePublishedWhiteboardPreview = `UPDATE core.whiteboard_data
+		SET preview_asset_name = $2, updated_at = NOW()
+		WHERE doc_id = $1`
+	insertNextWhiteboardDraft = `INSERT INTO core.page_doc_map (page_id, title, version, owner_id, draft)
+		SELECT page_id, title, NOW(), $2, 1 FROM core.page_doc_map WHERE doc_id = $1
+		RETURNING doc_id`
+	seedNextWhiteboardDraft = `INSERT INTO core.whiteboard_data
+		(doc_id, data, updated_at, revision, state_digest, server_update_sequence)
+		VALUES ($1, $2, NOW(), 0, $3, 0)`
+	insertWhiteboardPublishRequest = `INSERT INTO core.whiteboard_publish_request
+		(page_id, owner_id, client_id, request_id, request_hash, source_draft_doc_id, published_doc_id, next_draft_doc_id)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`
+
 	publishWhiteboardFlipDraft = `
 		UPDATE core.page_doc_map
 		SET draft = 0, version = NOW()
@@ -103,7 +151,10 @@ const (
 			wd.data,
 			d.title,
 			d.page_id,
-			p.space_id
+			p.space_id,
+			COALESCE(wd.revision, 0)::text,
+			COALESCE(wd.state_digest, ''),
+			COALESCE(wd.server_update_sequence, 0)
 		FROM core.page p
 		JOIN core.page_doc_map d ON p.id = d.page_id
 		LEFT JOIN core.whiteboard_data wd ON d.doc_id = wd.doc_id
@@ -116,7 +167,10 @@ const (
 			wd.data,
 			d.title,
 			d.page_id,
-			p.space_id
+			p.space_id,
+			COALESCE(wd.revision, 0)::text,
+			COALESCE(wd.state_digest, ''),
+			COALESCE(wd.server_update_sequence, 0)
 		FROM core.page p
 		JOIN core.page_doc_map d ON p.id = d.page_id
 		LEFT JOIN core.whiteboard_data wd ON d.doc_id = wd.doc_id
@@ -132,7 +186,10 @@ const (
 			d.title,
 			d.page_id,
 			p.space_id,
-			COALESCE(wd.preview_asset_name, '') AS previewAssetName
+			COALESCE(wd.preview_asset_name, '') AS previewAssetName,
+			COALESCE(wd.revision, 0)::text,
+			COALESCE(wd.state_digest, ''),
+			COALESCE(wd.server_update_sequence, 0)
 		FROM core.page p
 		JOIN core.page_doc_map d ON p.id = d.page_id
 		LEFT JOIN core.whiteboard_data wd ON d.doc_id = wd.doc_id
