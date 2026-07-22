@@ -10,6 +10,10 @@ import type {
 } from './types';
 import { isGlideBinding, isGlideShape } from './types';
 import { migrateRecord } from './migrations';
+import {
+  generateRebalancedOrderKeys,
+  getShapeOrderParentId,
+} from './ordering';
 
 /**
  * Version of the persisted GlideDocument/store envelope.
@@ -20,10 +24,11 @@ import { migrateRecord } from './migrations';
  *
  * Store v1 inferred record categories from their fields. Store v2 persists an
  * explicit `kind`, per-record `schemaVersion`, and `meta` envelope and has a
- * document-level v1-to-v2 migration. Increment this value only when the
- * document-wide format changes and add the corresponding migration pipeline.
+ * document-level v1-to-v2 migration. Store v3 normalizes shape order to
+ * canonical parent-scoped keys. Increment this value only when the document-wide
+ * format changes and add the corresponding migration pipeline.
  */
-export const CURRENT_STORE_VERSION = 2;
+export const CURRENT_STORE_VERSION = 3;
 
 export interface DocumentLimits {
   maxRecords: number;
@@ -393,31 +398,39 @@ export class GlideSchema {
           ? { ...record, pageId }
           : record);
 
-        const originalOrdinal = new Map(records.map((record, ordinal) => [String(record['id']), ordinal]));
-        const groups = new Map<string, AnyRecord[]>();
-        for (const record of records) {
-          if (record['kind'] !== 'shape') continue;
-          const group = String(record['parentId'] ?? record['pageId'] ?? 'root');
-          const members = groups.get(group) ?? [];
-          members.push(record);
-          groups.set(group, members);
-        }
-        const normalizedIndex = new Map<string, string>();
-        for (const members of groups.values()) {
-          members.sort((left, right) =>
-            String(left['index'] ?? '').localeCompare(String(right['index'] ?? ''))
-            || (originalOrdinal.get(String(left['id'])) ?? 0) - (originalOrdinal.get(String(right['id'])) ?? 0)
-            || String(left['id']).localeCompare(String(right['id'])),
-          );
-          members.forEach((record, ordinal) => {
-            normalizedIndex.set(String(record['id']), `a${ordinal.toString(36).padStart(8, '0')}`);
-          });
-        }
-        records = records.map(record => normalizedIndex.has(String(record['id']))
-          ? { ...record, index: normalizedIndex.get(String(record['id']))! }
-          : record);
-        migrations.push('legacy:normalize-page-and-order');
+        migrations.push('legacy:add-page-membership');
       }
+    }
+
+    if (sourceStoreVersion < 3) {
+      const originalOrdinal = new Map(records.map((record, ordinal) => [String(record['id']), ordinal]));
+      const groups = new Map<string, AnyRecord[]>();
+      for (const record of records) {
+        if (record['kind'] !== 'shape') continue;
+        const group = getShapeOrderParentId(record);
+        const members = groups.get(group) ?? [];
+        members.push(record);
+        groups.set(group, members);
+      }
+      const normalizedIndex = new Map<string, string>();
+      for (const members of groups.values()) {
+        members.sort((left, right) => {
+          const leftIndex = String(left['index'] ?? '');
+          const rightIndex = String(right['index'] ?? '');
+          const byIndex = leftIndex < rightIndex ? -1 : leftIndex > rightIndex ? 1 : 0;
+          const byOrdinal = (originalOrdinal.get(String(left['id'])) ?? 0)
+            - (originalOrdinal.get(String(right['id'])) ?? 0);
+          const leftId = String(left['id']);
+          const rightId = String(right['id']);
+          return byIndex || byOrdinal || (leftId < rightId ? -1 : leftId > rightId ? 1 : 0);
+        });
+        const keys = generateRebalancedOrderKeys(members.length);
+        members.forEach((record, ordinal) => normalizedIndex.set(String(record['id']), keys[ordinal]!));
+      }
+      records = records.map(record => normalizedIndex.has(String(record['id']))
+        ? { ...record, index: normalizedIndex.get(String(record['id']))! }
+        : record);
+      migrations.push('store:normalize-canonical-order');
     }
 
     this.validateCandidate(records);

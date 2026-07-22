@@ -191,7 +191,7 @@ export function createSvgPathShape(def: CreateSvgPathShapeDef): {
           id: this._previewId, type,
           x: Math.min(info.origin.x, info.origin.x + w),
           y: Math.min(info.origin.y, info.origin.y + h),
-          index: 'a1', rotation: 0, meta: {},
+          rotation: 0, meta: {},
           props: { ...(new CustomUtil()).getDefaultProps(), w: Math.max(1, Math.abs(w)), h: Math.max(1, Math.abs(h)) },
         });
     }, { history: 'ignore', scope: 'ephemeral' });
@@ -221,7 +221,7 @@ export function createSvgPathShape(def: CreateSvgPathShapeDef): {
           id: finalId, type,
           x: Math.min(this._origin.x, this._origin.x + w),
           y: Math.min(this._origin.y, this._origin.y + h),
-          index: 'a1', rotation: 0, meta: {},
+          rotation: 0, meta: {},
           props: { ...(new CustomUtil()).getDefaultProps(), w: Math.max(1, Math.abs(w)), h: Math.max(1, Math.abs(h)) },
         });
       });

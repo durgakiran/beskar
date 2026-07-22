@@ -1,5 +1,5 @@
 import * as Y from 'yjs';
-import { createMutationCapability } from '@durgakiran/glideline';
+import { createMutationCapability, isCanonicalOrderKey } from '@durgakiran/glideline';
 import { describe, expect, it } from 'vitest';
 import { bindGlideboardCollaboration } from './collaboration';
 import { createGlideboardEditorInstance } from './editor';
@@ -74,6 +74,33 @@ describe('bindGlideboardCollaboration', () => {
     expect(records.get('shape:seed')?.toJSON()).toMatchObject({ id: 'shape:seed', x: 12, y: 24 });
 
     cleanup();
+  });
+
+  it('migrates persisted collaborative v2 indices before projecting them', () => {
+    const seedCapability = createMutationCapability();
+    const seedEditor = createGlideboardEditorInstance([], undefined, seedCapability);
+    seedEditor.createShape(createBoxRecord('shape:first', 12, 24) as any);
+    seedEditor.createShape(createBoxRecord('shape:second', 12, 24) as any);
+    const doc = new Y.Doc();
+    const seedBinding = bindGlideboardCollaboration(seedEditor, { doc }, seedCapability);
+    seedBinding();
+
+    const metadata = doc.getMap<any>('glideboard-meta');
+    const currentSchema = metadata.get('documentSchema');
+    metadata.set('documentSchema', { ...currentSchema, storeVersion: 2 });
+    const records = doc.getMap<Y.Map<unknown>>('glideboard-records-v2');
+    records.get('shape:first')!.set('index', 'legacy-a');
+    records.get('shape:second')!.set('index', 'legacy-b');
+
+    const capability = createMutationCapability();
+    const editor = createGlideboardEditorInstance([], undefined, capability);
+    const binding = bindGlideboardCollaboration(editor, { doc }, capability);
+
+    expect(isCanonicalOrderKey(editor.getShape('shape:first' as any)?.index)).toBe(true);
+    expect(isCanonicalOrderKey(editor.getShape('shape:second' as any)?.index)).toBe(true);
+    expect(metadata.get('documentSchema').storeVersion).toBe(currentSchema.storeVersion);
+    expect(records.get('shape:first')?.get('index')).toBe(editor.getShape('shape:first' as any)?.index);
+    binding();
   });
 
   it('does not synchronize or serialize ephemeral preview records', async () => {
@@ -210,6 +237,35 @@ describe('bindGlideboardCollaboration', () => {
     const xB = editorB.getShape('shape:same-field' as any)?.x;
     expect(xA).toBe(xB);
     expect([100, 200]).toContain(xA);
+    bindingA();
+    bindingB();
+  });
+
+  it('converges concurrent equal order keys using shape id as the tie-break', () => {
+    const capabilityA = createMutationCapability();
+    const capabilityB = createMutationCapability();
+    const editorA = createGlideboardEditorInstance([], undefined, capabilityA);
+    const editorB = createGlideboardEditorInstance([], undefined, capabilityB);
+    const docA = new Y.Doc();
+    editorA.createShape(createBoxRecord('shape:seed', 10, 20) as any);
+    const bindingA = bindGlideboardCollaboration(editorA, { doc: docA }, capabilityA);
+    const docB = new Y.Doc();
+    Y.applyUpdate(docB, Y.encodeStateAsUpdate(docA));
+    const bindingB = bindGlideboardCollaboration(editorB, { doc: docB }, capabilityB);
+
+    editorA.createShape(createBoxRecord('shape:concurrent-b', 20, 20) as any);
+    editorB.createShape(createBoxRecord('shape:concurrent-a', 30, 20) as any);
+    expect(editorA.getShape('shape:concurrent-b' as any)?.index)
+      .toBe(editorB.getShape('shape:concurrent-a' as any)?.index);
+
+    const updateA = Y.encodeStateAsUpdate(docA, Y.encodeStateVector(docB));
+    const updateB = Y.encodeStateAsUpdate(docB, Y.encodeStateVector(docA));
+    Y.applyUpdate(docA, updateB, docB);
+    Y.applyUpdate(docB, updateA, docA);
+
+    const expected = ['shape:seed', 'shape:concurrent-a', 'shape:concurrent-b'];
+    expect(editorA.getOrderedShapeIds()).toEqual(expected);
+    expect(editorB.getOrderedShapeIds()).toEqual(expected);
     bindingA();
     bindingB();
   });

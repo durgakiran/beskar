@@ -270,7 +270,7 @@ const ShapeLayer = memo(({ id, zIndex }: { id: ShapeId; zIndex: number }) => {
 export function Canvas() {
   const controller = useGlideboardController();
   const editor = controller.editor;
-  const shapeIds = useSignalValue(editor.getShapeIdsSignal())!;
+  const shapeIds = useSignalValue(editor.getOrderedShapeIdsSignal())!;
   const camera = useSignalValue(editor.camera.signal)!;
   const readOnly = useSignalValue(controller.readOnlySignal) ?? false;
   const containerRef = useRef<HTMLDivElement>(null);
@@ -358,8 +358,7 @@ export function Canvas() {
 
   const getShapeAtEvent = useCallback((event: React.PointerEvent) => {
     const { page } = getPagePoint(event);
-    const hits = editor.getShapesAtPoint(page);
-    return hits.length > 0 ? hits[hits.length - 1] : null;
+    return editor.getTopShapeAtPoint(page) ?? null;
   }, [editor, getPagePoint]);
 
   const getHandleAtEvent = useCallback((event: React.PointerEvent) => {
@@ -499,8 +498,7 @@ export function Canvas() {
     const rect = containerRef.current!.getBoundingClientRect();
     const screen = { x: event.clientX - rect.left, y: event.clientY - rect.top };
     const page = editor.screenToPage(screen);
-    const hits = editor.getShapesAtPoint(page);
-    const hit = hits.length > 0 ? hits[hits.length - 1] : null;
+    const hit = editor.getTopShapeAtPoint(page);
     editor.dispatchEvent({ type: 'doubleClick', point: page, shapeId: hit?.id as ShapeId | undefined } as any);
   }, [editor, readOnly]);
 

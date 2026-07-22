@@ -1332,7 +1332,7 @@ Canvas paints insertion-order `shapeIds`; reorder commands mutate record `index`
 - Creation allocates above the current top sibling.
 - Front/back generate keys at the corresponding edge.
 - Forward/backward move selected contiguous runs one unselected position while preserving selected relative order.
-- Rebalance only one parent when keys exceed a measured length threshold.
+- Keys use a fixed-width fractional space; rebalance only one parent when that local gap is exhausted or legacy non-canonical keys are encountered.
 
 ```ts
 getOrderedChildIds(parentId: ParentId): readonly ShapeId[];
@@ -1351,6 +1351,13 @@ Canvas, hit tests, arrow binding candidates, layers, clipboard, export, and coll
 ### 16.3 Migration and tests
 
 Normalize legacy duplicates using existing key, original serialized ordinal, then ID. Test identical results with reversed insertion/arrival order; overlapping shapes must agree across paint, click, double-click, connector targeting, layer list, selected export, region export, reload, and two-client collaboration.
+
+### 16.4 Implementation status — complete
+
+- Glideline store version 3 migrates each legacy sibling set to deterministic fixed-width canonical keys, preserving existing key order with serialized ordinal and ID tie-breaks. Glideboard also migrates persisted collaborative v2 records inside the Yjs bootstrap transaction before projecting them into the editor.
+- `GlideEditor` owns index allocation. Creation allocates above the current parent-local top; direct `updateShape(..., { index })` writes are rejected; legacy `createTopIndex()` is deprecated. Reorder implements front, back, forward, and backward against sibling sets, changes only selected records while a gap exists, and limits fallback rebalance to one parent.
+- The canonical hierarchy traversal and `(index, id)` sibling comparator back ordered shape signals, child queries, top-shape hit selection, Canvas paint order, click/double-click targeting, connector candidates, clipboard/duplicate placement, and selected/region SVG export. Spatial queries sort only their candidates by ancestor path, avoiding an O(board size) hit-query regression. There is no separate layer-list implementation today; any future layer UI must consume `getOrderedShapeIdsSignal()` or `getOrderedChildIds()`.
+- Tests cover deterministic key generation and equal-key tie-breaks, parent-local selective reorder, direct-index rejection, RBush reinsertion independence, paint/hit/selected-export/region-export agreement, v1/v2 reload migration, collaborative persisted-state migration, and two-client convergence for concurrent equal keys. Glideline `0.0.5` and Glideboard `0.0.7` package builds and dry-run package publication pass.
 
 ## 17. Workstream K — Canonical Transforms and Geometry
 

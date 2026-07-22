@@ -43,7 +43,6 @@ class Idle extends StateNode {
         type:     'text',
         x:        e.point.x,
         y:        e.point.y,
-        index:    'a1',
         rotation: 0,
         meta:     {},
         props: {

@@ -29,6 +29,19 @@ export {
 } from './schema';
 export type { DocumentLimits, LoadReport, LoadedDocument } from './schema';
 
+// Canonical parent-scoped shape ordering
+export {
+  ROOT_ORDER_PARENT,
+  OrderKeySpaceExhaustedError,
+  isCanonicalOrderKey,
+  generateOrderKeysBetween,
+  generateRebalancedOrderKeys,
+  getShapeOrderParentId,
+  compareSiblingOrder,
+  getCanonicalShapeIds,
+  sortShapesByCanonicalOrder,
+} from './ordering';
+
 // Store
 export {
   GlideStore, AsyncTransactionError, TransactionAbortedError, TransactionReentryError,

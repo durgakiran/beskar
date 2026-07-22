@@ -520,16 +520,17 @@ class DraggingHandle extends StateNode {
 
           const otherTerminal = 'end';
           const otherBoundId = arrow.props[otherTerminal].boundShapeId;
-          const hits = this.editor.getShapesAtPoint(e.point)
-            .filter(s => s.type !== 'arrow' && s.id !== otherBoundId && s.id !== this._arrowId);
+          const targetShape = this.editor.getTopShapeAtPoint(
+            e.point,
+            shape => shape.type !== 'arrow' && shape.id !== otherBoundId && shape.id !== this._arrowId,
+          );
 
           let finalStartX = nextStartWorldX;
           let finalStartY = nextStartWorldY;
           let boundShapeId: ShapeId | null = null;
           let normalizedAnchor = { x: 0.5, y: 0.5 };
 
-          if (hits.length > 0) {
-            const targetShape = hits[hits.length - 1]!;
+          if (targetShape) {
             const preview = buildBindingPreview(this.editor, targetShape as any, e.point, 'start');
             const snapped = { normalizedAnchor: preview.normalizedAnchor, point: preview.point };
             finalStartX = snapped.point.x;
@@ -570,16 +571,17 @@ class DraggingHandle extends StateNode {
 
           const otherTerminal = 'start';
           const otherBoundId = arrow.props[otherTerminal].boundShapeId;
-          const hits = this.editor.getShapesAtPoint(e.point)
-            .filter(s => s.type !== 'arrow' && s.id !== otherBoundId && s.id !== this._arrowId);
+          const targetShape = this.editor.getTopShapeAtPoint(
+            e.point,
+            shape => shape.type !== 'arrow' && shape.id !== otherBoundId && shape.id !== this._arrowId,
+          );
 
           let finalEndLocalX = nextEndWorldX - arrowX;
           let finalEndLocalY = nextEndWorldY - arrowY;
           let boundShapeId: ShapeId | null = null;
           let normalizedAnchor = { x: 0.5, y: 0.5 };
 
-          if (hits.length > 0) {
-            const targetShape = hits[hits.length - 1]!;
+          if (targetShape) {
             const preview = buildBindingPreview(this.editor, targetShape as any, e.point, 'end');
             const snapped = { normalizedAnchor: preview.normalizedAnchor, point: preview.point };
             finalEndLocalX = snapped.point.x - arrowX;
@@ -635,11 +637,12 @@ class DraggingHandle extends StateNode {
           const term = this._handleType;
           const otherTerminal = term === 'start' ? 'end' : 'start';
           const otherBoundId = finalProps[otherTerminal].boundShapeId;
-          const hits = this.editor.getShapesAtPoint(e.point)
-            .filter(s => s.type !== 'arrow' && s.id !== otherBoundId && s.id !== this._arrowId);
+          const targetShape = this.editor.getTopShapeAtPoint(
+            e.point,
+            shape => shape.type !== 'arrow' && shape.id !== otherBoundId && shape.id !== this._arrowId,
+          );
 
-          if (hits.length > 0) {
-            const targetShape = hits[hits.length - 1]!;
+          if (targetShape) {
             const previewCandidate = matchingPreview(activePreview, term, targetShape.id as ShapeId);
             const snapped = previewCandidate
               ? { normalizedAnchor: previewCandidate.normalizedAnchor, point: previewCandidate.point }

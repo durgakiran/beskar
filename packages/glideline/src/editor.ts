@@ -16,7 +16,7 @@
  *  - updateShape calls onAfterChangeToShape for all bindings to the shape
  */
 
-import { signal, type Signal, type ReadonlySignal } from '@preact/signals';
+import { computed, signal, type Signal, type ReadonlySignal } from '@preact/signals';
 import { bid, isGlideShape, sid } from './types';
 import {
   GlideStore,
@@ -44,9 +44,18 @@ import { getWorldBounds, SmartRouterCache, type SmartRouteResolution, type Smart
 import type { GlideShape, GlideBinding, ShapeId, BindingId, Vec2, Box2d, AnyRecord } from './types';
 import type { GlideEvent } from './state-node';
 import { getMinHeightForShape } from './styles';
-import { createTopIndex } from './arrow-records';
 import { RecordIdService } from './id';
 import { InteractionManager } from './interaction';
+import {
+  compareSiblingOrder,
+  generateOrderKeysBetween,
+  generateRebalancedOrderKeys,
+  getCanonicalShapeIds,
+  getShapeOrderParentId,
+  isCanonicalOrderKey,
+  OrderKeySpaceExhaustedError,
+  sortShapesByCanonicalOrder,
+} from './ordering';
 import {
   allowAllMutations,
   createMutationCapability,
@@ -201,6 +210,7 @@ export class GlideEditor {
   private _selection: Signal<Set<ShapeId>>;
   private _tools = new Map<string, StateNode>();
   private _currentToolSignal: Signal<StateNode | null> = signal(null);
+  private readonly _orderedShapeIdsSignal: ReadonlySignal<readonly ShapeId[]>;
 
   /** Reactive signal of the active tool id — subscribe in UI for live highlight. */
   readonly currentToolId: Signal<string> = signal('select');
@@ -235,6 +245,10 @@ export class GlideEditor {
     this.camera = camera;
     this._mutationPolicy = mutationPolicy;
     this.interactions = new InteractionManager(store, this._localMutationCapability);
+    this._orderedShapeIdsSignal = computed(() => {
+      this.interactions.getVersionSignal().value;
+      return getCanonicalShapeIds(this._getAllShapes());
+    });
     this._history = new HistoryManager(store, this._localMutationCapability);
     this.history = createReadonlyHistoryView(this._history);
     mutableEditorHistories.set(this, this._history);
@@ -332,6 +346,14 @@ export class GlideEditor {
     return this.interactions.getShapeIdsSignal();
   }
 
+  getOrderedShapeIdsSignal(): ReadonlySignal<readonly ShapeId[]> {
+    return this._orderedShapeIdsSignal;
+  }
+
+  getOrderedShapeIds(): readonly ShapeId[] {
+    return this._orderedShapeIdsSignal.peek();
+  }
+
   getShapeSignal(id: ShapeId): ReadonlySignal<import('./store').StoreRecord | null> {
     return this.interactions.getSignal(id);
   }
@@ -356,7 +378,19 @@ export class GlideEditor {
         shape,
         { x: point.x - shape.x, y: point.y - shape.y },
       ));
-    return [...committed, ...transient];
+    return this.sortShapesByCanonicalOrder([...committed, ...transient]);
+  }
+
+  getTopShapeAtPoint(
+    point: Vec2,
+    filter?: (shape: GlideShape) => boolean,
+  ): GlideShape | undefined {
+    const hits = this.getShapesAtPoint(point);
+    if (!filter) return hits[hits.length - 1];
+    for (let index = hits.length - 1; index >= 0; index--) {
+      if (filter(hits[index]!)) return hits[index];
+    }
+    return undefined;
   }
 
   getShapesInBox(box: Pick<Box2d, 'minX' | 'minY' | 'maxX' | 'maxY'> & Partial<Pick<Box2d, 'x' | 'y' | 'w' | 'h'>>): GlideShape[] {
@@ -371,7 +405,112 @@ export class GlideEditor {
         return bounds.maxX >= box.minX && bounds.minX <= box.maxX
           && bounds.maxY >= box.minY && bounds.minY <= box.maxY;
       });
-    return [...committed, ...transient];
+    return this.sortShapesByCanonicalOrder([...committed, ...transient]);
+  }
+
+  sortShapesByCanonicalOrder(shapes: readonly GlideShape[]): GlideShape[] {
+    return [...shapes].sort((left, right) => this._compareCanonicalShapeOrder(left, right));
+  }
+
+  compareShapeOrder(left: GlideShape, right: GlideShape): number {
+    return this._compareCanonicalShapeOrder(left, right);
+  }
+
+  private _compareCanonicalShapeOrder(left: GlideShape, right: GlideShape): number {
+    if (left.id === right.id) return 0;
+    const pathFor = (shape: GlideShape): GlideShape[] => {
+      const path = [shape];
+      const visited = new Set<string>([String(shape.id)]);
+      let current = shape;
+      while ('parentId' in current && typeof current.parentId === 'string') {
+        const parentId = current.parentId;
+        if (visited.has(parentId)) break;
+        const parent = this.getShape(parentId as ShapeId);
+        if (!parent) break;
+        path.unshift(parent);
+        visited.add(parentId);
+        current = parent;
+      }
+      return path;
+    };
+    const leftPath = pathFor(left);
+    const rightPath = pathFor(right);
+    const leftScope = getShapeOrderParentId(leftPath[0]!);
+    const rightScope = getShapeOrderParentId(rightPath[0]!);
+    if (leftScope !== rightScope) return leftScope < rightScope ? -1 : 1;
+    let shared = 0;
+    while (shared < leftPath.length && shared < rightPath.length
+      && leftPath[shared]!.id === rightPath[shared]!.id) shared++;
+    if (shared === leftPath.length) return -1;
+    if (shared === rightPath.length) return 1;
+    return compareSiblingOrder(leftPath[shared]!, rightPath[shared]!);
+  }
+
+  getOrderedChildIds(parentId: string): readonly ShapeId[] {
+    return Object.freeze(this._getAllShapes()
+      .filter(shape => getShapeOrderParentId(shape) === parentId)
+      .sort(compareSiblingOrder)
+      .map(shape => shape.id as ShapeId));
+  }
+
+  generateIndexAbove(parentId: string): string {
+    const siblings = this._getSiblingShapes(parentId);
+    const top = siblings[siblings.length - 1]?.index ?? null;
+    if (top !== null && !isCanonicalOrderKey(top)) {
+      const keys = generateRebalancedOrderKeys(siblings.length + 1);
+      return keys[keys.length - 1]!;
+    }
+    return generateOrderKeysBetween(top, null, 1)[0]!;
+  }
+
+  generateIndicesBetween(
+    _parentId: string,
+    lower: string | null,
+    upper: string | null,
+    count: number,
+  ): readonly string[] {
+    return generateOrderKeysBetween(lower, upper, count);
+  }
+
+  private _getAllShapes(): GlideShape[] {
+    const result: GlideShape[] = [];
+    const ids = new Set<ShapeId>([
+      ...this._store.getShapeIds(),
+      ...this.interactions.getShapeIdsSignal().peek(),
+    ]);
+    for (const id of ids) {
+      const shape = toGlideShape(this.interactions.get(id));
+      if (shape) result.push(shape);
+    }
+    return result;
+  }
+
+  private _getSiblingShapes(parentId: string): GlideShape[] {
+    return this._getAllShapes()
+      .filter(shape => getShapeOrderParentId(shape) === parentId)
+      .sort(compareSiblingOrder);
+  }
+
+  private _allocateOrderKeysAbove(parentId: string, count: number): {
+    keys: readonly string[];
+    rebalanced: ReadonlyMap<ShapeId, string>;
+  } {
+    const siblings = this._getSiblingShapes(parentId);
+    if (siblings.every(shape => isCanonicalOrderKey(shape.index))) {
+      try {
+        return {
+          keys: generateOrderKeysBetween(siblings[siblings.length - 1]?.index ?? null, null, count),
+          rebalanced: new Map(),
+        };
+      } catch (error) {
+        if (!(error instanceof OrderKeySpaceExhaustedError)) throw error;
+      }
+    }
+    const allKeys = generateRebalancedOrderKeys(siblings.length + count);
+    return {
+      keys: Object.freeze(allKeys.slice(siblings.length)),
+      rebalanced: new Map(siblings.map((shape, index) => [shape.id as ShapeId, allKeys[index]!])),
+    };
   }
 
   // ── Binding queries ────────────────────────────────────────
@@ -402,12 +541,14 @@ export class GlideEditor {
     const requestedType = String(partial['type'] ?? 'shape');
     partial = {
       rotation: 0,
-      index: createTopIndex(),
       meta: {},
       ...partial,
       kind: 'shape',
       id: partial['id'] ?? this.createShapeId(requestedType),
     };
+    const parentId = getShapeOrderParentId(partial);
+    const allocation = this._allocateOrderKeysAbove(parentId, 1);
+    partial = { ...partial, index: allocation.keys[0]! };
     const type = partial['type'] as string;
     const util = this._utils.get(type);
     if (util) {
@@ -445,8 +586,11 @@ export class GlideEditor {
     this.executeCommand({
       id: 'shape.create',
       label: 'Create Shape',
-      affectedIds: [partial['id'] as string],
+      affectedIds: [partial['id'] as string, ...allocation.rebalanced.keys()],
       execute: tx => {
+        for (const [id, index] of allocation.rebalanced) {
+          tx.update(id, record => ({ ...record, index }));
+        }
         tx.insert(partial);
       },
     });
@@ -457,6 +601,9 @@ export class GlideEditor {
   }
 
   updateShape<S extends GlideShape>(id: ShapeId, partial: Partial<Omit<S, 'id' | 'type'>>): void {
+    if (Object.prototype.hasOwnProperty.call(partial, 'index')) {
+      throw new Error('Shape order is managed by reorderShapes(); index cannot be updated directly.');
+    }
     const existing = this.interactions.get(id);
     if (!existing) throw new Error(`GlideEditor: shape "${id}" not found`);
     const newShape = { ...existing, ...partial } as any;
@@ -748,26 +895,45 @@ export class GlideEditor {
     }
     const records = payload.records.map(record => cloneRecord(record));
     const recordById = new Map(records.map(record => [record['id'] as string, record]));
-    const orderedRootIds = [...payload.rootIds].sort((left, right) =>
-      String(recordById.get(left)?.['index'] ?? '').localeCompare(String(recordById.get(right)?.['index'] ?? ''))
-      || String(left).localeCompare(String(right)),
-    );
-    const rootOrder = new Map(orderedRootIds.map((id, ordinal) => [id, ordinal]));
-    const orderStamp = Date.now().toString(36);
+    const orderedRootIds = [...payload.rootIds].sort((left, right) => {
+      const leftRecord = recordById.get(left);
+      const rightRecord = recordById.get(right);
+      if (!leftRecord || !rightRecord) return String(left).localeCompare(String(right));
+      return compareSiblingOrder(leftRecord as unknown as GlideShape, rightRecord as unknown as GlideShape);
+    });
+    const rootsByParent = new Map<string, ShapeId[]>();
+    for (const id of orderedRootIds) {
+      const record = recordById.get(id);
+      if (!record) continue;
+      const parentId = getShapeOrderParentId(record);
+      const group = rootsByParent.get(parentId) ?? [];
+      group.push(id);
+      rootsByParent.set(parentId, group);
+    }
+    const rebalanced = new Map<ShapeId, string>();
+    for (const [parentId, rootIds] of rootsByParent) {
+      const allocation = this._allocateOrderKeysAbove(parentId, rootIds.length);
+      for (const [id, index] of allocation.rebalanced) rebalanced.set(id, index);
+      rootIds.forEach((id, ordinal) => {
+        const record = recordById.get(id);
+        if (record) record['index'] = allocation.keys[ordinal]!;
+      });
+    }
     for (const record of records) {
-      const ordinal = rootOrder.get(record['id'] as ShapeId);
-      if (ordinal === undefined || record['kind'] !== 'shape') continue;
+      if (!payload.rootIds.includes(record['id'] as ShapeId) || record['kind'] !== 'shape') continue;
       record['x'] = Number(record['x']) + offset.x;
       record['y'] = Number(record['y']) + offset.y;
-      record['index'] = `zz:${orderStamp}:${ordinal.toString(36).padStart(6, '0')}`;
     }
 
     let report!: ImportReport;
     this.executeCommand({
       id: label === 'Paste' ? 'clipboard.paste' : 'shape.duplicate',
       label,
-      affectedIds: payload.records.map(record => String(record['id'])),
-      execute: () => {
+      affectedIds: [...payload.records.map(record => String(record['id'])), ...rebalanced.keys()],
+      execute: tx => {
+        for (const [id, index] of rebalanced) {
+          tx.update(id, record => ({ ...record, index }));
+        }
         report = this._store.importRecords(records, {
           label,
           relationshipPolicy: 'detach-external',
@@ -785,17 +951,8 @@ export class GlideEditor {
    * fractional `index` field for z-ordered rendering.
    */
   getShapes(sorted = false): GlideShape[] {
-    const ids = this.interactions.getShapeIdsSignal().peek();
-    const shapes: GlideShape[] = [];
-    for (const id of ids) {
-      const s = this.interactions.get(id);
-      const shape = toGlideShape(s);
-      if (shape) shapes.push(shape);
-    }
-    if (sorted) {
-      shapes.sort((a, b) => (a.index < b.index ? -1 : a.index > b.index ? 1 : 0));
-    }
-    return shapes;
+    const shapes = this._getAllShapes();
+    return sorted ? sortShapesByCanonicalOrder(shapes, shapes) : shapes;
   }
 
   // ── Z-ordering ─────────────────────────────────────────────
@@ -808,68 +965,107 @@ export class GlideEditor {
    * 'forward' — move one step up
    * 'backward'— move one step down
    *
-   * Uses simple string lexicographic fractional indexing:
-   * inserts a new index between neighbours by averaging their char codes.
+   * Only selected siblings receive new fractional keys. A parent-local full
+   * rebalance is used solely when legacy keys or exhausted key space require it.
    */
   reorderShapes(
     ids: ShapeId[],
     position: 'front' | 'back' | 'forward' | 'backward',
   ): void {
-    const all = this.getShapes(true);
-    if (all.length === 0 || ids.length === 0) return;
-
     const idSet = new Set(ids);
-    const targets = all.filter(s => idSet.has(s.id as ShapeId));
-    const rest = all.filter(s => !idSet.has(s.id as ShapeId));
-
-    let reordered: GlideShape[];
-    switch (position) {
-      case 'front': reordered = [...rest, ...targets]; break;
-      case 'back': reordered = [...targets, ...rest]; break;
-      case 'forward': {
-        // Move each target one step toward the end, relative to non-targets
-        reordered = [...all];
-        // For simplicity, treat as 'front' of current batch
-        const lastTargetIdx = Math.max(...targets.map(t => all.indexOf(t)));
-        const insertAt = Math.min(lastTargetIdx + 2, all.length);
-        const withoutTargets = all.filter(s => !idSet.has(s.id as ShapeId));
-        // Find the correct insertion position among non-targets
-        let nonTargetPos = 0;
-        for (let i = 0; i < all.length && i < insertAt; i++) {
-          const shape = all[i];
-          if (shape && !idSet.has(shape.id as ShapeId)) nonTargetPos++;
-        }
-        withoutTargets.splice(nonTargetPos, 0, ...targets);
-        reordered = withoutTargets;
-        break;
-      }
-      case 'backward': {
-        const firstTargetIdx = Math.min(...targets.map(t => all.indexOf(t)));
-        const withoutTargets = all.filter(s => !idSet.has(s.id as ShapeId));
-        const nonTargetPos = Math.max(0, Math.min(
-          firstTargetIdx - 1,
-          withoutTargets.length,
-        ));
-        withoutTargets.splice(nonTargetPos, 0, ...targets);
-        reordered = withoutTargets;
-        break;
-      }
+    if (idSet.size === 0) return;
+    this.assertMutationAllowed({
+      origin: 'local-user',
+      command: 'shape.reorder',
+      affectedIds: [...idSet],
+    });
+    const groups = new Map<string, GlideShape[]>();
+    for (const shape of this._getAllShapes()) {
+      if (!idSet.has(shape.id as ShapeId)) continue;
+      const parentId = getShapeOrderParentId(shape);
+      const group = groups.get(parentId) ?? [];
+      group.push(shape);
+      groups.set(parentId, group);
     }
 
-    // Assign new sequential indices
+    const updates = new Map<ShapeId, string>();
+    for (const [parentId] of groups) {
+      const siblings = this._getSiblingShapes(parentId);
+      const targets = new Set(siblings.filter(shape => idSet.has(shape.id as ShapeId)).map(shape => shape.id as ShapeId));
+      if (targets.size === 0 || targets.size === siblings.length) continue;
+      const desired = [...siblings];
+      if (position === 'front' || position === 'back') {
+        const selected = desired.filter(shape => targets.has(shape.id as ShapeId));
+        const rest = desired.filter(shape => !targets.has(shape.id as ShapeId));
+        desired.splice(0, desired.length, ...(position === 'front' ? [...rest, ...selected] : [...selected, ...rest]));
+      } else if (position === 'forward') {
+        for (let index = desired.length - 2; index >= 0; index--) {
+          if (targets.has(desired[index]!.id as ShapeId) && !targets.has(desired[index + 1]!.id as ShapeId)) {
+            [desired[index], desired[index + 1]] = [desired[index + 1]!, desired[index]!];
+          }
+        }
+      } else {
+        for (let index = 1; index < desired.length; index++) {
+          if (targets.has(desired[index]!.id as ShapeId) && !targets.has(desired[index - 1]!.id as ShapeId)) {
+            [desired[index - 1], desired[index]] = [desired[index]!, desired[index - 1]!];
+          }
+        }
+      }
+
+      if (desired.every((shape, index) => shape.id === siblings[index]?.id)) continue;
+
+      const groupUpdates = this._keysForDesiredSiblingOrder(desired, targets);
+      for (const [id, index] of groupUpdates) updates.set(id, index);
+    }
+    if (updates.size === 0) return;
+
     this.executeCommand({
       id: 'shape.reorder',
       label: 'Reorder Shapes',
-      affectedIds: reordered.map(shape => shape.id),
+      affectedIds: [...updates.keys()],
       execute: tx => {
-        reordered.forEach((shape, i) => {
-          const newIndex = `a${String(i + 1).padStart(4, '0')}`;
-          if (shape.index !== newIndex) {
-            tx.update(shape.id, record => ({ ...record, index: newIndex }));
-          }
-        });
+        for (const [id, index] of updates) {
+          tx.update(id, record => ({ ...record, index }));
+        }
       },
     });
+  }
+
+  private _keysForDesiredSiblingOrder(
+    desired: readonly GlideShape[],
+    mutableIds: ReadonlySet<ShapeId>,
+  ): ReadonlyMap<ShapeId, string> {
+    if (desired.every(shape => isCanonicalOrderKey(shape.index))) {
+      try {
+        const result = new Map<ShapeId, string>();
+        let cursor = 0;
+        while (cursor < desired.length) {
+          if (!mutableIds.has(desired[cursor]!.id as ShapeId)) {
+            cursor++;
+            continue;
+          }
+          const start = cursor;
+          while (cursor < desired.length && mutableIds.has(desired[cursor]!.id as ShapeId)) cursor++;
+          const lower = start > 0 ? desired[start - 1]!.index : null;
+          const upper = cursor < desired.length ? desired[cursor]!.index : null;
+          const keys = generateOrderKeysBetween(lower, upper, cursor - start);
+          for (let index = start; index < cursor; index++) {
+            const shape = desired[index]!;
+            if (shape.index !== keys[index - start]) result.set(shape.id as ShapeId, keys[index - start]!);
+          }
+        }
+        return result;
+      } catch (error) {
+        if (!(error instanceof OrderKeySpaceExhaustedError)) throw error;
+      }
+    }
+
+    const keys = generateRebalancedOrderKeys(desired.length);
+    const result = new Map<ShapeId, string>();
+    desired.forEach((shape, index) => {
+      if (shape.index !== keys[index]) result.set(shape.id as ShapeId, keys[index]!);
+    });
+    return result;
   }
 
   // ── Duplication ────────────────────────────────────────────
@@ -1182,14 +1378,14 @@ export class GlideEditor {
   // ── Export ─────────────────────────────────────────────────
 
   exportToSvg(shapeIds: ShapeId[]): string {
-    const shapes = shapeIds
+    const shapes = this.sortShapesByCanonicalOrder(shapeIds
       .map(id => this.getShape(id))
-      .filter(Boolean) as GlideShape[];
+      .filter(Boolean) as GlideShape[]);
     return this._renderShapesToSvg(shapes);
   }
 
   exportRegionToSvg(box: Box2d): string {
-    const shapes = this.getShapesInBox(box).sort((a, b) => (a.index < b.index ? -1 : a.index > b.index ? 1 : 0));
+    const shapes = this.getShapesInBox(box);
     return this._renderShapesToSvg(shapes, box);
   }
 

@@ -5,7 +5,6 @@ import type { AIContextSnapshot } from './ai-context';
 import {
   buildArrowBindingRecord,
   buildArrowShapeRecord,
-  createTopIndex,
   resolveConnectionTerminal,
 } from './arrow-records';
 import type { ArrowRouteStyle } from './shapes/ArrowUtil';
@@ -241,7 +240,6 @@ const TOOL_DEFINITIONS = [
           type,
           x,
           y,
-          index: createTopIndex(),
           rotation: 0,
           meta: {},
           props,
@@ -330,7 +328,6 @@ const TOOL_DEFINITIONS = [
         startWorld: start.point,
         endWorld: end.point,
         routeStyle,
-        index: createTopIndex(),
       });
       arrow.props = {
         ...arrow.props,
@@ -412,7 +409,6 @@ const TOOL_DEFINITIONS = [
             type,
             x: input.startX + dagreNode.x - dagreNode.width / 2,
             y: input.startY + dagreNode.y - dagreNode.height / 2,
-            index: createTopIndex(),
             rotation: 0,
             meta: {},
             props,
@@ -439,7 +435,7 @@ const TOOL_DEFINITIONS = [
 
           const arrowId    = editor.createShapeId('arrow');
           const routeStyle = (edge.routeStyle ?? editor.arrowRouteStyle) as ArrowRouteStyle;
-          const arrow      = buildArrowShapeRecord({ id: arrowId, startWorld: start.point, endWorld: end.point, routeStyle, index: createTopIndex() });
+          const arrow      = buildArrowShapeRecord({ id: arrowId, startWorld: start.point, endWorld: end.point, routeStyle });
 
           arrow.props = {
             ...arrow.props,

@@ -4,7 +4,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { GlideSchema } from './schema';
+import { CURRENT_STORE_VERSION, GlideSchema } from './schema';
 import { GlideStore } from './store';
 import { T } from './validators';
 import { defineMigrations } from './migrations';
@@ -170,6 +170,6 @@ describe('GlideSchema.save', () => {
       id: 'shape:1', type: 'box', x: 0, y: 0, rotation: 0, index: 'a1', meta: {}, props: {},
     }]);
     expect(doc.schema.shapes['box']).toBe(3);
-    expect(doc.schema.storeVersion).toBe(2);
+    expect(doc.schema.storeVersion).toBe(CURRENT_STORE_VERSION);
   });
 });

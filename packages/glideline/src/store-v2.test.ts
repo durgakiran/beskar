@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { DocumentValidationError, GlideSchema } from './schema';
+import { CURRENT_STORE_VERSION, DocumentValidationError, GlideSchema } from './schema';
 import { GlideStore } from './store';
 import type { AnyRecord, GlideDocument } from './types';
 
@@ -65,7 +65,8 @@ describe('store-v2 loading and record capabilities', () => {
       records: [{ id: 'legacy', type: 'box', x: 0, y: 0, rotation: 0, index: 'a1', props: {}, meta: {} }],
     });
     expect(loaded.records[0]).toMatchObject({ kind: 'shape', schemaVersion: 0 });
-    expect(loaded.report.migrations).toContain('store:1->2');
+    expect(loaded.report.migrations).toContain(`store:1->${CURRENT_STORE_VERSION}`);
+    expect(loaded.report.migrations).toContain('store:normalize-canonical-order');
   });
 
   it('adds a default page and deterministic unique order keys during v1 migration', () => {
@@ -81,6 +82,19 @@ describe('store-v2 loading and record capabilities', () => {
     expect(page).toMatchObject({ id: 'page:default', name: 'Page 1' });
     expect(new Set(shapes.map(record => record['pageId']))).toEqual(new Set(['page:default']));
     expect(new Set(shapes.map(record => record['index'])).size).toBe(2);
+  });
+
+  it('migrates v2 sibling indices to canonical keys without changing their order', () => {
+    const loaded = createSchema().loadDocument(document([
+      shape('top', 'box', { index: 'z9' }),
+      shape('bottom', 'box', { index: 'a1' }),
+    ]));
+    const shapes = loaded.records.filter(record => record['kind'] === 'shape');
+
+    expect(shapes.map(record => record['id'])).toEqual(['top', 'bottom']);
+    expect(shapes.every(record => /^o[0-9a-z]{24}$/.test(String(record['index'])))).toBe(true);
+    expect(String(shapes[1]?.['index']) < String(shapes[0]?.['index'])).toBe(true);
+    expect(loaded.report.migrations).toContain('store:normalize-canonical-order');
   });
 
   it('quarantines an ambiguous unknown legacy relationship as opaque', () => {
@@ -133,7 +147,7 @@ describe('atomic document replacement', () => {
     expect(store.get('old')).toBeUndefined();
     expect(store.get('new')).toBeDefined();
     expect(report.recordCount).toBe(1);
-    expect(report.targetStoreVersion).toBe(2);
+    expect(report.targetStoreVersion).toBe(CURRENT_STORE_VERSION);
   });
 
   it('leaves the previous document untouched when graph validation fails', () => {

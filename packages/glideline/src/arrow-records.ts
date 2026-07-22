@@ -104,6 +104,7 @@ export function createCanvasShapeId(prefix: string): ShapeId {
   return sid(compatibilityIds.create(`shape:${prefix}`));
 }
 
+/** @deprecated Shape indices are assigned by GlideEditor.createShape(). */
 export function createTopIndex(): string {
   return `z${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }

@@ -45,7 +45,6 @@ class Idle extends StateNode {
         type:     'sticky-note',
         x:        e.point.x - W / 2,
         y:        e.point.y - H / 2,
-        index:    'a1',
         rotation: 0,
         meta:     {},
         props: {

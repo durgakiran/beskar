@@ -291,6 +291,9 @@ export function bindGlideboardCollaboration(
 
   const seedOrMigrate = () => {
     if (disposed || !ready || !validateMetadata()) return;
+    const previousDocumentSchema = metadata.get('documentSchema') as typeof localDocumentSchema | undefined;
+    const hadSharedRecords = records.size > 0;
+    const hadLegacyRecords = legacyRecords.size > 0;
     doc.transact(() => {
       if (metadata.get('schemaVersion') === undefined) {
         metadata.set('schemaVersion', SHARED_SCHEMA_VERSION);
@@ -308,6 +311,21 @@ export function bindGlideboardCollaboration(
         for (const record of legacyRecords.values()) writeRecord(doc, records, record as StoreRecord);
       } else if (records.size === 0) {
         for (const record of editor.serialize().records) writeRecord(doc, records, record as StoreRecord);
+      }
+      const migrationSchema = previousDocumentSchema
+        ?? (hadLegacyRecords ? { storeVersion: 1, shapes: {}, bindings: {} } : undefined)
+        ?? (hadSharedRecords ? {
+          storeVersion: 2,
+          shapes: localDocumentSchema.shapes,
+          bindings: localDocumentSchema.bindings,
+        } : undefined);
+      if (migrationSchema && migrationSchema.storeVersion < localDocumentSchema.storeVersion && records.size > 0) {
+        const migrated = editor.schema.loadDocument({
+          schema: migrationSchema,
+          records: materializeRecords(records),
+        });
+        for (const record of migrated.records) writeRecord(doc, records, record as StoreRecord);
+        metadata.set('documentSchema', localDocumentSchema);
       }
     }, BOOTSTRAP_ORIGIN);
     projectCurrentSharedState();

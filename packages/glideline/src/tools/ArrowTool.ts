@@ -80,9 +80,10 @@ function findBindableShapeCandidate(
   excludeIds: ShapeId[] = [],
 ): { shape: { id: ShapeId; type: string; x: number; y: number }; preview: BindingPreviewCandidate } | null {
   const excluded = new Set(excludeIds.filter(Boolean));
-  const directHits = editor.getShapesAtPoint(point)
-    .filter(s => s.type !== 'arrow' && !excluded.has(s.id as ShapeId));
-  const directShape = directHits.length > 0 ? directHits[directHits.length - 1] : null;
+  const directShape = editor.getTopShapeAtPoint(
+    point,
+    shape => shape.type !== 'arrow' && !excluded.has(shape.id as ShapeId),
+  );
   if (directShape) {
     return {
       shape: directShape as any,
@@ -100,7 +101,7 @@ function findBindableShapeCandidate(
   let best: { shape: { id: ShapeId; type: string; x: number; y: number }; preview: BindingPreviewCandidate } | null = null;
   let bestDistance = Number.POSITIVE_INFINITY;
 
-  for (const shape of nearby) {
+  for (const shape of [...nearby].reverse()) {
     const preview = buildBindingPreviewCandidate(editor, shape as any, point);
     const distance = Math.hypot(preview.point.x - point.x, preview.point.y - point.y);
     if (distance <= BINDING_SNAP_RADIUS && distance < bestDistance) {

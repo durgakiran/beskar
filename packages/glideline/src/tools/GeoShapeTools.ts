@@ -30,7 +30,6 @@ function makeShape(node: StateNode, id: ShapeId, x: number, y: number, w: number
     type: shapeType,
     x: Math.min(x, x + w),
     y: Math.min(y, y + h),
-    index: 'a1',
     rotation: 0,
     meta: {},
     props: {

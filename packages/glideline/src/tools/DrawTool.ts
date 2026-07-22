@@ -66,7 +66,6 @@ class Drawing extends StateNode {
         type:     'freehand',
         x:        info.point.x,
         y:        info.point.y,
-        index:    'a1',
         rotation: 0,
         meta:     {},
         props: {
@@ -131,7 +130,6 @@ class Drawing extends StateNode {
           type:     'freehand',
           x:        minX,
           y:        minY,
-          index:    'a1',
           rotation: 0,
           meta:     {},
           props: {
