@@ -104,6 +104,30 @@ describe('T4.1-02: onAfterChangeToShape fires on updateShape', () => {
     const binding = spy.mock.calls[0]![0] as AnyRecord;
     expect(binding.id).toBe(bid('bind2'));
   });
+
+  it('moves a bound arrow terminal when the target rotates', () => {
+    const ed = makeEditor();
+    getMutableStoreForTesting(ed).put([
+      boxShape('rotating-target', 100, 100, 200, 100),
+      arrowShape('rotating-arrow', 0, 0),
+    ]);
+    ed.createBinding({
+      ...makeBinding('rotating-binding', 'rotating-arrow', 'rotating-target'),
+      props: {
+        terminal: 'end',
+        normalizedAnchor: { x: 0.5, y: 0 },
+        fromEdge: 'top',
+      },
+    } as unknown as AnyRecord);
+
+    ed.updateShape(sid('rotating-target'), { rotation: Math.PI / 2 });
+
+    const arrow = ed.getShape(sid('rotating-arrow')) as ReturnType<typeof arrowShape>;
+    expect(arrow.props.end.point.x).toBeCloseTo(250);
+    expect(arrow.props.end.point.y).toBeCloseTo(150);
+    const binding = ed.getBinding(bid('rotating-binding')) as AnyRecord;
+    expect((binding['props'] as AnyRecord)['fromEdge']).toBe('right');
+  });
 });
 
 // ─────────────────────────────────────────────────────────────

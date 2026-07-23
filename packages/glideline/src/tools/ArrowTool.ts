@@ -26,41 +26,21 @@ import type { PointerDownEvent, PointerMoveEvent, PointerUpEvent, KeyDownEvent }
 import type { AnyRecord, ShapeId, Vec2 } from '../types';
 import { makeBox, sid } from '../types';
 import type { ArrowShape } from '../shapes/ArrowUtil';
-import { getClosestConnectionPoint, getConnectionPoints } from '../shapes/ArrowUtil';
 import type { BindingPreview, BindingPreviewCandidate } from '../editor';
 import { buildArrowBindingRecord, buildArrowShapeRecord } from '../arrow-records';
 
 const PREVIEW_ID = sid('__arrow-preview__');
 const BINDING_SNAP_RADIUS = 12;
 
-/** Convert local bounds (from getGeometry) to world bounds by adding shape.x/y. */
-function toWorldBounds(
-  localBounds: { minX: number; minY: number; maxX: number; maxY: number; w: number; h: number; x?: number; y?: number },
-  shape: { x: number; y: number }
-) {
-  return {
-    ...localBounds,
-    x: localBounds.minX + shape.x,
-    y: localBounds.minY + shape.y,
-    minX: localBounds.minX + shape.x,
-    minY: localBounds.minY + shape.y,
-    maxX: localBounds.maxX + shape.x,
-    maxY: localBounds.maxY + shape.y,
-  };
-}
-
 function buildBindingPreviewCandidate(editor: StateNode['editor'], targetShape: { id: ShapeId; type: string; x: number; y: number }, point: Vec2): BindingPreviewCandidate {
-  const util = editor.getShapeUtil(targetShape.type);
-  const localBounds = util.getGeometry(targetShape as any).getBounds();
-  const worldBounds = toWorldBounds(localBounds, targetShape);
-  const snapped = getClosestConnectionPoint(point, worldBounds);
+  const snapped = editor.transforms.getClosestConnectionAnchor(targetShape.id, point);
 
   return {
     targetId: targetShape.id,
     targetType: targetShape.type,
     normalizedAnchor: snapped.normalizedAnchor,
     point: snapped.point,
-    candidateAnchors: getConnectionPoints(worldBounds),
+    candidateAnchors: editor.transforms.getConnectionAnchors(targetShape.id),
   };
 }
 
@@ -153,7 +133,7 @@ class Drawing extends StateNode {
     this._sourcePreview = null;
     this.editor.clearBindingPreview();
 
-    const routeStyle = (this.editor as any).arrowRouteStyle ?? 'curve';
+    const routeStyle = (this.editor as any).arrowRouteStyle ?? 'ortho';
     const arrowheadStart = (this.editor as any).arrowheadStart ?? 'none';
     const arrowheadEnd = (this.editor as any).arrowheadEnd ?? 'arrow';
     let startPt = info.origin;
@@ -245,7 +225,7 @@ class Drawing extends StateNode {
       this.editor.deleteShapes([PREVIEW_ID]);
     }, { history: 'ignore', scope: 'ephemeral' });
 
-    const routeStyle = (this.editor as any).arrowRouteStyle ?? 'curve';
+    const routeStyle = (this.editor as any).arrowRouteStyle ?? 'ortho';
     const arrowheadStart = (this.editor as any).arrowheadStart ?? 'none';
     const arrowheadEnd = (this.editor as any).arrowheadEnd ?? 'arrow';
 
@@ -261,10 +241,7 @@ class Drawing extends StateNode {
       } else if (this._fromShapeId) {
         const fromShape = this.editor.getShape(this._fromShapeId);
         if (fromShape) {
-          const util = this.editor.getShapeUtil(fromShape.type);
-          const localBounds = util.getGeometry(fromShape as any).getBounds();
-          const worldBounds = toWorldBounds(localBounds, fromShape);
-          const snapped = getClosestConnectionPoint(this._origin, worldBounds);
+          const snapped = this.editor.transforms.getClosestConnectionAnchor(this._fromShapeId, this._origin);
           startAnchor = snapped.normalizedAnchor;
           startPt = snapped.point;
         }
@@ -281,10 +258,7 @@ class Drawing extends StateNode {
         } else {
           const target = this.editor.getShape(toShapeId);
           if (target) {
-            const util = this.editor.getShapeUtil(target.type);
-            const localBounds = util.getGeometry(target as any).getBounds();
-            const worldBounds = toWorldBounds(localBounds, target);
-            const snapped = getClosestConnectionPoint(e.point, worldBounds);
+            const snapped = this.editor.transforms.getClosestConnectionAnchor(toShapeId, e.point);
             endAnchor = snapped.normalizedAnchor;
             endPt = snapped.point;
           }
@@ -325,6 +299,7 @@ class Drawing extends StateNode {
           toId: this._fromShapeId,
           terminal: 'start',
           normalizedAnchor: startAnchor,
+          fromEdge: this.editor.transforms.getAnchorPageEdge(this._fromShapeId, startAnchor),
         }));
       }
 
@@ -336,6 +311,7 @@ class Drawing extends StateNode {
           toId: toShapeId,
           terminal: 'end',
           normalizedAnchor: endAnchor,
+          fromEdge: this.editor.transforms.getAnchorPageEdge(toShapeId, endAnchor),
         }));
       }
 

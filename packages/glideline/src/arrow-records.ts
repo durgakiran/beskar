@@ -1,10 +1,8 @@
 import type { GlideEditor } from './editor';
-import { type AnyRecord, type ShapeId, sid, type Vec2 } from './types';
+import { type AnyRecord, type EdgeName, type ShapeId, sid, type Vec2 } from './types';
 import { RecordIdService } from './id';
-import { getWorldBounds } from './smart-router';
 import {
   anchorToEdge,
-  getClosestConnectionPoint,
   type ArrowRouteStyle,
   type ArrowShape,
   type ArrowTerminal,
@@ -29,7 +27,7 @@ export function buildArrowShapeRecord(args: {
   arrowheadEnd?: ArrowheadStyle;
   index?: string;
 }): ArrowShape {
-  const routeStyle = args.routeStyle ?? 'curve';
+  const routeStyle = args.routeStyle ?? 'ortho';
   const arrowheadStart = args.arrowheadStart ?? 'none';
   const arrowheadEnd = args.arrowheadEnd ?? 'arrow';
 
@@ -65,6 +63,7 @@ export function buildArrowBindingRecord(args: {
   toId: ShapeId;
   terminal: 'start' | 'end';
   normalizedAnchor: Vec2;
+  fromEdge?: EdgeName;
 }): AnyRecord {
   return {
     ...(args.id ? { id: args.id } : {}),
@@ -75,7 +74,7 @@ export function buildArrowBindingRecord(args: {
     props: {
       terminal: args.terminal,
       normalizedAnchor: args.normalizedAnchor,
-      fromEdge: anchorToEdge(args.normalizedAnchor),
+      fromEdge: args.fromEdge ?? anchorToEdge(args.normalizedAnchor),
     },
   };
 }
@@ -88,12 +87,12 @@ export function resolveConnectionTerminal(
   const shape = editor.getShape(shapeId);
   if (!shape) return null;
 
-  const snapped = getClosestConnectionPoint(point, getWorldBounds(editor, shape));
+  const snapped = editor.transforms.getClosestConnectionAnchor(shapeId, point);
   return {
     shapeId,
     normalizedAnchor: snapped.normalizedAnchor,
     point: snapped.point,
-    fromEdge: anchorToEdge(snapped.normalizedAnchor),
+    fromEdge: editor.transforms.getAnchorPageEdge(shapeId, snapped.normalizedAnchor),
   };
 }
 

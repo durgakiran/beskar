@@ -1408,7 +1408,7 @@ Single-shape resize converts the page cursor into the shape's oriented local sel
 
 ### 17.5 Tests
 
-- Property test `pageToLocal(localToPage(p)) ≈ p` across random nested transforms.
+- Property test `pageToLocal(localToPage(p)) ≈ p` across varied transforms. Repeat it across nested transforms when the hierarchy workstream migrates child coordinates from page space to parent-local space.
 - Transformed bounds contain every transformed outline point.
 - Visible rotated corners hit; points outside the rotated outline do not.
 - Rotated shapes participate in viewport and region queries.
@@ -1418,6 +1418,13 @@ Single-shape resize converts the page cursor into the shape's oriented local sel
 - Golden Canvas versus SVG/PNG tests cover rotation, strokes, arrowheads, multiline text, and clipping.
 
 Canonical transforms must land before hierarchy and viewport virtualization.
+
+### 17.6 Implementation status — complete for the current flat-record model
+
+- Glideline now exposes one `TransformService` with affine matrix composition helpers, local/world/inverse transforms, local-to-page and page-to-local conversion, transformed outlines, geometry bounds, stroke/arrowhead-inflated visual bounds, zoom-aware precise hit margins, and transformed normalized connector anchors. Current `parentId` remains hierarchy/order metadata and `x/y` remain page-space for compatibility; parent-local composition is deliberately deferred to the hierarchy coordinate migration.
+- RBush broad-phase entries use transformed visual AABBs and precise point hits inverse-transform into local geometry. Viewport/region queries, minimap and navigation bounds, smart-router obstacles, connector candidates, binding refresh, Canvas culling, Canvas shape matrices, selection outlines/handles, and SVG/PNG export now consume the canonical service.
+- Single-shape resize runs in the oriented local frame and recomputes translation so the opposite page-space handle stays fixed. Multi-selection retains its page-space selection frame. Arrow record rotation is prohibited; group rotation rotates arrow points once, and store version 4 folds legacy non-zero arrow rotation into terminal points before setting rotation to zero.
+- Tests cover transform/inverse round trips, transformed-outline containment, rotated broad/precise hits, region queries, rotated anchors, Canvas-equivalent SVG matrices/view boxes, fixed-opposite-handle resize, arrow migration, and no-double-rotation group behavior. Glideline `0.0.6` and Glideboard `0.0.8` carry the implementation.
 
 ## 18. Workstream L — Text Edit Safety
 

@@ -179,7 +179,7 @@ export class GlideboardController {
     const report = this.editor.replaceDocument(document);
     if (options.resetSessionState ?? true) {
       this.editor.resetSessionState();
-      this.setArrowRouteStyle('curve');
+      this.setArrowRouteStyle('ortho');
       this.setConnectorPreset('arrow');
       this.editor.setCurrentTool(this.readOnlySignal.peek() ? 'hand' : 'select');
       this.isCanvasDraggingRef.current = false;

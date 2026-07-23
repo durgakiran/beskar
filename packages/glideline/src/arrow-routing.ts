@@ -24,8 +24,9 @@ export function resolveArrowRoute(
   opts?: { now?: () => number; budgetMs?: number },
 ): ArrowRouteResult {
   const { start, end, routeStyle, bend } = shape.props;
-  const startWorld = { x: shape.x + start.point.x, y: shape.y + start.point.y };
-  const endWorld = { x: shape.x + end.point.x, y: shape.y + end.point.y };
+  const toPage = (point: Vec2) => editor.localToPage(shape.id as any, point);
+  const startWorld = toPage(start.point);
+  const endWorld = toPage(end.point);
 
   if (routeStyle === 'curve') {
     const localPoints = sampleCurvePoints(start.point, end.point, bend);
@@ -34,7 +35,7 @@ export function resolveArrowRoute(
       renderKind: 'curve',
       path: computeArcPath(start.point, end.point, bend),
       localPoints,
-      worldPoints: localPoints.map(point => ({ x: shape.x + point.x, y: shape.y + point.y })),
+      worldPoints: localPoints.map(toPage),
     };
   }
 
@@ -54,10 +55,7 @@ export function resolveArrowRoute(
     };
     const smart = editor.resolveSmartRouteForArrow(shape, smartArgs);
 
-    const localPoints = smart.points.map(point => ({
-      x: point.x - shape.x,
-      y: point.y - shape.y,
-    }));
+    const localPoints = smart.points.map(point => editor.pageToLocal(shape.id as any, point));
 
     const result: ArrowRouteResult = {
       routeStyle,
@@ -80,7 +78,7 @@ export function resolveArrowRoute(
       renderKind: 'polyline',
       path: pointsToPath(localPoints),
       localPoints,
-      worldPoints: localPoints.map(point => ({ x: shape.x + point.x, y: shape.y + point.y })),
+      worldPoints: localPoints.map(toPage),
     };
   }
 
@@ -93,7 +91,7 @@ export function resolveArrowRoute(
       renderKind: 'polyline',
       path: pointsToPath(localPoints),
       localPoints,
-      worldPoints: localPoints.map(point => ({ x: shape.x + point.x, y: shape.y + point.y })),
+      worldPoints: localPoints.map(toPage),
     };
   }
 
@@ -110,7 +108,7 @@ export function resolveArrowRoute(
     renderKind: 'polyline',
     path: pointsToPath(localPoints),
     localPoints,
-    worldPoints: localPoints.map(point => ({ x: shape.x + point.x, y: shape.y + point.y })),
+    worldPoints: localPoints.map(toPage),
   };
 }
 
@@ -127,10 +125,10 @@ export function getArrowBendHandlePoint(
     const dy = shape.props.end.point.y - shape.props.start.point.y;
     const chord = Math.hypot(dx, dy);
     if (chord < 1e-9) {
-      return {
-        x: shape.x + (shape.props.start.point.x + shape.props.end.point.x) / 2,
-        y: shape.y + (shape.props.start.point.y + shape.props.end.point.y) / 2,
-      };
+      return editor.localToPage(shape.id as any, {
+        x: (shape.props.start.point.x + shape.props.end.point.x) / 2,
+        y: (shape.props.start.point.y + shape.props.end.point.y) / 2,
+      });
     }
 
     const mx = (shape.props.start.point.x + shape.props.end.point.x) / 2;
@@ -139,10 +137,10 @@ export function getArrowBendHandlePoint(
     const perpY = -dx / chord;
     const offset = chord * shape.props.bend;
 
-    return {
-      x: shape.x + mx + perpX * offset,
-      y: shape.y + my + perpY * offset,
-    };
+    return editor.localToPage(shape.id as any, {
+      x: mx + perpX * offset,
+      y: my + perpY * offset,
+    });
   }
 
   const resolved = resolveArrowRoute(editor, shape);

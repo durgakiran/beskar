@@ -52,14 +52,14 @@ function getSelectionData(editor: GlideEditor) {
   for (const id of selectedIds) {
     const shape = editor.getShapeSignal(id).value as GlideShape | null;
     if (!shape) continue;
-    const localBounds = editor.getShapeUtil(shape.type).getGeometry(shape as any).getBounds();
+    const worldBounds = editor.getShapeWorldBounds(shape);
     boxes.push({
-      minX: localBounds.minX + shape.x,
-      minY: localBounds.minY + shape.y,
-      maxX: localBounds.maxX + shape.x,
-      maxY: localBounds.maxY + shape.y,
-      w: localBounds.w,
-      h: localBounds.h,
+      minX: worldBounds.minX,
+      minY: worldBounds.minY,
+      maxX: worldBounds.maxX,
+      maxY: worldBounds.maxY,
+      w: worldBounds.w,
+      h: worldBounds.h,
       rotation: shape.rotation ?? 0,
     });
     shapes.push(shape);
@@ -100,17 +100,15 @@ export function getHandleAtPagePoint(editor: GlideEditor, pageX: number, pageY: 
   if (shapes.length === 1 && shapes[0]?.type === 'arrow') {
     const arrow = shapes[0] as ArrowShape;
     const { start, end } = arrow.props;
-    const startWorldX = arrow.x + start.point.x;
-    const startWorldY = arrow.y + start.point.y;
-    const endWorldX = arrow.x + end.point.x;
-    const endWorldY = arrow.y + end.point.y;
+    const startWorld = editor.localToPage(arrow.id as any, start.point);
+    const endWorld = editor.localToPage(arrow.id as any, end.point);
 
     // Start handle
-    const distStart = Math.hypot((pageX - startWorldX) * zoom, (pageY - startWorldY) * zoom);
+    const distStart = Math.hypot((pageX - startWorld.x) * zoom, (pageY - startWorld.y) * zoom);
     if (distStart <= 8) return 'start';
 
     // End handle
-    const distEnd = Math.hypot((pageX - endWorldX) * zoom, (pageY - endWorldY) * zoom);
+    const distEnd = Math.hypot((pageX - endWorld.x) * zoom, (pageY - endWorld.y) * zoom);
     if (distEnd <= 8) return 'end';
 
     // Bend handle
@@ -126,6 +124,38 @@ export function getHandleAtPagePoint(editor: GlideEditor, pageX: number, pageY: 
   const allText = shapes.every(shape => shape.type === 'text');
   if (allText) return null;
 
+  if (shapes.length === 1) {
+    const shape = shapes[0]!;
+    const util = editor.getShapeUtil(shape.type);
+    const bounds = util.getGeometry(shape as any).getBounds();
+    const centerX = bounds.minX + bounds.w / 2;
+    const centerY = bounds.minY + bounds.h / 2;
+    const handles: { id: ResizeHandle; point: { x: number; y: number } }[] = [
+      { id: 'nw', point: { x: bounds.minX, y: bounds.minY } },
+      { id: 'n', point: { x: centerX, y: bounds.minY } },
+      { id: 'ne', point: { x: bounds.maxX, y: bounds.minY } },
+      { id: 'e', point: { x: bounds.maxX, y: centerY } },
+      { id: 'se', point: { x: bounds.maxX, y: bounds.maxY } },
+      { id: 's', point: { x: centerX, y: bounds.maxY } },
+      { id: 'sw', point: { x: bounds.minX, y: bounds.maxY } },
+      { id: 'w', point: { x: bounds.minX, y: centerY } },
+    ];
+    if (!util.hideRotateHandle(shape as any)) {
+      const rotatePoint = editor.localToPage(shape.id as any, {
+        x: centerX,
+        y: bounds.minY - ROTATION_HANDLE_OFFSET / zoom,
+      });
+      if (Math.hypot((pageX - rotatePoint.x) * zoom, (pageY - rotatePoint.y) * zoom) <= 8) return 'rotate';
+    }
+    if (!util.hideResizeHandles(shape as any)) {
+      for (const handle of handles) {
+        const point = editor.localToPage(shape.id as any, handle.point);
+        if (Math.hypot((pageX - point.x) * zoom, (pageY - point.y) * zoom) <= 8) return handle.id;
+      }
+    }
+    return null;
+  }
+
   const minX = Math.min(...boxes.map(box => box.minX));
   const minY = Math.min(...boxes.map(box => box.minY));
   const maxX = Math.max(...boxes.map(box => box.maxX));
@@ -134,7 +164,7 @@ export function getHandleAtPagePoint(editor: GlideEditor, pageX: number, pageY: 
   const height = maxY - minY;
   const cx = minX + width / 2;
   const cy = minY + height / 2;
-  const rotation = boxes.length === 1 ? boxes[0]!.rotation : 0;
+  const rotation = 0;
 
   const getRotatedPoint = (px: number, py: number) => {
     if (boxes.length !== 1 || rotation === 0) {
@@ -236,17 +266,9 @@ function drawCandidate(
   activeRadius: number,
   zoom: number,
 ) {
-  const localBounds = editor.getShapeUtil(shape.type).getGeometry(shape as any).getBounds();
-  const cx = localBounds.minX + localBounds.w / 2;
-  const cy = localBounds.minY + localBounds.h / 2;
-
   ctx.save();
-  ctx.translate(shape.x, shape.y);
-  if (shape.rotation) {
-    ctx.translate(cx, cy);
-    ctx.rotate(shape.rotation);
-    ctx.translate(-cx, -cy);
-  }
+  const transform = editor.getWorldTransform(shape.id as any);
+  ctx.transform(transform.a, transform.b, transform.c, transform.d, transform.e, transform.f);
   drawGeometryOutline(editor, ctx, shape, stroke, fill, strokeWidth, zoom);
   ctx.restore();
 
@@ -281,10 +303,8 @@ function drawSelection(editor: GlideEditor, ctx: CanvasRenderingContext2D, zoom:
     const arrow = shapes[0] as ArrowShape;
     const { start, end } = arrow.props;
     const bendPoint = getArrowBendHandlePoint(editor as any, arrow);
-    const startWorldX = arrow.x + start.point.x;
-    const startWorldY = arrow.y + start.point.y;
-    const endWorldX = arrow.x + end.point.x;
-    const endWorldY = arrow.y + end.point.y;
+    const startWorld = editor.localToPage(arrow.id as any, start.point);
+    const endWorld = editor.localToPage(arrow.id as any, end.point);
 
     const hs = HANDLE_SIZE / zoom;
 
@@ -296,7 +316,7 @@ function drawSelection(editor: GlideEditor, ctx: CanvasRenderingContext2D, zoom:
 
     // Start diamond
     ctx.save();
-    ctx.translate(startWorldX, startWorldY);
+    ctx.translate(startWorld.x, startWorld.y);
     ctx.rotate(Math.PI / 4);
     ctx.fillRect(-hs / 2, -hs / 2, hs, hs);
     ctx.strokeRect(-hs / 2, -hs / 2, hs, hs);
@@ -304,7 +324,7 @@ function drawSelection(editor: GlideEditor, ctx: CanvasRenderingContext2D, zoom:
 
     // End diamond
     ctx.save();
-    ctx.translate(endWorldX, endWorldY);
+    ctx.translate(endWorld.x, endWorld.y);
     ctx.rotate(Math.PI / 4);
     ctx.fillRect(-hs / 2, -hs / 2, hs, hs);
     ctx.strokeRect(-hs / 2, -hs / 2, hs, hs);
@@ -318,6 +338,50 @@ function drawSelection(editor: GlideEditor, ctx: CanvasRenderingContext2D, zoom:
       ctx.strokeStyle = resolveColor(wbTheme.selectionFill);
       ctx.fill();
       ctx.stroke();
+    }
+    ctx.restore();
+    return;
+  }
+
+  if (shapes.length === 1) {
+    const shape = shapes[0]!;
+    const util = editor.getShapeUtil(shape.type);
+    const bounds = util.getGeometry(shape as any).getBounds();
+    const centerX = bounds.minX + bounds.w / 2;
+    const transform = editor.getWorldTransform(shape.id as any);
+    ctx.save();
+    ctx.transform(transform.a, transform.b, transform.c, transform.d, transform.e, transform.f);
+    ctx.strokeStyle = resolveColor(wbTheme.accent);
+    ctx.lineWidth = 1 / zoom;
+    ctx.setLineDash([4 / zoom, 2 / zoom]);
+    ctx.strokeRect(bounds.minX, bounds.minY, bounds.w, bounds.h);
+
+    if (shape.type !== 'text') {
+      ctx.setLineDash([]);
+      if (!util.hideRotateHandle(shape as any)) {
+        const rotateY = bounds.minY - ROTATION_HANDLE_OFFSET / zoom;
+        ctx.beginPath();
+        ctx.moveTo(centerX, bounds.minY);
+        ctx.lineTo(centerX, rotateY);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(centerX, rotateY, 5 / zoom, 0, 2 * Math.PI);
+        ctx.fillStyle = resolveColor(wbTheme.selectionFill);
+        ctx.fill();
+        ctx.stroke();
+      }
+      if (!util.hideResizeHandles(shape as any)) {
+        const hs = HANDLE_SIZE / zoom;
+        const points = [
+          [bounds.minX, bounds.minY], [centerX, bounds.minY], [bounds.maxX, bounds.minY],
+          [bounds.maxX, bounds.minY + bounds.h / 2], [bounds.maxX, bounds.maxY],
+          [centerX, bounds.maxY], [bounds.minX, bounds.maxY], [bounds.minX, bounds.minY + bounds.h / 2],
+        ];
+        for (const [x, y] of points) {
+          ctx.fillRect(x! - hs / 2, y! - hs / 2, hs, hs);
+          ctx.strokeRect(x! - hs / 2, y! - hs / 2, hs, hs);
+        }
+      }
     }
     ctx.restore();
     return;

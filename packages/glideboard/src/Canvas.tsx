@@ -77,17 +77,13 @@ const ShapeLayer = memo(({ id, zIndex }: { id: ShapeId; zIndex: number }) => {
   // Visibility culling
   useEffect(() => {
     if (!shape || !divRef.current) return;
-    const localBounds = editor.getShapeUtil(shape.type).getGeometry(shape as any).getBounds();
+    const bounds = editor.getShapeVisualWorldBounds(shape.id as ShapeId);
     const viewport = editor.getViewportBounds();
-    const worldMinX = localBounds.minX + shape.x;
-    const worldMinY = localBounds.minY + shape.y;
-    const worldMaxX = localBounds.maxX + shape.x;
-    const worldMaxY = localBounds.maxY + shape.y;
     const visible =
-      worldMaxX >= viewport.minX &&
-      worldMinX <= viewport.maxX &&
-      worldMaxY >= viewport.minY &&
-      worldMinY <= viewport.maxY;
+      bounds.maxX >= viewport.minX &&
+      bounds.minX <= viewport.maxX &&
+      bounds.maxY >= viewport.minY &&
+      bounds.minY <= viewport.maxY;
     divRef.current.style.display = visible ? '' : 'none';
   }, [editor, shape, camera]);
 
@@ -142,11 +138,8 @@ const ShapeLayer = memo(({ id, zIndex }: { id: ShapeId; zIndex: number }) => {
   const hasFixedWidth = isTextType && typeof (shape.props as any).w === 'number';
 
   const localBounds = util.getGeometry(shape as any).getBounds();
-  const cx = localBounds.minX + localBounds.w / 2;
-  const cy = localBounds.minY + localBounds.h / 2;
-  const angleDeg = ((shape.rotation || 0) * 180) / Math.PI;
-  const screenX = (shape.x - camera.x) * camera.z;
-  const screenY = (shape.y - camera.y) * camera.z;
+  const world = editor.getWorldTransform(shape.id as ShapeId);
+  const screenTransform = `matrix(${world.a * camera.z}, ${world.b * camera.z}, ${world.c * camera.z}, ${world.d * camera.z}, ${(world.e - camera.x) * camera.z}, ${(world.f - camera.y) * camera.z})`;
 
   const commitEdit = (text: string) => {
     const key = shape.type === 'sticky-note' ? 'text' : shape.type === 'text' ? 'text' : 'label';
@@ -184,7 +177,7 @@ const ShapeLayer = memo(({ id, zIndex }: { id: ShapeId; zIndex: number }) => {
         top: 0,
         width: localBounds.w,
         height: localBounds.h,
-        transform: `translate(${screenX}px, ${screenY}px) scale(${camera.z}) translate(${cx}px, ${cy}px) rotate(${angleDeg}deg) translate(${-cx}px, ${-cy}px)`,
+        transform: screenTransform,
         transformOrigin: '0 0',
         zIndex,
         pointerEvents: 'none',
@@ -374,7 +367,7 @@ export function Canvas() {
       event.preventDefault();
       isMiddleDraggingRef.current = true;
       originalToolBeforeMiddleDragRef.current = editor.currentToolId.peek();
-      editor.setCurrentTool('hand');
+      editor.setCurrentTool('hand', { preserveSelection: true });
     }
 
     isPointerDownRef.current = true;

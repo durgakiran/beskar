@@ -65,10 +65,7 @@ export abstract class ShapeUtil<S extends GlideShape<object> = GlideShape> {
   /** Return default props when creating a new shape. */
   abstract getDefaultProps(): S['props'];
 
-  /**
-   * Axis-aligned bounding box in page space.
-   * Used by the RBush spatial index, selection handles, and hit testing.
-   */
+  /** Intrinsic geometry in shape-local space. Page geometry comes from TransformService. */
   abstract getGeometry(shape: S): Geometry2d;
 
   /** Override for non-rectangular shapes. Default: AABB check. */

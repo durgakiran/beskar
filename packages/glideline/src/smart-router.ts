@@ -352,16 +352,7 @@ export class SmartRouterCache {
 }
 
 export function getWorldBounds(editor: GlideEditor, shape: GlideShape): Box2d {
-  const localBounds = editor.getShapeUtil(shape.type).getGeometry(shape as any).getBounds();
-  return {
-    ...localBounds,
-    x: localBounds.minX + shape.x,
-    y: localBounds.minY + shape.y,
-    minX: localBounds.minX + shape.x,
-    minY: localBounds.minY + shape.y,
-    maxX: localBounds.maxX + shape.x,
-    maxY: localBounds.maxY + shape.y,
-  };
+  return editor.transforms.getWorldBounds(shape.id as ShapeId);
 }
 
 export function getArrowBindingEdge(

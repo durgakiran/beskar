@@ -65,13 +65,13 @@ describe('GlideEditor canonical ordering', () => {
     expect(editor.getShapesAtPoint({ x: 50, y: 20 }).map(shape => shape.id)).toEqual([a, b, c]);
 
     const svg = editor.exportToSvg([c, a, b]);
-    expect(svg.indexOf('translate(0, 0)')).toBeLessThan(svg.indexOf('translate(11, 0)'));
-    expect(svg.indexOf('translate(11, 0)')).toBeLessThan(svg.indexOf('translate(20, 0)'));
+    expect(svg.indexOf('matrix(1 0 0 1 0 0)')).toBeLessThan(svg.indexOf('matrix(1 0 0 1 11 0)'));
+    expect(svg.indexOf('matrix(1 0 0 1 11 0)')).toBeLessThan(svg.indexOf('matrix(1 0 0 1 20 0)'));
     const regionSvg = editor.exportRegionToSvg({
       x: 0, y: 0, w: 200, h: 200, minX: 0, minY: 0, maxX: 200, maxY: 200,
     });
-    expect(regionSvg.indexOf('translate(0, 0)')).toBeLessThan(regionSvg.indexOf('translate(11, 0)'));
-    expect(regionSvg.indexOf('translate(11, 0)')).toBeLessThan(regionSvg.indexOf('translate(20, 0)'));
+    expect(regionSvg.indexOf('matrix(1 0 0 1 0 0)')).toBeLessThan(regionSvg.indexOf('matrix(1 0 0 1 11 0)'));
+    expect(regionSvg.indexOf('matrix(1 0 0 1 11 0)')).toBeLessThan(regionSvg.indexOf('matrix(1 0 0 1 20 0)'));
   });
 
   it('moves a selected shape without rewriting unaffected sibling keys', () => {

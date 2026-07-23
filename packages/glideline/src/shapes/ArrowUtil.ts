@@ -216,7 +216,7 @@ export class ArrowUtil extends ShapeUtil<ArrowShape> {
     return {
       start:      terminal,
       end:        terminal,
-      routeStyle: 'curve',
+      routeStyle: 'ortho',
       bend:       0,
       arrowheadStart: 'none',
       arrowheadEnd: 'arrow',
@@ -544,25 +544,9 @@ export class ArrowBindingUtil extends BindingUtil<ArrowBinding> {
     const targetShape = editor.getShape(binding.toId);
     if (!targetShape) return;
 
-    const util = editor.getShapeUtil(targetShape.type);
-    // getGeometry returns LOCAL bounds for non-arrow shapes (minX=0, minY=0)
-    // anchorToPoint uses bounds.x/bounds.y which equals 0 for local bounds.
-    // We need WORLD position, so use targetShape.x/y + local offset.
-    const localBounds = util.getGeometry(targetShape as any).getBounds();
-    // World bounds = localBounds shifted by targetShape.x/y
-    const worldBounds = {
-      ...localBounds,
-      x:    localBounds.minX + targetShape.x,
-      y:    localBounds.minY + targetShape.y,
-      minX: localBounds.minX + targetShape.x,
-      minY: localBounds.minY + targetShape.y,
-      maxX: localBounds.maxX + targetShape.x,
-      maxY: localBounds.maxY + targetShape.y,
-    };
-
     const { normalizedAnchor, terminal } = binding.props;
-    const worldPoint = anchorToPoint(normalizedAnchor, worldBounds);
-    const fromEdge   = anchorToEdge(normalizedAnchor);
+    const worldPoint = editor.transforms.normalizedAnchorToPage(binding.toId as ShapeId, normalizedAnchor);
+    const fromEdge = editor.transforms.getAnchorPageEdge(binding.toId as ShapeId, normalizedAnchor);
 
     const terminalData = arrow.props[terminal];
 

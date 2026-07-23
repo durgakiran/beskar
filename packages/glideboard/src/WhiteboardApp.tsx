@@ -56,7 +56,7 @@ export function WhiteboardApp() {
         const currentTool = editor.currentToolId.peek();
         if (currentTool !== 'hand') {
           previousToolRef.current = currentTool;
-          editor.setCurrentTool('hand');
+          editor.setCurrentTool('hand', { preserveSelection: true });
         }
       }
     };

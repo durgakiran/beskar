@@ -56,7 +56,7 @@ describe('createGlideboardEditorInstance', () => {
       expect.objectContaining({
         fromId: 'box:a',
         toId: 'box:b',
-        routeStyle: 'curve',
+        routeStyle: 'ortho',
       }),
     ]);
   });

@@ -133,8 +133,11 @@ export class InteractionManager {
   private _overlayVersion = signal(0);
   private _previewDepth = 0;
   private _combinedVersion = computed(() => {
-    this._overlayVersion.value;
-    return this._store.getVersionSignal().value;
+    // Consumers such as canvas overlays need a new numeric value for both
+    // committed store changes and transient interaction previews. Merely
+    // reading overlayVersion as a dependency is insufficient: computed
+    // signals suppress notifications when their returned value is unchanged.
+    return this._store.getVersionSignal().value + this._overlayVersion.value;
   });
   private _shapeIds = computed<readonly ShapeId[]>(() => {
     this._overlayVersion.value;

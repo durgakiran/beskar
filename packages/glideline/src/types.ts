@@ -75,6 +75,10 @@ export interface GlideShape<Props extends object = Record<string, unknown>>
   index: string;
   /** Rotation in radians */
   rotation: number;
+  /** Optional hierarchy/order parent; current x/y remain page-space. */
+  parentId?: ShapeId;
+  /** Optional page scope for root shapes. */
+  pageId?: PageId;
   props: Props;
   meta: Record<string, unknown>;
 }

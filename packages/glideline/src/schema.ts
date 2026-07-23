@@ -25,10 +25,11 @@ import {
  * Store v1 inferred record categories from their fields. Store v2 persists an
  * explicit `kind`, per-record `schemaVersion`, and `meta` envelope and has a
  * document-level v1-to-v2 migration. Store v3 normalizes shape order to
- * canonical parent-scoped keys. Increment this value only when the document-wide
- * format changes and add the corresponding migration pipeline.
+ * canonical parent-scoped keys. Store v4 folds legacy arrow record rotation
+ * into its path points. Increment this value only when the document-wide format
+ * changes and add the corresponding migration pipeline.
  */
-export const CURRENT_STORE_VERSION = 3;
+export const CURRENT_STORE_VERSION = 4;
 
 export interface DocumentLimits {
   maxRecords: number;
@@ -431,6 +432,51 @@ export class GlideSchema {
         ? { ...record, index: normalizedIndex.get(String(record['id']))! }
         : record);
       migrations.push('store:normalize-canonical-order');
+    }
+
+    if (sourceStoreVersion < 4) {
+      records = records.map(record => {
+        if (record['kind'] !== 'shape' || record['type'] !== 'arrow') return record;
+        const rotation = Number(record['rotation'] ?? 0);
+        if (!Number.isFinite(rotation) || rotation === 0) return { ...record, rotation: 0 };
+        const props = isPlainObject(record['props']) ? record['props'] : {};
+        const start = isPlainObject(props['start']) ? props['start'] : {};
+        const end = isPlainObject(props['end']) ? props['end'] : {};
+        const startPoint = isPlainObject(start['point']) ? start['point'] : {};
+        const endPoint = isPlainObject(end['point']) ? end['point'] : {};
+        const sx = Number(startPoint['x'] ?? 0);
+        const sy = Number(startPoint['y'] ?? 0);
+        const ex = Number(endPoint['x'] ?? 0);
+        const ey = Number(endPoint['y'] ?? 0);
+        const centerX = (sx + ex) / 2;
+        const centerY = (sy + ey) / 2;
+        const cos = Math.cos(rotation);
+        const sin = Math.sin(rotation);
+        const rotate = (x: number, y: number) => ({
+          x: centerX + (x - centerX) * cos - (y - centerY) * sin,
+          y: centerY + (x - centerX) * sin + (y - centerY) * cos,
+        });
+        const rotatedStart = rotate(sx, sy);
+        const rotatedEnd = rotate(ex, ey);
+        return {
+          ...record,
+          x: Number(record['x'] ?? 0) + rotatedStart.x,
+          y: Number(record['y'] ?? 0) + rotatedStart.y,
+          rotation: 0,
+          props: {
+            ...props,
+            start: { ...start, point: { x: 0, y: 0 } },
+            end: {
+              ...end,
+              point: {
+                x: rotatedEnd.x - rotatedStart.x,
+                y: rotatedEnd.y - rotatedStart.y,
+              },
+            },
+          },
+        };
+      });
+      migrations.push('store:fold-arrow-rotation');
     }
 
     this.validateCandidate(records);

@@ -34,6 +34,7 @@ import { GlideCamera } from './camera';
 import { HistoryManager, commandIdFromLabel, createReadonlyHistoryView } from './history';
 import type { BatchOptions, HistoryResult, ReadonlyHistoryManager } from './history';
 import { Rectangle2d } from './geometry';
+import { matrixToSvg, TransformService, type Matrix2d } from './transform';
 import { StateNode } from './state-node';
 import { SelectTool } from './tools/SelectTool';
 import { BoxTool } from './tools/BoxTool';
@@ -96,7 +97,7 @@ export interface BindingPreviewCandidate {
   targetType: string;
   normalizedAnchor: Vec2;
   point: Vec2;
-  candidateAnchors: BindingPreviewAnchor[];
+  candidateAnchors: readonly BindingPreviewAnchor[];
 }
 
 export interface BindingPreview extends BindingPreviewCandidate {
@@ -199,8 +200,10 @@ export class GlideEditor {
   readonly history: ReadonlyHistoryManager;
   private readonly _history: HistoryManager;
   readonly interactions: InteractionManager;
+  /** Canonical local/page transform and geometry service. */
+  readonly transforms: TransformService;
   private _clipboard: ClipboardPayload | null = null;
-  arrowRouteStyle: ArrowRouteStyle = 'curve';
+  arrowRouteStyle: ArrowRouteStyle = 'ortho';
   arrowheadStart: ArrowheadStyle = 'none';
   arrowheadEnd: ArrowheadStyle = 'arrow';
   private _smartRouter = new SmartRouterCache();
@@ -245,6 +248,12 @@ export class GlideEditor {
     this.camera = camera;
     this._mutationPolicy = mutationPolicy;
     this.interactions = new InteractionManager(store, this._localMutationCapability);
+    this.transforms = new TransformService({
+      getShape: id => this.getShape(id),
+      getGeometry: shape => this.getShapeUtil(shape.type).getGeometry(shape as any),
+      getZoom: () => this.camera.signal.peek().z,
+      hitTestLocal: (shape, point) => this.getShapeUtil(shape.type).hitTestPoint(shape as any, point),
+    });
     this._orderedShapeIdsSignal = computed(() => {
       this.interactions.getVersionSignal().value;
       return getCanonicalShapeIds(this._getAllShapes());
@@ -374,10 +383,7 @@ export class GlideEditor {
     const transient = this.interactions.changedIds
       .map(id => toGlideShape(this.interactions.get(id)))
       .filter((shape): shape is GlideShape => shape !== null)
-      .filter(shape => this.getShapeUtil(shape.type).hitTestPoint(
-        shape,
-        { x: point.x - shape.x, y: point.y - shape.y },
-      ));
+      .filter(shape => this.transforms.hitTestPagePoint(shape.id as ShapeId, point));
     return this.sortShapesByCanonicalOrder([...committed, ...transient]);
   }
 
@@ -550,6 +556,9 @@ export class GlideEditor {
     const allocation = this._allocateOrderKeysAbove(parentId, 1);
     partial = { ...partial, index: allocation.keys[0]! };
     const type = partial['type'] as string;
+    if (type === 'arrow' && Number(partial['rotation'] ?? 0) !== 0) {
+      throw new Error('Arrow rotation must be encoded in its path points; record rotation must remain zero.');
+    }
     const util = this._utils.get(type);
     if (util) {
       const defaultProps = util.getDefaultProps();
@@ -606,6 +615,9 @@ export class GlideEditor {
     }
     const existing = this.interactions.get(id);
     if (!existing) throw new Error(`GlideEditor: shape "${id}" not found`);
+    if (existing.type === 'arrow' && partial.rotation !== undefined && partial.rotation !== 0) {
+      throw new Error('Arrow rotation must be encoded in its path points; record rotation must remain zero.');
+    }
     const newShape = { ...existing, ...partial } as any;
     if (partial.props && existing.props) {
       newShape.props = { ...existing.props, ...(partial.props as any) };
@@ -1251,7 +1263,7 @@ export class GlideEditor {
    * Switch the active tool by id. Exits the current tool's active child,
    * resets the new tool to its initial child, and calls onEnter.
    */
-  setCurrentTool(id: string): void {
+  setCurrentTool(id: string, options: { preserveSelection?: boolean } = {}): void {
     const tool = this._tools.get(id);
     if (!tool) throw new Error(`GlideEditor: unknown tool "${id}"`);
     const prev = this._currentToolSignal.peek();
@@ -1260,6 +1272,9 @@ export class GlideEditor {
     // the first chance to clean up; this catches every remaining overlay.
     if (this.interactions.active) this.interactions.cancel();
     this.clearBindingPreview();
+    if (id !== 'select' && !options.preserveSelection) {
+      this.setSelectedShapeIds([]);
+    }
     this._currentToolSignal.value = tool;
     this.currentToolId.value = id;
     tool._reset();
@@ -1290,8 +1305,20 @@ export class GlideEditor {
     if (!shape) {
       throw new Error(`GlideEditor: shape "${shapeOrId}" not found`);
     }
-    return getWorldBounds(this, shape);
+    return this.transforms.getWorldBounds(shape.id as ShapeId);
   }
+
+  getShapeVisualWorldBounds(shapeOrId: GlideShape | ShapeId): Box2d {
+    const shape = typeof shapeOrId === 'string' ? this.getShape(shapeOrId) : shapeOrId;
+    if (!shape) throw new Error(`GlideEditor: shape "${shapeOrId}" not found`);
+    return this.transforms.getVisualWorldBounds(shape.id as ShapeId);
+  }
+
+  getLocalTransform(id: ShapeId): Matrix2d { return this.transforms.getLocalTransform(id); }
+  getWorldTransform(id: ShapeId): Matrix2d { return this.transforms.getWorldTransform(id); }
+  getWorldTransformInverse(id: ShapeId): Matrix2d { return this.transforms.getWorldTransformInverse(id); }
+  localToPage(id: ShapeId, point: Vec2): Vec2 { return this.transforms.localToPage(id, point); }
+  pageToLocal(id: ShapeId, point: Vec2): Vec2 { return this.transforms.pageToLocal(id, point); }
 
   resolveSmartRouteForArrow(
     arrow: ArrowShape,
@@ -1362,7 +1389,7 @@ export class GlideEditor {
     this.erasingShapeIds.value = new Set<ShapeId>();
     this.bindingPreview.value = null;
     this.activeStyles.value = { ...DEFAULT_ACTIVE_STYLES };
-    this.arrowRouteStyle = 'curve';
+    this.arrowRouteStyle = 'ortho';
     this.arrowheadStart = 'none';
     this.arrowheadEnd = 'arrow';
     this.camera.setCamera({ x: 0, y: 0, z: 1 });
@@ -1413,7 +1440,7 @@ export class GlideEditor {
 
     for (const shape of shapes) {
       const util = this.getShapeUtil(shape.type);
-      const box = this.getShapeWorldBounds(shape);
+      const box = this.getShapeVisualWorldBounds(shape);
       if (!explicitViewBox) {
         if (box.minX < minX) minX = box.minX;
         if (box.minY < minY) minY = box.minY;
@@ -1427,11 +1454,7 @@ export class GlideEditor {
         if (svgEl) {
           this._prepareSvgElementForExport(svgEl);
           const wrapper = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-          const localBounds = util.getGeometry(shape).getBounds();
-          const cx = localBounds.minX + localBounds.w / 2;
-          const cy = localBounds.minY + localBounds.h / 2;
-          const angleDeg = ((shape.rotation || 0) * 180) / Math.PI;
-          wrapper.setAttribute('transform', `translate(${shape.x}, ${shape.y}) rotate(${angleDeg}, ${cx}, ${cy})`);
+          wrapper.setAttribute('transform', matrixToSvg(this.transforms.getWorldTransform(shape.id as ShapeId)));
           wrapper.appendChild(svgEl);
           elements.push(wrapper.outerHTML);
         }
@@ -1664,27 +1687,13 @@ export function createEditor(opts: CreateEditorOptions = {}): GlideEditor {
     loadMutationCapability,
   );
 
-  // Inject geometric hooks for RBush integration
-  // getGeometry() returns LOCAL bounds; RBush needs WORLD bounds.
-  // We translate by shape.x/y here so the spatial index is always in world space.
+  // Inject canonical transformed geometry hooks for RBush broad/precise phases.
   store.getGeometry = (shape) => {
-    const util = editor.getShapeUtil(shape.type as any);
-    const localBounds = util.getGeometry(shape as any).getBounds();
-    const sx = (shape['x'] as number) ?? 0;
-    const sy = (shape['y'] as number) ?? 0;
-    return new Rectangle2d(
-      localBounds.minX + sx,
-      localBounds.minY + sy,
-      localBounds.w,
-      localBounds.h
-    );
+    const bounds = editor.transforms.getVisualWorldBounds(shape.id as ShapeId);
+    return new Rectangle2d(bounds.x, bounds.y, bounds.w, bounds.h);
   };
-  // hitTestPoint receives world-space x/y from the spatial query.
-  // Convert to local space before calling the util.
   store.hitTestPoint = (shape, x, y) => {
-    const sx = (shape['x'] as number) ?? 0;
-    const sy = (shape['y'] as number) ?? 0;
-    return editor.getShapeUtil(shape.type as any).hitTestPoint(shape as any, { x: x - sx, y: y - sy });
+    return editor.transforms.hitTestPagePoint(shape.id as ShapeId, { x, y });
   };
 
   // 8. Instantiate + inject each ShapeUtil

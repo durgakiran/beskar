@@ -122,7 +122,7 @@ describe('Glideboard board-scoped lifecycle', () => {
 
     expect((boardA.editor.getShape('box:shared' as any) as any)?.x).toBe(20);
     expect((boardB.editor.getShape('box:shared' as any) as any)?.x).toBe(420);
-    expect(boardA.editor.getSelectedShapeIds()).toEqual(['box:shared']);
+    expect(boardA.editor.getSelectedShapeIds()).toEqual([]);
     expect(boardB.editor.getSelectedShapeIds()).toEqual([]);
     expect(boardA.editor.camera.getCamera()).toEqual({ x: 80, y: 40, z: 2 });
     expect(boardB.editor.camera.getCamera()).toEqual({ x: 0, y: 0, z: 1 });

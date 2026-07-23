@@ -4,9 +4,14 @@ import type { PointerDownEvent, PointerMoveEvent, PointerUpEvent, KeyDownEvent, 
 import type { ShapeId, Vec2, AnyRecord } from '../types';
 import { makeBox } from '../types';
 import type { ArrowShape, ArrowProps } from '../shapes/ArrowUtil';
-import { getClosestConnectionPoint, getConnectionPoints, anchorToEdge } from '../shapes/ArrowUtil';
 import type { BindingPreview, BindingPreviewCandidate } from '../editor';
 import type { ResizeHandle, ResizeInfo } from '../shapes/ShapeUtil';
+import {
+  applyMatrixToPoint,
+  invertMatrix,
+  rotationMatrix,
+  type Matrix2d,
+} from '../transform';
 
 const DRAG_THRESHOLD = 4;
 
@@ -14,26 +19,8 @@ function dist(a: Vec2, b: Vec2): number {
   return Math.sqrt((b.x - a.x) ** 2 + (b.y - a.y) ** 2);
 }
 
-function toWorldBounds(
-  localBounds: { minX: number; minY: number; maxX: number; maxY: number; w: number; h: number; x?: number; y?: number },
-  shape: { x: number; y: number }
-) {
-  return {
-    ...localBounds,
-    x: localBounds.minX + shape.x,
-    y: localBounds.minY + shape.y,
-    minX: localBounds.minX + shape.x,
-    minY: localBounds.minY + shape.y,
-    maxX: localBounds.maxX + shape.x,
-    maxY: localBounds.maxY + shape.y,
-  };
-}
-
 function buildBindingPreview(editor: StateNode['editor'], targetShape: { id: ShapeId; type: string; x: number; y: number }, point: Vec2, terminal: 'start' | 'end') {
-  const util = editor.getShapeUtil(targetShape.type);
-  const localBounds = util.getGeometry(targetShape as any).getBounds();
-  const worldBounds = toWorldBounds(localBounds, targetShape);
-  const snapped = getClosestConnectionPoint(point, worldBounds);
+  const snapped = editor.transforms.getClosestConnectionAnchor(targetShape.id, point);
 
   return {
     terminal,
@@ -41,7 +28,7 @@ function buildBindingPreview(editor: StateNode['editor'], targetShape: { id: Sha
     targetType: targetShape.type,
     normalizedAnchor: snapped.normalizedAnchor,
     point: snapped.point,
-    candidateAnchors: getConnectionPoints(worldBounds),
+    candidateAnchors: editor.transforms.getConnectionAnchors(targetShape.id),
   };
 }
 
@@ -90,8 +77,7 @@ class Idle extends StateNode {
       if (e.handleId === 'rotate') {
         const boxes = sel.map(id => {
           const s = this.editor.getShape(id); if (!s) return null;
-          const b = this.editor.getShapeUtil(s.type).getGeometry(s as any).getBounds();
-          return { minX: b.minX + s.x, minY: b.minY + s.y, maxX: b.maxX + s.x, maxY: b.maxY + s.y, w: b.w, h: b.h };
+          return this.editor.getShapeWorldBounds(s);
         }).filter(Boolean) as any[];
         
         if (boxes.length > 0) {
@@ -110,7 +96,10 @@ class Idle extends StateNode {
           const initialCenters = new Map(sel.map(id => {
             const s = this.editor.getShape(id); if (!s) return null;
             const b = this.editor.getShapeUtil(s.type).getGeometry(s as any).getBounds();
-            return [id, { x: b.minX + s.x + b.w / 2, y: b.minY + s.y + b.h / 2 }] as [ShapeId, Vec2];
+            return [id, this.editor.localToPage(id, {
+              x: b.minX + b.w / 2,
+              y: b.minY + b.h / 2,
+            })] as [ShapeId, Vec2];
           }).filter(Boolean) as [ShapeId, Vec2][]);
           
           const initialShapes = new Map(sel.map(id => {
@@ -128,8 +117,7 @@ class Idle extends StateNode {
       if (resizeHandles.includes(e.handleId)) {
         const boxes = sel.map(id => {
           const s = this.editor.getShape(id); if (!s) return null;
-          const b = this.editor.getShapeUtil(s.type).getGeometry(s as any).getBounds();
-          return { minX: b.minX + s.x, minY: b.minY + s.y, maxX: b.maxX + s.x, maxY: b.maxY + s.y, w: b.w, h: b.h };
+          return this.editor.getShapeWorldBounds(s);
         }).filter(Boolean) as any[];
         
         const minX = Math.min(...boxes.map((b: any) => b.minX));
@@ -142,8 +130,12 @@ class Idle extends StateNode {
           const s = this.editor.getShape(id); if (!s) return null;
           const b = this.editor.getShapeUtil(s.type).getGeometry(s as any).getBounds();
           const clone = JSON.parse(JSON.stringify(s));
-          return [id, { shape: clone, bounds: b }];
-        }).filter(Boolean) as [ShapeId, { shape: import('../types').GlideShape; bounds: import('../types').Box2d }][]);
+          return [id, { shape: clone, bounds: b, worldTransform: this.editor.getWorldTransform(id) }];
+        }).filter(Boolean) as [ShapeId, {
+          shape: import('../types').GlideShape;
+          bounds: import('../types').Box2d;
+          worldTransform: Matrix2d;
+        }][]);
         
         this.parent!.transition('draggingResize', {
           shapeIds: sel,
@@ -169,13 +161,7 @@ class Idle extends StateNode {
       if (sel.length > 1 && !e.shiftKey) {
         const boxes = sel.map(id => {
           const s = this.editor.getShape(id); if (!s) return null;
-          const localBounds = this.editor.getShapeUtil(s.type).getGeometry(s as any).getBounds();
-          return {
-            minX: localBounds.minX + s.x,
-            minY: localBounds.minY + s.y,
-            maxX: localBounds.maxX + s.x,
-            maxY: localBounds.maxY + s.y,
-          };
+          return this.editor.getShapeWorldBounds(s);
         }).filter(Boolean) as any[];
 
         if (boxes.length > 0) {
@@ -646,18 +632,7 @@ class DraggingHandle extends StateNode {
             const previewCandidate = matchingPreview(activePreview, term, targetShape.id as ShapeId);
             const snapped = previewCandidate
               ? { normalizedAnchor: previewCandidate.normalizedAnchor, point: previewCandidate.point }
-              : (() => {
-                  const util = this.editor.getShapeUtil(targetShape.type);
-                  const localBounds = util.getGeometry(targetShape as any).getBounds();
-                  const worldBounds = {
-                    ...localBounds,
-                    minX: localBounds.minX + targetShape.x,
-                    minY: localBounds.minY + targetShape.y,
-                    maxX: localBounds.maxX + targetShape.x,
-                    maxY: localBounds.maxY + targetShape.y,
-                  };
-                  return getClosestConnectionPoint(e.point, worldBounds);
-                })();
+              : this.editor.transforms.getClosestConnectionAnchor(targetShape.id as ShapeId, e.point);
 
             if (term === 'start') {
               // World end = arrow.x + end.point (local)
@@ -698,7 +673,7 @@ class DraggingHandle extends StateNode {
               props: {
                 terminal: term,
                 normalizedAnchor: snapped.normalizedAnchor,
-                fromEdge: anchorToEdge(snapped.normalizedAnchor),
+                fromEdge: this.editor.transforms.getAnchorPageEdge(targetShape.id as ShapeId, snapped.normalizedAnchor),
               },
             };
             newBindingId = newBinding.id;
@@ -707,16 +682,6 @@ class DraggingHandle extends StateNode {
         }
 
         this.editor.updateShape(this._arrowId, { props: finalProps });
-
-        // Trigger updates to fire onAfterChangeToShape and refresh coordinates
-        if (finalProps.start.boundShapeId) {
-          const s = this.editor.getShape(finalProps.start.boundShapeId);
-          if (s) this.editor.updateShape(finalProps.start.boundShapeId, { x: s.x });
-        }
-        if (finalProps.end.boundShapeId) {
-          const s = this.editor.getShape(finalProps.end.boundShapeId);
-          if (s) this.editor.updateShape(finalProps.end.boundShapeId, { x: s.x });
-        }
       },
       { history: 'ignore' },
     );
@@ -848,7 +813,11 @@ export interface DraggingResizeState {
   handle:      ResizeHandle;
   origin:      Vec2;
   /** Per-shape snapshot: clone of shape + initial bounds */
-  initialGeom: Map<ShapeId, { shape: import('../types').GlideShape; bounds: import('../types').Box2d }>;
+  initialGeom: Map<ShapeId, {
+    shape: import('../types').GlideShape;
+    bounds: import('../types').Box2d;
+    worldTransform: Matrix2d;
+  }>;
   initialBounds: import('../types').Box2d;
 }
 
@@ -903,6 +872,17 @@ class DraggingResize extends StateNode {
 
   private _applyResize(cursor: Vec2, constrainAspect: boolean): void {
     const { handle, origin, initialGeom, initialBounds } = this._info;
+    if (initialGeom.size === 1) {
+      const entry = initialGeom.entries().next().value as [ShapeId, {
+        shape: import('../types').GlideShape;
+        bounds: import('../types').Box2d;
+        worldTransform: Matrix2d;
+      }] | undefined;
+      if (entry) {
+        this._applySingleOrientedResize(entry[0], entry[1], cursor, constrainAspect);
+        return;
+      }
+    }
     const dx = cursor.x - origin.x;
     const dy = cursor.y - origin.y;
 
@@ -948,6 +928,79 @@ class DraggingResize extends StateNode {
       const result = util.onResize(shape as any, { handle, scaleX, scaleY, initialShape: shape as any, initialBounds, newBounds });
       this.editor.updateShape(id, result);
     }
+  }
+
+  private _applySingleOrientedResize(
+    id: ShapeId,
+    initial: { shape: import('../types').GlideShape; bounds: import('../types').Box2d; worldTransform: Matrix2d },
+    cursor: Vec2,
+    constrainAspect: boolean,
+  ): void {
+    const { handle } = this._info;
+    const { shape, bounds, worldTransform } = initial;
+    const localCursor = applyMatrixToPoint(invertMatrix(worldTransform), cursor);
+    const centerX = bounds.minX + bounds.w / 2;
+    const centerY = bounds.minY + bounds.h / 2;
+    const fixedX = handle.includes('w') ? bounds.maxX
+      : handle.includes('e') ? bounds.minX : centerX;
+    const fixedY = handle.includes('n') ? bounds.maxY
+      : handle.includes('s') ? bounds.minY : centerY;
+    let width = handle.includes('w') ? fixedX - localCursor.x
+      : handle.includes('e') ? localCursor.x - fixedX : bounds.w;
+    let height = handle.includes('n') ? fixedY - localCursor.y
+      : handle.includes('s') ? localCursor.y - fixedY : bounds.h;
+    width = Math.max(4, width);
+    height = Math.max(4, height);
+    if (constrainAspect && bounds.w > 0 && bounds.h > 0) {
+      const aspect = bounds.w / bounds.h;
+      if (!handle.includes('n') && !handle.includes('s')) height = width / aspect;
+      else if (!handle.includes('e') && !handle.includes('w')) width = height * aspect;
+      else if (width / height > aspect) height = width / aspect;
+      else width = height * aspect;
+    }
+
+    const util = this.editor.getShapeUtil(shape.type);
+    const localInitialShape = { ...shape, x: bounds.minX, y: bounds.minY };
+    const newBounds = makeBox(bounds.minX, bounds.minY, width, height);
+    const result = util.onResize(localInitialShape as any, {
+      handle,
+      scaleX: width / (bounds.w || 1),
+      scaleY: height / (bounds.h || 1),
+      initialShape: localInitialShape as any,
+      initialBounds: bounds,
+      newBounds,
+    });
+    const resizedShape = {
+      ...shape,
+      ...result,
+      x: shape.x,
+      y: shape.y,
+      props: { ...shape.props, ...((result as any).props ?? {}) },
+    } as import('../types').GlideShape;
+    const resizedBounds = util.getGeometry(resizedShape as any).getBounds();
+    const opposite = (candidate: import('../types').Box2d): Vec2 => ({
+      x: handle.includes('w') ? candidate.maxX
+        : handle.includes('e') ? candidate.minX : candidate.minX + candidate.w / 2,
+      y: handle.includes('n') ? candidate.maxY
+        : handle.includes('s') ? candidate.minY : candidate.minY + candidate.h / 2,
+    });
+    const fixedPage = applyMatrixToPoint(worldTransform, opposite(bounds));
+    const resizedCenter = {
+      x: resizedBounds.minX + resizedBounds.w / 2,
+      y: resizedBounds.minY + resizedBounds.h / 2,
+    };
+    const rotatedOpposite = applyMatrixToPoint(
+      rotationMatrix(shape.rotation || 0),
+      {
+        x: opposite(resizedBounds).x - resizedCenter.x,
+        y: opposite(resizedBounds).y - resizedCenter.y,
+      },
+    );
+    this.editor.updateShape(id, {
+      ...result,
+      x: fixedPage.x - resizedCenter.x - rotatedOpposite.x,
+      y: fixedPage.y - resizedCenter.y - rotatedOpposite.y,
+    });
   }
 }
 
@@ -1066,7 +1119,7 @@ class DraggingRotation extends StateNode {
           this.editor.updateShape<ArrowShape>(id, {
             x: nsx,
             y: nsy,
-            rotation: initRot + delta,
+            rotation: 0,
             props: {
               ...arr.props,
               start: { ...arr.props.start, point: { x: 0, y: 0 } },

@@ -3,7 +3,7 @@
  *
  * static props    : w, h, cornerRadius, color, label, etc.
  * static migrations: v2
- * getGeometry()   : AABB from (x, y, w, h)
+ * getGeometry()   : local rectangle from (0, 0, w, h)
  * hitTestPoint()  : AABB (inherited default)
  * canContain()    : false (override in FrameUtil)
  * toSvg()         : <rect> with optional rx for corner radius

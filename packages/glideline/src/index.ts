@@ -17,6 +17,19 @@ export { sid, bid, pid, aid, makeBox, isGlideBinding, isGlideShape } from './typ
 export { RecordIdService } from './id';
 export type { IdTokenFactory } from './id';
 
+// Canonical transforms and geometry
+export {
+  TransformService,
+  IDENTITY_MATRIX,
+  multiplyMatrices,
+  translationMatrix,
+  rotationMatrix,
+  invertMatrix,
+  applyMatrixToPoint,
+  matrixToSvg,
+} from './transform';
+export type { Matrix2d } from './transform';
+
 // Validators
 export { T } from './validators';
 

@@ -283,6 +283,42 @@ describe('Arrow handle dragging via SelectTool', () => {
     expect(bnd.props.terminal).toBe('end');
   });
 
+  it('rebinds an end handle from the top to the bottom anchor of the same shape', () => {
+    const ed = makeEditor();
+    ed.setCurrentTool('select');
+    getMutableStoreForTesting(ed).put([
+      box('sameTarget', 200, 200, 100, 100),
+      arrow('sameTargetArrow', { x: 0, y: 250 }, { x: 250, y: 200 }),
+    ]);
+    ed.createBinding({
+      ...binding('sameTargetBinding', 'sameTargetArrow', 'sameTarget', 'end'),
+      props: {
+        terminal: 'end',
+        normalizedAnchor: { x: 0.5, y: 0 },
+        fromEdge: 'top',
+      },
+    } as unknown as AnyRecord);
+    ed.setSelectedShapeIds([sid('sameTargetArrow')]);
+
+    ed.dispatchEvent({
+      type: 'pointerDown', point: { x: 250, y: 200 },
+      shiftKey: false, target: 'handle', handleId: 'end',
+    });
+    ed.dispatchEvent({ type: 'pointerMove', point: { x: 250, y: 300 } });
+    ed.dispatchEvent({ type: 'pointerUp', point: { x: 250, y: 300 } });
+
+    const updated = ed.getShape<ArrowShape>(sid('sameTargetArrow'))!;
+    expect(updated.props.end.normalizedAnchor).toEqual({ x: 0.5, y: 1 });
+    expect({
+      x: updated.x + updated.props.end.point.x,
+      y: updated.y + updated.props.end.point.y,
+    }).toEqual({ x: 250, y: 300 });
+    const updatedBinding = ed.getBindingsFromShape(sid('sameTargetArrow'))
+      .find(candidate => candidate.props.terminal === 'end')!;
+    expect(updatedBinding.props.normalizedAnchor).toEqual({ x: 0.5, y: 1 });
+    expect(updatedBinding.props.fromEdge).toBe('bottom');
+  });
+
   it('cancels bend handle drag on Escape', () => {
     const ed = makeEditor();
     ed.setCurrentTool('select');
@@ -318,9 +354,8 @@ describe('Arrow handle dragging via SelectTool', () => {
     expect(newArrow.props.start.boundShapeId).toBe(sid('bxA'));
   });
 
-  it('uses editor.arrowRouteStyle for newly drawn arrows', () => {
+  it('uses ortho as the default route style for newly drawn arrows', () => {
     const ed = makeEditor();
-    ed.arrowRouteStyle = 'ortho';
     getMutableStoreForTesting(ed).put([
       box('bxX', 0, 0, 100, 100),
     ]);

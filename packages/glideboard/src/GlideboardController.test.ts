@@ -94,7 +94,7 @@ describe('GlideboardController', () => {
 
       expect(getRecordIds(controllerA.editor.serialize())).toEqual(['shape:a']);
       expect(controllerA.editor.camera.getCamera()).toEqual({ x: 120, y: 240, z: 2 });
-      expect(controllerA.editor.getSelectedShapeIds()).toEqual(['shape:a']);
+      expect(controllerA.editor.getSelectedShapeIds()).toEqual([]);
       expect(controllerA.editor.history.undoStack).toHaveLength(1);
       expect(controllerA.editor.currentToolId.peek()).toBe('box');
       expect(controllerA.arrowRouteStyleSignal.peek()).toBe('smart');
@@ -109,7 +109,7 @@ describe('GlideboardController', () => {
       expect(controllerB.editor.getSelectedShapeIds()).toEqual([]);
       expect(controllerB.editor.history.undoStack).toHaveLength(0);
       expect(controllerB.editor.currentToolId.peek()).toBe('select');
-      expect(controllerB.arrowRouteStyleSignal.peek()).toBe('curve');
+      expect(controllerB.arrowRouteStyleSignal.peek()).toBe('ortho');
       expect(controllerB.arrowPresetSignal.peek()).toBe('arrow');
       expect(controllerB.arrowheadStartSignal.peek()).toBe('none');
       expect(controllerB.arrowheadEndSignal.peek()).toBe('arrow');
@@ -198,7 +198,7 @@ describe('GlideboardController', () => {
       expect(controller.editor.paste()).toEqual([]);
       expect(controller.editor.camera.getCamera()).toEqual({ x: 0, y: 0, z: 1 });
       expect(controller.editor.currentToolId.peek()).toBe('select');
-      expect(controller.arrowRouteStyleSignal.peek()).toBe('curve');
+      expect(controller.arrowRouteStyleSignal.peek()).toBe('ortho');
       expect(controller.arrowPresetSignal.peek()).toBe('arrow');
       expect(controller.isCanvasDraggingRef.current).toBe(false);
       expect(controller.deferredToolRestoreRef.current).toBeNull();
