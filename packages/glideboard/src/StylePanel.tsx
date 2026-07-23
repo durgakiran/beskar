@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import {
   TLDRAW_COLORS,
+  type GlideShape,
   type ShapeId,
 } from '@durgakiran/glideline';
 import { useSelectedShapes } from './hooks/useSelectedShapes';
@@ -73,8 +74,20 @@ function IconButton({ active, onClick, style, children }: { active: boolean; onC
 export function StylePanel() {
   const controller = useGlideboardController();
   const { editor } = controller;
-  const shapes = useSelectedShapes();
+  const selectedShapes = useSelectedShapes();
+  const editingSession = useSignalValue(editor.textEditing.session);
+  const editingShape = useSignalValue(
+    editingSession ? editor.getShapeSignal(editingSession.shapeId) : undefined,
+  ) as GlideShape | null | undefined;
+  const textStyleTargetId = useSignalValue(controller.textStyleTargetIdSignal);
+  const shapes = editingShape ? [editingShape] : selectedShapes;
   const activeStyles = useSignalValue(editor.activeStyles);
+  const textOnly = Boolean(editingShape)
+    || (shapes.length > 0 && shapes.every(shape => shape.type === 'text'))
+    || (
+      selectedShapes.length === 1
+      && selectedShapes[0]!.id === textStyleTargetId
+    );
 
   const supportedKeys = useMemo(() => {
     const keys = new Set<string>();
@@ -113,7 +126,7 @@ export function StylePanel() {
         for (const shape of shapes) {
           if (key in shape.props) {
             editor.updateShape(shape.id as ShapeId, {
-              props: { ...shape.props, [key]: value },
+              props: { [key]: value },
             });
           }
         }
@@ -133,6 +146,45 @@ export function StylePanel() {
   const arrowheadStart = getCommonValue('arrowheadStart');
   const arrowheadEnd = getCommonValue('arrowheadEnd');
 
+  const getCommonTextColor = () => {
+    let value: unknown = undefined;
+    let first = true;
+    for (const shape of shapes) {
+      const key = 'labelColor' in shape.props ? 'labelColor' : 'color';
+      if (!(key in shape.props)) continue;
+      if (first) {
+        value = shape.props[key];
+        first = false;
+      } else if (value !== shape.props[key]) {
+        return undefined;
+      }
+    }
+    return shapes.length === 0
+      ? activeStyles?.['labelColor'] ?? activeStyles?.['color']
+      : value;
+  };
+  const textColor = getCommonTextColor();
+  const supportsTextColor = shapes.length === 0 || shapes.some(shape => (
+    'labelColor' in shape.props || 'color' in shape.props
+  ));
+
+  const updateTextColor = (value: unknown) => {
+    editor.activeStyles.value = {
+      ...editor.activeStyles.value,
+      color: value,
+      labelColor: value,
+    };
+    if (shapes.length === 0) return;
+    editor.batch('Text color change', () => {
+      for (const shape of shapes) {
+        const key = 'labelColor' in shape.props ? 'labelColor' : 'color';
+        if (key in shape.props) {
+          editor.updateShape(shape.id as ShapeId, { props: { [key]: value } });
+        }
+      }
+    });
+  };
+
   const updateArrowRoute = (value: ArrowRouteStyle) => {
     controller.setArrowRouteStyle(value);
     updateProp('routeStyle', value);
@@ -146,7 +198,7 @@ export function StylePanel() {
 
   return (
     <div style={panelStyle} onPointerDown={event => event.stopPropagation()}>
-      {(shapes.length === 0 || supportedKeys.has('color')) ? (
+      {!textOnly && (shapes.length === 0 || supportedKeys.has('color')) ? (
         <div>
           <div style={sectionTitleStyle}>Stroke / Fill Color</div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4 }}>
@@ -173,16 +225,17 @@ export function StylePanel() {
         </div>
       ) : null}
 
-      {(shapes.length === 0 || supportedKeys.has('labelColor')) ? (
+      {((textOnly && supportsTextColor) || (!textOnly && (shapes.length === 0 || supportedKeys.has('labelColor')))) ? (
         <div>
           <div style={sectionTitleStyle}>Text Color</div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4 }}>
             {Object.entries(TLDRAW_COLORS).map(([name, hex]) => {
-              const active = labelColor === name || labelColor === hex;
+              const currentTextColor = textOnly ? textColor : labelColor;
+              const active = currentTextColor === name || currentTextColor === hex;
               return (
                 <button
                   key={name}
-                  onClick={() => updateProp('labelColor', name)}
+                  onClick={() => textOnly ? updateTextColor(name) : updateProp('labelColor', name)}
                   title={name}
                   style={{
                     width: 24,
@@ -200,7 +253,7 @@ export function StylePanel() {
         </div>
       ) : null}
 
-      {(shapes.length === 0 || supportedKeys.has('fillStyle')) ? (
+      {!textOnly && (shapes.length === 0 || supportedKeys.has('fillStyle')) ? (
         <div>
           <div style={sectionTitleStyle}>Fill</div>
           <div style={rowStyle}>
@@ -213,7 +266,7 @@ export function StylePanel() {
         </div>
       ) : null}
 
-      {(shapes.length === 0 || supportedKeys.has('strokeWidth')) ? (
+      {!textOnly && (shapes.length === 0 || supportedKeys.has('strokeWidth')) ? (
         <div>
           <div style={sectionTitleStyle}>Stroke Width</div>
           <div style={rowStyle}>
@@ -225,7 +278,7 @@ export function StylePanel() {
         </div>
       ) : null}
 
-      {(shapes.length === 0 || supportedKeys.has('strokeStyle')) ? (
+      {!textOnly && (shapes.length === 0 || supportedKeys.has('strokeStyle')) ? (
         <div>
           <div style={sectionTitleStyle}>Stroke Style</div>
           <div style={rowStyle}>
@@ -236,7 +289,7 @@ export function StylePanel() {
         </div>
       ) : null}
 
-      {supportedKeys.has('routeStyle') ? (
+      {!textOnly && supportedKeys.has('routeStyle') ? (
         <div>
           <div style={sectionTitleStyle}>Arrow Route</div>
           <div style={rowStyle}>
@@ -247,7 +300,7 @@ export function StylePanel() {
         </div>
       ) : null}
 
-      {supportedKeys.has('arrowheadStart') ? (
+      {!textOnly && supportedKeys.has('arrowheadStart') ? (
         <div>
           <div style={sectionTitleStyle}>Start Arrowhead</div>
           <div style={rowStyle}>
@@ -257,7 +310,7 @@ export function StylePanel() {
         </div>
       ) : null}
 
-      {supportedKeys.has('arrowheadEnd') ? (
+      {!textOnly && supportedKeys.has('arrowheadEnd') ? (
         <div>
           <div style={sectionTitleStyle}>End Arrowhead</div>
           <div style={rowStyle}>

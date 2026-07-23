@@ -53,6 +53,11 @@ export function buildArrowShapeRecord(args: {
       opacity: 1,
       strokeStyle: 'solid',
       strokeWidth: 'medium',
+      label: '',
+      labelPosition: 0.5,
+      labelColor: 'black',
+      font: 'sans',
+      fontSize: 'md',
     },
   };
 }

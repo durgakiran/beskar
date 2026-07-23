@@ -66,6 +66,7 @@ import {
   type MutationPolicy,
   type MutationRequest,
 } from './mutation-policy';
+import { TextEditSessionController } from './text-edit';
 
 // ─────────────────────────────────────────────────────────────
 // GlidePlugin — unit of extension
@@ -200,6 +201,7 @@ export class GlideEditor {
   readonly history: ReadonlyHistoryManager;
   private readonly _history: HistoryManager;
   readonly interactions: InteractionManager;
+  readonly textEditing: TextEditSessionController;
   /** Canonical local/page transform and geometry service. */
   readonly transforms: TransformService;
   private _clipboard: ClipboardPayload | null = null;
@@ -251,9 +253,53 @@ export class GlideEditor {
     this.transforms = new TransformService({
       getShape: id => this.getShape(id),
       getGeometry: shape => this.getShapeUtil(shape.type).getGeometry(shape as any),
+      getVisualBounds: shape => this.getShapeUtil(shape.type).getVisualBounds(shape as any),
       getZoom: () => this.camera.signal.peek().z,
       hitTestLocal: (shape, point) => this.getShapeUtil(shape.type).hitTestPoint(shape as any, point),
     });
+    this.textEditing = new TextEditSessionController({
+      getRevision: () => this.store.revision,
+      getEditableText: id => {
+        const shape = this.getShape(id);
+        if (!shape) return null;
+        const util = this.getShapeUtil(shape.type);
+        return util.canEditLabel(shape as any) ? util.getEditableText(shape as any) : null;
+      },
+      commit: (id, draft, pendingProps) => {
+        const latest = this.getShape(id);
+        if (!latest) return;
+        if (latest.type === 'text' && draft.trim() === '') {
+          this.batch('Delete Empty Text', () => this.deleteShapes([id]));
+          return;
+        }
+        const util = this.getShapeUtil(latest.type);
+        const patch = util.getTextCommitPatch(
+          latest as any,
+          draft,
+          pendingProps,
+        ) as Partial<GlideShape>;
+        if (latest.type === 'text' && latest.rotation !== 0) {
+          const anchoredPagePoint = this.transforms.localToPage(id, { x: 0, y: 0 });
+          const nextShape = {
+            ...latest,
+            ...patch,
+            props: { ...latest.props, ...(patch.props ?? {}) },
+          } as GlideShape;
+          const translation = this.transforms.getTranslationForLocalPoint(
+            nextShape,
+            { x: 0, y: 0 },
+            anchoredPagePoint,
+          );
+          patch.x = translation.x;
+          patch.y = translation.y;
+        }
+        this.batch('Edit Text', () => this.updateShape(id, patch as any));
+      },
+    });
+    this.textEditing.session.subscribe(session => {
+      this.editingShapeId.value = session?.shapeId ?? null;
+    });
+    this.interactions.getVersionSignal().subscribe(() => this.textEditing.reconcile());
     this._orderedShapeIdsSignal = computed(() => {
       this.interactions.getVersionSignal().value;
       return getCanonicalShapeIds(this._getAllShapes());
@@ -1095,21 +1141,46 @@ export class GlideEditor {
   // ── Inline editing state ───────────────────────────────────
 
   /**
-   * Mark a shape as being inline-edited.
-   * The demo layer uses this signal to overlay a <textarea>.
+   * Start the canonical draft session for a shape's editable text field.
    */
-  startEditing(id: ShapeId): void {
-    this.editingShapeId.value = id;
+  startEditing(
+    id: ShapeId,
+    pendingProps?: Readonly<Record<string, unknown>>,
+  ): void {
+    const session = this.textEditing.start(id, pendingProps);
+    if (!session) return;
     this.setSelectedShapeIds([]);
   }
 
   /** Clear the inline-editing state. */
   stopEditing(selectAgain = false): void {
     const id = this.editingShapeId.peek();
-    this.editingShapeId.value = null;
+    this.textEditing.cancel();
     if (selectAgain && id && this.getShape(id)) {
       this.setSelectedShapeIds([id]);
     }
+  }
+
+  updateEditingDraft(draft: string): void { this.textEditing.updateDraft(draft); }
+  setEditingComposition(composing: boolean): void { this.textEditing.setComposing(composing); }
+
+  commitEditing(selectAgain = true): boolean {
+    const id = this.editingShapeId.peek();
+    const session = this.textEditing.session.peek();
+    const shape = id ? this.getShape(id) : undefined;
+    const deleteEmptyText = shape?.type === 'text' && session?.draft.trim() === '';
+    const committed = this.textEditing.commit();
+    if (committed && deleteEmptyText && id && this.getShape(id)) {
+      this.batch('Delete Empty Text', () => this.deleteShapes([id]));
+    }
+    if (committed && selectAgain && id && this.getShape(id)) this.setSelectedShapeIds([id]);
+    return committed;
+  }
+
+  cancelEditing(selectAgain = true, recover = false): void {
+    const id = this.editingShapeId.peek();
+    this.textEditing.cancel({ recover });
+    if (selectAgain && id && this.getShape(id)) this.setSelectedShapeIds([id]);
   }
 
   setBindingPreview(preview: BindingPreview | null): void {
@@ -1385,7 +1456,7 @@ export class GlideEditor {
     this._history.clear();
     this._clipboard = null;
     this.setSelectedShapeIds([]);
-    this.editingShapeId.value = null;
+    this.textEditing.cancel();
     this.erasingShapeIds.value = new Set<ShapeId>();
     this.bindingPreview.value = null;
     this.activeStyles.value = { ...DEFAULT_ACTIVE_STYLES };

@@ -152,6 +152,10 @@ export type {
   FillStyle, StrokeStyle, SizeStyle, FontSize, TextAlign, Font,
   ShapeStyleProps, LabelProps,
 } from './styles';
+export { TextEditSessionController } from './text-edit';
+export type {
+  EditableTextField, EditableTextValue, TextEditSession, RecoverableTextEditDraft,
+} from './text-edit';
 
 // Phase A — Ellipse shape
 export { EllipseUtil, EllipsePlugin } from './shapes/EllipseUtil';

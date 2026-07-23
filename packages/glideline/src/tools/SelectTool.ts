@@ -183,14 +183,16 @@ class Idle extends StateNode {
   }
 
   override onDoubleClick(e: DoubleClickEvent): void {
-    // Double-click on a labeled shape → start inline editing
     if (e.shapeId) {
       const shape = this.editor.getShape(e.shapeId);
       if (!shape) return;
-      const labeledTypes = ['box', 'ellipse', 'triangle', 'diamond', 'hexagon', 'star', 'sticky-note', 'text', 'frame'];
-      if (labeledTypes.includes(shape.type)) {
+      const util = this.editor.getShapeUtil(shape.type);
+      if (util.canEditLabel(shape as any)) {
         this.editor.setSelectedShapeIds([e.shapeId]);
-        this.editor.startEditing(e.shapeId);
+        this.editor.startEditing(
+          e.shapeId,
+          util.getTextEditProps(shape as any, e.point) ?? undefined,
+        );
       }
     }
   }

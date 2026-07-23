@@ -5,6 +5,7 @@ import type {
   ShapeId,
   Vec2,
   LabelProps,
+  TextEditSession,
 } from '@durgakiran/glideline';
 import { FONT_FAMILIES } from '@durgakiran/glideline';
 import { CanvasOverlays, getHandleAtPagePoint, getCursorForHandle } from './CanvasOverlays';
@@ -25,6 +26,23 @@ function pointsToSvgPath(points: Vec2[], closed = false): string {
   }
   if (closed) path += ' Z';
   return path;
+}
+
+// A non-breaking space creates a real line box for Chromium's empty-editable
+// caret. It is stripped at the draft boundary and is never persisted.
+const EMPTY_EDIT_MARKER = '\u00A0';
+
+function readEditingText(element: HTMLElement): string {
+  return (element.textContent ?? '').split(EMPTY_EDIT_MARKER).join('');
+}
+
+function moveCaretToEnd(element: HTMLElement): void {
+  const range = document.createRange();
+  const selection = window.getSelection();
+  range.selectNodeContents(element);
+  range.collapse(false);
+  selection?.removeAllRanges();
+  selection?.addRange(range);
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -66,11 +84,9 @@ const ShapeLayer = memo(({ id, zIndex }: { id: ShapeId; zIndex: number }) => {
   const shape = useSignalValue(sig as any) as GlideShape | null;
   const divRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
-  const labelRef = useRef<HTMLDivElement>(null);
   const editingId = useSignalValue(editor.editingShapeId);
   const erasingIds = useSignalValue(editor.erasingShapeIds);
   const camera = useSignalValue(editor.camera.signal)!;
-  const readOnly = useSignalValue(controller.readOnlySignal) ?? false;
   const isErasing = erasingIds ? erasingIds.has(id) : false;
   const isEditing = editingId === id;
 
@@ -104,33 +120,8 @@ const ShapeLayer = memo(({ id, zIndex }: { id: ShapeId; zIndex: number }) => {
     }
   }, [editor, shape]);
 
-  // Auto-focus label div when editing starts
-  useEffect(() => {
-    if (isEditing && labelRef.current) {
-      labelRef.current.focus();
-      // Move cursor to end
-      const range = document.createRange();
-      const sel = window.getSelection();
-      range.selectNodeContents(labelRef.current);
-      range.collapse(false);
-      sel?.removeAllRanges();
-      sel?.addRange(range);
-    }
-  }, [isEditing]);
-
   const util = shape ? editor.getShapeUtil(shape.type) : null;
   const labelProps: LabelProps | null = (shape && util) ? ((util as any).getLabelProps?.(shape) ?? null) : null;
-
-  // Keep contenteditable text content in sync manually (prevents React conflicts on re-render)
-  const lastTextRef = useRef<string | undefined>(labelProps?.text);
-  useEffect(() => {
-    if (labelRef.current && labelProps) {
-      if (!isEditing || lastTextRef.current !== labelProps.text) {
-        labelRef.current.textContent = labelProps.text;
-        lastTextRef.current = labelProps.text;
-      }
-    }
-  }, [labelProps?.text, isEditing]);
 
   if (!shape || !util) return null;
 
@@ -140,31 +131,6 @@ const ShapeLayer = memo(({ id, zIndex }: { id: ShapeId; zIndex: number }) => {
   const localBounds = util.getGeometry(shape as any).getBounds();
   const world = editor.getWorldTransform(shape.id as ShapeId);
   const screenTransform = `matrix(${world.a * camera.z}, ${world.b * camera.z}, ${world.c * camera.z}, ${world.d * camera.z}, ${(world.e - camera.x) * camera.z}, ${(world.f - camera.y) * camera.z})`;
-
-  const commitEdit = (text: string) => {
-    const key = shape.type === 'sticky-note' ? 'text' : shape.type === 'text' ? 'text' : 'label';
-    if (shape.type === 'text' && text.trim() === '') {
-      editor.batch('Delete Empty Text', () => {
-        editor.deleteShapes([id]);
-      });
-    } else {
-      editor.batch('Edit Text', () => {
-        editor.updateShape(id, { props: { ...shape.props, [key]: text } });
-      });
-    }
-    editor.stopEditing(true);
-  };
-
-  const handleLabelKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
-    if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
-      event.preventDefault();
-      commitEdit(event.currentTarget.textContent ?? '');
-    }
-    if (event.key === 'Escape') {
-      event.preventDefault();
-      editor.stopEditing(true);
-    }
-  };
 
   return (
     <div
@@ -200,6 +166,7 @@ const ShapeLayer = memo(({ id, zIndex }: { id: ShapeId; zIndex: number }) => {
       {/* Erase overlay */}
       {isErasing && (
         <div
+          data-glideboard-role="shape-label"
           style={{
             position: 'absolute',
             inset: 0,
@@ -212,23 +179,14 @@ const ShapeLayer = memo(({ id, zIndex }: { id: ShapeId; zIndex: number }) => {
       )}
 
       {/* Label: native HTML div */}
-      {labelProps && (
+      {labelProps && (labelProps.text.length > 0 || isEditing) && (
         <div
-          ref={labelRef}
-          contentEditable={isEditing && !readOnly ? true : undefined}
-          suppressContentEditableWarning
-          onBlur={isEditing && !readOnly
-            ? (e) => commitEdit(e.currentTarget.textContent ?? '')
-            : undefined}
-          onKeyDown={isEditing ? handleLabelKeyDown : undefined}
           style={{
             position: 'absolute',
-            left: labelProps.padding,
-            top: labelProps.padding,
-            right: (isTextType && isEditing && !hasFixedWidth) ? undefined : labelProps.padding,
-            bottom: (isTextType && isEditing) ? undefined : labelProps.padding,
-            width: (isTextType && isEditing && !hasFixedWidth) ? 'max-content' : '100%',
-            height: (isTextType && isEditing) ? 'auto' : '100%',
+            left: labelProps.x ?? labelProps.padding,
+            top: labelProps.y ?? labelProps.padding,
+            width: labelProps.w ?? (isTextType && !hasFixedWidth ? 'max-content' : Math.max(0, localBounds.w - labelProps.padding * 2)),
+            height: labelProps.h ?? (isTextType ? 'auto' : Math.max(0, localBounds.h - labelProps.padding * 2)),
             fontFamily: labelProps.fontFamily,
             fontSize: labelProps.fontSize,
             color: labelProps.color,
@@ -238,23 +196,193 @@ const ShapeLayer = memo(({ id, zIndex }: { id: ShapeId; zIndex: number }) => {
             flexDirection: 'column',
             alignItems: labelProps.textAlign === 'left' ? 'flex-start' : labelProps.textAlign === 'right' ? 'flex-end' : 'center',
             justifyContent: labelProps.verticalAlign === 'center' ? 'center' : 'flex-start',
-            pointerEvents: isEditing && !readOnly ? 'auto' : 'none',
-            userSelect: isEditing ? 'text' : 'none',
-            overflow: isEditing ? 'visible' : 'hidden',
+            pointerEvents: 'none',
+            userSelect: 'none',
+            overflow: 'hidden',
             whiteSpace: (isTextType && !hasFixedWidth) ? 'pre' : 'pre-wrap',
             wordBreak: 'break-word',
             outline: 'none',
-            cursor: isEditing ? 'text' : 'inherit',
             boxSizing: 'border-box',
             lineHeight: 1.35,
-            minHeight: isEditing ? '1.35em' : undefined,
-            minWidth: isEditing ? (isTextType ? '150px' : '2ch') : undefined,
+            visibility: isEditing ? 'hidden' : 'visible',
           }}
-        />
+        >
+          {labelProps.text}
+        </div>
       )}
     </div>
   );
 });
+
+// ─────────────────────────────────────────────────────────────
+// TextEditingOverlay — the only live text editor on the canvas
+// ─────────────────────────────────────────────────────────────
+
+function TextEditingOverlay() {
+  const controller = useGlideboardController();
+  const editor = controller.editor;
+  const session = useSignalValue(editor.textEditing.session) as TextEditSession | null;
+  const camera = useSignalValue(editor.camera.signal)!;
+  const shape = useSignalValue(
+    session ? editor.getShapeSignal(session.shapeId) as any : null,
+  ) as GlideShape | null;
+  const editableRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const editable = editableRef.current;
+    if (!editable || !session) return;
+    if (readEditingText(editable) !== session.draft) {
+      editable.textContent = session.draft || EMPTY_EDIT_MARKER;
+    } else if (!session.draft && editable.textContent === '') {
+      editable.textContent = EMPTY_EDIT_MARKER;
+    }
+  }, [session?.draft, session?.shapeId, shape?.id]);
+
+  useEffect(() => {
+    const editable = editableRef.current;
+    if (!editable || !session) return;
+    editable.focus();
+    moveCaretToEnd(editable);
+  }, [session?.shapeId, shape?.id]);
+
+  if (!session || !shape) return null;
+
+  const util = editor.getShapeUtil(shape.type);
+  const layoutShape = session.pendingProps
+    ? { ...shape, props: { ...shape.props, ...session.pendingProps } }
+    : shape;
+  const labelProps = util.getLabelProps(layoutShape as any);
+  if (!labelProps) return null;
+
+  const localBounds = util.getGeometry(layoutShape as any).getBounds();
+  const world = editor.getWorldTransform(shape.id as ShapeId);
+  const screenTransform = `matrix(${world.a * camera.z}, ${world.b * camera.z}, ${world.c * camera.z}, ${world.d * camera.z}, ${(world.e - camera.x) * camera.z}, ${(world.f - camera.y) * camera.z})`;
+  const isTextType = shape.type === 'text';
+  const hasFixedWidth = isTextType && typeof (shape.props as any).w === 'number';
+  const conflicted = session.status === 'conflicted';
+
+  const commit = () => {
+    if (editor.commitEditing(true)) return;
+    requestAnimationFrame(() => editableRef.current?.focus());
+  };
+
+  return (
+    <div
+      data-glideboard-role="text-editing-overlay"
+      data-shape-id={shape.id}
+      style={{
+        position: 'absolute',
+        left: 0,
+        top: 0,
+        width: localBounds.w,
+        height: localBounds.h,
+        transform: screenTransform,
+        transformOrigin: '0 0',
+        zIndex: 1_000_000,
+        pointerEvents: 'none',
+      }}
+    >
+      <div
+        data-glideboard-role="text-editing-box"
+        onPointerDown={event => {
+          event.stopPropagation();
+          editableRef.current?.focus();
+        }}
+        style={{
+          position: 'absolute',
+          left: labelProps.x ?? labelProps.padding,
+          top: labelProps.y ?? labelProps.padding,
+          width: labelProps.w ?? (isTextType && !hasFixedWidth ? 'max-content' : Math.max(0, localBounds.w - labelProps.padding * 2)),
+          height: labelProps.h ?? (isTextType ? 'auto' : Math.max(0, localBounds.h - labelProps.padding * 2)),
+          minWidth: isTextType && !hasFixedWidth ? 150 : '2ch',
+          minHeight: '1.35em',
+          padding: 0,
+          border: 0,
+          outline: conflicted ? '2px solid #ef4444' : '2px solid #4f8cff',
+          outlineOffset: 2,
+          fontFamily: labelProps.fontFamily,
+          fontSize: labelProps.fontSize,
+          color: labelProps.color,
+          background: labelProps.background ?? 'transparent',
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: labelProps.verticalAlign === 'center' ? 'center' : 'flex-start',
+          pointerEvents: 'auto',
+          overflow: 'visible',
+          cursor: 'text',
+          boxSizing: 'border-box',
+          lineHeight: 1.35,
+        }}
+      >
+        <div
+          ref={editableRef}
+          contentEditable="plaintext-only"
+          suppressContentEditableWarning
+          role="textbox"
+          aria-multiline="true"
+          aria-invalid={conflicted || undefined}
+          title={conflicted ? 'This label changed elsewhere. Press Escape to keep the newer document value.' : undefined}
+          onPointerDown={event => event.stopPropagation()}
+          onBeforeInput={event => {
+            if (
+              event.currentTarget.textContent === EMPTY_EDIT_MARKER
+              && !event.nativeEvent.isComposing
+            ) {
+              event.currentTarget.textContent = '';
+              moveCaretToEnd(event.currentTarget);
+            }
+          }}
+          onInput={event => {
+            const editable = event.currentTarget;
+            const draft = readEditingText(editable);
+            editor.updateEditingDraft(draft);
+            if (!draft && editable.textContent === '') {
+              editable.textContent = EMPTY_EDIT_MARKER;
+              moveCaretToEnd(editable);
+            }
+          }}
+          onCompositionStart={() => editor.setEditingComposition(true)}
+          onCompositionEnd={event => {
+            const draft = readEditingText(event.currentTarget);
+            event.currentTarget.textContent = draft || EMPTY_EDIT_MARKER;
+            moveCaretToEnd(event.currentTarget);
+            editor.updateEditingDraft(draft);
+            editor.setEditingComposition(false);
+          }}
+          onBlur={commit}
+          onKeyDown={event => {
+            event.stopPropagation();
+            if (event.nativeEvent.isComposing || session.composing) return;
+            if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
+              event.preventDefault();
+              commit();
+            } else if (event.key === 'Escape') {
+              event.preventDefault();
+              editor.cancelEditing(true, conflicted);
+            }
+          }}
+          style={{
+            width: '100%',
+            minWidth: isTextType && !hasFixedWidth ? 150 : '2ch',
+            minHeight: '1.35em',
+            padding: 0,
+            border: 0,
+            outline: 'none',
+            font: 'inherit',
+            color: 'inherit',
+            textAlign: labelProps.textAlign,
+            userSelect: 'text',
+            whiteSpace: isTextType && !hasFixedWidth ? 'pre' : 'pre-wrap',
+            wordBreak: 'break-word',
+            cursor: 'text',
+            boxSizing: 'border-box',
+            lineHeight: 1.35,
+          }}
+        />
+      </div>
+    </div>
+  );
+}
 
 // ─────────────────────────────────────────────────────────────
 // Canvas
@@ -380,6 +508,7 @@ export function Canvas() {
 
     if (handleId && event.button === 0) {
       if (readOnly) return;
+      controller.textStyleTargetIdSignal.value = null;
       editor.setCurrentTool('select');
       editor.dispatchEvent({
         type: 'pointerDown',
@@ -393,6 +522,17 @@ export function Canvas() {
     }
 
     const hit = getShapeAtEvent(event);
+    if (event.button === 0) {
+      if (hit) {
+        const util = editor.getShapeUtil(hit.type);
+        const localPoint = editor.pageToLocal(hit.id as ShapeId, page);
+        controller.textStyleTargetIdSignal.value = (
+          hit.type === 'text' || util.hitTestLabel(hit as any, localPoint)
+        ) ? hit.id as ShapeId : null;
+      } else {
+        controller.textStyleTargetIdSignal.value = null;
+      }
+    }
     const editingBefore = editor.editingShapeId.peek();
     editor.dispatchEvent({
       type: 'pointerDown',
@@ -587,7 +727,10 @@ export function Canvas() {
         ))}
       </div>
 
-      {/* 3. Overlay Canvas — selection handles, marquee, binding preview */}
+      {/* 3. One text editor for the active edit session */}
+      {!readOnly && <TextEditingOverlay />}
+
+      {/* 4. Overlay Canvas — selection handles, marquee, binding preview */}
       <CanvasOverlays />
     </div>
   );

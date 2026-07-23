@@ -851,12 +851,7 @@ describe('GlideboardController', () => {
     try {
       const id = controller.editor.createShape(createBoxRecord('shape:text-draft', 10, 20) as any);
       controller.editor.startEditing(id);
-      const canvas = document.createElement('div');
-      const editable = document.createElement('div');
-      editable.setAttribute('contenteditable', 'true');
-      editable.textContent = 'Unsaved local draft';
-      canvas.appendChild(editable);
-      controller.setCanvasElement(canvas);
+      controller.editor.updateEditingDraft('Unsaved local draft');
 
       await controller.settleActiveEdit('cancel');
 
@@ -882,12 +877,9 @@ describe('GlideboardController', () => {
         controller.editor.updateShape(id, { x: 300 });
       });
       controller.editor.startEditing(id);
+      controller.editor.updateEditingDraft('Recover this text');
 
       const canvas = document.createElement('div');
-      const editable = document.createElement('div');
-      editable.setAttribute('contenteditable', 'true');
-      editable.textContent = 'Recover this text';
-      canvas.appendChild(editable);
       const releasePointerCapture = vi.fn();
       Object.assign(canvas, {
         hasPointerCapture: (pointerId: number) => pointerId === 7,

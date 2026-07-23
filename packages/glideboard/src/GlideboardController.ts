@@ -10,6 +10,7 @@ import {
   type GlidePlugin,
   type LoadReport,
   type MutationPolicy,
+  type ShapeId,
   type Vec2,
 } from '@durgakiran/glideline';
 import { bindGlideboardCollaboration } from './collaboration';
@@ -112,6 +113,7 @@ export class GlideboardController {
   readonly activePointerIdRef = { current: null as number | null };
   readonly deferredToolRestoreRef = { current: null as string | null };
   readonly recoverableTextDraftSignal = signal<RecoverableTextDraft | null>(null);
+  readonly textStyleTargetIdSignal = signal<ShapeId | null>(null);
   readonly mutationFenceDepthSignal = signal(0);
   readonly arrowRouteStyleSignal;
   readonly arrowPresetSignal;
@@ -161,6 +163,11 @@ export class GlideboardController {
     );
     this.arrowheadStartSignal = signal<ArrowheadStyle>(this.editor.arrowheadStart);
     this.arrowheadEndSignal = signal<ArrowheadStyle>(this.editor.arrowheadEnd);
+    this.debugCleanups.add(this.editor.textEditing.recoverableDraft.subscribe(draft => {
+      this.recoverableTextDraftSignal.value = draft
+        ? Object.freeze({ shapeId: draft.shapeId, text: draft.text })
+        : null;
+    }));
 
     if (options.initialDocument) {
       if (!options.initialDocumentDisposition) {
@@ -179,6 +186,7 @@ export class GlideboardController {
     const report = this.editor.replaceDocument(document);
     if (options.resetSessionState ?? true) {
       this.editor.resetSessionState();
+      this.textStyleTargetIdSignal.value = null;
       this.setArrowRouteStyle('ortho');
       this.setConnectorPreset('arrow');
       this.editor.setCurrentTool(this.readOnlySignal.peek() ? 'hand' : 'select');
@@ -215,14 +223,8 @@ export class GlideboardController {
     }
 
     if (readOnly) {
-      const editingShapeId = this.editor.editingShapeId.peek();
-      const editable = this.canvasElement?.querySelector<HTMLElement>('[contenteditable="true"]');
-      if (editingShapeId && editable) {
-        this.recoverableTextDraftSignal.value = Object.freeze({
-          shapeId: editingShapeId,
-          text: editable.textContent ?? '',
-        });
-      }
+      this.editor.cancelEditing(false, true);
+      this.textStyleTargetIdSignal.value = null;
     }
 
     // Change authorization before any downgrade cleanup can trigger callbacks.
@@ -231,7 +233,6 @@ export class GlideboardController {
     if (readOnly) {
       // Edit → View
       this.editor.interactions.cancel();
-      this.editor.stopEditing();
       this.editor.clearBindingPreview();
 
       const pointerId = this.activePointerIdRef.current;
@@ -374,24 +375,19 @@ export class GlideboardController {
   async settleActiveEdit(policy: 'commit' | 'cancel'): Promise<void> {
     this.editor.interactions.cancel();
     this.editor.clearBindingPreview();
-    const editingShapeId = this.editor.editingShapeId.peek();
-    const editable = this.canvasElement?.querySelector<HTMLElement>('[contenteditable="true"]');
-    if (editingShapeId && editable && policy === 'cancel') {
-      this.recoverableTextDraftSignal.value = Object.freeze({
-        shapeId: editingShapeId,
-        text: editable.textContent ?? '',
-      });
-    }
-
-    if (policy === 'commit' && editable) {
+    if (policy === 'commit' && this.editor.textEditing.session.peek()) {
       this.fencedSettlementSignal.value = true;
       try {
-        editable.blur();
+        if (!this.editor.commitEditing(false)) {
+          // A concurrent same-field change must never be overwritten during
+          // close/publish. Preserve the local draft and keep the canonical one.
+          this.editor.cancelEditing(false, true);
+        }
       } finally {
         this.fencedSettlementSignal.value = false;
       }
     } else {
-      this.editor.stopEditing();
+      this.editor.cancelEditing(false, policy === 'cancel');
     }
     await Promise.resolve();
   }

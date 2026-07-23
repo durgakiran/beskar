@@ -3,7 +3,7 @@
  *
  * canContain() = true → other shapes can be nested inside.
  * Renders as dashed-border rect with a label.
- * toSvg() returns a <g> with dashed <rect> + <text> label.
+ * toSvg() returns geometry; getLabelProps() owns the editable label layout.
  */
 
 import { ShapeUtil } from './ShapeUtil';
@@ -12,6 +12,7 @@ import { defineMigrations } from '../migrations';
 import { makeBox } from '../types';
 import type { GlideShape } from '../types';
 import { Geometry2d, Rectangle2d } from '../geometry';
+import { createTextForeignObjectForExport, type LabelProps } from '../styles';
 
 export interface FrameProps {
   [key: string]: unknown;
@@ -56,6 +57,32 @@ export class FrameUtil extends ShapeUtil<FrameShape> {
     return true;
   }
 
+  override getLabelProps(shape: FrameShape): LabelProps {
+    return {
+      text: shape.props.label,
+      fontFamily: 'Inter, system-ui, sans-serif',
+      fontSize: 13,
+      color: shape.props.color,
+      textAlign: 'left',
+      verticalAlign: 'center',
+      padding: 0,
+      x: 8,
+      y: -26,
+      w: Math.max(40, shape.props.w - 16),
+      h: 20,
+    };
+  }
+
+  override getVisualBounds(shape: FrameShape) {
+    const bounds = this.getGeometry(shape).getBounds();
+    const label = this.getLabelProps(shape);
+    const minX = Math.min(bounds.minX, label.x ?? bounds.minX);
+    const minY = Math.min(bounds.minY, label.y ?? bounds.minY);
+    const maxX = Math.max(bounds.maxX, (label.x ?? 0) + (label.w ?? 0));
+    const maxY = Math.max(bounds.maxY, (label.y ?? 0) + (label.h ?? 0));
+    return makeBox(minX, minY, maxX - minX, maxY - minY);
+  }
+
   toSvg(shape: FrameShape): SVGElement {
     const { props } = shape;
     const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
@@ -73,16 +100,24 @@ export class FrameUtil extends ShapeUtil<FrameShape> {
     rect.setAttribute('rx',             '4');
     g.appendChild(rect);
 
-    // Label (above top-left corner at local 0,0)
-    const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-    label.setAttribute('x',           '8');
-    label.setAttribute('y',           '-6');
-    label.setAttribute('font-size',   '13');
-    label.setAttribute('font-family', 'Inter, system-ui, sans-serif');
-    label.setAttribute('fill',        props.color);
-    label.textContent = props.label;
-    g.appendChild(label);
+    return g;
+  }
 
+  override toSvgExport(shape: FrameShape): SVGElement {
+    const g = this.toSvg(shape);
+    const label = this.getLabelProps(shape);
+    g.appendChild(createTextForeignObjectForExport({
+      x: label.x ?? 8,
+      y: label.y ?? -26,
+      w: label.w ?? Math.max(40, shape.props.w - 16),
+      h: label.h ?? 20,
+      text: shape.props.label,
+      font: label.fontFamily,
+      fontSize: label.fontSize,
+      textAlign: 'left',
+      color: label.color,
+      verticalAlign: 'center',
+    }));
     return g;
   }
 }

@@ -120,10 +120,6 @@ export function getHandleAtPagePoint(editor: GlideEditor, pageX: number, pageY: 
     return null;
   }
 
-  // Check if text elements only
-  const allText = shapes.every(shape => shape.type === 'text');
-  if (allText) return null;
-
   if (shapes.length === 1) {
     const shape = shapes[0]!;
     const util = editor.getShapeUtil(shape.type);
@@ -356,31 +352,29 @@ function drawSelection(editor: GlideEditor, ctx: CanvasRenderingContext2D, zoom:
     ctx.setLineDash([4 / zoom, 2 / zoom]);
     ctx.strokeRect(bounds.minX, bounds.minY, bounds.w, bounds.h);
 
-    if (shape.type !== 'text') {
-      ctx.setLineDash([]);
-      if (!util.hideRotateHandle(shape as any)) {
-        const rotateY = bounds.minY - ROTATION_HANDLE_OFFSET / zoom;
-        ctx.beginPath();
-        ctx.moveTo(centerX, bounds.minY);
-        ctx.lineTo(centerX, rotateY);
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.arc(centerX, rotateY, 5 / zoom, 0, 2 * Math.PI);
-        ctx.fillStyle = resolveColor(wbTheme.selectionFill);
-        ctx.fill();
-        ctx.stroke();
-      }
-      if (!util.hideResizeHandles(shape as any)) {
-        const hs = HANDLE_SIZE / zoom;
-        const points = [
-          [bounds.minX, bounds.minY], [centerX, bounds.minY], [bounds.maxX, bounds.minY],
-          [bounds.maxX, bounds.minY + bounds.h / 2], [bounds.maxX, bounds.maxY],
-          [centerX, bounds.maxY], [bounds.minX, bounds.maxY], [bounds.minX, bounds.minY + bounds.h / 2],
-        ];
-        for (const [x, y] of points) {
-          ctx.fillRect(x! - hs / 2, y! - hs / 2, hs, hs);
-          ctx.strokeRect(x! - hs / 2, y! - hs / 2, hs, hs);
-        }
+    ctx.setLineDash([]);
+    if (!util.hideRotateHandle(shape as any)) {
+      const rotateY = bounds.minY - ROTATION_HANDLE_OFFSET / zoom;
+      ctx.beginPath();
+      ctx.moveTo(centerX, bounds.minY);
+      ctx.lineTo(centerX, rotateY);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(centerX, rotateY, 5 / zoom, 0, 2 * Math.PI);
+      ctx.fillStyle = resolveColor(wbTheme.selectionFill);
+      ctx.fill();
+      ctx.stroke();
+    }
+    if (!util.hideResizeHandles(shape as any)) {
+      const hs = HANDLE_SIZE / zoom;
+      const points = [
+        [bounds.minX, bounds.minY], [centerX, bounds.minY], [bounds.maxX, bounds.minY],
+        [bounds.maxX, bounds.minY + bounds.h / 2], [bounds.maxX, bounds.maxY],
+        [centerX, bounds.maxY], [bounds.minX, bounds.maxY], [bounds.minX, bounds.minY + bounds.h / 2],
+      ];
+      for (const [x, y] of points) {
+        ctx.fillRect(x! - hs / 2, y! - hs / 2, hs, hs);
+        ctx.strokeRect(x! - hs / 2, y! - hs / 2, hs, hs);
       }
     }
     ctx.restore();
@@ -397,8 +391,6 @@ function drawSelection(editor: GlideEditor, ctx: CanvasRenderingContext2D, zoom:
   const cy = minY + height / 2;
   const rotation = boxes.length === 1 ? boxes[0]!.rotation : 0;
 
-  const allText = shapes.every(shape => shape.type === 'text');
-
   ctx.save();
   if (boxes.length === 1 && rotation !== 0) {
     ctx.translate(cx, cy);
@@ -412,58 +404,56 @@ function drawSelection(editor: GlideEditor, ctx: CanvasRenderingContext2D, zoom:
   ctx.setLineDash([4 / zoom, 2 / zoom]);
   ctx.strokeRect(minX, minY, width, height);
 
-  if (!allText) {
-    let showRotate = true;
-    let showResize = true;
-    if (boxes.length === 1) {
-      const util = editor.getShapeUtil(shapes[0]!.type);
-      showRotate = !util.hideRotateHandle(shapes[0] as any);
-      showResize = !util.hideResizeHandles(shapes[0] as any);
-    }
+  let showRotate = true;
+  let showResize = true;
+  if (boxes.length === 1) {
+    const util = editor.getShapeUtil(shapes[0]!.type);
+    showRotate = !util.hideRotateHandle(shapes[0] as any);
+    showResize = !util.hideResizeHandles(shapes[0] as any);
+  }
 
-    ctx.setLineDash([]);
+  ctx.setLineDash([]);
 
-    // Rotate handle
-    if (showRotate && boxes.length === 1) {
-      const rotY = minY - ROTATION_HANDLE_OFFSET / zoom;
-      ctx.beginPath();
-      ctx.moveTo(cx, minY);
-      ctx.lineTo(cx, rotY);
-      ctx.stroke();
+  // Rotate handle
+  if (showRotate && boxes.length === 1) {
+    const rotY = minY - ROTATION_HANDLE_OFFSET / zoom;
+    ctx.beginPath();
+    ctx.moveTo(cx, minY);
+    ctx.lineTo(cx, rotY);
+    ctx.stroke();
 
-      ctx.beginPath();
-      ctx.arc(cx, rotY, 5 / zoom, 0, 2 * Math.PI);
-      ctx.fillStyle = resolveColor(wbTheme.selectionFill);
-      ctx.fill();
-      ctx.stroke();
-    }
+    ctx.beginPath();
+    ctx.arc(cx, rotY, 5 / zoom, 0, 2 * Math.PI);
+    ctx.fillStyle = resolveColor(wbTheme.selectionFill);
+    ctx.fill();
+    ctx.stroke();
+  }
 
-    // Resize handles
-    if (showResize) {
-      const hs = HANDLE_SIZE / zoom;
-      const rx = 1 / zoom;
-      const handles = [
-        { id: 'nw', px: minX, py: minY },
-        { id: 'n', px: cx, py: minY },
-        { id: 'ne', px: maxX, py: minY },
-        { id: 'e', px: maxX, py: minY + height / 2 },
-        { id: 'se', px: maxX, py: maxY },
-        { id: 's', px: cx, py: maxY },
-        { id: 'sw', px: minX, py: maxY },
-        { id: 'w', px: minX, py: minY + height / 2 },
-      ];
+  // Resize handles
+  if (showResize) {
+    const hs = HANDLE_SIZE / zoom;
+    const rx = 1 / zoom;
+    const handles = [
+      { id: 'nw', px: minX, py: minY },
+      { id: 'n', px: cx, py: minY },
+      { id: 'ne', px: maxX, py: minY },
+      { id: 'e', px: maxX, py: minY + height / 2 },
+      { id: 'se', px: maxX, py: maxY },
+      { id: 's', px: cx, py: maxY },
+      { id: 'sw', px: minX, py: maxY },
+      { id: 'w', px: minX, py: minY + height / 2 },
+    ];
 
-      ctx.fillStyle = resolveColor(wbTheme.selectionFill);
-      for (const h of handles) {
-        if (ctx.roundRect) {
-          ctx.beginPath();
-          ctx.roundRect(h.px - hs / 2, h.py - hs / 2, hs, hs, rx);
-          ctx.fill();
-          ctx.stroke();
-        } else {
-          ctx.fillRect(h.px - hs / 2, h.py - hs / 2, hs, hs);
-          ctx.strokeRect(h.px - hs / 2, h.py - hs / 2, hs, hs);
-        }
+    ctx.fillStyle = resolveColor(wbTheme.selectionFill);
+    for (const h of handles) {
+      if (ctx.roundRect) {
+        ctx.beginPath();
+        ctx.roundRect(h.px - hs / 2, h.py - hs / 2, hs, hs, rx);
+        ctx.fill();
+        ctx.stroke();
+      } else {
+        ctx.fillRect(h.px - hs / 2, h.py - hs / 2, hs, hs);
+        ctx.strokeRect(h.px - hs / 2, h.py - hs / 2, hs, hs);
       }
     }
   }

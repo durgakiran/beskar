@@ -287,6 +287,11 @@ export interface LabelProps {
   padding:       number;
   /** Optional background color (used by sticky-note to match shape fill on label div). */
   background?:   string;
+  /** Optional positioned label box in shape-local coordinates. */
+  x?: number;
+  y?: number;
+  w?: number;
+  h?: number;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -303,6 +308,7 @@ export function createTextForeignObjectForExport(opts: {
   fontSize: FontSize | number;
   textAlign: TextAlign | string;
   color: string;
+  background?: string;
   verticalAlign?: 'top' | 'center';
   padding?: number;
 }): SVGForeignObjectElement {
@@ -323,6 +329,7 @@ export function createTextForeignObjectForExport(opts: {
   div.style.fontSize = typeof opts.fontSize === 'number' ? `${opts.fontSize}px` : `${FONT_SIZES[opts.fontSize as FontSize]}px`;
   div.style.fontFamily = (FONT_FAMILIES as any)[opts.font] || opts.font;
   div.style.color = resolveColor(opts.color) ?? opts.color;
+  if (opts.background) div.style.background = resolveColor(opts.background) ?? opts.background;
   div.style.textAlign = opts.textAlign;
   div.style.whiteSpace = 'pre-wrap';
   div.style.wordBreak = 'break-word';
@@ -455,4 +462,3 @@ export function getMinHeightForShape(shape: { type: string; props: Record<string
   const width = w ?? shape.props.w ?? 100;
   return estimateTextHeight({ text, w: width, font, fontSize, padding });
 }
-

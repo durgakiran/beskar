@@ -1466,6 +1466,29 @@ getTextCommitPatch(latestShape, draft): RecordPatch;
 
 For future rich text, store a normalized structured document, sanitize paste/import at the model boundary, never persist arbitrary executable HTML, and use a dedicated collaborative text type. Static render, bounds, hit testing, and export must share one layout contract.
 
+### 18.3 Required label and text coverage
+
+Workstream L also closes the current UI capability gaps for plain text:
+
+- Audit every registered shape util and explicitly declare whether it supports editable text.
+- Every label-capable shape, including ellipse and geo/path shapes such as diamond, triangle, document, cylinder, note, and callout, must expose the same double-click and keyboard editing entry points.
+- Frame, sticky-note, standalone text, built-in shapes, and developer-defined label-capable shapes must use the same edit-session contract rather than shape-type conditionals in Glideboard.
+- Add arrow labels without rendering an empty placeholder by default. The first double-click anywhere on the route opens a draft at that route position; committing stores the arrow-owned text and position together. Later double-clicks edit the same label. Endpoint movement, rebinding, rerouting, and target movement keep it attached.
+- Arrow-label editing must use the same safe draft/commit flow and must not interfere with endpoint or bend-handle interaction.
+- Enable rotation controls for standalone text. Editing, static rendering, selection geometry, hit testing, bounds, and SVG export must agree on the rotated transform.
+- Labels embedded in rotated shapes must inherit the shape transform without rotating twice.
+- Shapes that intentionally cannot contain text, such as freehand strokes and eraser output, must opt out explicitly.
+
+This work delivers safe plain-text labels. Rich-text formatting, collaborative rich-text spans, and persisted HTML are not part of Workstream L.
+
+### 18.4 Implementation status — complete for plain-text editing
+
+- Glideline now owns a `TextEditSessionController` with draft, composition, conflict, commit, cancellation, and recoverable-draft state. Commits produce a narrow patch for only the owned text field against the latest canonical shape, so concurrent style changes survive and same-field conflicts are never overwritten.
+- Glideboard mounts one active `TextEditingOverlay`; per-shape layers render static labels only. Blur and command commit are idempotent, Escape performs no write, IME composition delays commands, remote deletion preserves a dirty draft, and close/view-mode settlement no longer reads text from the DOM.
+- `ShapeUtil` now defines editable-text, commit-patch, label-layout, hit-test, and visual-bounds behavior. The select tool uses that contract rather than a shape-type allowlist. Frame titles and every registered label-capable built-in shape use the common path; freehand explicitly opts out.
+- Arrows persist route-relative plain-text labels with font/color fields and schema migration 6. Label rendering, editing, hit testing, visual bounds, rerouting, and SVG export share the resolved layout. Standalone text now exposes its rotation handle and uses the same canonical transform for editing and static rendering.
+- Regression tests cover narrow-field merge, same-field conflict recovery, IME safety, cancel/idempotent commit, remote deletion recovery, arrow label routing/hit/export, a single mounted editor, controller downgrade/close recovery, and rotated-text controls. Glideline `0.0.7` and Glideboard `0.0.9` carry the implementation.
+
 ## 19. Workstream M — Viewport Rendering Without Correctness Regressions
 
 Current CSS visibility still mounts every `ShapeLayer`, record subscription, and several global subscriptions. Before real virtualization:

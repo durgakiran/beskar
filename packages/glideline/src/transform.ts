@@ -62,6 +62,7 @@ export function matrixToSvg(matrix: Matrix2d): string {
 interface TransformHost {
   getShape(id: ShapeId): GlideShape | undefined;
   getGeometry(shape: GlideShape): Geometry2d;
+  getVisualBounds(shape: GlideShape): Box2d;
   getZoom(): number;
   hitTestLocal(shape: GlideShape, point: Vec2): boolean;
 }
@@ -136,6 +137,39 @@ export class TransformService {
     return applyMatrixToPoint(this.getWorldTransformInverse(id), point);
   }
 
+  /**
+   * Find the record translation that maps a local point on a proposed shape
+   * to an existing page point. Used when intrinsic geometry changes but its
+   * visual anchor must remain fixed.
+   */
+  getTranslationForLocalPoint(
+    shape: GlideShape,
+    localPoint: Vec2,
+    pagePoint: Vec2,
+  ): Vec2 {
+    if (shape.type === 'arrow') {
+      return {
+        x: pagePoint.x - localPoint.x,
+        y: pagePoint.y - localPoint.y,
+      };
+    }
+    const bounds = this.host.getGeometry(shape).getBounds();
+    const centerX = bounds.minX + bounds.w / 2;
+    const centerY = bounds.minY + bounds.h / 2;
+    const withoutTranslation = multiplyMatrices(
+      translationMatrix(centerX, centerY),
+      multiplyMatrices(
+        rotationMatrix(shape.rotation || 0),
+        translationMatrix(-centerX, -centerY),
+      ),
+    );
+    const transformedPoint = applyMatrixToPoint(withoutTranslation, localPoint);
+    return {
+      x: pagePoint.x - transformedPoint.x,
+      y: pagePoint.y - transformedPoint.y,
+    };
+  }
+
   getWorldOutline(id: ShapeId): readonly Vec2[] {
     const geometry = this.getLocalGeometry(id);
     return Object.freeze(geometry.getOutline().map(point => this.localToPage(id, point)));
@@ -155,7 +189,13 @@ export class TransformService {
 
   getVisualWorldBounds(id: ShapeId): Box2d {
     const shape = this.requireShape(id);
-    const bounds = this.getWorldBounds(id);
+    const localBounds = this.host.getVisualBounds(shape);
+    const bounds = boundsOfPoints([
+      { x: localBounds.minX, y: localBounds.minY },
+      { x: localBounds.maxX, y: localBounds.minY },
+      { x: localBounds.maxX, y: localBounds.maxY },
+      { x: localBounds.minX, y: localBounds.maxY },
+    ].map(point => this.localToPage(id, point)));
     const props = shape.props as Record<string, unknown>;
     const stroke = typeof props.strokeWidth === 'string'
       ? STROKE_WIDTHS[props.strokeWidth as SizeStyle] ?? 0

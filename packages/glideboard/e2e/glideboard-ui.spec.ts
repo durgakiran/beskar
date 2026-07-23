@@ -24,14 +24,14 @@ test.describe('glideboard e2e flows', () => {
     await page.mouse.move(bounds!.x + 340, bounds!.y + 300, { steps: 10 });
     await page.mouse.up();
 
-    await expect(page.locator('[data-shape-id^="box-"]')).toHaveCount(1);
+    await expect(page.locator('[data-shape-id^="shape:box"]')).toHaveCount(1);
     await expect(page.locator('[data-glideboard-role="statusbar"]')).toContainText('1 shape');
 
     await page.waitForTimeout(800);
     await page.reload();
     await page.waitForSelector('[data-glideboard-role="canvas"]', { timeout: 10_000 });
 
-    await expect(page.locator('[data-shape-id^="box-"]')).toHaveCount(1);
+    await expect(page.locator('[data-shape-id^="shape:box"]')).toHaveCount(1);
     await expect(page.locator('[data-glideboard-role="statusbar"]')).toContainText('1 shape');
   });
 
