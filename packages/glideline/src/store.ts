@@ -467,6 +467,7 @@ export class GlideStore {
 
   getShapeIdsSignal(): ReadonlySignal<readonly ShapeId[]> { return this._shapeIdsReadonly; }
   getVersionSignal(): ReadonlySignal<number> { return this._versionReadonly; }
+  getEphemeralIds(): readonly string[] { return Object.freeze([...this._ephemeralIds]); }
 
   /** Non-reactive shape IDs, including staged values while inside a transaction. */
   getShapeIds(): readonly ShapeId[] {

@@ -93,6 +93,69 @@ test.describe('glideboard browser automation', () => {
     expect(routeIntersectsBoxInterior(routePoints, state.obstacle)).toBe(false);
   });
 
+  test('virtualizes offscreen records without clipping transformed viewport crossings', async ({ page }) => {
+    const state = await page.evaluate(async () => {
+      const api = (window as any).__GLIDELINE_WHITEBOARD__;
+      const from = await api.callTool('create_shape', {
+        type: 'box',
+        x: -500,
+        y: 280,
+        w: 120,
+        h: 80,
+        label: 'Offscreen source',
+      });
+      const to = await api.callTool('create_shape', {
+        type: 'box',
+        x: 1_700,
+        y: 280,
+        w: 120,
+        h: 80,
+        label: 'Offscreen target',
+      });
+      const arrow = await api.callTool('create_connection', {
+        fromId: from.id,
+        toId: to.id,
+        routeStyle: 'ortho',
+      });
+      const rotated = await api.callTool('create_shape', {
+        type: 'box',
+        x: -700,
+        y: -400,
+        w: 400,
+        h: 1_000,
+      });
+      await api.callTool('update_shape', {
+        id: rotated.id,
+        rotation: Math.PI / 4,
+      });
+      const far = await api.callTool('create_shape', {
+        type: 'box',
+        x: 5_000,
+        y: 5_000,
+        w: 120,
+        h: 80,
+      });
+      return {
+        arrowId: arrow.id as string,
+        rotatedId: rotated.id as string,
+        farId: far.id as string,
+      };
+    });
+
+    await expect(page.locator(`[data-shape-id="${state.arrowId}"]`)).toHaveCount(1);
+    await expect(page.locator(`[data-shape-id="${state.rotatedId}"]`)).toHaveCount(1);
+    await expect(page.locator(`[data-shape-id="${state.farId}"]`)).toHaveCount(0);
+    await expect.poll(() => page.evaluate((farId) => {
+      return (window as any).__GLIDELINE_WHITEBOARD__.getAIContext().shapes
+        .some((shape: any) => shape.id === farId);
+    }, state.farId)).toBe(true);
+
+    await page.evaluate((farId) => {
+      (window as any).__GLIDELINE_WHITEBOARD__.select([farId]);
+    }, state.farId);
+    await expect(page.locator(`[data-shape-id="${state.farId}"]`)).toHaveCount(1);
+  });
+
   test('double-click places and then re-edits one arrow label', async ({ page }) => {
     const state = await page.evaluate(async () => {
       const api = (window as any).__GLIDELINE_WHITEBOARD__;

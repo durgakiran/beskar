@@ -150,6 +150,10 @@ export class InteractionManager {
     }
     return Object.freeze(ids);
   });
+  private _changedIds = computed<readonly string[]>(() => {
+    this._overlayVersion.value;
+    return Object.freeze([...this._overlay.keys()]);
+  });
 
   constructor(
     private _store: GlideStore,
@@ -186,9 +190,8 @@ export class InteractionManager {
     if (!result) {
       result = computed(() => {
         this._overlayVersion.value;
-        this._store.getVersionSignal().value;
         if (this._overlay.has(id)) return this._overlay.get(id) ?? null;
-        return this._store.get(id) ?? null;
+        return this._store.getSignal(id)?.value ?? null;
       });
       this._signals.set(id, result);
     }
@@ -197,6 +200,7 @@ export class InteractionManager {
 
   getVersionSignal(): ReadonlySignal<number> { return this._combinedVersion; }
   getShapeIdsSignal(): ReadonlySignal<readonly ShapeId[]> { return this._shapeIds; }
+  getChangedIdsSignal(): ReadonlySignal<readonly string[]> { return this._changedIds; }
 
   runPreview<T>(fn: () => T): T {
     if (!this._kind) throw new Error('No interaction is active');

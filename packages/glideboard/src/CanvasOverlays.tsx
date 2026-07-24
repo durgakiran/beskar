@@ -585,16 +585,33 @@ export function CanvasOverlays() {
 
     const observedSignals = [
       editor.camera.signal,
-      editor.getDocumentVersionSignal(),
       editor.bindingPreview,
       editor.getSelectionSignal(),
       editor.currentToolId,
+      editor.interactions.getChangedIdsSignal(),
     ];
     let subscribingBaseSignals = true;
     const disposers = observedSignals.map(observed => observed.subscribe(() => {
       if (!subscribingBaseSignals) draw();
     }));
     subscribingBaseSignals = false;
+    const disposeStore = editor.store.listen(changes => {
+      const relevantIds = new Set<string>([
+        ...editor.getSelectedShapeIds(),
+        ...editor.interactions.changedIds,
+      ]);
+      const preview = editor.bindingPreview.peek();
+      if (preview) {
+        relevantIds.add(preview.targetId);
+        if (preview.sourceCandidate) relevantIds.add(preview.sourceCandidate.targetId);
+      }
+      for (const selectedId of editor.getSelectedShapeIds()) {
+        for (const binding of editor.getBindingsFromShape(selectedId)) {
+          relevantIds.add(binding.toId);
+        }
+      }
+      if (changes.changedIds.some(id => relevantIds.has(id))) draw();
+    });
 
     const resizeObserver = typeof ResizeObserver === 'undefined'
       ? null
@@ -605,6 +622,7 @@ export function CanvasOverlays() {
     return () => {
       resizeObserver?.disconnect();
       disposeMarquee?.();
+      disposeStore();
       for (const dispose of disposers) dispose();
     };
   }, [editor]);

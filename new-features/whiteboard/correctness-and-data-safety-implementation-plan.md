@@ -1510,6 +1510,14 @@ Then:
 
 Correctness tests must include a rotated shape whose origin is offscreen but outline is visible, and a connector whose endpoints are offscreen but route crosses the viewport.
 
+### 19.1 Implementation status — complete
+
+- Glideboard now schedules one overscanned RBush viewport projection per animation frame and mounts only its visible IDs plus selected, edited, interaction-owned, ephemeral, eraser-preview, binding-preview, and related connector IDs.
+- Rendered shapes retain their canonical global z-index. A shared world-layer transform applies camera movement once; text editing and eraser feedback live in dedicated transient overlay layers.
+- Shape layers subscribe to their own record signal instead of camera, edit, eraser, or global document-version signals. Canvas overlays redraw from targeted selection, interaction, binding-preview, camera, and relevant `changedIds` dependencies.
+- Offscreen records remain canonical store records and continue to participate in collaboration, commands, search/AI context, clipboard, export, and persistence.
+- Unit and browser regressions cover offscreen unmounting, pinned offscreen selection, ephemeral previews, a rotated shape with an offscreen origin and visible outline, a connector crossing the viewport with offscreen endpoints, canonical shared camera transforms, and logical access to unmounted records. Glideline `0.0.8` and Glideboard `0.0.10` carry the implementation.
+
 ## 20. Workstream N — Untrusted Shape, SVG, Image, and Rich-Content Ingress
 
 ### 20.1 Trust boundary

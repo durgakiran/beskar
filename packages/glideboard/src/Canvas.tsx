@@ -1,6 +1,6 @@
-import React, { memo, useCallback, useEffect, useRef } from 'react';
-import { effect } from '@preact/signals';
+import React, { memo, useCallback, useEffect, useRef, useState } from 'react';
 import type {
+  GlideEditor,
   GlideShape,
   ShapeId,
   Vec2,
@@ -12,6 +12,11 @@ import { CanvasOverlays, getHandleAtPagePoint, getCursorForHandle } from './Canv
 import { useGlideboardController } from './GlideboardContext';
 import { wbTheme } from './theme';
 import { useSignalValue } from './useSignalValue';
+import {
+  getViewportShapeEntries,
+  sameViewportEntries,
+  type ViewportShapeEntry,
+} from './viewport-rendering';
 
 // ─────────────────────────────────────────────────────────────
 // Shared helpers
@@ -43,6 +48,44 @@ function moveCaretToEnd(element: HTMLElement): void {
   range.collapse(false);
   selection?.removeAllRanges();
   selection?.addRange(range);
+}
+
+function useViewportShapeEntries(
+  editor: GlideEditor,
+  viewportRevision: number,
+): readonly ViewportShapeEntry[] {
+  const [entries, setEntries] = useState<readonly ViewportShapeEntry[]>(
+    () => getViewportShapeEntries(editor),
+  );
+
+  useEffect(() => {
+    let frame: number | null = null;
+    const update = () => {
+      frame = null;
+      const next = getViewportShapeEntries(editor);
+      setEntries(current => sameViewportEntries(current, next) ? current : next);
+    };
+    const schedule = () => {
+      if (frame !== null) return;
+      frame = requestAnimationFrame(update);
+    };
+    const disposers = [
+      editor.store.listen(schedule),
+      editor.camera.signal.subscribe(schedule),
+      editor.getSelectionSignal().subscribe(schedule),
+      editor.editingShapeId.subscribe(schedule),
+      editor.erasingShapeIds.subscribe(schedule),
+      editor.bindingPreview.subscribe(schedule),
+      editor.interactions.getChangedIdsSignal().subscribe(schedule),
+    ];
+    schedule();
+    return () => {
+      if (frame !== null) cancelAnimationFrame(frame);
+      for (const dispose of disposers) dispose();
+    };
+  }, [editor, viewportRevision]);
+
+  return entries;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -77,31 +120,20 @@ function Grid() {
 // ShapeLayer — one HTML div per shape
 // ─────────────────────────────────────────────────────────────
 
-const ShapeLayer = memo(({ id, zIndex }: { id: ShapeId; zIndex: number }) => {
+const ShapeLayer = memo(({
+  id,
+  zIndex,
+  isEditing,
+}: {
+  id: ShapeId;
+  zIndex: number;
+  isEditing: boolean;
+}) => {
   const controller = useGlideboardController();
   const editor = controller.editor;
   const sig = editor.getShapeSignal(id);
   const shape = useSignalValue(sig as any) as GlideShape | null;
-  const divRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
-  const editingId = useSignalValue(editor.editingShapeId);
-  const erasingIds = useSignalValue(editor.erasingShapeIds);
-  const camera = useSignalValue(editor.camera.signal)!;
-  const isErasing = erasingIds ? erasingIds.has(id) : false;
-  const isEditing = editingId === id;
-
-  // Visibility culling
-  useEffect(() => {
-    if (!shape || !divRef.current) return;
-    const bounds = editor.getShapeVisualWorldBounds(shape.id as ShapeId);
-    const viewport = editor.getViewportBounds();
-    const visible =
-      bounds.maxX >= viewport.minX &&
-      bounds.minX <= viewport.maxX &&
-      bounds.maxY >= viewport.minY &&
-      bounds.minY <= viewport.maxY;
-    divRef.current.style.display = visible ? '' : 'none';
-  }, [editor, shape, camera]);
 
   // Inject toSvg() geometry output into the per-shape <svg>
   useEffect(() => {
@@ -130,11 +162,10 @@ const ShapeLayer = memo(({ id, zIndex }: { id: ShapeId; zIndex: number }) => {
 
   const localBounds = util.getGeometry(shape as any).getBounds();
   const world = editor.getWorldTransform(shape.id as ShapeId);
-  const screenTransform = `matrix(${world.a * camera.z}, ${world.b * camera.z}, ${world.c * camera.z}, ${world.d * camera.z}, ${(world.e - camera.x) * camera.z}, ${(world.f - camera.y) * camera.z})`;
+  const worldTransform = `matrix(${world.a}, ${world.b}, ${world.c}, ${world.d}, ${world.e}, ${world.f})`;
 
   return (
     <div
-      ref={divRef}
       id={controller.domId(`shape-${id}`)}
       data-shape-id={id}
       style={{
@@ -143,11 +174,10 @@ const ShapeLayer = memo(({ id, zIndex }: { id: ShapeId; zIndex: number }) => {
         top: 0,
         width: localBounds.w,
         height: localBounds.h,
-        transform: screenTransform,
+        transform: worldTransform,
         transformOrigin: '0 0',
         zIndex,
         pointerEvents: 'none',
-        opacity: isErasing ? 0.4 : 1,
       }}
     >
       {/* Geometry: 1×1px SVG with overflow:visible — contains toSvg() output */}
@@ -162,21 +192,6 @@ const ShapeLayer = memo(({ id, zIndex }: { id: ShapeId; zIndex: number }) => {
           left: 0,
         }}
       />
-
-      {/* Erase overlay */}
-      {isErasing && (
-        <div
-          data-glideboard-role="shape-label"
-          style={{
-            position: 'absolute',
-            inset: 0,
-            background: '#f38ba8',
-            opacity: 0.35,
-            borderRadius: 2,
-            pointerEvents: 'none',
-          }}
-        />
-      )}
 
       {/* Label: native HTML div */}
       {labelProps && (labelProps.text.length > 0 || isEditing) && (
@@ -215,6 +230,68 @@ const ShapeLayer = memo(({ id, zIndex }: { id: ShapeId; zIndex: number }) => {
 });
 
 // ─────────────────────────────────────────────────────────────
+// EraserPreviewOverlay — transient feedback outside shape layers
+// ─────────────────────────────────────────────────────────────
+
+const EraserPreviewShape = memo(({ id, zoom }: { id: ShapeId; zoom: number }) => {
+  const controller = useGlideboardController();
+  const editor = controller.editor;
+  const shape = useSignalValue(editor.getShapeSignal(id) as any) as GlideShape | null;
+  if (!shape) return null;
+
+  const points = editor.transforms.getWorldOutline(id);
+  if (points.length === 0) return null;
+  const serialized = points.map(point => `${point.x},${point.y}`).join(' ');
+  const open = shape.type === 'arrow' || shape.type === 'freehand';
+  return open ? (
+    <polyline
+      points={serialized}
+      fill="none"
+      stroke="#f38ba8"
+      strokeWidth={8 / zoom}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      opacity={0.65}
+    />
+  ) : (
+    <polygon
+      points={serialized}
+      fill="#f38ba8"
+      stroke="#f38ba8"
+      strokeWidth={2 / zoom}
+      opacity={0.35}
+    />
+  );
+});
+
+function EraserPreviewOverlay() {
+  const controller = useGlideboardController();
+  const editor = controller.editor;
+  const ids = useSignalValue(editor.erasingShapeIds) ?? new Set<ShapeId>();
+  const zoom = useSignalValue(editor.camera.signal)?.z ?? 1;
+
+  if (ids.size === 0) return null;
+
+  return (
+    <svg
+      data-glideboard-role="eraser-preview-overlay"
+      style={{
+        position: 'absolute',
+        left: 0,
+        top: 0,
+        width: 1,
+        height: 1,
+        overflow: 'visible',
+        pointerEvents: 'none',
+        zIndex: 999_999,
+      }}
+    >
+      {[...ids].map(id => <EraserPreviewShape key={id} id={id} zoom={zoom} />)}
+    </svg>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
 // TextEditingOverlay — the only live text editor on the canvas
 // ─────────────────────────────────────────────────────────────
 
@@ -222,7 +299,6 @@ function TextEditingOverlay() {
   const controller = useGlideboardController();
   const editor = controller.editor;
   const session = useSignalValue(editor.textEditing.session) as TextEditSession | null;
-  const camera = useSignalValue(editor.camera.signal)!;
   const shape = useSignalValue(
     session ? editor.getShapeSignal(session.shapeId) as any : null,
   ) as GlideShape | null;
@@ -256,7 +332,7 @@ function TextEditingOverlay() {
 
   const localBounds = util.getGeometry(layoutShape as any).getBounds();
   const world = editor.getWorldTransform(shape.id as ShapeId);
-  const screenTransform = `matrix(${world.a * camera.z}, ${world.b * camera.z}, ${world.c * camera.z}, ${world.d * camera.z}, ${(world.e - camera.x) * camera.z}, ${(world.f - camera.y) * camera.z})`;
+  const worldTransform = `matrix(${world.a}, ${world.b}, ${world.c}, ${world.d}, ${world.e}, ${world.f})`;
   const isTextType = shape.type === 'text';
   const hasFixedWidth = isTextType && typeof (shape.props as any).w === 'number';
   const conflicted = session.status === 'conflicted';
@@ -276,7 +352,7 @@ function TextEditingOverlay() {
         top: 0,
         width: localBounds.w,
         height: localBounds.h,
-        transform: screenTransform,
+        transform: worldTransform,
         transformOrigin: '0 0',
         zIndex: 1_000_000,
         pointerEvents: 'none',
@@ -391,9 +467,11 @@ function TextEditingOverlay() {
 export function Canvas() {
   const controller = useGlideboardController();
   const editor = controller.editor;
-  const shapeIds = useSignalValue(editor.getOrderedShapeIdsSignal())!;
   const camera = useSignalValue(editor.camera.signal)!;
+  const editingId = useSignalValue(editor.editingShapeId);
   const readOnly = useSignalValue(controller.readOnlySignal) ?? false;
+  const [viewportRevision, setViewportRevision] = useState(0);
+  const viewportShapes = useViewportShapeEntries(editor, viewportRevision);
   const containerRef = useRef<HTMLDivElement>(null);
   const preventFocusStealRef = useRef(false);
   const isMiddleDraggingRef = useRef(false);
@@ -421,10 +499,12 @@ export function Canvas() {
     const ro = new ResizeObserver(entries => {
       const { width, height } = entries[0]!.contentRect;
       editor.camera.setViewportSize(width, height);
+      setViewportRevision(revision => revision + 1);
     });
     ro.observe(el);
     const rect = el.getBoundingClientRect();
     editor.camera.setViewportSize(rect.width, rect.height);
+    setViewportRevision(revision => revision + 1);
 
     const handleWheel = (event: WheelEvent) => {
       event.preventDefault();
@@ -662,7 +742,7 @@ export function Canvas() {
     }
   }, [activeTool]);
 
-  const cameraTransform = `scale(${camera.z}) translate(${-camera.x}px, ${-camera.y}px)`;
+  const cameraTransform = `matrix(${camera.z}, 0, 0, ${camera.z}, ${-camera.x * camera.z}, ${-camera.y * camera.z})`;
 
   return (
     <div
@@ -713,24 +793,48 @@ export function Canvas() {
         <rect x="0" y="0" width="100%" height="100%" fill={`url(#${controller.domId('grid-pattern')})`} />
       </svg>
 
-      {/* 2. HTML shape layer — one div per shape */}
+      {/* 2. World layer — one camera transform for visible and pinned content */}
       <div
-        id={controller.domId('shapes')}
+        id={controller.domId('world')}
+        data-glideboard-role="world-layer"
         style={{
           position: 'absolute',
           inset: 0,
-          overflow: 'hidden',
+          overflow: 'visible',
+          transform: cameraTransform,
+          transformOrigin: '0 0',
+          willChange: 'transform',
+          pointerEvents: 'none',
         }}
       >
-        {(shapeIds ?? []).map((id: ShapeId, index: number) => (
-          <ShapeLayer key={id} id={id} zIndex={index + 1} />
-        ))}
+        <div
+          id={controller.domId('shapes')}
+          data-glideboard-role="shape-layer"
+          style={{
+            position: 'absolute',
+            inset: 0,
+            overflow: 'visible',
+            pointerEvents: 'none',
+          }}
+        >
+          {viewportShapes.map(({ id, zIndex }) => (
+            <ShapeLayer
+              key={id}
+              id={id}
+              zIndex={zIndex}
+              isEditing={editingId === id}
+            />
+          ))}
+        </div>
+
+        {/* Transient previews stay mounted even when their records are offscreen. */}
+        <EraserPreviewOverlay />
+
+        {/* One text editor for the active edit session. */}
+        {!readOnly && <TextEditingOverlay />}
       </div>
 
-      {/* 3. One text editor for the active edit session */}
-      {!readOnly && <TextEditingOverlay />}
-
-      {/* 4. Overlay Canvas — selection handles, marquee, binding preview */}
+      {/* 3. Screen overlay — selection handles, marquee, binding preview */}
       <CanvasOverlays />
     </div>
   );
