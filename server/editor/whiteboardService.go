@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/durgakiran/beskar/core"
+	media "github.com/durgakiran/beskar/media/services"
 	"github.com/durgakiran/beskar/quota"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -273,6 +274,10 @@ func FetchWhiteboardByDocId(ctx context.Context, docId int64, spaceId uuid.UUID)
 
 func DeleteWhiteboard(d WhiteboardInput) error {
 	ctx := context.Background()
+	assetStorageKeys, err := media.ListWhiteboardAssetStorageKeys(ctx, d.Id)
+	if err != nil {
+		return err
+	}
 	tx, err := core.GetPool().Begin(ctx)
 	if err != nil {
 		return err
@@ -288,5 +293,13 @@ func DeleteWhiteboard(d WhiteboardInput) error {
 		logger().Error(fmt.Sprintf("DeleteWhiteboard err: %s", err.Error()))
 		return err
 	}
-	return tx.Commit(ctx)
+	if err := tx.Commit(ctx); err != nil {
+		return err
+	}
+	if err := media.DeleteWhiteboardAssetObjects(ctx, assetStorageKeys); err != nil {
+		// The page and catalog rows are already deleted. Retaining an orphaned
+		// immutable object is safer than rolling document deletion back.
+		logger().Error(fmt.Sprintf("DeleteWhiteboard asset cleanup err: %s", err.Error()))
+	}
+	return nil
 }

@@ -9,6 +9,7 @@ import { ZoomWidget, fitToScreen } from './ZoomWidget';
 import { useSignalValue } from './useSignalValue';
 import { BackToContentButton } from './BackToContentButton';
 import { CollaborationCursors } from './CollaborationCursors';
+import { ContentIngressError, normalizeClipboardText } from '@durgakiran/glideline';
 
 const TOOL_KEYS: Record<string, string> = {
   v: 'select',
@@ -139,8 +140,6 @@ export function WhiteboardApp() {
             editor.copy(ids);
             editor.deleteShapes(ids);
           });
-        } else if (event.key === 'v') {
-          editor.paste();
         } else if (event.key === 'd' && ids.length > 0) {
           event.preventDefault();
           editor.duplicateShapes(ids, { x: 20, y: 20 });
@@ -170,6 +169,55 @@ export function WhiteboardApp() {
     }
   };
 
+  const onPaste = (event: React.ClipboardEvent) => {
+    if (readOnly || editor.editingShapeId.peek()) return;
+    const clipboard = event.clipboardData;
+    const svg = clipboard.getData('image/svg+xml');
+    const html = clipboard.getData('text/html');
+    const text = clipboard.getData('text/plain');
+    const svgSource = svg || (/^\s*<svg[\s>]/i.test(html) ? html : '');
+    const raster = Array.from(clipboard.files).find(file =>
+      ['image/png', 'image/jpeg', 'image/webp'].includes(file.type),
+    );
+
+    if (svgSource) {
+      event.preventDefault();
+      void controller.importSvg(svgSource).catch(error => {
+        const message = error instanceof ContentIngressError
+          ? error.message
+          : 'Unable to import SVG';
+        console.warn(`[Glideboard] ${message}`);
+      });
+      return;
+    }
+    if (raster) {
+      event.preventDefault();
+      void raster.arrayBuffer()
+        .then(buffer => controller.importRaster(new Uint8Array(buffer), raster.type))
+        .catch(error => {
+          const message = error instanceof Error ? error.message : 'Unable to import image';
+          console.warn(`[Glideboard] ${message}`);
+        });
+      return;
+    }
+    if (html || text) {
+      event.preventDefault();
+      try {
+        controller.importPlainText(normalizeClipboardText({ html, text }));
+      } catch (error) {
+        const message = error instanceof ContentIngressError
+          ? error.message
+          : 'Unable to import clipboard content';
+        console.warn(`[Glideboard] ${message}`);
+      }
+      return;
+    }
+
+    // No external clipboard representation: preserve Glideboard's in-memory copy/paste.
+    event.preventDefault();
+    editor.paste();
+  };
+
   return (
     <div
       ref={rootRef}
@@ -186,6 +234,7 @@ export function WhiteboardApp() {
       }}
       tabIndex={0}
       onKeyDown={onKeyDown}
+      onPaste={onPaste}
       onContextMenu={onContextMenu}
     >
       <Canvas />

@@ -2,6 +2,8 @@ import { signal, type ReadonlySignal } from '@preact/signals';
 import {
   createCanvasToolServer,
   createMutationCapability,
+  createSanitizedSvgAsset,
+  prepareRasterAsset,
   MutationPermissionError,
   resolveArrowRoute,
   type Box2d,
@@ -19,6 +21,7 @@ import type {
   GlideboardCollaborationConfig,
   GlideboardCollaborationProvider,
   GlideboardDocumentChangeContext,
+  GlideboardAssetStorage,
   GlideboardUser,
   InitialDocumentDisposition,
   RecoverableTextDraft,
@@ -35,6 +38,7 @@ export interface GlideboardControllerOptions {
   initialDocument?: GlideDocument | null;
   initialDocumentDisposition?: InitialDocumentDisposition;
   readOnly?: boolean;
+  assetStorage?: GlideboardAssetStorage;
 }
 
 type DocumentChangeHandler = (
@@ -141,9 +145,12 @@ export class GlideboardController {
   private documentSaveRetryAttempt = 0;
   private disposalPromise: Promise<void> | null = null;
   private readonly debugCleanups = new Set<() => void>();
+  private readonly assetStorage?: GlideboardAssetStorage;
+  private readonly assetImportControllers = new Set<AbortController>();
 
   constructor(options: GlideboardControllerOptions) {
     this.sessionKey = options.sessionKey;
+    this.assetStorage = options.assetStorage;
     this.domIdPrefix = `glideboard-${++nextControllerId}`;
     const mutationPolicy = createMutationPolicy(
       this.readOnlySignal,
@@ -154,6 +161,9 @@ export class GlideboardController {
       [...(options.customShapes ?? [])],
       mutationPolicy,
       this.remoteMutationCapability,
+      options.assetStorage
+        ? asset => options.assetStorage!.resolve(asset)
+        : undefined,
     );
     this.toolServer = createCanvasToolServer(this.editor);
 
@@ -177,6 +187,124 @@ export class GlideboardController {
       this.documentDirty = options.initialDocumentDisposition.kind !== 'acknowledged-baseline';
     }
     this.setReadOnly(Boolean(options.readOnly));
+  }
+
+  /**
+   * Sanitize an untrusted SVG and import its immutable asset plus visible shape
+   * in one store transaction. The original XML is never persisted.
+   */
+  async importSvg(source: string, point?: Vec2): Promise<ShapeId> {
+    const prepared = await createSanitizedSvgAsset(source);
+    const viewport = this.editor.camera.getViewportBounds();
+    const width = Math.min(320, prepared.asset.props['width'] as number);
+    const height = width * (
+      (prepared.asset.props['height'] as number) / (prepared.asset.props['width'] as number)
+    );
+    const origin = point ?? {
+      x: viewport.x + (viewport.w - width) / 2,
+      y: viewport.y + (viewport.h - height) / 2,
+    };
+    const sourceShapeId = this.editor.createShapeId('sanitized-svg');
+    const shapeRecord = {
+      id: sourceShapeId,
+      kind: 'shape',
+      type: 'sanitized-svg',
+      schemaVersion: 0,
+      x: origin.x,
+      y: origin.y,
+      rotation: 0,
+      index: this.editor.generateIndexAbove('root'),
+      props: {
+        w: width,
+        h: height,
+        assetId: prepared.asset.id,
+      },
+      meta: {},
+    };
+    const assetExists = this.editor.store.get(prepared.asset.id) !== undefined;
+    const report = this.editor.importRecords(assetExists
+      ? [shapeRecord]
+      : [prepared.asset as unknown as Record<string, unknown>, shapeRecord], {
+      label: 'Import Sanitized SVG',
+      idPolicy: 'reject',
+      relationshipPolicy: assetExists ? 'preserve' : 'detach-external',
+    });
+    const importedShapeId = report.idMap[sourceShapeId] as ShapeId;
+    this.editor.setSelectedShapeIds([importedShapeId]);
+    this.editor.setCurrentTool('select', { preserveSelection: true });
+    return importedShapeId;
+  }
+
+  importPlainText(text: string, point?: Vec2): ShapeId | null {
+    if (!text) return null;
+    const viewport = this.editor.camera.getViewportBounds();
+    const origin = point ?? {
+      x: viewport.x + viewport.w / 2,
+      y: viewport.y + viewport.h / 2,
+    };
+    const id = this.editor.createShape({
+      type: 'text',
+      x: origin.x,
+      y: origin.y,
+      props: { text },
+    });
+    this.editor.setSelectedShapeIds([id]);
+    this.editor.setCurrentTool('select', { preserveSelection: true });
+    return id;
+  }
+
+  async importRaster(
+    bytes: Uint8Array,
+    declaredMimeType?: string,
+    point?: Vec2,
+  ): Promise<ShapeId> {
+    if (!this.assetStorage) {
+      throw new Error('Glideboard: assetStorage is required to import raster images.');
+    }
+    const prepared = await prepareRasterAsset(bytes, declaredMimeType);
+    const abortController = new AbortController();
+    this.assetImportControllers.add(abortController);
+    try {
+      await this.assetStorage.persist(prepared.asset, prepared.bytes, abortController.signal);
+      if (abortController.signal.aborted) throw new DOMException('Raster import aborted', 'AbortError');
+
+      const viewport = this.editor.camera.getViewportBounds();
+      const sourceWidth = prepared.asset.props['width'] as number;
+      const sourceHeight = prepared.asset.props['height'] as number;
+      const width = Math.min(480, sourceWidth);
+      const height = width * (sourceHeight / sourceWidth);
+      const origin = point ?? {
+        x: viewport.x + (viewport.w - width) / 2,
+        y: viewport.y + (viewport.h - height) / 2,
+      };
+      const sourceShapeId = this.editor.createShapeId('raster-image');
+      const shapeRecord = {
+        id: sourceShapeId,
+        kind: 'shape',
+        type: 'raster-image',
+        schemaVersion: 0,
+        x: origin.x,
+        y: origin.y,
+        rotation: 0,
+        index: this.editor.generateIndexAbove('root'),
+        props: { w: width, h: height, assetId: prepared.asset.id },
+        meta: {},
+      };
+      const assetExists = this.editor.store.get(prepared.asset.id) !== undefined;
+      const report = this.editor.importRecords(assetExists
+        ? [shapeRecord]
+        : [prepared.asset as unknown as Record<string, unknown>, shapeRecord], {
+        label: 'Import Raster Image',
+        idPolicy: 'reject',
+        relationshipPolicy: assetExists ? 'preserve' : 'detach-external',
+      });
+      const importedShapeId = report.idMap[sourceShapeId] as ShapeId;
+      this.editor.setSelectedShapeIds([importedShapeId]);
+      this.editor.setCurrentTool('select', { preserveSelection: true });
+      return importedShapeId;
+    } finally {
+      this.assetImportControllers.delete(abortController);
+    }
   }
 
   replaceDocument(
@@ -598,6 +726,8 @@ export class GlideboardController {
     this.cancelPendingDocumentChange();
 
     const finishDisposal = () => {
+      for (const controller of this.assetImportControllers) controller.abort();
+      this.assetImportControllers.clear();
       this.editor.interactions.cancel();
       this.documentChangeHandler = null;
       this.documentDirty = false;

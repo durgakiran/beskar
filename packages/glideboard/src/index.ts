@@ -7,6 +7,7 @@ export type {
   GlideboardUser,
   GlideboardCollaborationConfig,
   GlideboardCollaborationProvider,
+  GlideboardAssetStorage,
   InitialDocumentDisposition,
   RecoverableTextDraft,
 } from './types';

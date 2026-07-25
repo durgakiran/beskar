@@ -29,6 +29,8 @@ import {
   BoxUtil,
   FrameUtil,
   TextUtil,
+  SanitizedSvgUtil,
+  RasterImageUtil,
   type MutationCapability,
   type MutationPolicy,
 } from '@durgakiran/glideline';
@@ -42,6 +44,8 @@ const CoreShapesPlugin = {
     EllipseUtil as any,
     StickyNoteUtil as any,
     FreehandUtil as any,
+    SanitizedSvgUtil as any,
+    RasterImageUtil as any,
   ],
 };
 
@@ -49,6 +53,7 @@ export function createGlideboardEditorInstance(
   extraPlugins: import('@durgakiran/glideline').GlidePlugin[] = [],
   mutationPolicy?: MutationPolicy,
   remoteMutationCapability?: MutationCapability,
+  assetResolver?: import('@durgakiran/glideline').AssetResolver,
 ) {
   return createEditor({
     plugins: [CoreShapesPlugin, GeoShapePlugin, ArrowPlugin, P1ShapesPlugin, ...extraPlugins],
@@ -83,5 +88,6 @@ export function createGlideboardEditorInstance(
           }],
         }
       : {}),
+    ...(assetResolver ? { assetResolver } : {}),
   });
 }

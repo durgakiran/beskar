@@ -14,6 +14,7 @@ import {
   generateRebalancedOrderKeys,
   getShapeOrderParentId,
 } from './ordering';
+import { ContentIngressError, validateAssetRecord } from './content-ingress';
 
 /**
  * Version of the persisted GlideDocument/store envelope.
@@ -240,6 +241,14 @@ export class GlideSchema {
     if (kind === 'asset') {
       if (!isPlainObject(record['props'])) throw new DocumentValidationError('asset props must be a plain JSON object', id);
       if (jsonBytes(record['props']) > this.limits.maxPropsBytes) throw new DocumentValidationError('asset props exceeds configured size limit', id);
+      try {
+        validateAssetRecord(record);
+      } catch (error) {
+        if (error instanceof ContentIngressError) {
+          throw new DocumentValidationError(error.message, id);
+        }
+        throw error;
+      }
     }
   }
 

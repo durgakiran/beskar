@@ -42,7 +42,7 @@ import type { ShapeUtil, BindingUtil } from './shapes/ShapeUtil';
 import type { ArrowheadStyle, ArrowRouteStyle, ArrowShape } from './shapes/ArrowUtil';
 import { buildAIContext, type AIContextSnapshot } from './ai-context';
 import { getWorldBounds, SmartRouterCache, type SmartRouteResolution, type SmartRoutingSnapshot } from './smart-router';
-import type { GlideShape, GlideBinding, ShapeId, BindingId, Vec2, Box2d, AnyRecord } from './types';
+import type { GlideShape, GlideBinding, GlideAsset, ShapeId, BindingId, Vec2, Box2d, AnyRecord } from './types';
 import type { GlideEvent } from './state-node';
 import { getMinHeightForShape } from './styles';
 import { RecordIdService } from './id';
@@ -234,6 +234,7 @@ export class GlideEditor {
   readonly activeStyles = signal<Record<string, any>>({ ...DEFAULT_ACTIVE_STYLES });
 
   private readonly _mutationPolicy: MutationPolicy;
+  private readonly _assetResolver: AssetResolver | undefined;
 
   constructor(
     store: GlideStore,
@@ -242,6 +243,7 @@ export class GlideEditor {
     mutationPolicy: MutationPolicy,
     private readonly _localMutationCapability: MutationCapability,
     private readonly _loadMutationCapability: MutationCapability,
+    assetResolver?: AssetResolver,
   ) {
     this._store = store;
     this.store = createReadonlyStoreView(store);
@@ -249,6 +251,7 @@ export class GlideEditor {
     this.schema = schema;
     this.camera = camera;
     this._mutationPolicy = mutationPolicy;
+    this._assetResolver = assetResolver;
     this.interactions = new InteractionManager(store, this._localMutationCapability);
     this.transforms = new TransformService({
       getShape: id => this.getShape(id),
@@ -339,6 +342,19 @@ export class GlideEditor {
         }
       }
     });
+  }
+
+  /** Resolve immutable asset metadata through trusted host configuration. */
+  resolveAssetUrl(asset: GlideAsset): string | null {
+    const resolved = this._assetResolver?.(asset) ?? null;
+    if (resolved === null) return null;
+    try {
+      const url = new URL(resolved, typeof document === 'undefined' ? 'https://localhost/' : document.baseURI);
+      if (!['https:', 'http:', 'blob:'].includes(url.protocol)) return null;
+      return resolved;
+    } catch {
+      return null;
+    }
   }
 
   // ── Shape util resolution ──────────────────────────────────
@@ -1674,7 +1690,11 @@ export interface CreateEditorOptions {
   idService?: RecordIdService;
   mutationPolicy?: MutationPolicy;
   trustedMutationCapabilities?: readonly MutationCapabilityGrant[];
+  /** Trusted host lookup; returned URLs are never persisted in the document. */
+  assetResolver?: AssetResolver;
 }
+
+export type AssetResolver = (asset: GlideAsset) => string | null;
 
 /**
  * Boot sequence (LLD §18):
@@ -1697,6 +1717,7 @@ export function createEditor(opts: CreateEditorOptions = {}): GlideEditor {
     camera: camInit,
     mutationPolicy = allowAllMutations,
     trustedMutationCapabilities = [],
+    assetResolver,
   } = opts;
 
   // 1. Schema
@@ -1756,6 +1777,7 @@ export function createEditor(opts: CreateEditorOptions = {}): GlideEditor {
     mutationPolicy,
     localMutationCapability,
     loadMutationCapability,
+    assetResolver,
   );
 
   // Inject canonical transformed geometry hooks for RBush broad/precise phases.

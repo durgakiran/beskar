@@ -1,4 +1,4 @@
-import type { GlideDocument, GlidePlugin, LoadReport, ShapeId } from '@durgakiran/glideline';
+import type { GlideAsset, GlideDocument, GlidePlugin, LoadReport, ShapeId } from '@durgakiran/glideline';
 import type { CollaborationCheckpointSource, MutationFence, ProjectionTarget } from './durability/types';
 
 export interface GlideboardUser {
@@ -66,6 +66,12 @@ export type InitialDocumentDisposition =
   | { kind: 'local-recovery'; recoveryCheckpoint: string }
   | { kind: 'new-unsaved-seed' };
 
+export interface GlideboardAssetStorage {
+  persist(asset: GlideAsset, bytes: Uint8Array, signal: AbortSignal): Promise<void>;
+  /** Trusted runtime lookup; the returned URL is never persisted. */
+  resolve(asset: GlideAsset): string | null;
+}
+
 export interface GlideboardProps {
   /** Changing this value starts a new, isolated board session. */
   sessionKey?: string;
@@ -84,6 +90,8 @@ export interface GlideboardProps {
   debugApiKey?: string;
   /** Startup-only plugins. Change sessionKey to construct a board with a new plugin set. */
   customShapes?: readonly GlidePlugin[];
+  /** Required for raster import. Sanitized SVG path assets are self-contained. */
+  assetStorage?: GlideboardAssetStorage;
 }
 
 export interface GlideboardDocumentChangeContext {
@@ -108,6 +116,9 @@ export interface GlideboardHandle {
   serialize(): GlideDocument;
   replaceDocument(document: GlideDocument): LoadReport;
   exportSvg(options?: GlideboardExportSvgOptions): Promise<string>;
+  /** Sanitize and import untrusted SVG data; raw XML is never stored. */
+  importSvg(source: string): Promise<ShapeId>;
+  importRaster(bytes: Uint8Array, declaredMimeType?: string): Promise<ShapeId>;
   getRecoverableTextDraft(): RecoverableTextDraft | null;
   setCurrentTool(toolId: string): void;
   settleActiveEdit(policy: 'commit' | 'cancel'): Promise<void>;

@@ -10,6 +10,7 @@ const providerInstances: Array<{ room: string; doc: Y.Doc; options: unknown }> =
 const glideboardMock = vi.hoisted(() => ({
     settleActiveEdit: vi.fn(),
     acquireMutationFence: vi.fn(),
+    assetStorage: null as any,
 }));
 
 vi.mock("@http/hooks", () => ({
@@ -21,9 +22,10 @@ vi.mock("@durgakiran/glideboard", () => ({
         .filter(([, state]) => Boolean(state?.user))
         .map(([clientId, state]) => ({ clientId, user: state.user, cursor: state.cursor ?? null })),
     Glideboard: React.forwardRef(function MockGlideboard(
-        { readOnly, collaboration, sessionKey }: any,
+        { readOnly, collaboration, sessionKey, assetStorage }: any,
         ref: React.ForwardedRef<unknown>,
     ) {
+        glideboardMock.assetStorage = assetStorage;
         const checkpointSource = React.useMemo(() => {
             let sequence = 0;
             let latest: any = null;
@@ -144,6 +146,7 @@ describe("WhiteboardEditor", () => {
         providerInstances.length = 0;
         glideboardMock.settleActiveEdit.mockResolvedValue(undefined);
         glideboardMock.acquireMutationFence.mockReturnValue({ release: vi.fn() });
+        glideboardMock.assetStorage = null;
         useGet.mockReturnValue([
             {
                 data: { data: { id: "user-1", name: "Asha", email: "asha@example.com" } },
@@ -193,6 +196,35 @@ describe("WhiteboardEditor", () => {
             expect.objectContaining({ credentials: "include", signal: expect.any(AbortSignal) }),
         );
         expect(providerInstances[0]?.room).toBe("2-space-space-1");
+    });
+
+    it("persists whiteboard raster assets through the page-scoped content-hash API", async () => {
+        const fetchMock = vi.fn().mockResolvedValue(jsonResponse(boardData("space-1", "2")));
+        vi.stubGlobal("fetch", fetchMock);
+        renderEditor({ slug: ["space-1", "2"], readOnly: true });
+        await waitFor(() => expect(glideboardMock.assetStorage).not.toBeNull());
+
+        fetchMock.mockResolvedValueOnce({ ok: true, status: 201 });
+        const hash = "a".repeat(64);
+        const controller = new AbortController();
+        await glideboardMock.assetStorage.persist({
+            props: { hash, mimeType: "image/png" },
+        }, new Uint8Array([1, 2, 3]), controller.signal);
+
+        expect(fetchMock).toHaveBeenLastCalledWith(
+            `/api/v1/media/whiteboard-asset/2/${hash}`,
+            expect.objectContaining({
+                method: "POST",
+                credentials: "include",
+                headers: expect.objectContaining({
+                    "Content-Type": "image/png",
+                    "X-Content-SHA256": hash,
+                }),
+                signal: controller.signal,
+            }),
+        );
+        expect(glideboardMock.assetStorage.resolve({ props: { hash } }))
+            .toBe(`/api/v1/media/whiteboard-asset/2/${hash}`);
     });
 
     it("keeps the current Y.Doc alive through StrictMode replay", async () => {

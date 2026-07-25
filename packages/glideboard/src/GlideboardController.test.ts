@@ -907,4 +907,79 @@ describe('GlideboardController', () => {
       void controller.dispose();
     }
   });
+
+  it('imports untrusted SVG as canonical asset data and an engine-rendered shape', async () => {
+    const controller = new GlideboardController({ sessionKey: 'safe-svg-import' });
+    try {
+      const source = `
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 20">
+          <path d="M0 0 L40 0 L40 20 L0 20 Z" fill="#123456"/>
+        </svg>
+      `;
+      const id = await controller.importSvg(source, { x: 25, y: 50 });
+      await controller.importSvg(source, { x: 100, y: 100 });
+      const shape = controller.editor.getShape(id)!;
+      const asset = controller.editor.store.get(shape.props['assetId'] as string)!;
+
+      expect(shape.type).toBe('sanitized-svg');
+      expect(shape.x).toBe(25);
+      expect(shape.y).toBe(50);
+      expect(asset['type']).toBe('sanitized-svg');
+      expect(JSON.stringify(asset)).not.toContain('<svg');
+      expect(JSON.stringify(asset)).not.toContain('xmlns');
+      expect(controller.editor.getShapeUtil(shape).toSvg(shape).querySelectorAll('path')).toHaveLength(1);
+      expect(controller.editor.serialize().records.filter(record => record.kind === 'asset')).toHaveLength(1);
+    } finally {
+      void controller.dispose();
+    }
+  });
+
+  it('persists validated raster bytes before inserting immutable asset records', async () => {
+    const png = new Uint8Array(24);
+    png.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    png.set([0x49, 0x48, 0x44, 0x52], 12);
+    new DataView(png.buffer).setUint32(16, 16);
+    new DataView(png.buffer).setUint32(20, 8);
+    const persist = vi.fn(async () => {});
+    const controller = new GlideboardController({
+      sessionKey: 'safe-raster-import',
+      assetStorage: {
+        persist,
+        resolve: asset => `https://media.example.test/${asset.props['hash']}`,
+      },
+    });
+    try {
+      const id = await controller.importRaster(png, 'image/png', { x: 10, y: 20 });
+      const shape = controller.editor.getShape(id)!;
+      const asset = controller.editor.store.get(shape.props['assetId'] as string)!;
+      expect(persist).toHaveBeenCalledOnce();
+      expect(asset['props']).not.toHaveProperty('src');
+      expect(asset['props']).not.toHaveProperty('bytes');
+      expect(controller.editor.getShapeUtil(shape).toSvg(shape).querySelector('image')?.getAttribute('href'))
+        .toMatch(/^https:\/\/media\.example\.test\//);
+    } finally {
+      void controller.dispose();
+    }
+  });
+
+  it('does not create a raster record when host persistence fails', async () => {
+    const png = new Uint8Array(24);
+    png.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    png.set([0x49, 0x48, 0x44, 0x52], 12);
+    new DataView(png.buffer).setUint32(16, 2);
+    new DataView(png.buffer).setUint32(20, 2);
+    const controller = new GlideboardController({
+      sessionKey: 'failed-raster-import',
+      assetStorage: {
+        persist: async () => { throw new Error('storage unavailable'); },
+        resolve: () => null,
+      },
+    });
+    try {
+      await expect(controller.importRaster(png, 'image/png')).rejects.toThrow('storage unavailable');
+      expect(controller.editor.serialize().records).toHaveLength(0);
+    } finally {
+      void controller.dispose();
+    }
+  });
 });

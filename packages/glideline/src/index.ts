@@ -91,7 +91,7 @@ export { BoxTool } from './tools/BoxTool';
 export { GlideEditor, createEditor } from './editor';
 export type {
   GlidePlugin, CreateEditorOptions, ClipboardSchemaHeader, ClipboardPayload,
-  EditorCommand, ExecuteCommandOptions,
+  EditorCommand, ExecuteCommandOptions, AssetResolver,
 } from './editor';
 
 // Phase 4 — Bindings & Arrow Routing
@@ -207,6 +207,27 @@ export type { RotationInfo } from './tools/SelectTool';
 
 export { createSvgPathShape } from './shapes/createSvgPathShape';
 export type { CreateSvgPathShapeDef } from './shapes/createSvgPathShape';
+export { SanitizedSvgUtil, SanitizedAssetPlugin } from './shapes/SanitizedSvgUtil';
+export type { SanitizedSvgShape, SanitizedSvgShapeProps } from './shapes/SanitizedSvgUtil';
+export { RasterImageUtil } from './shapes/RasterImageUtil';
+export type { RasterImageShape, RasterImageShapeProps } from './shapes/RasterImageUtil';
+export {
+  ContentIngressError,
+  sanitizeSvg,
+  createSanitizedSvgAsset,
+  normalizeClipboardText,
+  prepareRasterAsset,
+  validateAssetRecord,
+} from './content-ingress';
+export type {
+  SanitizedSvg,
+  SanitizedSvgPath,
+  SanitizedSvgAssetProps,
+  PreparedSanitizedSvgAsset,
+  RasterMetadata,
+  PreparedRasterAsset,
+  AssetProvenance,
+} from './content-ingress';
 
 export { MutationPermissionError, allowAllMutations, createMutationCapability } from './mutation-policy';
 export type {

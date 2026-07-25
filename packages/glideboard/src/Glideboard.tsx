@@ -30,6 +30,8 @@ function MountedGlideboardSession({
     serialize: () => controller.editor.serialize(),
     replaceDocument: (document) => controller.replaceDocument(document),
     exportSvg: (options) => controller.exportSvgAtTarget(options),
+    importSvg: (source) => controller.importSvg(source),
+    importRaster: (bytes, declaredMimeType) => controller.importRaster(bytes, declaredMimeType),
     getRecoverableTextDraft: () => controller.recoverableTextDraftSignal.peek(),
     setCurrentTool: (toolId) => controller.setCurrentTool(toolId),
     settleActiveEdit: (policy) => controller.settleActiveEdit(policy),
@@ -104,6 +106,7 @@ function GlideboardSession({
   initialDocument,
   initialDocumentDisposition,
   customShapes,
+  assetStorage,
   readOnly = false,
   pendingSaveOnUnmount = 'cancel',
   ...props
@@ -112,6 +115,7 @@ function GlideboardSession({
     initialDocument,
     initialDocumentDisposition,
     customShapes,
+    assetStorage,
     readOnly,
   });
   const pendingSavePolicyRef = React.useRef(pendingSaveOnUnmount);
@@ -136,6 +140,7 @@ function GlideboardSession({
           initialDocument: startup.initialDocument,
           initialDocumentDisposition: startup.initialDocumentDisposition,
           readOnly: startup.readOnly,
+          assetStorage: startup.assetStorage,
         });
         setController(ownedController);
       } catch (error) {

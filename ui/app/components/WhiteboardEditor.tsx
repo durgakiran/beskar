@@ -9,12 +9,18 @@ import { useNavigate } from "react-router-dom";
 import { HiHome } from "react-icons/hi";
 import { FiStar } from "react-icons/fi";
 import { getSignalingUrl } from "app/core/signaling";
-import { Glideboard, safeAwarenessEntries, type GlideboardHandle } from "@durgakiran/glideboard";
+import {
+    Glideboard,
+    safeAwarenessEntries,
+    type GlideboardAssetStorage,
+    type GlideboardHandle,
+} from "@durgakiran/glideboard";
 import { IndexedDbYjsRecoveryAdapter } from "app/core/whiteboard/durability/IndexedDbYjsRecoveryAdapter";
 import { UnavailableYjsRecoveryAdapter } from "app/core/whiteboard/durability/UnavailableYjsRecoveryAdapter";
 import { WhiteboardCheckpointHttpAdapter } from "app/core/whiteboard/durability/WhiteboardCheckpointHttpAdapter";
 import { YjsDurabilityCoordinator } from "app/core/whiteboard/durability/YjsDurabilityCoordinator";
 import type { DurabilityStatus, YjsRecoveryAdapter } from "app/core/whiteboard/durability/types";
+import { getApiV1Base } from "app/core/http/apiBase";
 
 const USER_URI = (import.meta.env.VITE_USER_SERVER_URL || "").replace(/\/+$/, "");
 const INITIAL_DATABASE_LOAD = Symbol('whiteboard-initial-database-load');
@@ -126,6 +132,39 @@ export default function WhiteboardEditor({
         const color = `#${[r, g, b].map(x => x.toString(16).padStart(2, '0')).join('')}`;
         return { id: profileData.data.id, name: profileData.data.name, color };
     }, [profileData]);
+
+    const whiteboardAssetStorage = useMemo<GlideboardAssetStorage>(() => ({
+        async persist(asset, bytes, signal) {
+            const hash = String(asset.props.hash ?? "");
+            const mimeType = String(asset.props.mimeType ?? "");
+            if (!/^[a-f0-9]{64}$/.test(hash)) throw new Error("Invalid whiteboard asset identity");
+            if (!["image/png", "image/jpeg", "image/webp"].includes(mimeType)) {
+                throw new Error("Unsupported whiteboard asset MIME type");
+            }
+            const body = new Uint8Array(bytes.byteLength);
+            body.set(bytes);
+            const apiV1 = getApiV1Base({ fallbackBase: import.meta.env.VITE_IMAGE_SERVER_URL });
+            const response = await fetch(`${apiV1}/media/whiteboard-asset/${encodeURIComponent(pageId)}/${hash}`, {
+                method: "POST",
+                credentials: "include",
+                headers: {
+                    "Content-Type": mimeType,
+                    "X-Content-SHA256": hash,
+                },
+                body: body.buffer,
+                signal,
+            });
+            if (!response.ok) {
+                throw new Error(`Whiteboard asset upload failed (${response.status})`);
+            }
+        },
+        resolve(asset) {
+            const hash = String(asset.props.hash ?? "");
+            if (!/^[a-f0-9]{64}$/.test(hash)) return null;
+            const apiV1 = getApiV1Base({ fallbackBase: import.meta.env.VITE_IMAGE_SERVER_URL });
+            return `${apiV1}/media/whiteboard-asset/${encodeURIComponent(pageId)}/${hash}`;
+        },
+    }), [pageId]);
 
     const documentSession = useMemo<DocumentSession>(() => ({
         doc: new Y.Doc(),
@@ -683,7 +722,7 @@ export default function WhiteboardEditor({
 
                 {/* Canvas */}
                 <div style={{ flex: 1, position: 'relative', minWidth: 0 }}>
-                    <WhiteboardCanvas boardRef={boardRef} sessionKey={documentSessionKey} yDoc={yDoc} provider={provider} fetchErr={fetchErr} readOnly={readOnly} collaborationUser={collaborationUser} bootstrapRevision={boardData?.durableRevision ?? "0"} />
+                    <WhiteboardCanvas boardRef={boardRef} sessionKey={documentSessionKey} yDoc={yDoc} provider={provider} fetchErr={fetchErr} readOnly={readOnly} collaborationUser={collaborationUser} bootstrapRevision={boardData?.durableRevision ?? "0"} assetStorage={whiteboardAssetStorage} />
                 </div>
             </div>
         );
@@ -692,7 +731,7 @@ export default function WhiteboardEditor({
     // View mode: render canvas directly, no sub-header
     return (
         <div style={{ width: '100%', height: fillParent ? '100%' : 'calc(100vh - 120px)' }}>
-            <WhiteboardCanvas boardRef={boardRef} sessionKey={documentSessionKey} yDoc={yDoc} provider={provider} fetchErr={fetchErr} readOnly={readOnly} collaborationUser={collaborationUser} bootstrapRevision={boardData?.durableRevision ?? "0"} />
+            <WhiteboardCanvas boardRef={boardRef} sessionKey={documentSessionKey} yDoc={yDoc} provider={provider} fetchErr={fetchErr} readOnly={readOnly} collaborationUser={collaborationUser} bootstrapRevision={boardData?.durableRevision ?? "0"} assetStorage={whiteboardAssetStorage} />
         </div>
     );
 }
@@ -706,6 +745,7 @@ function WhiteboardCanvas({
     readOnly,
     collaborationUser,
     bootstrapRevision,
+    assetStorage,
 }: {
     boardRef: MutableRefObject<GlideboardHandle | null>;
     sessionKey: string;
@@ -715,6 +755,7 @@ function WhiteboardCanvas({
     readOnly: boolean;
     collaborationUser: { id: string; name: string; color: string } | null;
     bootstrapRevision: string;
+    assetStorage: GlideboardAssetStorage;
 }) {
     if (fetchErr) {
         return <Flex>Error loading whiteboard.</Flex>;
@@ -735,6 +776,7 @@ function WhiteboardCanvas({
                 sessionKey={sessionKey}
                 collaboration={collaborationProps}
                 readOnly={readOnly}
+                assetStorage={assetStorage}
             />
         </div>
     );

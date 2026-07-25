@@ -88,8 +88,8 @@ describe('Workstream D derived indices and graph integrity', () => {
     getMutableStoreForTesting(editor).transact({ origin: 'system', history: 'ignore' }, tx => {
       tx.insert({ id: 'page:a', kind: 'page', type: 'page', name: 'A', meta: {} });
       tx.insert({ id: 'page:b', kind: 'page', type: 'page', name: 'B', meta: {} });
-      tx.insert({ id: 'asset:one', kind: 'asset', type: 'image', props: { src: 'one' }, meta: {} });
-      tx.insert({ id: 'asset:two', kind: 'asset', type: 'image', props: { src: 'two' }, meta: {} });
+      tx.insert({ id: 'asset:one', kind: 'asset', type: 'image', props: { contentHash: 'one' }, meta: {} });
+      tx.insert({ id: 'asset:two', kind: 'asset', type: 'image', props: { contentHash: 'two' }, meta: {} });
     });
     const parentA = createBox(editor, 'parent:a', 0, { pageId: 'page:a' });
     const parentB = createBox(editor, 'parent:b', 200, { pageId: 'page:b' });
@@ -140,7 +140,7 @@ describe('Workstream D derived indices and graph integrity', () => {
   it('rejects dangling util-declared references and direct bound-shape deletion atomically', () => {
     const editor = makeEditor();
     getMutableStoreForTesting(editor).transact({ origin: 'system', history: 'ignore' }, tx => {
-      tx.insert({ id: 'asset:one', kind: 'asset', type: 'image', props: { src: 'one' }, meta: {} });
+      tx.insert({ id: 'asset:one', kind: 'asset', type: 'image', props: { contentHash: 'one' }, meta: {} });
     });
     const source = createBox(editor, 'source', 0);
     const target = createBox(editor, 'target', 300);
@@ -270,7 +270,7 @@ describe('Workstream D graph-aware clipboard and duplication', () => {
   it('copies descendants and assets, rewrites ownership, and does not alias props', () => {
     const editor = makeEditor();
     getMutableStoreForTesting(editor).transact({ origin: 'system', history: 'ignore' }, tx => {
-      tx.insert({ id: 'asset:source', kind: 'asset', type: 'image', props: { src: 'image.png' }, meta: {} });
+      tx.insert({ id: 'asset:source', kind: 'asset', type: 'image', props: { contentHash: 'image' }, meta: {} });
     });
     const parent = createBox(editor, 'parent', 0);
     editor.createShape({

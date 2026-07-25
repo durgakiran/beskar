@@ -15,3 +15,10 @@ func TestS3StoreObjectKeyNoPrefix(t *testing.T) {
 		t.Fatalf("got %q", got)
 	}
 }
+
+func TestWhiteboardAssetObjectKeyIsPageScopedAndContentAddressed(t *testing.T) {
+	hash := "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	if got := WhiteboardAssetObjectKey(42, hash); got != "whiteboard-assets/42/sha256/"+hash {
+		t.Fatalf("WhiteboardAssetObjectKey() = %q", got)
+	}
+}
