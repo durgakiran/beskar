@@ -2,7 +2,7 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   plugins: [react()],
   resolve: {
     alias: {
@@ -36,11 +36,13 @@ export default defineConfig({
     },
   },
   build: {
+    commonjsOptions: {
+      include: [/node_modules/, /packages\/glideline\/dist/],
+    },
     rollupOptions: {
-      input: {
-        main: 'index.html',
-        desktop: 'index.desktop.html',
-      },
+      input: mode === 'desktop'
+        ? { desktop: 'index.desktop.html' }
+        : { main: 'index.html' },
     },
   },
-});
+}));

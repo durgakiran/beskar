@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { HashRouter, Routes, Route, Navigate, useLocation, useNavigate } from "react-router-dom";
 import AuthGuard from "../app/core/auth/AuthGuard.desktop";
-import { ConfigService } from '../bindings/beskar/desktop/config';
+import * as ConfigService from '../wailsjs/beskar/desktop/config/configservice';
 // @ts-ignore
 import { Events } from '@wailsio/runtime';
 
