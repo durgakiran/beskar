@@ -12,7 +12,12 @@ import {
 import { BoxUtil } from './shapes/BoxUtil';
 import { sid, type AnyRecord, type GlideShape, type ShapeId } from './types';
 
-const BoxPlugin: GlidePlugin = { id: 'box', shapes: [BoxUtil as any] };
+class ContainerBoxUtil extends BoxUtil {
+  static override readonly type = 'container-box';
+  static override readonly canContainChildren = true;
+}
+
+const BoxPlugin: GlidePlugin = { id: 'box', shapes: [BoxUtil as any, ContainerBoxUtil as any] };
 
 function makeEditor() {
   return createEditor({ plugins: [BoxPlugin] });
@@ -95,7 +100,7 @@ describe('GlideEditor canonical ordering', () => {
 
   it('orders children within their parent and keeps reorders parent-local', () => {
     const editor = makeEditor();
-    const parent = createBox(editor, 'shape:parent');
+    const parent = editor.createShape({ id: sid('shape:parent'), type: 'container-box', x: 0, y: 0 });
     const rootSibling = createBox(editor, 'shape:root-sibling');
     const first = createBox(editor, 'shape:first', 0, { parentId: parent });
     const second = createBox(editor, 'shape:second', 0, { parentId: parent });

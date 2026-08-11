@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react';
+import { FiLock, FiUnlock, FiRotateCcw } from 'react-icons/fi';
 import {
   TLDRAW_COLORS,
   type GlideShape,
@@ -31,6 +32,8 @@ const panelStyle: React.CSSProperties = {
   zIndex: 100,
   userSelect: 'none',
   pointerEvents: 'auto',
+  maxHeight: 'calc(100% - 48px)',
+  overflowY: 'auto',
 };
 
 const sectionTitleStyle: React.CSSProperties = {
@@ -45,6 +48,20 @@ const sectionTitleStyle: React.CSSProperties = {
 const rowStyle: React.CSSProperties = {
   display: 'flex',
   gap: 4,
+};
+
+const buttonStyleSmall: React.CSSProperties = {
+  minWidth: 0,
+  height: 28,
+  borderRadius: 4,
+  border: `1px solid ${wbTheme.border}`,
+  background: wbTheme.surfaceInset,
+  color: wbTheme.textMuted,
+  cursor: 'pointer',
+  fontSize: 10,
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
 };
 
 function IconButton({ active, onClick, style, children }: { active: boolean; onClick: () => void; style?: React.CSSProperties; children: React.ReactNode }) {
@@ -71,6 +88,38 @@ function IconButton({ active, onClick, style, children }: { active: boolean; onC
   );
 }
 
+function NumericField({ label, value, onCommit, disabled = false }: {
+  label: string;
+  value: number;
+  onCommit: (value: number) => void;
+  disabled?: boolean;
+}) {
+  const [draft, setDraft] = React.useState(String(Math.round(value * 100) / 100));
+  React.useEffect(() => setDraft(String(Math.round(value * 100) / 100)), [value]);
+  const commit = () => {
+    const parsed = Number(draft);
+    if (Number.isFinite(parsed)) onCommit(parsed);
+    else setDraft(String(Math.round(value * 100) / 100));
+  };
+  return (
+    <label style={{ display: 'grid', gridTemplateColumns: '18px 1fr', alignItems: 'center', gap: 4, minWidth: 0 }}>
+      <span style={{ fontSize: 10, color: wbTheme.textSoft }}>{label}</span>
+      <input
+        aria-label={label}
+        type="number"
+        value={draft}
+        disabled={disabled}
+        onChange={event => setDraft(event.target.value)}
+        onBlur={commit}
+        onKeyDown={event => { if (event.key === 'Enter') event.currentTarget.blur(); }}
+        style={{ width: '100%', minWidth: 0, height: 26, boxSizing: 'border-box', borderRadius: 4,
+          border: `1px solid ${wbTheme.border}`, background: wbTheme.surfaceInset, color: wbTheme.text,
+          padding: '0 6px', fontSize: 11 }}
+      />
+    </label>
+  );
+}
+
 export function StylePanel() {
   const controller = useGlideboardController();
   const { editor } = controller;
@@ -82,12 +131,20 @@ export function StylePanel() {
   const textStyleTargetId = useSignalValue(controller.textStyleTargetIdSignal);
   const shapes = editingShape ? [editingShape] : selectedShapes;
   const activeStyles = useSignalValue(editor.activeStyles);
+  const snapSettings = useSignalValue(editor.snapping.settings)!;
   const textOnly = Boolean(editingShape)
     || (shapes.length > 0 && shapes.every(shape => shape.type === 'text'))
     || (
       selectedShapes.length === 1
       && selectedShapes[0]!.id === textStyleTargetId
     );
+  const [lockAspect, setLockAspect] = React.useState(true);
+  const selected = selectedShapes.length === 1 ? selectedShapes[0]! : null;
+  const selectedWorld = selected ? editor.getShapeVisualWorldBounds(selected) : null;
+  const selectedLocal = selected ? editor.getShapeLocalBounds(selected.id as ShapeId) : null;
+  const canResizePrecisely = Boolean(selected && selected.type !== 'group' && selected.type !== 'arrow');
+  const canMatchSizes = selectedShapes.length >= 2
+    && selectedShapes.every(shape => shape.type !== 'group' && shape.type !== 'arrow');
 
   const supportedKeys = useMemo(() => {
     const keys = new Set<string>();
@@ -145,6 +202,7 @@ export function StylePanel() {
   const routeStyle = getCommonValue('routeStyle');
   const arrowheadStart = getCommonValue('arrowheadStart');
   const arrowheadEnd = getCommonValue('arrowheadEnd');
+  const clipContent = getCommonValue('clipContent');
 
   const getCommonTextColor = () => {
     let value: unknown = undefined;
@@ -198,6 +256,59 @@ export function StylePanel() {
 
   return (
     <div style={panelStyle} onPointerDown={event => event.stopPropagation()}>
+      {selected && selectedWorld && selectedLocal && !editingShape ? (
+        <div>
+          <div style={sectionTitleStyle}>Position and Size</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+            <NumericField label="X" value={selectedWorld.minX}
+              onCommit={x => editor.setShapePrecision(selected.id as ShapeId, { x })} />
+            <NumericField label="Y" value={selectedWorld.minY}
+              onCommit={y => editor.setShapePrecision(selected.id as ShapeId, { y })} />
+            <NumericField label="W" value={selectedLocal.w} disabled={!canResizePrecisely}
+              onCommit={w => editor.setShapePrecision(selected.id as ShapeId, { w, lockAspect })} />
+            <NumericField label="H" value={selectedLocal.h} disabled={!canResizePrecisely}
+              onCommit={h => editor.setShapePrecision(selected.id as ShapeId, { h, lockAspect })} />
+            <NumericField label="°" value={selected.rotation * 180 / Math.PI} disabled={selected.type === 'arrow'}
+              onCommit={degrees => editor.setShapePrecision(selected.id as ShapeId, { rotation: degrees * Math.PI / 180 })} />
+            <div style={{ display: 'flex', gap: 4 }}>
+              <button title={lockAspect ? 'Unlock aspect ratio' : 'Lock aspect ratio'} aria-label="Aspect ratio"
+                onClick={() => setLockAspect(value => !value)} style={{ ...buttonStyleSmall, flex: 1 }}>
+                {lockAspect ? <FiLock size={13} /> : <FiUnlock size={13} />}
+              </button>
+              <button title="Reset rotation" aria-label="Reset rotation"
+                onClick={() => editor.setShapePrecision(selected.id as ShapeId, { rotation: 0 })}
+                style={{ ...buttonStyleSmall, flex: 1 }}><FiRotateCcw size={13} /></button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {selectedShapes.length >= 2 && !editingShape ? (
+        <div>
+          <div style={sectionTitleStyle}>Arrange</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 4 }}>
+            <button title="Align left" style={buttonStyleSmall} onClick={() => editor.alignShapes(selectedShapes.map(s => s.id as ShapeId), 'left')}>Left</button>
+            <button title="Align horizontal centers" style={buttonStyleSmall} onClick={() => editor.alignShapes(selectedShapes.map(s => s.id as ShapeId), 'center-x')}>H Mid</button>
+            <button title="Align right" style={buttonStyleSmall} onClick={() => editor.alignShapes(selectedShapes.map(s => s.id as ShapeId), 'right')}>Right</button>
+            <button title="Align top" style={buttonStyleSmall} onClick={() => editor.alignShapes(selectedShapes.map(s => s.id as ShapeId), 'top')}>Top</button>
+            <button title="Align vertical centers" style={buttonStyleSmall} onClick={() => editor.alignShapes(selectedShapes.map(s => s.id as ShapeId), 'center-y')}>V Mid</button>
+            <button title="Align bottom" style={buttonStyleSmall} onClick={() => editor.alignShapes(selectedShapes.map(s => s.id as ShapeId), 'bottom')}>Bottom</button>
+            <button title="Distribute horizontal gaps" disabled={selectedShapes.length < 3} style={buttonStyleSmall}
+              onClick={() => editor.distributeShapes(selectedShapes.map(s => s.id as ShapeId), 'horizontal')}>H Gap</button>
+            <button title="Distribute vertical gaps" disabled={selectedShapes.length < 3} style={buttonStyleSmall}
+              onClick={() => editor.distributeShapes(selectedShapes.map(s => s.id as ShapeId), 'vertical')}>V Gap</button>
+            <button title="Tidy into a row" style={buttonStyleSmall}
+              onClick={() => editor.tidyShapes(selectedShapes.map(s => s.id as ShapeId), 'row')}>Tidy</button>
+            <button title="Match width" disabled={!canMatchSizes} style={buttonStyleSmall}
+              onClick={() => editor.matchShapeSizes(selectedShapes.map(s => s.id as ShapeId), 'width')}>Width</button>
+            <button title="Match height" disabled={!canMatchSizes} style={buttonStyleSmall}
+              onClick={() => editor.matchShapeSizes(selectedShapes.map(s => s.id as ShapeId), 'height')}>Height</button>
+            <button title="Match size" disabled={!canMatchSizes} style={buttonStyleSmall}
+              onClick={() => editor.matchShapeSizes(selectedShapes.map(s => s.id as ShapeId), 'both')}>Size</button>
+          </div>
+        </div>
+      ) : null}
+
       {!textOnly && (shapes.length === 0 || supportedKeys.has('color')) ? (
         <div>
           <div style={sectionTitleStyle}>Stroke / Fill Color</div>
@@ -354,6 +465,30 @@ export function StylePanel() {
           </div>
         </div>
       ) : null}
+
+      {supportedKeys.has('clipContent') ? (
+        <div>
+          <div style={sectionTitleStyle}>Frame Content</div>
+          <div style={rowStyle}>
+            <IconButton active={!clipContent} onClick={() => updateProp('clipContent', false)}>Overflow</IconButton>
+            <IconButton active={clipContent === true} onClick={() => updateProp('clipContent', true)}>Clip</IconButton>
+          </div>
+        </div>
+      ) : null}
+
+      <div>
+        <div style={sectionTitleStyle}>Grid and Snapping</div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, fontSize: 11 }}>
+          <label><input type="checkbox" checked={snapSettings.showGrid}
+            onChange={event => editor.snapping.updateSettings({ showGrid: event.target.checked })} /> Grid</label>
+          <label><input type="checkbox" checked={snapSettings.snapToGrid}
+            onChange={event => editor.snapping.updateSettings({ snapToGrid: event.target.checked })} /> Snap grid</label>
+          <label><input type="checkbox" checked={snapSettings.snapToObjects}
+            onChange={event => editor.snapping.updateSettings({ snapToObjects: event.target.checked })} /> Objects</label>
+          <NumericField label="Grid" value={snapSettings.gridSize}
+            onCommit={gridSize => editor.snapping.updateSettings({ gridSize: Math.max(2, gridSize) })} />
+        </div>
+      </div>
     </div>
   );
 }

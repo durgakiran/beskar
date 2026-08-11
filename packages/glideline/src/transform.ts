@@ -1,6 +1,6 @@
 import type { Geometry2d } from './geometry';
 import { STROKE_WIDTHS, type SizeStyle } from './styles';
-import { makeBox, type Box2d, type EdgeName, type GlideShape, type ShapeId, type Vec2 } from './types';
+import { makeBox, type Box2d, type EdgeName, type GlideShape, type PageId, type ShapeId, type Vec2 } from './types';
 
 /** Affine 2D matrix using the SVG/Canvas `a b c d e f` convention. */
 export interface Matrix2d {
@@ -55,6 +55,17 @@ export function applyMatrixToPoint(matrix: Matrix2d, point: Vec2): Vec2 {
   };
 }
 
+export function applyMatrixToVector(matrix: Matrix2d, vector: Vec2): Vec2 {
+  return {
+    x: matrix.a * vector.x + matrix.c * vector.y,
+    y: matrix.b * vector.x + matrix.d * vector.y,
+  };
+}
+
+export function getMatrixRotation(matrix: Matrix2d): number {
+  return Math.atan2(matrix.b, matrix.a);
+}
+
 export function matrixToSvg(matrix: Matrix2d): string {
   return `matrix(${matrix.a} ${matrix.b} ${matrix.c} ${matrix.d} ${matrix.e} ${matrix.f})`;
 }
@@ -101,8 +112,17 @@ export class TransformService {
   }
 
   getLocalTransform(id: ShapeId): Matrix2d {
-    const shape = this.requireShape(id);
+    return this.getShapeLocalTransform(this.requireShape(id));
+  }
+
+  private getShapeLocalTransform(shape: GlideShape): Matrix2d {
     if (shape.type === 'arrow') return translationMatrix(shape.x, shape.y);
+    if (shape.type === 'group') {
+      return multiplyMatrices(
+        translationMatrix(shape.x, shape.y),
+        rotationMatrix(shape.rotation || 0),
+      );
+    }
     const bounds = this.host.getGeometry(shape).getBounds();
     const centerX = bounds.minX + bounds.w / 2;
     const centerY = bounds.minY + bounds.h / 2;
@@ -119,10 +139,31 @@ export class TransformService {
   }
 
   getWorldTransform(id: ShapeId): Matrix2d {
-    // Current records store x/y in page space even when parentId is present.
-    // Parent matrix composition belongs to the future hierarchy coordinate
-    // migration; composing it here would move existing documents.
-    return this.getLocalTransform(id);
+    const ownShape = this.requireShape(id);
+    if (String(ownShape.parentId).startsWith('page:')) return this.getShapeLocalTransform(ownShape);
+    const chain: GlideShape[] = [];
+    const seen = new Set<string>();
+    let shape: GlideShape | undefined = ownShape;
+    while (shape) {
+      if (seen.has(shape.id)) throw new Error(`Shape hierarchy cycle at "${shape.id}".`);
+      seen.add(shape.id);
+      chain.push(shape);
+      const parent: GlideShape | undefined = String(shape.parentId).startsWith('page:')
+        ? undefined
+        : this.host.getShape(shape.parentId as ShapeId);
+      shape = parent?.kind === 'shape' ? parent : undefined;
+    }
+    let result = IDENTITY_MATRIX;
+    for (let index = chain.length - 1; index >= 0; index--) {
+      result = multiplyMatrices(result, this.getShapeLocalTransform(chain[index]!));
+    }
+    return result;
+  }
+
+  getParentWorldTransform(parentId: PageId | ShapeId): Matrix2d {
+    if (String(parentId).startsWith('page:')) return IDENTITY_MATRIX;
+    const parent = this.host.getShape(parentId as ShapeId);
+    return parent?.kind === 'shape' ? this.getWorldTransform(parentId as ShapeId) : IDENTITY_MATRIX;
   }
 
   getWorldTransformInverse(id: ShapeId): Matrix2d {
@@ -135,6 +176,39 @@ export class TransformService {
 
   pageToLocal(id: ShapeId, point: Vec2): Vec2 {
     return applyMatrixToPoint(this.getWorldTransformInverse(id), point);
+  }
+
+  parentToPage(parentId: PageId | ShapeId, point: Vec2): Vec2 {
+    return applyMatrixToPoint(this.getParentWorldTransform(parentId), point);
+  }
+
+  pageToParent(parentId: PageId | ShapeId, point: Vec2): Vec2 {
+    return applyMatrixToPoint(invertMatrix(this.getParentWorldTransform(parentId)), point);
+  }
+
+  pageDeltaToParent(parentId: PageId | ShapeId, delta: Vec2): Vec2 {
+    return applyMatrixToVector(invertMatrix(this.getParentWorldTransform(parentId)), delta);
+  }
+
+  getLocalPlacementForWorldTransform(
+    shape: GlideShape,
+    worldTransform: Matrix2d,
+    parentId: PageId | ShapeId = shape.parentId,
+  ): Pick<GlideShape, 'x' | 'y' | 'rotation'> {
+    if (shape.type === 'arrow') {
+      throw new Error('Arrow placement must be converted through its path points.');
+    }
+    const local = multiplyMatrices(invertMatrix(this.getParentWorldTransform(parentId)), worldTransform);
+    const rotation = getMatrixRotation(local);
+    if (shape.type === 'group') return { x: local.e, y: local.f, rotation };
+    const bounds = this.host.getGeometry(shape).getBounds();
+    const center = { x: bounds.minX + bounds.w / 2, y: bounds.minY + bounds.h / 2 };
+    const rotatedCenter = applyMatrixToPoint(rotationMatrix(rotation), center);
+    return {
+      x: local.e - center.x + rotatedCenter.x,
+      y: local.f - center.y + rotatedCenter.y,
+      rotation,
+    };
   }
 
   /**
@@ -164,9 +238,10 @@ export class TransformService {
       ),
     );
     const transformedPoint = applyMatrixToPoint(withoutTranslation, localPoint);
+    const parentPoint = this.pageToParent(shape.parentId, pagePoint);
     return {
-      x: pagePoint.x - transformedPoint.x,
-      y: pagePoint.y - transformedPoint.y,
+      x: parentPoint.x - transformedPoint.x,
+      y: parentPoint.y - transformedPoint.y,
     };
   }
 

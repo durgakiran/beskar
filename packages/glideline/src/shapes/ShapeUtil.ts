@@ -36,11 +36,20 @@ export interface ShapeUtilEditor {
   getShape<S extends GlideShape<object>>(id: S['id']): S | undefined;
   getSelectedShapeIds(): ShapeId[];
   updateShape<S extends GlideShape<object>>(id: S['id'], patch: Partial<S>): void;
+  getChildren(parentId: string): GlideShape[];
+  getShapeLocalBounds(id: ShapeId): Box2d;
+  getShapeLocalOutline(id: ShapeId): readonly Vec2[];
+  getShapeWorldBounds(id: ShapeId): Box2d;
+  localToPage(id: ShapeId, point: Vec2): Vec2;
+  pageToLocal(id: ShapeId, point: Vec2): Vec2;
 }
 
 export abstract class ShapeUtil<S extends GlideShape<object> = GlideShape> {
   /** Unique type string — must match shape.type. */
   static readonly type: string;
+
+  /** Schema-level capability used to validate shape parents. */
+  static readonly canContainChildren: boolean = false;
 
   /**
    * Runtime prop validators. Validated on every store.put().
@@ -102,6 +111,11 @@ export abstract class ShapeUtil<S extends GlideShape<object> = GlideShape> {
    * Arrows return true — they are resized via terminal handle drags instead.
    */
   hideResizeHandles(_shape: S): boolean { return false; }
+
+  /** Return the resize handles supported by this shape. */
+  getResizeHandles(_shape: S): readonly ResizeHandle[] {
+    return ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'];
+  }
 
   /**
    * Return true to suppress the circular rotate handle for this shape.

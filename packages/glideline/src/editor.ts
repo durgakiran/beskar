@@ -17,7 +17,7 @@
  */
 
 import { computed, signal, type Signal, type ReadonlySignal } from '@preact/signals';
-import { bid, isGlideShape, sid } from './types';
+import { bid, isGlideShape, makeBox, sid } from './types';
 import {
   GlideStore,
   createReadonlyStoreView,
@@ -29,7 +29,7 @@ import {
   type TransactionOptions,
   type TransactionResult,
 } from './store';
-import { CURRENT_STORE_VERSION, GlideSchema } from './schema';
+import { CURRENT_STORE_VERSION, DEFAULT_PAGE_ID, GlideSchema } from './schema';
 import { GlideCamera } from './camera';
 import { HistoryManager, commandIdFromLabel, createReadonlyHistoryView } from './history';
 import type { BatchOptions, HistoryResult, ReadonlyHistoryManager } from './history';
@@ -42,7 +42,7 @@ import type { ShapeUtil, BindingUtil } from './shapes/ShapeUtil';
 import type { ArrowheadStyle, ArrowRouteStyle, ArrowShape } from './shapes/ArrowUtil';
 import { buildAIContext, type AIContextSnapshot } from './ai-context';
 import { getWorldBounds, SmartRouterCache, type SmartRouteResolution, type SmartRoutingSnapshot } from './smart-router';
-import type { GlideShape, GlideBinding, GlideAsset, ShapeId, BindingId, Vec2, Box2d, AnyRecord } from './types';
+import type { GlideShape, GlideBinding, GlideAsset, ShapeId, BindingId, PageId, Vec2, Box2d, AnyRecord } from './types';
 import type { GlideEvent } from './state-node';
 import { getMinHeightForShape } from './styles';
 import { RecordIdService } from './id';
@@ -67,6 +67,7 @@ import {
   type MutationRequest,
 } from './mutation-policy';
 import { TextEditSessionController } from './text-edit';
+import { SnapManager } from './snapping';
 
 // ─────────────────────────────────────────────────────────────
 // GlidePlugin — unit of extension
@@ -144,6 +145,22 @@ export interface ExecuteCommandOptions {
   readonly actorId?: string;
 }
 
+export type AlignOperation = 'left' | 'center-x' | 'right' | 'top' | 'center-y' | 'bottom';
+export type DistributeAxis = 'horizontal' | 'vertical';
+export type DistributeMode = 'centers' | 'gaps';
+export type MatchSizeOperation = 'width' | 'height' | 'both';
+export type FlipAxis = 'horizontal' | 'vertical';
+export type TidyLayout = 'row' | 'grid';
+
+export interface ShapePrecisionPatch {
+  x?: number;
+  y?: number;
+  w?: number;
+  h?: number;
+  rotation?: number;
+  lockAspect?: boolean;
+}
+
 function cloneRecord<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
 }
@@ -202,6 +219,7 @@ export class GlideEditor {
   private readonly _history: HistoryManager;
   readonly interactions: InteractionManager;
   readonly textEditing: TextEditSessionController;
+  readonly snapping = new SnapManager();
   /** Canonical local/page transform and geometry service. */
   readonly transforms: TransformService;
   private _clipboard: ClipboardPayload | null = null;
@@ -219,6 +237,9 @@ export class GlideEditor {
 
   /** Reactive signal of the active tool id — subscribe in UI for live highlight. */
   readonly currentToolId: Signal<string> = signal('select');
+
+  /** Group whose direct content is currently being edited. Ephemeral UI state. */
+  readonly focusedGroupId: Signal<ShapeId | null> = signal(null);
 
   /** Signal carrying the ID of the shape currently being inline-edited, or null. */
   readonly editingShapeId: Signal<ShapeId | null> = signal(null);
@@ -439,14 +460,16 @@ export class GlideEditor {
   }
 
   getShapesAtPoint(point: Vec2): GlideShape[] {
-    const changed = new Set(this.interactions.changedIds);
+    const changed = this._getInteractionAffectedShapeIds();
     const committed = toGlideShapes(this.store.getShapesAtPoint(point.x, point.y))
       .filter(shape => !changed.has(shape.id));
-    const transient = this.interactions.changedIds
+    const transient = [...changed]
       .map(id => toGlideShape(this.interactions.get(id)))
       .filter((shape): shape is GlideShape => shape !== null)
       .filter(shape => this.transforms.hitTestPagePoint(shape.id as ShapeId, point));
-    return this.sortShapesByCanonicalOrder([...committed, ...transient]);
+    return this.sortShapesByCanonicalOrder([...committed, ...transient])
+      .filter(shape => !this.isShapeEffectivelyHidden(shape.id as ShapeId))
+      .filter(shape => this._pointInsideClippingAncestors(shape.id as ShapeId, point));
   }
 
   getTopShapeAtPoint(
@@ -462,10 +485,10 @@ export class GlideEditor {
   }
 
   getShapesInBox(box: Pick<Box2d, 'minX' | 'minY' | 'maxX' | 'maxY'> & Partial<Pick<Box2d, 'x' | 'y' | 'w' | 'h'>>): GlideShape[] {
-    const changed = new Set(this.interactions.changedIds);
+    const changed = this._getInteractionAffectedShapeIds();
     const committed = toGlideShapes(this.store.getShapesInBox(box.minX, box.minY, box.maxX, box.maxY))
       .filter(shape => !changed.has(shape.id));
-    const transient = this.interactions.changedIds
+    const transient = [...changed]
       .map(id => toGlideShape(this.interactions.get(id)))
       .filter((shape): shape is GlideShape => shape !== null)
       .filter(shape => {
@@ -473,7 +496,33 @@ export class GlideEditor {
         return bounds.maxX >= box.minX && bounds.minX <= box.maxX
           && bounds.maxY >= box.minY && bounds.minY <= box.maxY;
       });
-    return this.sortShapesByCanonicalOrder([...committed, ...transient]);
+    return this.sortShapesByCanonicalOrder([...committed, ...transient])
+      .filter(shape => !this.isShapeEffectivelyHidden(shape.id as ShapeId));
+  }
+
+  private _pointInsideClippingAncestors(id: ShapeId, point: Vec2): boolean {
+    return this.getAncestors(id).every(parent => parent.type !== 'frame'
+      || !(parent.props as AnyRecord)['clipContent']
+      || this.transforms.hitTestPagePoint(parent.id as ShapeId, point));
+  }
+
+  getClippingFrameAncestors(id: ShapeId): GlideShape[] {
+    return this.getAncestors(id).filter(parent => parent.type === 'frame'
+      && Boolean((parent.props as AnyRecord)['clipContent']));
+  }
+
+  private _getInteractionAffectedShapeIds(): Set<string> {
+    const affected = new Set(this.interactions.changedIds);
+    const queue = [...affected];
+    while (queue.length > 0) {
+      const parentId = queue.shift()!;
+      for (const child of this.store.getChildren(parentId)) {
+        if (child['kind'] !== 'shape' || affected.has(String(child['id']))) continue;
+        affected.add(String(child['id']));
+        queue.push(String(child['id']));
+      }
+    }
+    return affected;
   }
 
   sortShapesByCanonicalOrder(shapes: readonly GlideShape[]): GlideShape[] {
@@ -519,6 +568,75 @@ export class GlideEditor {
       .filter(shape => getShapeOrderParentId(shape) === parentId)
       .sort(compareSiblingOrder)
       .map(shape => shape.id as ShapeId));
+  }
+
+  getChildren(parentId: string): GlideShape[] {
+    return this.getOrderedChildIds(parentId)
+      .map(id => this.getShape(id))
+      .filter((shape): shape is GlideShape => shape !== undefined);
+  }
+
+  getAncestors(id: ShapeId): GlideShape[] {
+    const result: GlideShape[] = [];
+    const seen = new Set<string>();
+    let current = this.getShape(id);
+    while (current && !seen.has(String(current.parentId))) {
+      seen.add(String(current.parentId));
+      const parent = this.getShape(current.parentId as ShapeId);
+      if (!parent) break;
+      result.push(parent);
+      current = parent;
+    }
+    return result;
+  }
+
+  isShapeEffectivelyLocked(id: ShapeId): boolean {
+    const shape = this.getShape(id);
+    if (!shape) return false;
+    if (shape.isLocked) return true;
+    if (String(shape.parentId).startsWith('page:')) return false;
+    return this.getAncestors(id).some(parent => parent.isLocked);
+  }
+
+  isShapeEffectivelyHidden(id: ShapeId): boolean {
+    const shape = this.getShape(id);
+    if (!shape) return false;
+    if (shape.isHidden) return true;
+    if (String(shape.parentId).startsWith('page:')) return false;
+    return this.getAncestors(id).some(parent => parent.isHidden);
+  }
+
+  getSelectableShapeId(id: ShapeId): ShapeId | null {
+    if (this.isShapeEffectivelyHidden(id)) return null;
+    const focused = this.focusedGroupId.peek();
+    const path = [...this.getAncestors(id)].reverse();
+    if (focused) {
+      const focusIndex = path.findIndex(shape => shape.id === focused);
+      if (focusIndex >= 0) return (path[focusIndex + 1]?.id as ShapeId | undefined) ?? id;
+    }
+    const outerGroup = path.find(shape => shape.type === 'group');
+    return outerGroup ? outerGroup.id as ShapeId : id;
+  }
+
+  enterGroup(id: ShapeId): boolean {
+    const shape = this.getShape(id);
+    if (!shape || shape.type !== 'group' || this.isShapeEffectivelyLocked(id) || this.isShapeEffectivelyHidden(id)) return false;
+    this.focusedGroupId.value = id;
+    this.setSelectedShapeIds([]);
+    return true;
+  }
+
+  exitGroup(): boolean {
+    const focused = this.focusedGroupId.peek();
+    if (!focused) return false;
+    const parentGroup = this.getAncestors(focused).find(shape => shape.type === 'group');
+    this.focusedGroupId.value = (parentGroup?.id as ShapeId | undefined) ?? null;
+    this.setSelectedShapeIds([focused]);
+    return true;
+  }
+
+  getDefaultPageId(): PageId {
+    return this._store.getPageIds()[0] ?? DEFAULT_PAGE_ID;
   }
 
   generateIndexAbove(parentId: string): string {
@@ -609,6 +727,9 @@ export class GlideEditor {
     const requestedType = String(partial['type'] ?? 'shape');
     partial = {
       rotation: 0,
+      parentId: this.getDefaultPageId(),
+      isLocked: false,
+      isHidden: false,
       meta: {},
       ...partial,
       kind: 'shape',
@@ -677,6 +798,7 @@ export class GlideEditor {
     }
     const existing = this.interactions.get(id);
     if (!existing) throw new Error(`GlideEditor: shape "${id}" not found`);
+    if (this.isShapeEffectivelyLocked(id)) throw new Error(`Shape "${id}" is locked.`);
     if (existing.type === 'arrow' && partial.rotation !== undefined && partial.rotation !== 0) {
       throw new Error('Arrow rotation must be encoded in its path points; record rotation must remain zero.');
     }
@@ -713,6 +835,519 @@ export class GlideEditor {
     });
   }
 
+  /** Reparent shapes while preserving their page-space geometry. */
+  reparentShapes(ids: readonly ShapeId[], parentId: PageId | ShapeId): void {
+    const uniqueIds = [...new Set(ids)];
+    if (uniqueIds.length === 0) return;
+    const parent = this.interactions.get(parentId);
+    if (!parent || (parent['kind'] !== 'page'
+      && (parent['kind'] !== 'shape' || !this.schema.getUtil(String(parent['type']))?.canContainChildren))) {
+      throw new Error(`Parent "${parentId}" must be a page or registered container shape.`);
+    }
+    if (parent['kind'] === 'shape' && this.isShapeEffectivelyLocked(parentId as ShapeId)) {
+      throw new Error('Cannot reparent into a locked container.');
+    }
+    const snapshots = uniqueIds.map(id => {
+      const shape = this.getShape(id);
+      if (!shape) throw new Error(`GlideEditor: shape "${id}" not found`);
+      if (id === parentId) throw new Error('A shape cannot be its own parent.');
+      if (this.isShapeEffectivelyLocked(id)) throw new Error('Locked shapes cannot be reparented.');
+      return {
+        shape,
+        world: this.transforms.getWorldTransform(id),
+        startWorld: shape.type === 'arrow'
+          ? this.localToPage(id, (shape as ArrowShape).props.start.point)
+          : null,
+        endWorld: shape.type === 'arrow'
+          ? this.localToPage(id, (shape as ArrowShape).props.end.point)
+          : null,
+      };
+    });
+    const allocation = this._allocateOrderKeysAbove(parentId, snapshots.length);
+    const movedIds = new Set(snapshots.map(item => item.shape.id as ShapeId));
+    const emptiedGroups = new Set(snapshots
+      .map(item => item.shape.parentId as ShapeId)
+      .filter(oldParentId => {
+        if (oldParentId === parentId) return false;
+        const oldParent = this.getShape(oldParentId);
+        return oldParent?.type === 'group'
+          && this.getChildren(oldParentId).every(child => movedIds.has(child.id as ShapeId));
+      }));
+
+    this.executeCommand({
+      id: 'shape.reparent',
+      label: 'Reparent Shapes',
+      affectedIds: [...uniqueIds, ...allocation.rebalanced.keys()],
+      execute: tx => {
+        for (const [id, index] of allocation.rebalanced) {
+          tx.update(id, record => ({ ...record, index }));
+        }
+        snapshots.forEach(({ shape, world, startWorld, endWorld }, ordinal) => {
+          if (shape.type === 'arrow' && startWorld && endWorld) {
+            const start = this.transforms.pageToParent(parentId, startWorld);
+            const end = this.transforms.pageToParent(parentId, endWorld);
+            const arrow = shape as ArrowShape;
+            tx.update(shape.id, record => ({
+              ...record,
+              parentId,
+              index: allocation.keys[ordinal]!,
+              x: start.x,
+              y: start.y,
+              rotation: 0,
+              props: {
+                ...arrow.props,
+                start: { ...arrow.props.start, point: { x: 0, y: 0 } },
+                end: {
+                  ...arrow.props.end,
+                  point: { x: end.x - start.x, y: end.y - start.y },
+                },
+              },
+            }));
+            return;
+          }
+          const placement = this.transforms.getLocalPlacementForWorldTransform(shape, world, parentId);
+          tx.update(shape.id, record => ({
+            ...record,
+            ...placement,
+            parentId,
+            index: allocation.keys[ordinal]!,
+          }));
+        });
+        for (const groupId of emptiedGroups) tx.remove(groupId);
+      },
+    });
+    this._smartRouter.markDirty();
+  }
+
+  groupShapes(ids: readonly ShapeId[]): ShapeId {
+    const shapes = [...new Set(ids)].map(id => {
+      const shape = this.getShape(id);
+      if (!shape) throw new Error(`GlideEditor: shape "${id}" not found`);
+      return shape;
+    });
+    if (shapes.length < 2) throw new Error('Grouping requires at least two shapes.');
+    const parentId = shapes[0]!.parentId;
+    if (shapes.some(shape => shape.parentId !== parentId)) {
+      throw new Error('Grouped shapes must be siblings under the same parent.');
+    }
+    if (shapes.some(shape => this.isShapeEffectivelyLocked(shape.id as ShapeId))) {
+      throw new Error('Locked shapes cannot be grouped.');
+    }
+    const ordered = [...shapes].sort(compareSiblingOrder);
+    const bounds = ordered.map(shape => this.getShapeVisualWorldBounds(shape));
+    const minX = Math.min(...bounds.map(box => box.minX));
+    const minY = Math.min(...bounds.map(box => box.minY));
+    const origin = this.pageToParent(parentId, { x: minX, y: minY });
+    const groupId = this.createShapeId('group');
+    const worlds = new Map(ordered.map(shape => [shape.id as ShapeId, this.getWorldTransform(shape.id as ShapeId)]));
+    const arrowPoints = new Map(ordered.filter(shape => shape.type === 'arrow').map(shape => [
+      shape.id as ShapeId,
+      {
+        start: this.localToPage(shape.id as ShapeId, (shape as ArrowShape).props.start.point),
+        end: this.localToPage(shape.id as ShapeId, (shape as ArrowShape).props.end.point),
+      },
+    ]));
+    const childIndices = generateRebalancedOrderKeys(ordered.length);
+
+    this.executeCommand({
+      id: 'shape.group', label: 'Group Shapes', affectedIds: [groupId, ...ordered.map(shape => shape.id)],
+      execute: tx => {
+        tx.insert({
+          id: groupId, kind: 'shape', type: 'group', schemaVersion: 0,
+          parentId, x: origin.x, y: origin.y, rotation: 0,
+          index: ordered[0]!.index, isLocked: false, isHidden: false, props: {}, meta: {},
+        });
+        ordered.forEach((shape, index) => {
+          const arrow = arrowPoints.get(shape.id as ShapeId);
+          if (shape.type === 'arrow' && arrow) {
+            const start = this.pageToParent(groupId, arrow.start);
+            const end = this.pageToParent(groupId, arrow.end);
+            tx.update(shape.id, record => ({ ...record, parentId: groupId, index: childIndices[index]!,
+              x: start.x, y: start.y, rotation: 0,
+              props: { ...(record['props'] as AnyRecord),
+                start: { ...((record['props'] as AnyRecord)['start'] as AnyRecord), point: { x: 0, y: 0 } },
+                end: { ...((record['props'] as AnyRecord)['end'] as AnyRecord), point: { x: end.x - start.x, y: end.y - start.y } },
+              },
+            }));
+          } else {
+            const placement = this.transforms.getLocalPlacementForWorldTransform(shape, worlds.get(shape.id as ShapeId)!, groupId);
+            tx.update(shape.id, record => ({ ...record, ...placement, parentId: groupId, index: childIndices[index]! }));
+          }
+        });
+      },
+    });
+    this.setSelectedShapeIds([groupId]);
+    this._smartRouter.markDirty();
+    return groupId;
+  }
+
+  ungroupShapes(ids: readonly ShapeId[]): ShapeId[] {
+    return this._removeContainersKeepContent(ids, 'group', 'shape.ungroup', 'Ungroup Shapes');
+  }
+
+  removeFramesKeepContent(ids: readonly ShapeId[]): ShapeId[] {
+    return this._removeContainersKeepContent(ids, 'frame', 'frame.remove-keep-content', 'Remove Frames, Keep Content');
+  }
+
+  private _removeContainersKeepContent(
+    ids: readonly ShapeId[], type: 'group' | 'frame', commandId: string, label: string,
+  ): ShapeId[] {
+    const containers = [...new Set(ids)].map(id => {
+      const shape = this.getShape(id);
+      if (!shape || shape.type !== type) throw new Error(`Shape "${id}" is not a ${type}.`);
+      if (this.isShapeEffectivelyLocked(id)) throw new Error(`Locked ${type}s cannot be removed.`);
+      return shape;
+    }).sort(compareSiblingOrder);
+    const children = containers.flatMap(container => this.getChildren(container.id as ShapeId));
+    const snapshots = children.map(shape => ({
+      shape,
+      world: this.getWorldTransform(shape.id as ShapeId),
+      arrow: shape.type === 'arrow' ? {
+        start: this.localToPage(shape.id as ShapeId, (shape as ArrowShape).props.start.point),
+        end: this.localToPage(shape.id as ShapeId, (shape as ArrowShape).props.end.point),
+      } : null,
+    }));
+
+    this.executeCommand({
+      id: commandId, label,
+      affectedIds: [...containers.map(shape => shape.id), ...children.map(shape => shape.id)],
+      execute: tx => {
+        for (const container of containers) {
+          const siblings = this._getSiblingShapes(container.parentId).filter(shape => shape.id !== container.id);
+          const direct = snapshots.filter(item => item.shape.parentId === container.id);
+          const insertion = siblings.findIndex(shape => compareSiblingOrder(shape, container) > 0);
+          const desired = insertion < 0
+            ? [...siblings, ...direct.map(item => item.shape)]
+            : [...siblings.slice(0, insertion), ...direct.map(item => item.shape), ...siblings.slice(insertion)];
+          const indices = generateRebalancedOrderKeys(desired.length);
+          desired.forEach((shape, index) => tx.update(shape.id, record => ({ ...record, index: indices[index]! })));
+          direct.forEach(item => {
+            if (item.arrow) {
+              const start = this.pageToParent(container.parentId, item.arrow.start);
+              const end = this.pageToParent(container.parentId, item.arrow.end);
+              tx.update(item.shape.id, record => ({ ...record, parentId: container.parentId,
+                x: start.x, y: start.y, rotation: 0,
+                props: { ...(record['props'] as AnyRecord),
+                  start: { ...((record['props'] as AnyRecord)['start'] as AnyRecord), point: { x: 0, y: 0 } },
+                  end: { ...((record['props'] as AnyRecord)['end'] as AnyRecord), point: { x: end.x - start.x, y: end.y - start.y } },
+                },
+              }));
+            } else {
+              const placement = this.transforms.getLocalPlacementForWorldTransform(item.shape, item.world, container.parentId);
+              tx.update(item.shape.id, record => ({ ...record, ...placement, parentId: container.parentId }));
+            }
+          });
+          tx.remove(container.id);
+        }
+      },
+    });
+    const childIds = children.map(shape => shape.id as ShapeId);
+    this.setSelectedShapeIds(childIds);
+    this._smartRouter.markDirty();
+    return childIds;
+  }
+
+  setLocked(ids: readonly ShapeId[], locked: boolean): void {
+    const unique = [...new Set(ids)];
+    this.executeCommand({ id: 'shape.set-locked', label: locked ? 'Lock Shapes' : 'Unlock Shapes', affectedIds: unique,
+      execute: tx => unique.forEach(id => tx.update(id, record => ({ ...record, isLocked: locked }))),
+    });
+  }
+
+  setHidden(ids: readonly ShapeId[], hidden: boolean): void {
+    const unique = [...new Set(ids)];
+    this.executeCommand({ id: 'shape.set-hidden', label: hidden ? 'Hide Shapes' : 'Show Shapes', affectedIds: unique,
+      execute: tx => unique.forEach(id => tx.update(id, record => ({ ...record, isHidden: hidden }))),
+    });
+    this._smartRouter.markDirty();
+  }
+
+  alignShapes(ids: readonly ShapeId[], operation: AlignOperation): void {
+    const shapes = this._getTransformRoots(ids, 2);
+    const bounds = new Map(shapes.map(shape => [shape.id as ShapeId, this.getShapeVisualWorldBounds(shape)]));
+    const all = [...bounds.values()];
+    const minX = Math.min(...all.map(box => box.minX));
+    const minY = Math.min(...all.map(box => box.minY));
+    const maxX = Math.max(...all.map(box => box.maxX));
+    const maxY = Math.max(...all.map(box => box.maxY));
+    const deltas = new Map<ShapeId, Vec2>();
+    for (const shape of shapes) {
+      const box = bounds.get(shape.id as ShapeId)!;
+      let dx = 0;
+      let dy = 0;
+      if (operation === 'left') dx = minX - box.minX;
+      if (operation === 'center-x') dx = (minX + maxX) / 2 - (box.minX + box.maxX) / 2;
+      if (operation === 'right') dx = maxX - box.maxX;
+      if (operation === 'top') dy = minY - box.minY;
+      if (operation === 'center-y') dy = (minY + maxY) / 2 - (box.minY + box.maxY) / 2;
+      if (operation === 'bottom') dy = maxY - box.maxY;
+      deltas.set(shape.id as ShapeId, { x: dx, y: dy });
+    }
+    this._translateShapes('shape.align', `Align ${operation}`, shapes, deltas);
+  }
+
+  distributeShapes(
+    ids: readonly ShapeId[], axis: DistributeAxis, mode: DistributeMode = 'gaps',
+  ): void {
+    const shapes = this._getTransformRoots(ids, 3);
+    const entries = shapes.map(shape => ({ shape, box: this.getShapeVisualWorldBounds(shape) }));
+    const horizontal = axis === 'horizontal';
+    entries.sort((left, right) => {
+      const leftCenter = horizontal
+        ? (left.box.minX + left.box.maxX) / 2
+        : (left.box.minY + left.box.maxY) / 2;
+      const rightCenter = horizontal
+        ? (right.box.minX + right.box.maxX) / 2
+        : (right.box.minY + right.box.maxY) / 2;
+      return leftCenter - rightCenter || this.compareShapeOrder(left.shape, right.shape);
+    });
+    const first = entries[0]!;
+    const last = entries[entries.length - 1]!;
+    const deltas = new Map<ShapeId, Vec2>();
+    if (mode === 'centers') {
+      const firstCenter = horizontal
+        ? (first.box.minX + first.box.maxX) / 2
+        : (first.box.minY + first.box.maxY) / 2;
+      const lastCenter = horizontal
+        ? (last.box.minX + last.box.maxX) / 2
+        : (last.box.minY + last.box.maxY) / 2;
+      const step = (lastCenter - firstCenter) / (entries.length - 1);
+      entries.forEach((entry, index) => {
+        const center = horizontal
+          ? (entry.box.minX + entry.box.maxX) / 2
+          : (entry.box.minY + entry.box.maxY) / 2;
+        const delta = firstCenter + step * index - center;
+        deltas.set(entry.shape.id as ShapeId, horizontal ? { x: delta, y: 0 } : { x: 0, y: delta });
+      });
+    } else {
+      const start = horizontal ? first.box.minX : first.box.minY;
+      const end = horizontal ? last.box.maxX : last.box.maxY;
+      const occupied = entries.reduce((sum, entry) => sum + (horizontal ? entry.box.w : entry.box.h), 0);
+      const gap = (end - start - occupied) / (entries.length - 1);
+      let cursor = start;
+      entries.forEach(entry => {
+        const current = horizontal ? entry.box.minX : entry.box.minY;
+        const delta = cursor - current;
+        deltas.set(entry.shape.id as ShapeId, horizontal ? { x: delta, y: 0 } : { x: 0, y: delta });
+        cursor += (horizontal ? entry.box.w : entry.box.h) + gap;
+      });
+    }
+    this._translateShapes('shape.distribute', `Distribute ${axis} ${mode}`, shapes, deltas);
+  }
+
+  matchShapeSizes(ids: readonly ShapeId[], operation: MatchSizeOperation): void {
+    const shapes = this._getTransformRoots(ids, 2);
+    const reference = shapes[shapes.length - 1]!;
+    const referenceBounds = this.getShapeLocalBounds(reference.id as ShapeId);
+    const patches = new Map<ShapeId, Partial<GlideShape>>();
+    for (const shape of shapes) {
+      if (shape.id === reference.id) continue;
+      const bounds = this.getShapeLocalBounds(shape.id as ShapeId);
+      const w = operation === 'height' ? bounds.w : referenceBounds.w;
+      const h = operation === 'width' ? bounds.h : referenceBounds.h;
+      patches.set(shape.id as ShapeId, this._getResizePatch(shape, w, h, false));
+    }
+    this._applyShapePatches('shape.match-size', `Match ${operation}`, patches);
+  }
+
+  flipShapes(ids: readonly ShapeId[], axis: FlipAxis): void {
+    const shapes = this._getTransformRoots(ids, 1);
+    const boxes = shapes.map(shape => this.getShapeVisualWorldBounds(shape));
+    const pivot = axis === 'horizontal'
+      ? (Math.min(...boxes.map(box => box.minX)) + Math.max(...boxes.map(box => box.maxX))) / 2
+      : (Math.min(...boxes.map(box => box.minY)) + Math.max(...boxes.map(box => box.maxY))) / 2;
+    const patches = new Map<ShapeId, Partial<GlideShape>>();
+    for (const shape of shapes) {
+      if (shape.type === 'arrow') {
+        const arrow = shape as ArrowShape;
+        const reflect = (point: Vec2): Vec2 => axis === 'horizontal'
+          ? { x: pivot * 2 - point.x, y: point.y }
+          : { x: point.x, y: pivot * 2 - point.y };
+        const start = this.pageToParent(shape.parentId, reflect(this.localToPage(shape.id as ShapeId, arrow.props.start.point)));
+        const end = this.pageToParent(shape.parentId, reflect(this.localToPage(shape.id as ShapeId, arrow.props.end.point)));
+        patches.set(shape.id as ShapeId, {
+          x: start.x, y: start.y, rotation: 0,
+          props: {
+            ...arrow.props,
+            start: { ...arrow.props.start, point: { x: 0, y: 0 } },
+            end: { ...arrow.props.end, point: { x: end.x - start.x, y: end.y - start.y } },
+          },
+        } as Partial<GlideShape>);
+        continue;
+      }
+      const localBounds = this.getShapeLocalBounds(shape.id as ShapeId);
+      const localCenter = { x: localBounds.minX + localBounds.w / 2, y: localBounds.minY + localBounds.h / 2 };
+      const center = this.localToPage(shape.id as ShapeId, localCenter);
+      const targetCenter = axis === 'horizontal'
+        ? { x: pivot * 2 - center.x, y: center.y }
+        : { x: center.x, y: pivot * 2 - center.y };
+      const rotation = axis === 'horizontal' ? Math.PI - shape.rotation : -shape.rotation;
+      const candidate = { ...shape, rotation } as GlideShape;
+      const translation = this.transforms.getTranslationForLocalPoint(candidate, localCenter, targetCenter);
+      patches.set(shape.id as ShapeId, { x: translation.x, y: translation.y, rotation });
+    }
+    this._applyShapePatches('shape.flip', `Flip ${axis}`, patches);
+  }
+
+  tidyShapes(ids: readonly ShapeId[], layout: TidyLayout = 'row', gap = 24): void {
+    const shapes = this._getTransformRoots(ids, 2).sort((left, right) => this.compareShapeOrder(left, right));
+    const boxes = shapes.map(shape => this.getShapeVisualWorldBounds(shape));
+    const startX = Math.min(...boxes.map(box => box.minX));
+    const startY = Math.min(...boxes.map(box => box.minY));
+    const deltas = new Map<ShapeId, Vec2>();
+    if (layout === 'row') {
+      let x = startX;
+      shapes.forEach((shape, index) => {
+        const box = boxes[index]!;
+        deltas.set(shape.id as ShapeId, { x: x - box.minX, y: startY - box.minY });
+        x += box.w + gap;
+      });
+    } else {
+      const columns = Math.ceil(Math.sqrt(shapes.length));
+      const cellW = Math.max(...boxes.map(box => box.w)) + gap;
+      const cellH = Math.max(...boxes.map(box => box.h)) + gap;
+      shapes.forEach((shape, index) => {
+        const box = boxes[index]!;
+        const column = index % columns;
+        const row = Math.floor(index / columns);
+        deltas.set(shape.id as ShapeId, {
+          x: startX + column * cellW - box.minX,
+          y: startY + row * cellH - box.minY,
+        });
+      });
+    }
+    this._translateShapes('shape.tidy', `Tidy ${layout}`, shapes, deltas);
+  }
+
+  nudgeShapes(ids: readonly ShapeId[], delta: Vec2): void {
+    const shapes = this._getTransformRoots(ids, 1);
+    this._translateShapes('shape.nudge', 'Nudge Shapes', shapes,
+      new Map(shapes.map(shape => [shape.id as ShapeId, delta])));
+  }
+
+  setShapePrecision(id: ShapeId, patch: ShapePrecisionPatch): void {
+    const shape = this._getTransformRoots([id], 1)[0]!;
+    let nextPatch: Partial<GlideShape> = {};
+    if (patch.w !== undefined || patch.h !== undefined) {
+      const bounds = this.getShapeLocalBounds(id);
+      let w = Math.max(1, patch.w ?? bounds.w);
+      let h = Math.max(1, patch.h ?? bounds.h);
+      if (patch.lockAspect && bounds.w > 0 && bounds.h > 0) {
+        if (patch.w !== undefined && patch.h === undefined) h = w * bounds.h / bounds.w;
+        if (patch.h !== undefined && patch.w === undefined) w = h * bounds.w / bounds.h;
+      }
+      nextPatch = this._getResizePatch(shape, w, h, patch.lockAspect ?? false);
+    }
+    if (patch.rotation !== undefined && shape.type !== 'arrow') {
+      const bounds = this.getShapeLocalBounds(id);
+      const center = { x: bounds.minX + bounds.w / 2, y: bounds.minY + bounds.h / 2 };
+      const pageCenter = this.localToPage(id, center);
+      const candidate = { ...shape, ...nextPatch, rotation: patch.rotation,
+        props: { ...shape.props, ...(nextPatch.props ?? {}) } } as GlideShape;
+      const translation = this.transforms.getTranslationForLocalPoint(candidate, center, pageCenter);
+      nextPatch = { ...nextPatch, x: translation.x, y: translation.y, rotation: patch.rotation };
+    }
+    if (patch.x !== undefined || patch.y !== undefined) {
+      const world = this.getShapeVisualWorldBounds(id);
+      const delta = { x: (patch.x ?? world.minX) - world.minX, y: (patch.y ?? world.minY) - world.minY };
+      const localDelta = this.pageDeltaToParent(shape.parentId, delta);
+      nextPatch.x = (nextPatch.x ?? shape.x) + localDelta.x;
+      nextPatch.y = (nextPatch.y ?? shape.y) + localDelta.y;
+    }
+    this._applyShapePatches('shape.set-precision', 'Set Shape Geometry', new Map([[id, nextPatch]]));
+  }
+
+  resetShapeRotations(ids: readonly ShapeId[]): void {
+    const shapes = this._getTransformRoots(ids, 1);
+    const patches = new Map<ShapeId, Partial<GlideShape>>();
+    for (const shape of shapes) {
+      if (shape.type === 'arrow') continue;
+      const bounds = this.getShapeLocalBounds(shape.id as ShapeId);
+      const center = { x: bounds.minX + bounds.w / 2, y: bounds.minY + bounds.h / 2 };
+      const pageCenter = this.localToPage(shape.id as ShapeId, center);
+      const candidate = { ...shape, rotation: 0 } as GlideShape;
+      const translation = this.transforms.getTranslationForLocalPoint(candidate, center, pageCenter);
+      patches.set(shape.id as ShapeId, { x: translation.x, y: translation.y, rotation: 0 });
+    }
+    this._applyShapePatches('shape.reset-rotation', 'Reset Rotation', patches);
+  }
+
+  private _getTransformRoots(ids: readonly ShapeId[], minimum: number): GlideShape[] {
+    const selected = new Set(ids);
+    const shapes = [...selected].map(id => {
+      const shape = this.getShape(id);
+      if (!shape) throw new Error(`GlideEditor: shape "${id}" not found`);
+      if (this.isShapeEffectivelyLocked(id)) throw new Error(`Shape "${id}" is locked.`);
+      return shape;
+    }).filter(shape => !this.getAncestors(shape.id as ShapeId)
+      .some(parent => selected.has(parent.id as ShapeId)));
+    if (shapes.length < minimum) throw new Error(`Operation requires at least ${minimum} shape${minimum === 1 ? '' : 's'}.`);
+    return shapes;
+  }
+
+  private _translateShapes(
+    commandId: string, label: string, shapes: readonly GlideShape[], deltas: ReadonlyMap<ShapeId, Vec2>,
+  ): void {
+    const patches = new Map<ShapeId, Partial<GlideShape>>();
+    for (const shape of shapes) {
+      const delta = deltas.get(shape.id as ShapeId) ?? { x: 0, y: 0 };
+      const local = this.pageDeltaToParent(shape.parentId, delta);
+      patches.set(shape.id as ShapeId, { x: shape.x + local.x, y: shape.y + local.y });
+    }
+    this._applyShapePatches(commandId, label, patches);
+  }
+
+  private _getResizePatch(shape: GlideShape, width: number, height: number, constrainAspect: boolean): Partial<GlideShape> {
+    if (shape.type === 'arrow' || shape.type === 'group') {
+      throw new Error(`${shape.type} size is controlled by its content.`);
+    }
+    const util = this.getShapeUtil(shape.type);
+    const bounds = util.getGeometry(shape as any).getBounds();
+    const pageCenter = this.localToPage(shape.id as ShapeId, {
+      x: bounds.minX + bounds.w / 2,
+      y: bounds.minY + bounds.h / 2,
+    });
+    let w = Math.max(1, width);
+    let h = Math.max(1, height);
+    if (constrainAspect && bounds.w > 0 && bounds.h > 0) {
+      const scale = Math.max(w / bounds.w, h / bounds.h);
+      w = bounds.w * scale;
+      h = bounds.h * scale;
+    }
+    const result = util.onResize(shape as any, {
+      handle: 'se', scaleX: w / (bounds.w || 1), scaleY: h / (bounds.h || 1),
+      initialShape: shape as any, initialBounds: bounds,
+      newBounds: makeBox(bounds.minX, bounds.minY, w, h),
+    }) as Partial<GlideShape>;
+    const candidate = { ...shape, ...result, x: shape.x, y: shape.y,
+      props: { ...shape.props, ...(result.props ?? {}) } } as GlideShape;
+    const nextBounds = util.getGeometry(candidate as any).getBounds();
+    const translation = this.transforms.getTranslationForLocalPoint(candidate, {
+      x: nextBounds.minX + nextBounds.w / 2,
+      y: nextBounds.minY + nextBounds.h / 2,
+    }, pageCenter);
+    return { ...result, x: translation.x, y: translation.y };
+  }
+
+  private _applyShapePatches(
+    commandId: string, label: string, patches: ReadonlyMap<ShapeId, Partial<GlideShape>>,
+  ): void {
+    if (patches.size === 0) return;
+    this.executeCommand({
+      id: commandId, label, affectedIds: [...patches.keys()],
+      execute: tx => {
+        for (const [id, patch] of patches) {
+          tx.update(id, record => ({
+            ...record,
+            ...patch,
+            ...(patch.props ? { props: { ...(record['props'] as AnyRecord), ...(patch.props as AnyRecord) } } : {}),
+          }));
+        }
+      },
+    });
+    this._smartRouter.markDirty();
+  }
+
   deleteShapes(ids: ShapeId[]): void {
     const closure = new Set<ShapeId>();
     const visit = (id: ShapeId) => {
@@ -725,7 +1360,23 @@ export class GlideEditor {
       }
     };
     for (const id of ids) visit(id);
+    let addedEmptyGroup = true;
+    while (addedEmptyGroup) {
+      addedEmptyGroup = false;
+      for (const id of [...closure]) {
+        const shape = this.getShape(id);
+        const parent = shape ? this.getShape(shape.parentId as ShapeId) : undefined;
+        if (parent?.type !== 'group' || closure.has(parent.id as ShapeId)) continue;
+        if (this.getChildren(parent.id as ShapeId).every(child => closure.has(child.id as ShapeId))) {
+          visit(parent.id as ShapeId);
+          addedEmptyGroup = true;
+        }
+      }
+    }
     const deleteIds = Array.from(closure);
+    if (deleteIds.some(id => this.isShapeEffectivelyLocked(id))) {
+      throw new Error('Locked shapes cannot be deleted.');
+    }
     let shouldInvalidateSmartRoutes = false;
     this.executeCommand({
       id: 'shape.delete',
@@ -868,11 +1519,12 @@ export class GlideEditor {
   private _selectionArraySignal?: Signal<ShapeId[]>;
 
   setSelectedShapeIds(ids: ShapeId[]): void {
-    this._selection.value = new Set(ids);
+    this._selection.value = new Set(ids.filter(id => this.getShape(id)
+      && !this.isShapeEffectivelyHidden(id)));
   }
 
   selectAll(): void {
-    this._selection.value = new Set(this.interactions.getShapeIdsSignal().peek());
+    this.setSelectedShapeIds([...this.interactions.getShapeIdsSignal().peek()]);
   }
 
   // ── Clipboard ──────────────────────────────────────────────
@@ -923,6 +1575,38 @@ export class GlideEditor {
     const records: AnyRecord[] = documentRecords
       .filter(record => record['kind'] === 'shape' && shapeIds.has(record['id'] as ShapeId))
       .map(record => cloneRecord(record));
+    const copiedById = new Map(records.map(record => [String(record['id']), record]));
+    for (const rootId of rootIds) {
+      const source = this.getShape(rootId);
+      const copied = copiedById.get(rootId);
+      if (!source || !copied || !this.getShape(source.parentId as ShapeId)) continue;
+      let pageId: PageId = this.getDefaultPageId();
+      let cursor: GlideShape | undefined = source;
+      while (cursor) {
+        if (!this.getShape(cursor.parentId as ShapeId)) {
+          pageId = cursor.parentId as PageId;
+          break;
+        }
+        cursor = this.getShape(cursor.parentId as ShapeId);
+      }
+      if (source.type === 'arrow') {
+        const arrow = source as ArrowShape;
+        const start = this.localToPage(rootId, arrow.props.start.point);
+        const end = this.localToPage(rootId, arrow.props.end.point);
+        Object.assign(copied, {
+          parentId: pageId, x: start.x, y: start.y, rotation: 0,
+          props: {
+            ...arrow.props,
+            start: { ...arrow.props.start, point: { x: 0, y: 0 } },
+            end: { ...arrow.props.end, point: { x: end.x - start.x, y: end.y - start.y } },
+          },
+        });
+      } else {
+        Object.assign(copied, this.transforms.getLocalPlacementForWorldTransform(
+          source, this.getWorldTransform(rootId), pageId,
+        ), { parentId: pageId });
+      }
+    }
     for (const record of documentRecords) {
       if (record['kind'] !== 'binding') continue;
       if (shapeIds.has(record['fromId'] as ShapeId) && shapeIds.has(record['toId'] as ShapeId)) {
@@ -1025,7 +1709,7 @@ export class GlideEditor {
    * fractional `index` field for z-ordered rendering.
    */
   getShapes(sorted = false): GlideShape[] {
-    const shapes = this._getAllShapes();
+    const shapes = this._getAllShapes().filter(shape => !this.isShapeEffectivelyHidden(shape.id as ShapeId));
     return sorted ? sortShapesByCanonicalOrder(shapes, shapes) : shapes;
   }
 
@@ -1048,6 +1732,9 @@ export class GlideEditor {
   ): void {
     const idSet = new Set(ids);
     if (idSet.size === 0) return;
+    if ([...idSet].some(id => this.isShapeEffectivelyLocked(id))) {
+      throw new Error('Locked shapes cannot be reordered.');
+    }
     this.assertMutationAllowed({
       origin: 'local-user',
       command: 'shape.reorder',
@@ -1385,6 +2072,18 @@ export class GlideEditor {
   getViewportBounds(): Box2d { return this.camera.getViewportBounds(); }
   getSmartRoutingSnapshot(): SmartRoutingSnapshot { return this._smartRouter.getSnapshot(); }
 
+  getShapeLocalBounds(id: ShapeId): Box2d {
+    const shape = this.getShape(id);
+    if (!shape) throw new Error(`GlideEditor: shape "${id}" not found`);
+    return this.getShapeUtil(shape.type).getGeometry(shape as any).getBounds();
+  }
+
+  getShapeLocalOutline(id: ShapeId): readonly Vec2[] {
+    const shape = this.getShape(id);
+    if (!shape) throw new Error(`GlideEditor: shape "${id}" not found`);
+    return this.getShapeUtil(shape.type).getGeometry(shape as any).getOutline();
+  }
+
   getShapeWorldBounds(shapeOrId: GlideShape | ShapeId): Box2d {
     const shape = typeof shapeOrId === 'string'
       ? this.getShape(shapeOrId)
@@ -1406,6 +2105,15 @@ export class GlideEditor {
   getWorldTransformInverse(id: ShapeId): Matrix2d { return this.transforms.getWorldTransformInverse(id); }
   localToPage(id: ShapeId, point: Vec2): Vec2 { return this.transforms.localToPage(id, point); }
   pageToLocal(id: ShapeId, point: Vec2): Vec2 { return this.transforms.pageToLocal(id, point); }
+  parentToPage(parentId: PageId | ShapeId, point: Vec2): Vec2 {
+    return this.transforms.parentToPage(parentId, point);
+  }
+  pageToParent(parentId: PageId | ShapeId, point: Vec2): Vec2 {
+    return this.transforms.pageToParent(parentId, point);
+  }
+  pageDeltaToParent(parentId: PageId | ShapeId, delta: Vec2): Vec2 {
+    return this.transforms.pageDeltaToParent(parentId, delta);
+  }
 
   resolveSmartRouteForArrow(
     arrow: ArrowShape,
@@ -1492,7 +2200,15 @@ export class GlideEditor {
   // ── Export ─────────────────────────────────────────────────
 
   exportToSvg(shapeIds: ShapeId[]): string {
-    const shapes = this.sortShapesByCanonicalOrder(shapeIds
+    const expanded = new Set<ShapeId>();
+    const visit = (id: ShapeId) => {
+      if (expanded.has(id)) return;
+      expanded.add(id);
+      this.getChildren(id).forEach(child => visit(child.id as ShapeId));
+    };
+    shapeIds.forEach(visit);
+    const shapes = this.sortShapesByCanonicalOrder([...expanded]
+      .filter(id => !this.isShapeEffectivelyHidden(id))
       .map(id => this.getShape(id))
       .filter(Boolean) as GlideShape[]);
     return this._renderShapesToSvg(shapes);
@@ -1524,6 +2240,7 @@ export class GlideEditor {
     let maxX = explicitViewBox?.maxX ?? -Infinity;
     let maxY = explicitViewBox?.maxY ?? -Infinity;
     const elements: string[] = [];
+    const clipDefs = new Map<string, string>();
 
     for (const shape of shapes) {
       const util = this.getShapeUtil(shape.type);
@@ -1543,7 +2260,22 @@ export class GlideEditor {
           const wrapper = document.createElementNS('http://www.w3.org/2000/svg', 'g');
           wrapper.setAttribute('transform', matrixToSvg(this.transforms.getWorldTransform(shape.id as ShapeId)));
           wrapper.appendChild(svgEl);
-          elements.push(wrapper.outerHTML);
+          const clippingFrame = this.getClippingFrameAncestors(shape.id as ShapeId)[0];
+          if (clippingFrame) {
+            const clipId = `clip-${String(clippingFrame.id).replace(/[^a-zA-Z0-9_-]/g, '-')}`;
+            if (!clipDefs.has(clipId)) {
+              const bounds = this.transforms.getLocalGeometry(clippingFrame.id as ShapeId).getBounds();
+              const points = [
+                { x: bounds.minX, y: bounds.minY }, { x: bounds.maxX, y: bounds.minY },
+                { x: bounds.maxX, y: bounds.maxY }, { x: bounds.minX, y: bounds.maxY },
+              ].map(point => this.localToPage(clippingFrame.id as ShapeId, point))
+                .map(point => `${point.x},${point.y}`).join(' ');
+              clipDefs.set(clipId, `<clipPath id="${clipId}" clipPathUnits="userSpaceOnUse"><polygon points="${points}" /></clipPath>`);
+            }
+            elements.push(`<g clip-path="url(#${clipId})">${wrapper.outerHTML}</g>`);
+          } else {
+            elements.push(wrapper.outerHTML);
+          }
         }
       }
     }
@@ -1562,6 +2294,7 @@ export class GlideEditor {
   <style>
     text { font-family: Inter, system-ui, sans-serif; }
   </style>
+  ${clipDefs.size ? `<defs>${[...clipDefs.values()].join('')}</defs>` : ''}
   ${elements.join('\n  ')}
 </svg>`;
   }

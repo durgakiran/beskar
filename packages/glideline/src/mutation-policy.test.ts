@@ -147,7 +147,7 @@ describe("MutationPolicy", () => {
     expect(() => (editor.history as any).undo())
       .toThrow(MutationPermissionError);
 
-    expect(editor.serialize().records).toHaveLength(0);
+    expect(editor.serialize().records.filter(record => record.kind === 'shape')).toHaveLength(0);
   });
 
   it('does not trust a caller merely because it claims a remote origin', () => {

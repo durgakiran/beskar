@@ -26,7 +26,12 @@ import type {
   DeepReadonly,
 } from './types';
 import type { Geometry2d } from './geometry';
-import { GlideSchema, DocumentValidationError, type LoadReport } from './schema';
+import {
+  GlideSchema,
+  DocumentValidationError,
+  createDefaultPageRecord,
+  type LoadReport,
+} from './schema';
 import { RecordIdService } from './id';
 import {
   MutationPermissionError,
@@ -258,6 +263,7 @@ interface DerivedState {
   bindingsByFrom: Map<ShapeId, Set<BindingId>>;
   bindingsByTo: Map<ShapeId, Set<BindingId>>;
   shapesByPage: Map<PageId, Set<ShapeId>>;
+  replaceShapesByPage: Map<PageId, Set<ShapeId>> | null;
   childrenByParent: Map<string, Set<string>>;
   assetUsers: Map<AssetId, Set<string>>;
   shapeIds: readonly ShapeId[] | null;
@@ -448,6 +454,11 @@ export class GlideStore {
     for (const grant of authorization.grants ?? []) {
       this._mutationCapabilities.set(grant.capability, new Set(grant.origins));
     }
+    const defaultPage = ownRecord(this.schema.prepareRecord(createDefaultPageRecord()));
+    this.schema.validateRecord(defaultPage as AnyRecord);
+    const pageSignal = signal<StoreRecord | null>(defaultPage);
+    this._signals.set(String(defaultPage['id']), pageSignal);
+    this._readonlySignals.set(String(defaultPage['id']), computed(() => pageSignal.value));
   }
 
   get revision(): number { return this._versionSignal.peek(); }
@@ -548,6 +559,15 @@ export class GlideStore {
 
   getShapeIdsOnPage(pageId: PageId): readonly ShapeId[] {
     return Object.freeze(Array.from(this._shapesByPage.get(pageId) ?? []));
+  }
+
+  getPageIds(): readonly PageId[] {
+    return Object.freeze(Array.from(this._signals.values())
+      .map(recordSignal => recordSignal.peek())
+      .filter((record): record is StoreRecord => record?.['kind'] === 'page')
+      .sort((left, right) => String(left['index']).localeCompare(String(right['index']))
+        || String(left['id']).localeCompare(String(right['id'])))
+      .map(record => record['id'] as PageId));
   }
 
   getChildren(parentId: string): readonly StoreRecord[] {
@@ -902,6 +922,13 @@ export class GlideStore {
     const childrenByParent = new Map<string, Set<string>>();
     const assetUsers = new Map<AssetId, Set<string>>();
     let shapeIds: ShapeId[] | null = null;
+    const hierarchyChanged = deltas.some(delta =>
+      delta.before === null
+      || delta.after === null
+      || delta.before?.['parentId'] !== delta.after?.['parentId']
+      || delta.before?.['kind'] === 'page'
+      || delta.after?.['kind'] === 'page');
+    let replaceShapesByPage: Map<PageId, Set<ShapeId>> | null = null;
 
     const mutableSet = <K, V>(
       source: Map<K, Set<V>>,
@@ -942,8 +969,6 @@ export class GlideStore {
         } else if (beforeIsShape) {
           const oldEntry = this._treeEntries.get(id);
           if (oldEntry) treeRemovals.push(oldEntry);
-          const pageId = before['pageId'] as PageId | undefined;
-          if (pageId) mutableSet(this._shapesByPage, shapesByPage, pageId).delete(id as ShapeId);
           if (!afterIsShape) {
             const ids = mutableShapeIds();
             const index = ids.indexOf(id as ShapeId);
@@ -974,13 +999,47 @@ export class GlideStore {
       if (!beforeIsShape) {
         mutableShapeIds().push(id as ShapeId);
       }
-      const pageId = after['pageId'] as PageId | undefined;
-      if (pageId) mutableSet(this._shapesByPage, shapesByPage, pageId).add(id as ShapeId);
-
       const entry = this._geometryEntry(after);
       if (entry) {
         treeInsertions.push(entry);
       }
+    }
+
+    // A parent transform changes every descendant's world-space bounds even
+    // when the descendant records themselves are unchanged.
+    const changedShapeIds = new Set(deltas
+      .filter(delta => (delta.before && this.schema.isRenderableShape(delta.before as AnyRecord))
+        || (delta.after && this.schema.isRenderableShape(delta.after as AnyRecord)))
+      .map(delta => delta.id));
+    const changedParents = new Set([...changedShapeIds].filter(id =>
+      (this._childrenByParent.get(id)?.size ?? 0) > 0));
+    if (changedParents.size > 0) {
+      const candidates = this._candidateValues();
+      const byId = new Map(candidates.map(record => [String(record['id']), record]));
+      const directIds = new Set(deltas.map(delta => delta.id));
+      for (const record of candidates) {
+        if (!this.schema.isRenderableShape(record as AnyRecord) || directIds.has(String(record['id']))) continue;
+        let parentId = record['parentId'];
+        let affected = false;
+        const seen = new Set<string>();
+        while (typeof parentId === 'string' && !seen.has(parentId)) {
+          if (changedParents.has(parentId)) {
+            affected = true;
+            break;
+          }
+          seen.add(parentId);
+          parentId = byId.get(parentId)?.['parentId'];
+        }
+        if (!affected) continue;
+        const oldEntry = this._treeEntries.get(String(record['id']));
+        if (oldEntry) treeRemovals.push(oldEntry);
+        const entry = this._geometryEntry(record);
+        if (entry) treeInsertions.push(entry);
+      }
+    }
+
+    if (hierarchyChanged) {
+      replaceShapesByPage = this._deriveShapesByPage(this._candidateValues());
     }
 
     return {
@@ -989,6 +1048,7 @@ export class GlideStore {
       bindingsByFrom,
       bindingsByTo,
       shapesByPage,
+      replaceShapesByPage,
       childrenByParent,
       assetUsers,
       shapeIds: shapeIds ? Object.freeze(shapeIds) : null,
@@ -1012,9 +1072,13 @@ export class GlideStore {
       if (values.size === 0) this._bindingsByTo.delete(id);
       else this._bindingsByTo.set(id, values);
     }
-    for (const [id, values] of derived.shapesByPage) {
-      if (values.size === 0) this._shapesByPage.delete(id);
-      else this._shapesByPage.set(id, values);
+    if (derived.replaceShapesByPage) {
+      this._shapesByPage = derived.replaceShapesByPage;
+    } else {
+      for (const [id, values] of derived.shapesByPage) {
+        if (values.size === 0) this._shapesByPage.delete(id);
+        else this._shapesByPage.set(id, values);
+      }
     }
     for (const [id, values] of derived.childrenByParent) {
       if (values.size === 0) this._childrenByParent.delete(id);
@@ -1036,6 +1100,30 @@ export class GlideStore {
       if (typeof value === 'string') result.add(value as AssetId);
     }
     return Array.from(result);
+  }
+
+  private _deriveShapesByPage(records: readonly StoreRecord[]): Map<PageId, Set<ShapeId>> {
+    const byId = new Map(records.map(record => [String(record['id']), record]));
+    const result = new Map<PageId, Set<ShapeId>>();
+    for (const record of records) {
+      if (!this.schema.isRenderableShape(record as AnyRecord)) continue;
+      let cursor: StoreRecord | undefined = record;
+      const seen = new Set<string>();
+      while (typeof cursor?.['parentId'] === 'string') {
+        const parentId = cursor['parentId'] as string;
+        if (seen.has(parentId)) break;
+        seen.add(parentId);
+        const parent = byId.get(parentId);
+        if (parent?.['kind'] === 'page') {
+          const members = result.get(parentId as PageId) ?? new Set<ShapeId>();
+          members.add(record['id'] as ShapeId);
+          result.set(parentId as PageId, members);
+          break;
+        }
+        cursor = parent;
+      }
+    }
+    return result;
   }
 
   private _geometryEntry(record: StoreRecord): RBushEntry | null {
@@ -1066,7 +1154,7 @@ export class GlideStore {
     const treeEntries = new Map<string, RBushEntry>();
     const bindingsByFrom = new Map<ShapeId, Set<BindingId>>();
     const bindingsByTo = new Map<ShapeId, Set<BindingId>>();
-    const shapesByPage = new Map<PageId, Set<ShapeId>>();
+    let shapesByPage = new Map<PageId, Set<ShapeId>>();
     const childrenByParent = new Map<string, Set<string>>();
     const assetUsers = new Map<AssetId, Set<string>>();
     const shapeIds: ShapeId[] = [];
@@ -1089,14 +1177,15 @@ export class GlideStore {
       }
       if (!this.schema.isRenderableShape(record as AnyRecord)) continue;
       shapeIds.push(id as ShapeId);
-      const pageId = record['pageId'];
-      if (typeof pageId === 'string') add(shapesByPage, pageId as PageId, id as ShapeId);
       const entry = this._geometryEntry(record);
       if (entry) {
         tree.insert(entry);
         treeEntries.set(id, entry);
       }
     }
+    shapesByPage = this._deriveShapesByPage(Array.from(this._signals.values())
+      .map(recordSignal => recordSignal.peek())
+      .filter((record): record is StoreRecord => record !== null));
     return {
       tree,
       treeEntries,
@@ -1299,9 +1388,11 @@ export class GlideStore {
           continue;
         }
         const external = this.get(reference);
-        if ((field === 'pageId' || field === 'assetId')
-          && preserveExternalKinds.has(field === 'pageId' ? 'page' : 'asset')
-          && external?.['kind'] === (field === 'pageId' ? 'page' : 'asset')) {
+        const preservedKind = field === 'assetId' ? 'asset'
+          : field === 'pageId' || field === 'parentId' ? 'page'
+            : null;
+        if (preservedKind && preserveExternalKinds.has(preservedKind)
+          && external?.['kind'] === preservedKind) {
           continue;
         }
         if (relationshipPolicy === 'preserve') continue;

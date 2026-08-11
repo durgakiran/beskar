@@ -155,6 +155,30 @@ export const layoutShapesInputSchema = z.object({
   rankSep:   finiteNumber.default(80),
 });
 
+export const arrangeShapesInputSchema = z.object({
+  shapeIds: z.array(z.string().min(1)).min(1),
+  operation: z.enum([
+    'align-left', 'align-center-x', 'align-right', 'align-top', 'align-center-y', 'align-bottom',
+    'distribute-horizontal', 'distribute-vertical', 'match-width', 'match-height', 'match-both',
+    'flip-horizontal', 'flip-vertical', 'tidy-row', 'tidy-grid',
+  ]),
+}).strict();
+
+export const setShapeGeometryInputSchema = z.object({
+  id: z.string().min(1),
+  x: finiteNumber.optional(),
+  y: finiteNumber.optional(),
+  w: finiteNumber.positive().optional(),
+  h: finiteNumber.positive().optional(),
+  rotation: finiteNumber.optional(),
+  lockAspect: z.boolean().optional(),
+}).strict();
+
+export const reparentShapesInputSchema = z.object({
+  shapeIds: z.array(z.string().min(1)).min(1),
+  parentId: z.string().min(1),
+}).strict();
+
 export const getCanvasImageInputSchema = z.object({
   viewport: z.boolean().default(false),
 }).strict();
@@ -167,6 +191,9 @@ export type CanvasToolName =
   | 'get_canvas_state'
   | 'create_diagram'
   | 'layout_shapes'
+  | 'arrange_shapes'
+  | 'set_shape_geometry'
+  | 'reparent_shapes'
   | 'get_canvas_image';
 
 export type CanvasToolResult =
@@ -518,6 +545,48 @@ const TOOL_DEFINITIONS = [
       });
 
       return { ok: true, repositioned: ids.length } as any;
+    },
+  },
+  {
+    name: 'arrange_shapes',
+    description: 'Align, distribute, match, flip, or tidy shapes using hierarchy-aware page geometry.',
+    schema: arrangeShapesInputSchema,
+    handler: (editor, input: z.infer<typeof arrangeShapesInputSchema>) => {
+      const ids = input.shapeIds.map(id => id as ShapeId);
+      const operation = input.operation;
+      if (operation.startsWith('align-')) {
+        const map = { 'align-left': 'left', 'align-center-x': 'center-x', 'align-right': 'right',
+          'align-top': 'top', 'align-center-y': 'center-y', 'align-bottom': 'bottom' } as const;
+        editor.alignShapes(ids, map[operation as keyof typeof map]);
+      } else if (operation.startsWith('distribute-')) {
+        editor.distributeShapes(ids, operation === 'distribute-horizontal' ? 'horizontal' : 'vertical');
+      } else if (operation.startsWith('match-')) {
+        editor.matchShapeSizes(ids, operation === 'match-width' ? 'width' : operation === 'match-height' ? 'height' : 'both');
+      } else if (operation.startsWith('flip-')) {
+        editor.flipShapes(ids, operation === 'flip-horizontal' ? 'horizontal' : 'vertical');
+      } else {
+        editor.tidyShapes(ids, operation === 'tidy-grid' ? 'grid' : 'row');
+      }
+      return { ok: true };
+    },
+  },
+  {
+    name: 'set_shape_geometry',
+    description: 'Set a shape page position, intrinsic size, or rotation precisely.',
+    schema: setShapeGeometryInputSchema,
+    handler: (editor, input: z.infer<typeof setShapeGeometryInputSchema>) => {
+      const { id, ...patch } = input;
+      editor.setShapePrecision(id as ShapeId, patch);
+      return { ok: true };
+    },
+  },
+  {
+    name: 'reparent_shapes',
+    description: 'Move shapes into a page, frame, or group while preserving page geometry.',
+    schema: reparentShapesInputSchema,
+    handler: (editor, input: z.infer<typeof reparentShapesInputSchema>) => {
+      editor.reparentShapes(input.shapeIds.map(id => id as ShapeId), input.parentId as any);
+      return { ok: true };
     },
   },
   {

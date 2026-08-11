@@ -252,14 +252,14 @@ describe('T2.3-06: store.put with invalid props throws; store unchanged', () => 
 // Additional: migrations currentVersion === 1 on all three
 // ─────────────────────────────────────────────────────────────
 
-describe('All three utils have static migrations with currentVersion: Box 2, Text/Frame 1', () => {
+describe('built-in utils expose their current schema versions', () => {
   it('BoxUtil.migrations.currentVersion === 2', () => {
     expect(BoxUtil.migrations?.currentVersion).toBe(2);
   });
   it('TextUtil.migrations.currentVersion === 3', () => {
     expect(TextUtil.migrations?.currentVersion).toBe(3);
   });
-  it('FrameUtil.migrations.currentVersion === 1', () => {
-    expect(FrameUtil.migrations?.currentVersion).toBe(1);
+  it('FrameUtil.migrations.currentVersion === 2', () => {
+    expect(FrameUtil.migrations?.currentVersion).toBe(2);
   });
 });

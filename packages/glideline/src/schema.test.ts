@@ -4,7 +4,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { CURRENT_STORE_VERSION, GlideSchema } from './schema';
+import { CURRENT_STORE_VERSION, GlideSchema, createDefaultPageRecord } from './schema';
 import { GlideStore } from './store';
 import { T } from './validators';
 import { defineMigrations } from './migrations';
@@ -166,7 +166,7 @@ describe('GlideSchema.save', () => {
     };
     schema.registerShapeUtil(util);
 
-    const doc = schema.save([{
+    const doc = schema.save([createDefaultPageRecord(), {
       id: 'shape:1', type: 'box', x: 0, y: 0, rotation: 0, index: 'a1', meta: {}, props: {},
     }]);
     expect(doc.schema.shapes['box']).toBe(3);

@@ -2,9 +2,25 @@ import { computeArcPath } from './arc-router';
 import type { GlideEditor } from './editor';
 import { computeFallbackLocalElbowPoints, getArrowBindingEdge } from './smart-router';
 import type { ArrowRouteStyle, ArrowShape } from './shapes/ArrowUtil';
-import type { Vec2 } from './types';
+import { makeBox, type Box2d, type ShapeId, type Vec2 } from './types';
 
 const CURVE_SAMPLE_STEPS = 24;
+
+function getShapeBoundsInParent(editor: GlideEditor, id: ShapeId, parentId: string): Box2d {
+  const bounds = editor.getShapeLocalBounds(id);
+  const points = [
+    { x: bounds.minX, y: bounds.minY },
+    { x: bounds.maxX, y: bounds.minY },
+    { x: bounds.maxX, y: bounds.maxY },
+    { x: bounds.minX, y: bounds.maxY },
+  ].map(point => editor.pageToParent(parentId,
+    editor.localToPage(id, point)));
+  const minX = Math.min(...points.map(point => point.x));
+  const minY = Math.min(...points.map(point => point.y));
+  const maxX = Math.max(...points.map(point => point.x));
+  const maxY = Math.max(...points.map(point => point.y));
+  return makeBox(minX, minY, maxX - minX, maxY - minY);
+}
 
 export interface ArrowRouteResult {
   routeStyle: ArrowRouteStyle;
@@ -97,18 +113,19 @@ export function resolveArrowRoute(
 
   const localPoints = computeFallbackLocalElbowPoints(
     shape,
-    editor.getShapeWorldBounds(fromShape.id as any),
-    editor.getShapeWorldBounds(toShape.id as any),
+    getShapeBoundsInParent(editor, fromShape.id as ShapeId, shape.parentId),
+    getShapeBoundsInParent(editor, toShape.id as ShapeId, shape.parentId),
     fromEdge,
     toEdge,
   );
+  const worldPoints = localPoints.map(toPage);
 
   return {
     routeStyle,
     renderKind: 'polyline',
     path: pointsToPath(localPoints),
     localPoints,
-    worldPoints: localPoints.map(toPage),
+    worldPoints,
   };
 }
 

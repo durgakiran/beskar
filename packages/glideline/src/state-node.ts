@@ -16,8 +16,8 @@ import type { Vec2, ShapeId } from './types';
 
 export type GlideEvent =
   | { type: 'pointerDown'; point: Vec2; screenPoint?: Vec2; shiftKey: boolean; target: 'shape' | 'canvas' | 'handle'; shapeId?: ShapeId; handleId?: string }
-  | { type: 'pointerMove'; point: Vec2; screenPoint?: Vec2 }
-  | { type: 'pointerUp';   point: Vec2; screenPoint?: Vec2 }
+  | { type: 'pointerMove'; point: Vec2; screenPoint?: Vec2; shiftKey?: boolean; altKey?: boolean }
+  | { type: 'pointerUp';   point: Vec2; screenPoint?: Vec2; shiftKey?: boolean; altKey?: boolean }
   | { type: 'keyDown';     key: string }
   | { type: 'doubleClick'; point: Vec2; shapeId?: ShapeId };
 

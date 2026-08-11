@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createEditor } from './editor';
 import { BoxUtil } from './shapes/BoxUtil';
+import { GroupUtil } from './shapes/GroupUtil';
 import { ArrowPlugin, type ArrowShape, type ArrowRouteStyle } from './shapes/ArrowUtil';
 import { BoxTool } from './tools/BoxTool';
 import { SelectTool } from './tools/SelectTool';
@@ -8,7 +9,7 @@ import { sid, type Box2d, type ShapeId, type Vec2 } from './types';
 import { buildArrowBindingRecord, buildArrowShapeRecord, resolveConnectionTerminal } from './arrow-records';
 import { resolveArrowRoute } from './arrow-routing';
 
-const BoxPlugin = { id: 'box', shapes: [BoxUtil as any] };
+const BoxPlugin = { id: 'box', shapes: [BoxUtil as any, GroupUtil as any] };
 
 function makeEditor() {
   return createEditor({
@@ -282,5 +283,42 @@ describe('Phase 6 smart routing', () => {
     expect(route.didFallback).not.toBe(true);
     expect(route.renderKind).toBe('polyline');
     expect(routeIntersectsBoxInterior(route.worldPoints, obstacleBounds)).toBe(false);
+  });
+
+  it('preserves a bound orthogonal route when its diagram is grouped', () => {
+    const editor = makeEditor();
+    const fromId = createBox(editor, 'box:group-from', 120, 80, 140, 100);
+    const toId = createBox(editor, 'box:group-to', 460, 360, 140, 100);
+    const arrow = createBoundArrow(editor, 'shape:group-route', fromId, toId, 'ortho');
+    const before = resolveArrowRoute(editor, arrow).worldPoints;
+
+    editor.groupShapes([fromId, toId, arrow.id as ShapeId]);
+
+    const groupedArrow = editor.getShape<ArrowShape>(arrow.id as ShapeId)!;
+    const after = resolveArrowRoute(editor, groupedArrow).worldPoints;
+    expect(after).toHaveLength(before.length);
+    after.forEach((point, index) => {
+      expect(point.x).toBeCloseTo(before[index]!.x, 7);
+      expect(point.y).toBeCloseTo(before[index]!.y, 7);
+    });
+
+    const group = editor.getShape(groupedArrow.parentId as ShapeId)!;
+    const routeBeforeRotation = resolveArrowRoute(editor, groupedArrow).localPoints;
+    const boundsBeforeRotation = editor.getShapeLocalBounds(group.id as ShapeId);
+    editor.updateShape(group.id as ShapeId, { rotation: Math.PI / 3 });
+    const routeAfterRotation = resolveArrowRoute(
+      editor,
+      editor.getShape<ArrowShape>(arrow.id as ShapeId)!,
+    ).localPoints;
+    const boundsAfterRotation = editor.getShapeLocalBounds(group.id as ShapeId);
+    expect(routeAfterRotation).toHaveLength(routeBeforeRotation.length);
+    routeAfterRotation.forEach((point, index) => {
+      expect(point.x).toBeCloseTo(routeBeforeRotation[index]!.x, 7);
+      expect(point.y).toBeCloseTo(routeBeforeRotation[index]!.y, 7);
+    });
+    expect(boundsAfterRotation.x).toBeCloseTo(boundsBeforeRotation.x, 7);
+    expect(boundsAfterRotation.y).toBeCloseTo(boundsBeforeRotation.y, 7);
+    expect(boundsAfterRotation.w).toBeCloseTo(boundsBeforeRotation.w, 7);
+    expect(boundsAfterRotation.h).toBeCloseTo(boundsBeforeRotation.h, 7);
   });
 });

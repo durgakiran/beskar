@@ -58,7 +58,7 @@ export function getViewportShapeEntries(editor: GlideEditor): ViewportShapeEntry
   const entries: ViewportShapeEntry[] = [];
   for (let index = 0; index < orderedIds.length; index++) {
     const id = orderedIds[index]!;
-    if (ids.has(id)) entries.push({ id, zIndex: index + 1 });
+    if (ids.has(id) && !editor.isShapeEffectivelyHidden(id)) entries.push({ id, zIndex: index + 1 });
   }
   return entries;
 }

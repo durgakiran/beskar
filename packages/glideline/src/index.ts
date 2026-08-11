@@ -26,6 +26,8 @@ export {
   rotationMatrix,
   invertMatrix,
   applyMatrixToPoint,
+  applyMatrixToVector,
+  getMatrixRotation,
   matrixToSvg,
 } from './transform';
 export type { Matrix2d } from './transform';
@@ -38,7 +40,13 @@ export { defineMigrations, migrateRecord, migrateRecordDown } from './migrations
 
 // Schema
 export {
-  GlideSchema, DocumentValidationError, CURRENT_STORE_VERSION, DEFAULT_DOCUMENT_LIMITS,
+  GlideSchema,
+  DocumentValidationError,
+  CURRENT_STORE_VERSION,
+  DEFAULT_DOCUMENT_LIMITS,
+  DEFAULT_PAGE_ID,
+  DEFAULT_PAGE_INDEX,
+  createDefaultPageRecord,
 } from './schema';
 export type { DocumentLimits, LoadReport, LoadedDocument } from './schema';
 
@@ -72,6 +80,8 @@ export type {
 export { ShapeUtil, BindingUtil } from './shapes/ShapeUtil';
 export { BoxUtil } from './shapes/BoxUtil';
 export { FrameUtil } from './shapes/FrameUtil';
+export { GroupUtil } from './shapes/GroupUtil';
+export type { GroupShape } from './shapes/GroupUtil';
 export { TextUtil } from './shapes/TextUtil';
 
 // Phase 3 — State machine + history + tools
@@ -86,12 +96,17 @@ export { InteractionManager, InteractionConflictError } from './interaction';
 export type { InteractionConflict, InteractionCommitOptions } from './interaction';
 export { SelectTool } from './tools/SelectTool';
 export { BoxTool } from './tools/BoxTool';
+export { FrameTool } from './tools/FrameTool';
+export { SnapManager } from './snapping';
+export type { SnapSettings, SnapGuide, SnapTranslationResult, SnapDimensionsResult } from './snapping';
 
 // Editor
 export { GlideEditor, createEditor } from './editor';
 export type {
   GlidePlugin, CreateEditorOptions, ClipboardSchemaHeader, ClipboardPayload,
-  EditorCommand, ExecuteCommandOptions, AssetResolver,
+  EditorCommand, ExecuteCommandOptions, AssetResolver, AlignOperation,
+  DistributeAxis, DistributeMode, MatchSizeOperation, FlipAxis, TidyLayout,
+  ShapePrecisionPatch,
 } from './editor';
 
 // Phase 4 — Bindings & Arrow Routing

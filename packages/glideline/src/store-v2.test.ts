@@ -80,7 +80,8 @@ describe('store-v2 loading and record capabilities', () => {
     const shapes = loaded.records.filter(record => record['kind'] === 'shape');
     const page = loaded.records.find(record => record['kind'] === 'page');
     expect(page).toMatchObject({ id: 'page:default', name: 'Page 1' });
-    expect(new Set(shapes.map(record => record['pageId']))).toEqual(new Set(['page:default']));
+    expect(new Set(shapes.map(record => record['parentId']))).toEqual(new Set(['page:default']));
+    expect(shapes.every(record => record['isLocked'] === false && record['isHidden'] === false)).toBe(true);
     expect(new Set(shapes.map(record => record['index'])).size).toBe(2);
   });
 
@@ -146,7 +147,7 @@ describe('atomic document replacement', () => {
 
     expect(store.get('old')).toBeUndefined();
     expect(store.get('new')).toBeDefined();
-    expect(report.recordCount).toBe(1);
+    expect(report.recordCount).toBe(2);
     expect(report.targetStoreVersion).toBe(CURRENT_STORE_VERSION);
   });
 
@@ -205,6 +206,6 @@ describe('graph-aware import', () => {
     ])).toThrow('cannot detach external binding toId');
 
     expect(store.revision).toBe(revision);
-    expect(store.serialize().records.map(record => record.id)).toEqual(['existing']);
+    expect(store.serialize().records.map(record => record.id)).toEqual(['existing', 'page:default']);
   });
 });

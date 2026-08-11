@@ -21,7 +21,10 @@ function createBoxRecord(id: string, x: number, y: number, index = 'a0001') {
 }
 
 function getRecordIds(document: GlideDocument): string[] {
-  return document.records.map(record => String(record.id)).sort();
+  return document.records
+    .filter(record => record.kind !== 'page')
+    .map(record => String(record.id))
+    .sort();
 }
 
 function createDocument(id: string): GlideDocument {
@@ -104,7 +107,7 @@ describe('GlideboardController', () => {
       expect(controllerA.isCanvasDraggingRef.current).toBe(true);
       expect(controllerA.deferredToolRestoreRef.current).toBe('box');
 
-      expect(controllerB.editor.serialize().records).toEqual([]);
+      expect(controllerB.editor.serialize().records.filter(record => record.kind !== 'page')).toEqual([]);
       expect(controllerB.editor.camera.getCamera()).toEqual({ x: 0, y: 0, z: 1 });
       expect(controllerB.editor.getSelectedShapeIds()).toEqual([]);
       expect(controllerB.editor.history.undoStack).toHaveLength(0);
@@ -158,7 +161,7 @@ describe('GlideboardController', () => {
 
       controller.clearDocument();
 
-      expect(controller.editor.serialize().records).toHaveLength(0);
+      expect(controller.editor.serialize().records.filter(record => record.kind !== 'page')).toHaveLength(0);
       const undoStack = controller.editor.history.undoStack;
       expect(undoStack[undoStack.length - 1]?.label).toBe('Clear Document');
       controller.editor.undo();
@@ -190,7 +193,7 @@ describe('GlideboardController', () => {
         }],
       });
 
-      expect(report.recordCount).toBe(1);
+      expect(report.recordCount).toBe(2);
       expect(getRecordIds(controller.editor.serialize())).toEqual(['shape:new']);
       expect(controller.editor.getSelectedShapeIds()).toEqual([]);
       expect(controller.editor.history.undoStack).toHaveLength(0);
@@ -258,7 +261,7 @@ describe('GlideboardController', () => {
 
       expect(onDocumentChange).not.toHaveBeenCalled();
       expect(controller.editor.getShape('shape:preview' as any)).toBeDefined();
-      expect(controller.editor.serialize().records).toHaveLength(0);
+      expect(controller.editor.serialize().records.filter(record => record.kind !== 'page')).toHaveLength(0);
 
       controller.editor.createShape(createBoxRecord('shape:final', 30, 40) as any);
       await vi.advanceTimersByTimeAsync(25);
@@ -573,8 +576,8 @@ describe('GlideboardController', () => {
 
       expect(controllerA.awarenessSignal.peek()).toBe(awarenessA);
       expect(controllerB.awarenessSignal.peek()).toBe(awarenessB);
-      expect(docA.getMap('glideboard-records-v2').size).toBe(1);
-      expect(docB.getMap('glideboard-records-v2').size).toBe(1);
+      expect(docA.getMap('glideboard-records-v2').size).toBe(2);
+      expect(docB.getMap('glideboard-records-v2').size).toBe(2);
 
       controllerA.dispose();
 
@@ -584,8 +587,8 @@ describe('GlideboardController', () => {
       expect(awarenessB.setLocalStateField).toHaveBeenCalledTimes(1);
 
       controllerB.editor.createShape(createBoxRecord('shape:b2', 50, 60, 'a0002') as any);
-      expect(docA.getMap('glideboard-records-v2').size).toBe(1);
-      expect(docB.getMap('glideboard-records-v2').size).toBe(2);
+      expect(docA.getMap('glideboard-records-v2').size).toBe(2);
+      expect(docB.getMap('glideboard-records-v2').size).toBe(3);
     } finally {
       controllerA.dispose();
       controllerB.dispose();
@@ -834,7 +837,7 @@ describe('GlideboardController', () => {
       expect(() => controller.editor.createShape(
         createBoxRecord('shape:blocked', 10, 20) as any,
       )).toThrow(MutationPermissionError);
-      expect(controller.editor.serialize().records).toHaveLength(0);
+      expect(controller.editor.serialize().records.filter(record => record.kind !== 'page')).toHaveLength(0);
 
       fence.release();
       fence.release();
@@ -977,7 +980,7 @@ describe('GlideboardController', () => {
     });
     try {
       await expect(controller.importRaster(png, 'image/png')).rejects.toThrow('storage unavailable');
-      expect(controller.editor.serialize().records).toHaveLength(0);
+      expect(controller.editor.serialize().records.filter(record => record.kind !== 'page')).toHaveLength(0);
     } finally {
       void controller.dispose();
     }

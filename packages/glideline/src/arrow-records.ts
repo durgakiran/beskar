@@ -38,6 +38,9 @@ export function buildArrowShapeRecord(args: {
     y: args.startWorld.y,
     index: args.index ?? 'a1',
     rotation: 0,
+    parentId: 'page:default' as any,
+    isLocked: false,
+    isHidden: false,
     meta: {},
     props: {
       start: makeTerminal({ x: 0, y: 0 }),

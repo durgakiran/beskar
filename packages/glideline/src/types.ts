@@ -75,10 +75,11 @@ export interface GlideShape<Props extends object = Record<string, unknown>>
   index: string;
   /** Rotation in radians */
   rotation: number;
-  /** Optional hierarchy/order parent; current x/y remain page-space. */
-  parentId?: ShapeId;
-  /** Optional page scope for root shapes. */
-  pageId?: PageId;
+  /** Required ownership parent. Coordinates are local to this parent. */
+  parentId: PageId | ShapeId;
+  isLocked: boolean;
+  isHidden: boolean;
+  name?: string;
   props: Props;
   meta: Record<string, unknown>;
 }
@@ -97,6 +98,7 @@ export interface GlidePage extends BaseRecord {
   readonly id: PageId;
   readonly kind?: 'page';
   name: string;
+  index: string;
   meta: Record<string, unknown>;
 }
 

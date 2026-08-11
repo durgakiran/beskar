@@ -9,7 +9,9 @@ import type { ResizeHandle, ResizeInfo } from '../shapes/ShapeUtil';
 import {
   applyMatrixToPoint,
   invertMatrix,
+  multiplyMatrices,
   rotationMatrix,
+  translationMatrix,
   type Matrix2d,
 } from '../transform';
 
@@ -107,7 +109,15 @@ class Idle extends StateNode {
             return [id, JSON.parse(JSON.stringify(s))] as [ShapeId, import('../types').GlideShape];
           }).filter(Boolean) as [ShapeId, import('../types').GlideShape][]);
 
-          this.parent!.transition('draggingRotation', { shapeIds: sel, center, initialRotation: initRot, initialCenters, initialShapes, startAngle });
+          const initialWorldTransforms = new Map(sel.map(id => [
+            id,
+            this.editor.getWorldTransform(id),
+          ] as [ShapeId, Matrix2d]));
+
+          this.parent!.transition('draggingRotation', {
+            shapeIds: sel, center, initialRotation: initRot, initialCenters,
+            initialShapes, initialWorldTransforms, startAngle,
+          });
           return;
         }
       }
@@ -115,6 +125,11 @@ class Idle extends StateNode {
       // Resize handle
       const resizeHandles = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'];
       if (resizeHandles.includes(e.handleId)) {
+        if (sel.length === 1) {
+          const shape = this.editor.getShape(sel[0]!);
+          if (!shape || !this.editor.getShapeUtil(shape.type)
+            .getResizeHandles(shape as any).includes(e.handleId as ResizeHandle)) return;
+        }
         const boxes = sel.map(id => {
           const s = this.editor.getShape(id); if (!s) return null;
           return this.editor.getShapeWorldBounds(s);
@@ -126,16 +141,31 @@ class Idle extends StateNode {
         const maxY = Math.max(...boxes.map((b: any) => b.maxY));
         const initialBounds = makeBox(minX, minY, maxX - minX, maxY - minY);
 
-        const initialGeom = new Map(sel.map(id => {
+          const initialGeom = new Map(sel.map(id => {
           const s = this.editor.getShape(id); if (!s) return null;
           const b = this.editor.getShapeUtil(s.type).getGeometry(s as any).getBounds();
           const clone = JSON.parse(JSON.stringify(s));
           return [id, { shape: clone, bounds: b, worldTransform: this.editor.getWorldTransform(id) }];
-        }).filter(Boolean) as [ShapeId, {
+          }).filter(Boolean) as [ShapeId, {
           shape: import('../types').GlideShape;
           bounds: import('../types').Box2d;
           worldTransform: Matrix2d;
-        }][]);
+          }][]);
+          let groupDescendants: DraggingResizeState['groupDescendants'];
+          if (sel.length === 1 && this.editor.getShape(sel[0]!)?.type === 'group') {
+            groupDescendants = new Map();
+            const visit = (parentId: ShapeId) => {
+              for (const child of this.editor.getChildren(parentId)) {
+                groupDescendants!.set(child.id as ShapeId, {
+                  shape: JSON.parse(JSON.stringify(child)),
+                  worldTransform: this.editor.getWorldTransform(child.id as ShapeId),
+                  depth: this.editor.getAncestors(child.id as ShapeId).length,
+                });
+                visit(child.id as ShapeId);
+              }
+            };
+            visit(sel[0]!);
+          }
         
         this.parent!.transition('draggingResize', {
           shapeIds: sel,
@@ -143,6 +173,7 @@ class Idle extends StateNode {
           origin: e.point,
           initialGeom,
           initialBounds,
+          groupDescendants,
         });
         return;
       }
@@ -150,9 +181,15 @@ class Idle extends StateNode {
 
     // Standard shape/canvas pointing logic
     if (e.target === 'shape' && e.shapeId) {
+      const selectableId = this.editor.getSelectableShapeId(e.shapeId);
+      if (!selectableId) {
+        this.parent!.transition('pointingCanvas', { ...e, target: 'canvas', shapeId: undefined });
+        return;
+      }
+      e = { ...e, shapeId: selectableId };
       // Select on enter if not already selected
-      if (!e.shiftKey && !this.editor.getSelectedShapeIds().includes(e.shapeId)) {
-        this.editor.setSelectedShapeIds([e.shapeId]);
+      if (!e.shiftKey && !this.editor.getSelectedShapeIds().includes(selectableId)) {
+        this.editor.setSelectedShapeIds([selectableId]);
       }
       this.parent!.transition('pointingShape', e);
     } else {
@@ -184,13 +221,15 @@ class Idle extends StateNode {
 
   override onDoubleClick(e: DoubleClickEvent): void {
     if (e.shapeId) {
-      const shape = this.editor.getShape(e.shapeId);
+      const selectableId = this.editor.getSelectableShapeId(e.shapeId) ?? e.shapeId;
+      const shape = this.editor.getShape(selectableId);
       if (!shape) return;
+      if (shape.type === 'group' && this.editor.enterGroup(shape.id as ShapeId)) return;
       const util = this.editor.getShapeUtil(shape.type);
       if (util.canEditLabel(shape as any)) {
-        this.editor.setSelectedShapeIds([e.shapeId]);
+        this.editor.setSelectedShapeIds([selectableId]);
         this.editor.startEditing(
-          e.shapeId,
+          selectableId,
           util.getTextEditProps(shape as any, e.point) ?? undefined,
         );
       }
@@ -225,6 +264,7 @@ class PointingShape extends StateNode {
 
       // Alt+drag: duplicate first, then drag the copies
       let startPositions = this._capturePositions();
+      if (startPositions.size === 0) return;
       if ((e as any).altKey) {
         const origIds = Array.from(startPositions.keys());
         const newIds = this.editor.duplicateShapes(origIds, { x: 0, y: 0 });
@@ -239,9 +279,18 @@ class PointingShape extends StateNode {
         this.editor.setSelectedShapeIds(Array.from(startPositions.keys()));
       }
 
+      const initialShapes = new Map<ShapeId, import('../types').GlideShape>();
+      for (const id of startPositions.keys()) {
+        const shape = this.editor.getShape(id);
+        if (!shape) continue;
+        initialShapes.set(id, JSON.parse(JSON.stringify(shape)));
+        const parent = this.editor.getShape(shape.parentId as ShapeId);
+        if (parent?.type === 'group') initialShapes.set(parent.id as ShapeId, JSON.parse(JSON.stringify(parent)));
+      }
       this.parent!.transition('dragging', {
         origin: this._origin,
         startPositions,
+        initialShapes,
         constrainAxis: false,
       });
     }
@@ -265,9 +314,20 @@ class PointingShape extends StateNode {
 
   private _capturePositions(): Map<ShapeId, Vec2> {
     const map = new Map<ShapeId, Vec2>();
-    for (const id of this.editor.getSelectedShapeIds()) {
+    const selected = new Set(this.editor.getSelectedShapeIds());
+    for (const id of selected) {
       const shape = this.editor.getShape(id);
-      if (shape) map.set(id, { x: shape.x, y: shape.y });
+      if (!shape || this.editor.isShapeEffectivelyLocked(id)) continue;
+      let parent = this.editor.getShape(shape.parentId as ShapeId);
+      let hasSelectedAncestor = false;
+      while (parent) {
+        if (selected.has(parent.id as ShapeId)) {
+          hasSelectedAncestor = true;
+          break;
+        }
+        parent = this.editor.getShape(parent.parentId as ShapeId);
+      }
+      if (!hasSelectedAncestor) map.set(id, { x: shape.x, y: shape.y });
     }
     return map;
   }
@@ -282,13 +342,23 @@ class Dragging extends StateNode {
 
   private _origin!: Vec2;
   private _startPositions!: Map<ShapeId, Vec2>;
+  private _initialShapes!: Map<ShapeId, import('../types').GlideShape>;
+  private _initialBounds!: import('../types').Box2d;
   /** 'x' | 'y' | null — determined on first significant move when shift held */
   private _axis: 'x' | 'y' | null = null;
 
-  override onEnter(info: { origin: Vec2; startPositions: Map<ShapeId, Vec2>; constrainAxis?: boolean }): void {
+  override onEnter(info: { origin: Vec2; startPositions: Map<ShapeId, Vec2>; initialShapes: Map<ShapeId, import('../types').GlideShape>; constrainAxis?: boolean }): void {
     this._origin         = info.origin;
     this._startPositions = info.startPositions;
+    this._initialShapes = info.initialShapes;
     this._axis           = null;
+    const boxes = [...this._startPositions.keys()].map(id => this.editor.getShapeVisualWorldBounds(id));
+    this._initialBounds = makeBox(
+      Math.min(...boxes.map(box => box.minX)),
+      Math.min(...boxes.map(box => box.minY)),
+      Math.max(...boxes.map(box => box.maxX)) - Math.min(...boxes.map(box => box.minX)),
+      Math.max(...boxes.map(box => box.maxY)) - Math.min(...boxes.map(box => box.minY)),
+    );
     this.editor.beginHistoryPreview();
   }
 
@@ -310,9 +380,18 @@ class Dragging extends StateNode {
       this._axis = null;
     }
 
+    const snapped = this.editor.snapping.snapTranslation(
+      this.editor, [...this._startPositions.keys()], this._initialBounds, { x: dx, y: dy }, Boolean(e.altKey),
+    );
+    dx = snapped.delta.x;
+    dy = snapped.delta.y;
+
     this.editor.batch('Drag', () => {
       for (const [id, start] of this._startPositions) {
-        this.editor.updateShape(id, { x: start.x + dx, y: start.y + dy });
+        const shape = this.editor.getShape(id);
+        if (!shape) continue;
+        const delta = this.editor.pageDeltaToParent(shape.parentId, { x: dx, y: dy });
+        this.editor.updateShape(id, { x: start.x + delta.x, y: start.y + delta.y });
       }
     }, { history: 'ignore' }); // live preview — not a history record
   }
@@ -323,6 +402,11 @@ class Dragging extends StateNode {
     let fdx = dx, fdy = dy;
     if (this._axis === 'x') fdy = 0;
     if (this._axis === 'y') fdx = 0;
+    const snapped = this.editor.snapping.snapTranslation(
+      this.editor, [...this._startPositions.keys()], this._initialBounds, { x: fdx, y: fdy }, Boolean(_e.altKey),
+    );
+    fdx = snapped.delta.x;
+    fdy = snapped.delta.y;
     const startPositions = this._startPositions;
 
     // Publish the final pointer location atomically as an ignored preview.
@@ -331,15 +415,16 @@ class Dragging extends StateNode {
     // snapshots explicitly below.
     this.editor.batch('Move Shapes Preview', () => {
       for (const [id, start] of startPositions) {
-        this.editor.updateShape(id, { x: start.x + fdx, y: start.y + fdy });
+        const shape = this.editor.getShape(id);
+        if (!shape) continue;
+        const delta = this.editor.pageDeltaToParent(shape.parentId, { x: fdx, y: fdy });
+        this.editor.updateShape(id, { x: start.x + delta.x, y: start.y + delta.y });
       }
+      this._captureFrameDrop(_e.point);
     }, { history: 'ignore' });
 
     const before = new Map<string, AnyRecord | null>();
-    for (const [id, start] of startPositions) {
-      const current = this.editor.getShape(id);
-      if (current) before.set(id, { ...current, x: start.x, y: start.y });
-    }
+    for (const [id, initial] of this._initialShapes) before.set(id, initial as unknown as AnyRecord);
     this.editor.recordHistoryPreview('Move Shapes', before);
 
     this.parent!.transition('idle');
@@ -359,7 +444,33 @@ class Dragging extends StateNode {
   }
 
   override onExit(): void {
+    this.editor.snapping.clearGuides();
     this.editor.cancelHistoryPreview();
+  }
+
+  private _captureFrameDrop(point: Vec2): void {
+    const moved = new Set(this._startPositions.keys());
+    const frame = this.editor.getTopShapeAtPoint(point, shape => {
+      if (shape.type !== 'frame' || moved.has(shape.id as ShapeId)) return false;
+      if (this.editor.isShapeEffectivelyLocked(shape.id as ShapeId)) return false;
+      return !this.editor.getAncestors(shape.id as ShapeId).some(parent => moved.has(parent.id as ShapeId));
+    });
+    if (frame) {
+      const ids = [...moved].filter(id => this.editor.getShape(id)?.parentId !== frame.id);
+      if (ids.length > 0) this.editor.reparentShapes(ids, frame.id as ShapeId);
+      return;
+    }
+    const byTarget = new Map<string, ShapeId[]>();
+    for (const id of moved) {
+      const shape = this.editor.getShape(id);
+      const parent = shape ? this.editor.getShape(shape.parentId as ShapeId) : undefined;
+      if (!shape || parent?.type !== 'frame') continue;
+      const target = parent.parentId;
+      const ids = byTarget.get(target) ?? [];
+      ids.push(id);
+      byTarget.set(target, ids);
+    }
+    for (const [target, ids] of byTarget) this.editor.reparentShapes(ids, target as any);
   }
 }
 
@@ -379,6 +490,7 @@ class DraggingHandle extends StateNode {
   /** World-space arrow position at drag start (= shape.x, shape.y). */
   private _initialArrowX!: number;
   private _initialArrowY!: number;
+  private _initialEndWorld!: Vec2;
 
   override onEnter(info: {
     arrowId: ShapeId;
@@ -398,6 +510,7 @@ class DraggingHandle extends StateNode {
     this._initialArrow = JSON.parse(JSON.stringify(arrow)) as ArrowShape;
     this._initialArrowX = arrow?.x ?? 0;
     this._initialArrowY = arrow?.y ?? 0;
+    this._initialEndWorld = this.editor.localToPage(info.arrowId, arrow.props.end.point);
     this.editor.beginHistoryPreview();
   }
 
@@ -477,8 +590,9 @@ class DraggingHandle extends StateNode {
         const perpX = dy / chord;
         const perpY = -dx / chord;
         // The bend handle's world position relative to the arrow's origin
-        const localCursorX = e.point.x - arrow.x;
-        const localCursorY = e.point.y - arrow.y;
+        const localCursor = this.editor.pageToLocal(this._arrowId, e.point);
+        const localCursorX = localCursor.x;
+        const localCursorY = localCursor.y;
         const px = localCursorX - mx;
         const py = localCursorY - my;
         const dist_perp = px * perpX + py * perpY;
@@ -503,8 +617,8 @@ class DraggingHandle extends StateNode {
           // Simpler: new start world = cursor; new end local = old_world_end - cursor_world_start
           const nextStartWorldX = e.point.x;
           const nextStartWorldY = e.point.y;
-          const oldWorldEndX = this._initialArrowX + this._initialProps.end.point.x;
-          const oldWorldEndY = this._initialArrowY + this._initialProps.end.point.y;
+          const oldWorldEndX = this._initialEndWorld.x;
+          const oldWorldEndY = this._initialEndWorld.y;
 
           const otherTerminal = 'end';
           const otherBoundId = arrow.props[otherTerminal].boundShapeId;
@@ -530,9 +644,17 @@ class DraggingHandle extends StateNode {
             this.editor.clearBindingPreview();
           }
 
-          this.editor.updateShape(this._arrowId, {
+          const parentStart = this.editor.pageToParent(arrow.parentId, {
             x: finalStartX,
             y: finalStartY,
+          });
+          const parentEnd = this.editor.pageToParent(arrow.parentId, {
+            x: oldWorldEndX,
+            y: oldWorldEndY,
+          });
+          this.editor.updateShape(this._arrowId, {
+            x: parentStart.x,
+            y: parentStart.y,
             props: {
               ...arrow.props,
               start: {
@@ -543,19 +665,15 @@ class DraggingHandle extends StateNode {
               end: {
                 ...arrow.props.end,
                 point: {
-                  x: oldWorldEndX - finalStartX,
-                  y: oldWorldEndY - finalStartY,
+                  x: parentEnd.x - parentStart.x,
+                  y: parentEnd.y - parentStart.y,
                 },
               },
             }
           });
         } else {
           // Moving the end terminal: end.point changes (local offset)
-          const initEndLocal = this._initialProps.end.point;
-          const nextEndWorldX = e.point.x;
-          const nextEndWorldY = e.point.y;
-          const arrowX = (this.editor.getShape(this._arrowId) as ArrowShape)?.x ?? 0;
-          const arrowY = (this.editor.getShape(this._arrowId) as ArrowShape)?.y ?? 0;
+          const localEnd = this.editor.pageToLocal(this._arrowId, e.point);
 
           const otherTerminal = 'start';
           const otherBoundId = arrow.props[otherTerminal].boundShapeId;
@@ -564,16 +682,17 @@ class DraggingHandle extends StateNode {
             shape => shape.type !== 'arrow' && shape.id !== otherBoundId && shape.id !== this._arrowId,
           );
 
-          let finalEndLocalX = nextEndWorldX - arrowX;
-          let finalEndLocalY = nextEndWorldY - arrowY;
+          let finalEndLocalX = localEnd.x;
+          let finalEndLocalY = localEnd.y;
           let boundShapeId: ShapeId | null = null;
           let normalizedAnchor = { x: 0.5, y: 0.5 };
 
           if (targetShape) {
             const preview = buildBindingPreview(this.editor, targetShape as any, e.point, 'end');
             const snapped = { normalizedAnchor: preview.normalizedAnchor, point: preview.point };
-            finalEndLocalX = snapped.point.x - arrowX;
-            finalEndLocalY = snapped.point.y - arrowY;
+            const snappedLocal = this.editor.pageToLocal(this._arrowId, snapped.point);
+            finalEndLocalX = snappedLocal.x;
+            finalEndLocalY = snappedLocal.y;
             boundShapeId = targetShape.id as ShapeId;
             normalizedAnchor = snapped.normalizedAnchor;
             this.editor.setBindingPreview(preview);
@@ -607,8 +726,7 @@ class DraggingHandle extends StateNode {
     }
 
     const finalProps = { ...arrow.props };
-    const finalArrowX = arrow.x;
-    const finalArrowY = arrow.y;
+    const finalEndWorld = this.editor.localToPage(this._arrowId, finalProps.end.point);
     let newBindingId: string | null = null;
 
     // Finalize bindings and the last pointer position as one publication. The
@@ -638,8 +756,8 @@ class DraggingHandle extends StateNode {
 
             if (term === 'start') {
               // World end = arrow.x + end.point (local)
-              const worldEndX = finalArrowX + finalProps.end.point.x;
-              const worldEndY = finalArrowY + finalProps.end.point.y;
+              const parentStart = this.editor.pageToParent(arrow.parentId, snapped.point);
+              const parentEnd = this.editor.pageToParent(arrow.parentId, finalEndWorld);
               finalProps.start = {
                 boundShapeId: targetShape.id as ShapeId,
                 normalizedAnchor: snapped.normalizedAnchor,
@@ -648,20 +766,21 @@ class DraggingHandle extends StateNode {
               finalProps.end = {
                 ...finalProps.end,
                 point: {
-                  x: worldEndX - snapped.point.x,
-                  y: worldEndY - snapped.point.y,
+                  x: parentEnd.x - parentStart.x,
+                  y: parentEnd.y - parentStart.y,
                 },
               };
               // Update arrow world position to match new start anchor
-              this.editor.updateShape(this._arrowId, { x: snapped.point.x, y: snapped.point.y });
+              this.editor.updateShape(this._arrowId, { x: parentStart.x, y: parentStart.y });
             } else {
               // end terminal: store as local offset from arrow.x/y
+              const snappedLocal = this.editor.pageToLocal(this._arrowId, snapped.point);
               finalProps.end = {
                 boundShapeId: targetShape.id as ShapeId,
                 normalizedAnchor: snapped.normalizedAnchor,
                 point: {
-                  x: snapped.point.x - finalArrowX,
-                  y: snapped.point.y - finalArrowY,
+                  x: snappedLocal.x,
+                  y: snappedLocal.y,
                 },
               };
             }
@@ -784,7 +903,9 @@ class MarqueeSelecting extends StateNode {
   override onPointerUp(e: PointerUpEvent): void {
     this._updateMarquee(e.point);
     const shapes = this.editor.getShapesInBox(this.marqueeBoxSignal.peek());
-    this.editor.setSelectedShapeIds(shapes.map(s => s.id as ShapeId));
+    this.editor.setSelectedShapeIds([...new Set(shapes
+      .map(shape => this.editor.getSelectableShapeId(shape.id as ShapeId))
+      .filter((id): id is ShapeId => id !== null))]);
     this.marqueeBoxSignal.value = makeBox(0, 0, 0, 0);
     this.parent!.transition('idle');
   }
@@ -821,6 +942,11 @@ export interface DraggingResizeState {
     worldTransform: Matrix2d;
   }>;
   initialBounds: import('../types').Box2d;
+  groupDescendants?: Map<ShapeId, {
+    shape: import('../types').GlideShape;
+    worldTransform: Matrix2d;
+    depth: number;
+  }>;
 }
 
 class DraggingResize extends StateNode {
@@ -835,17 +961,20 @@ class DraggingResize extends StateNode {
 
   override onPointerMove(e: PointerMoveEvent): void {
     this.editor.batch('Resize Preview', () => {
-      this._applyResize(e.point, (e as any).shiftKey ?? false);
+      this._applyResize(e.point, (e as any).shiftKey ?? false, (e as any).altKey ?? false);
     }, { history: 'ignore' });
   }
 
   override onPointerUp(e: PointerUpEvent): void {
     this.editor.batch('Resize Shapes Preview', () => {
-      this._applyResize(e.point, (e as any).shiftKey ?? false);
+      this._applyResize(e.point, (e as any).shiftKey ?? false, (e as any).altKey ?? false);
     }, { history: 'ignore' });
 
     const before = new Map<string, AnyRecord | null>();
     for (const [id, { shape }] of this._info.initialGeom) {
+      before.set(id, shape as unknown as AnyRecord);
+    }
+    for (const [id, { shape }] of this._info.groupDescendants ?? []) {
       before.set(id, shape as unknown as AnyRecord);
     }
     this.editor.recordHistoryPreview('Resize Shapes', before);
@@ -862,6 +991,9 @@ class DraggingResize extends StateNode {
             props: shape.props as any,
           });
         }
+        for (const [id, { shape }] of this._info.groupDescendants ?? []) {
+          this.editor.updateShape(id, { x: shape.x, y: shape.y, rotation: shape.rotation, props: shape.props as any });
+        }
       }, { history: 'ignore' });
       this.editor.cancelHistoryPreview();
       this.parent!.transition('idle');
@@ -869,11 +1001,16 @@ class DraggingResize extends StateNode {
   }
 
   override onExit(): void {
+    this.editor.snapping.clearGuides();
     this.editor.cancelHistoryPreview();
   }
 
-  private _applyResize(cursor: Vec2, constrainAspect: boolean): void {
+  private _applyResize(cursor: Vec2, constrainAspect: boolean, disableSnap: boolean): void {
     const { handle, origin, initialGeom, initialBounds } = this._info;
+    if (this._info.groupDescendants) {
+      this._applyGroupResize(cursor, constrainAspect);
+      return;
+    }
     if (initialGeom.size === 1) {
       const entry = initialGeom.entries().next().value as [ShapeId, {
         shape: import('../types').GlideShape;
@@ -881,7 +1018,7 @@ class DraggingResize extends StateNode {
         worldTransform: Matrix2d;
       }] | undefined;
       if (entry) {
-        this._applySingleOrientedResize(entry[0], entry[1], cursor, constrainAspect);
+        this._applySingleOrientedResize(entry[0], entry[1], cursor, constrainAspect, disableSnap);
         return;
       }
     }
@@ -932,11 +1069,87 @@ class DraggingResize extends StateNode {
     }
   }
 
+  private _applyGroupResize(cursor: Vec2, _constrainAspect: boolean): void {
+    const { handle, origin, groupDescendants, initialGeom, shapeIds } = this._info;
+    const groupId = shapeIds[0];
+    const groupInitial = groupId ? initialGeom.get(groupId) : undefined;
+    if (!groupDescendants || !groupInitial) return;
+    const initialBounds = groupInitial.bounds;
+    if (initialBounds.w === 0 || initialBounds.h === 0) return;
+
+    const worldToGroup = invertMatrix(groupInitial.worldTransform);
+    const localCursor = applyMatrixToPoint(worldToGroup, cursor);
+    const localOrigin = applyMatrixToPoint(worldToGroup, origin);
+    const dx = localCursor.x - localOrigin.x;
+    const dy = localCursor.y - localOrigin.y;
+    const requestedX = handle.includes('e') ? (initialBounds.w + dx) / initialBounds.w
+      : handle.includes('w') ? (initialBounds.w - dx) / initialBounds.w : null;
+    const requestedY = handle.includes('s') ? (initialBounds.h + dy) / initialBounds.h
+      : handle.includes('n') ? (initialBounds.h - dy) / initialBounds.h : null;
+    const requested = requestedX !== null && requestedY !== null
+      ? (Math.abs(requestedX - 1) >= Math.abs(requestedY - 1) ? requestedX : requestedY)
+      : requestedX ?? requestedY ?? 1;
+    const scale = Math.max(Math.max(4 / initialBounds.w, 4 / initialBounds.h), requested);
+    const w = initialBounds.w * scale;
+    const h = initialBounds.h * scale;
+    const minX = handle.includes('w') ? initialBounds.maxX - w
+      : handle.includes('e') ? initialBounds.minX
+      : initialBounds.minX + (initialBounds.w - w) / 2;
+    const minY = handle.includes('n') ? initialBounds.maxY - h
+      : handle.includes('s') ? initialBounds.minY
+      : initialBounds.minY + (initialBounds.h - h) / 2;
+    const scaleLocal: Matrix2d = {
+      a: scale, b: 0, c: 0, d: scale,
+      e: minX - initialBounds.minX * scale,
+      f: minY - initialBounds.minY * scale,
+    };
+    const scaleWorld = multiplyMatrices(
+      groupInitial.worldTransform,
+      multiplyMatrices(scaleLocal, worldToGroup),
+    );
+    const entries = [...groupDescendants.entries()].sort((left, right) => left[1].depth - right[1].depth);
+    for (const [id, initial] of entries) {
+      const shape = initial.shape;
+      if (shape.type === 'arrow') {
+        const arrow = shape as ArrowShape;
+        const startWorld = applyMatrixToPoint(scaleWorld, applyMatrixToPoint(initial.worldTransform, arrow.props.start.point));
+        const endWorld = applyMatrixToPoint(scaleWorld, applyMatrixToPoint(initial.worldTransform, arrow.props.end.point));
+        const start = this.editor.pageToParent(shape.parentId, startWorld);
+        const end = this.editor.pageToParent(shape.parentId, endWorld);
+        this.editor.updateShape<ArrowShape>(id, {
+          x: start.x, y: start.y, props: {
+            ...arrow.props,
+            start: { ...arrow.props.start, point: { x: 0, y: 0 } },
+            end: { ...arrow.props.end, point: { x: end.x - start.x, y: end.y - start.y } },
+          },
+        });
+        continue;
+      }
+      const util = this.editor.getShapeUtil(shape.type);
+      const bounds = util.getGeometry(shape as any).getBounds();
+      const resized = shape.type === 'group' ? {} : util.onResize(shape as any, {
+        handle,
+        scaleX: scale,
+        scaleY: scale,
+        initialShape: shape as any,
+        initialBounds: bounds,
+        newBounds: makeBox(bounds.minX, bounds.minY,
+          Math.max(1, bounds.w * scale), Math.max(1, bounds.h * scale)),
+      }) as any;
+      const nextShape = { ...shape, ...resized, x: shape.x, y: shape.y,
+        props: { ...shape.props, ...(resized.props ?? {}) } } as import('../types').GlideShape;
+      const desiredWorld = multiplyMatrices(scaleWorld, initial.worldTransform);
+      const placement = this.editor.transforms.getLocalPlacementForWorldTransform(nextShape, desiredWorld, shape.parentId);
+      this.editor.updateShape(id, { ...resized, ...placement });
+    }
+  }
+
   private _applySingleOrientedResize(
     id: ShapeId,
     initial: { shape: import('../types').GlideShape; bounds: import('../types').Box2d; worldTransform: Matrix2d },
     cursor: Vec2,
     constrainAspect: boolean,
+    disableSnap: boolean,
   ): void {
     const { handle } = this._info;
     const { shape, bounds, worldTransform } = initial;
@@ -960,6 +1173,13 @@ class DraggingResize extends StateNode {
       else if (width / height > aspect) height = width / aspect;
       else width = height * aspect;
     }
+    const snappedDimensions = this.editor.snapping.snapDimensions(
+      this.editor, id, width, height,
+      { width: handle.includes('e') || handle.includes('w'), height: handle.includes('n') || handle.includes('s') },
+      disableSnap,
+    );
+    width = snappedDimensions.width;
+    height = snappedDimensions.height;
 
     const util = this.editor.getShapeUtil(shape.type);
     const localInitialShape = { ...shape, x: bounds.minX, y: bounds.minY };
@@ -987,21 +1207,15 @@ class DraggingResize extends StateNode {
         : handle.includes('s') ? candidate.minY : candidate.minY + candidate.h / 2,
     });
     const fixedPage = applyMatrixToPoint(worldTransform, opposite(bounds));
-    const resizedCenter = {
-      x: resizedBounds.minX + resizedBounds.w / 2,
-      y: resizedBounds.minY + resizedBounds.h / 2,
-    };
-    const rotatedOpposite = applyMatrixToPoint(
-      rotationMatrix(shape.rotation || 0),
-      {
-        x: opposite(resizedBounds).x - resizedCenter.x,
-        y: opposite(resizedBounds).y - resizedCenter.y,
-      },
+    const translation = this.editor.transforms.getTranslationForLocalPoint(
+      resizedShape,
+      opposite(resizedBounds),
+      fixedPage,
     );
     this.editor.updateShape(id, {
       ...result,
-      x: fixedPage.x - resizedCenter.x - rotatedOpposite.x,
-      y: fixedPage.y - resizedCenter.y - rotatedOpposite.y,
+      x: translation.x,
+      y: translation.y,
     });
   }
 }
@@ -1018,6 +1232,7 @@ export interface RotationInfo {
   /** Per-shape center at start */
   initialCenters:  Map<ShapeId, Vec2>;
   initialShapes:   Map<ShapeId, import('../types').GlideShape>;
+  initialWorldTransforms: Map<ShapeId, Matrix2d>;
   /** Angle from center to cursor at drag start (radians). */
   startAngle:      number;
 }
@@ -1077,7 +1292,7 @@ class DraggingRotation extends StateNode {
   }
 
   private _applyRotation(cursor: Vec2, snap: boolean): void {
-    const { center, startAngle, initialRotation, initialCenters } = this._info;
+    const { center, startAngle } = this._info;
     const currentAngle = Math.atan2(cursor.y - center.y, cursor.x - center.x);
     let delta = currentAngle - startAngle;
 
@@ -1086,59 +1301,39 @@ class DraggingRotation extends StateNode {
       delta = Math.round(delta / SNAP_ANGLE) * SNAP_ANGLE;
     }
 
-    const cos = Math.cos(delta);
-    const sin = Math.sin(delta);
+    const orbit = multiplyMatrices(
+      translationMatrix(center.x, center.y),
+      multiplyMatrices(rotationMatrix(delta), translationMatrix(-center.x, -center.y)),
+    );
 
     for (const id of this._info.shapeIds) {
-      const initRot = initialRotation.get(id) ?? 0;
-      const initC = initialCenters.get(id);
       const initS = this._info.initialShapes.get(id);
-      if (!initC || !initS) continue;
-
-      // Orbit center around pivot
-      const dx = initC.x - center.x;
-      const dy = initC.y - center.y;
-      const rotCx = center.x + (dx * cos - dy * sin);
-      const rotCy = center.y + (dx * sin + dy * cos);
-
-      const s = this.editor.getShape(id);
-      if (s) {
-        if (s.type === 'arrow') {
-          const arr = initS as unknown as ArrowShape;
-          const sWorld = { x: arr.x, y: arr.y };
-          const eWorld = { x: arr.x + arr.props.end.point.x, y: arr.y + arr.props.end.point.y };
-
-          const sdx = sWorld.x - center.x;
-          const sdy = sWorld.y - center.y;
-          const nsx = center.x + (sdx * cos - sdy * sin);
-          const nsy = center.y + (sdx * sin + sdy * cos);
-
-          const edx = eWorld.x - center.x;
-          const edy = eWorld.y - center.y;
-          const nex = center.x + (edx * cos - edy * sin);
-          const ney = center.y + (edx * sin + edy * cos);
-
-          this.editor.updateShape<ArrowShape>(id, {
-            x: nsx,
-            y: nsy,
-            rotation: 0,
-            props: {
-              ...arr.props,
-              start: { ...arr.props.start, point: { x: 0, y: 0 } },
-              end: { ...arr.props.end, point: { x: nex - nsx, y: ney - nsy } },
-            }
-          });
-        } else {
-          const b = this.editor.getShapeUtil(s.type).getGeometry(s as any).getBounds();
-          // Position top-left such that the shape's local center is at the new rotCx/rotCy
-          // Wait, rotCx/rotCy is the world center. 
-          // newX = rotCx - localCenter.x
-          const localCx = b.minX + b.w / 2;
-          const localCy = b.minY + b.h / 2;
-          const newX = rotCx - localCx;
-          const newY = rotCy - localCy;
-          this.editor.updateShape(id, { x: newX, y: newY, rotation: initRot + delta });
-        }
+      const initialWorld = this._info.initialWorldTransforms.get(id);
+      if (!initS || !initialWorld) continue;
+      if (initS.type === 'arrow') {
+        const arrow = initS as ArrowShape;
+        const startWorld = applyMatrixToPoint(initialWorld, arrow.props.start.point);
+        const endWorld = applyMatrixToPoint(initialWorld, arrow.props.end.point);
+        const nextStartWorld = applyMatrixToPoint(orbit, startWorld);
+        const nextEndWorld = applyMatrixToPoint(orbit, endWorld);
+        const start = this.editor.pageToParent(arrow.parentId, nextStartWorld);
+        const end = this.editor.pageToParent(arrow.parentId, nextEndWorld);
+        this.editor.updateShape<ArrowShape>(id, {
+          x: start.x, y: start.y, rotation: 0,
+          props: {
+            ...arrow.props,
+            start: { ...arrow.props.start, point: { x: 0, y: 0 } },
+            end: { ...arrow.props.end, point: { x: end.x - start.x, y: end.y - start.y } },
+          },
+        });
+      } else {
+        const desiredWorld = multiplyMatrices(orbit, initialWorld);
+        const placement = this.editor.transforms.getLocalPlacementForWorldTransform(
+          initS,
+          desiredWorld,
+          initS.parentId,
+        );
+        this.editor.updateShape(id, placement);
       }
     }
   }
@@ -1163,6 +1358,7 @@ export class SelectTool extends StateNode {
 
   override onKeyDown(e: KeyDownEvent): void {
     if (e.key === 'Escape') {
+      if (this.editor.exitGroup()) return;
       this.editor.setSelectedShapeIds([]);
       this.transition('idle');
     }

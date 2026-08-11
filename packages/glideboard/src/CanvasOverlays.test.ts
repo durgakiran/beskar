@@ -28,4 +28,22 @@ describe('Canvas text controls', () => {
       void controller.dispose();
     }
   });
+
+  it('only hit-tests corner resize handles for groups', () => {
+    const controller = new GlideboardController({ sessionKey: 'group-resize-handles' });
+    try {
+      const first = controller.editor.createShape({ type: 'box', x: 100, y: 80, props: { w: 100, h: 60 } });
+      const second = controller.editor.createShape({ type: 'box', x: 280, y: 180, props: { w: 100, h: 60 } });
+      const group = controller.editor.groupShapes([first, second]);
+      controller.editor.setSelectedShapeIds([group]);
+      const bounds = controller.editor.getShapeLocalBounds(group);
+      const east = controller.editor.localToPage(group, { x: bounds.maxX, y: bounds.minY + bounds.h / 2 });
+      const southEast = controller.editor.localToPage(group, { x: bounds.maxX, y: bounds.maxY });
+
+      expect(getHandleAtPagePoint(controller.editor, east.x, east.y)).toBeNull();
+      expect(getHandleAtPagePoint(controller.editor, southEast.x, southEast.y)).toBe('se');
+    } finally {
+      void controller.dispose();
+    }
+  });
 });

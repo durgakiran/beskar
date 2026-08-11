@@ -266,7 +266,7 @@ describe('stable signals and derived indices', () => {
         id: `page:${index}`, kind: 'page', type: 'page', schemaVersion: 0,
         name: `Page ${index}`, meta: {},
       })),
-      ...shapeIds.map((id, index) => shape(id, index * 20, { pageId: `page:${index % 2}` })),
+      ...shapeIds.map((id, index) => shape(id, index * 20, { parentId: `page:${index % 2}` })),
     ]);
 
     for (let iteration = 0; iteration < 150; iteration++) {
@@ -280,11 +280,11 @@ describe('stable signals and derived indices', () => {
               tx.update(id, record => ({
                 ...record,
                 x: Math.floor(random() * 500),
-                pageId: `page:${Math.floor(random() * 3)}`,
+                parentId: `page:${Math.floor(random() * 3)}`,
               }));
             } else {
               tx.insert(shape(id, Math.floor(random() * 500), {
-                pageId: `page:${Math.floor(random() * 3)}`,
+                parentId: `page:${Math.floor(random() * 3)}`,
               }));
             }
           } else if (action === 2) {
@@ -316,9 +316,9 @@ describe('stable signals and derived indices', () => {
 
       const expectedPages = new Map<string, Set<string>>();
       for (const record of shapes) {
-        if (!record.pageId) continue;
-        if (!expectedPages.has(record.pageId)) expectedPages.set(record.pageId, new Set());
-        expectedPages.get(record.pageId)!.add(record.id);
+        if (!record.parentId?.startsWith('page:')) continue;
+        if (!expectedPages.has(record.parentId)) expectedPages.set(record.parentId, new Set());
+        expectedPages.get(record.parentId)!.add(record.id);
       }
       const actualPages = new Map<string, Set<string>>(
         Array.from((store as any)._shapesByPage, ([id, ids]: [string, Set<string>]) => [id, new Set(ids)]),

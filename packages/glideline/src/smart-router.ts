@@ -383,18 +383,13 @@ export function getFallbackElbowPoints(
 
   const fromBoundsWorld = getWorldBounds(editor, fromShape as any);
   const toBoundsWorld = getWorldBounds(editor, toShape as any);
-  const localPoints = computeFallbackLocalElbowPoints(
-    arrow,
+  return computeFallbackLocalElbowPoints(
+    { ...arrow, x: 0, y: 0 },
     fromBoundsWorld,
     toBoundsWorld,
     fromEdge,
     toEdge,
   );
-
-  return localPoints.map(point => ({
-    x: arrow.x + point.x,
-    y: arrow.y + point.y,
-  }));
 }
 
 export function computeFallbackLocalElbowPoints(

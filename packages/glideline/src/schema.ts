@@ -7,6 +7,7 @@ import type {
   GlideMigrations,
   RecordKind,
   RecordReferenceDescriptor,
+  PageId,
 } from './types';
 import { isGlideBinding, isGlideShape } from './types';
 import { migrateRecord } from './migrations';
@@ -15,6 +16,16 @@ import {
   getShapeOrderParentId,
 } from './ordering';
 import { ContentIngressError, validateAssetRecord } from './content-ingress';
+import {
+  applyMatrixToPoint,
+  getMatrixRotation,
+  IDENTITY_MATRIX,
+  invertMatrix,
+  multiplyMatrices,
+  rotationMatrix,
+  translationMatrix,
+  type Matrix2d,
+} from './transform';
 
 /**
  * Version of the persisted GlideDocument/store envelope.
@@ -27,10 +38,26 @@ import { ContentIngressError, validateAssetRecord } from './content-ingress';
  * explicit `kind`, per-record `schemaVersion`, and `meta` envelope and has a
  * document-level v1-to-v2 migration. Store v3 normalizes shape order to
  * canonical parent-scoped keys. Store v4 folds legacy arrow record rotation
- * into its path points. Increment this value only when the document-wide format
- * changes and add the corresponding migration pipeline.
+ * into its path points. Store v5 adds explicit shape ownership, lock/visibility,
+ * and ordered pages. Store v6 makes nested shape coordinates parent-local.
+ * Increment this value only when the document-wide format changes and add the
+ * corresponding migration pipeline.
  */
-export const CURRENT_STORE_VERSION = 4;
+export const CURRENT_STORE_VERSION = 6;
+export const DEFAULT_PAGE_ID = 'page:default' as PageId;
+export const DEFAULT_PAGE_INDEX = generateRebalancedOrderKeys(1)[0]!;
+
+export function createDefaultPageRecord(): AnyRecord {
+  return {
+    id: DEFAULT_PAGE_ID,
+    kind: 'page',
+    type: 'page',
+    schemaVersion: 0,
+    name: 'Page 1',
+    index: DEFAULT_PAGE_INDEX,
+    meta: {},
+  };
+}
 
 export interface DocumentLimits {
   maxRecords: number;
@@ -72,9 +99,27 @@ export class DocumentValidationError extends Error {
 
 interface UtilClass {
   type: string;
+  canContainChildren?: boolean;
   props?: Record<string, { validate(v: unknown): unknown }>;
   migrations?: GlideMigrations;
   references?: readonly RecordReferenceDescriptor[];
+  prototype?: {
+    getGeometry?(shape: GlideShape): { getBounds(): { minX: number; minY: number; w: number; h: number } };
+  };
+}
+
+function shapeTransform(record: AnyRecord, center: { x: number; y: number }): Matrix2d {
+  if (record['type'] === 'arrow') {
+    return translationMatrix(Number(record['x']), Number(record['y']));
+  }
+  const rotation = Number(record['rotation'] ?? 0);
+  return multiplyMatrices(
+    translationMatrix(Number(record['x']), Number(record['y'])),
+    multiplyMatrices(
+      translationMatrix(center.x, center.y),
+      multiplyMatrices(rotationMatrix(rotation), translationMatrix(-center.x, -center.y)),
+    ),
+  );
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -168,7 +213,7 @@ export class GlideSchema {
         : undefined;
     const schemaVersion = raw['schemaVersion'] ?? versionHint ?? util?.migrations?.currentVersion ?? 0;
 
-    return {
+    const prepared: AnyRecord = {
       ...raw,
       kind,
       schemaVersion,
@@ -177,6 +222,21 @@ export class GlideSchema {
         ? { props: {} }
         : {}),
     };
+    if (kind === 'shape') {
+      prepared['parentId'] = typeof raw['parentId'] === 'string'
+        ? raw['parentId']
+        : typeof raw['pageId'] === 'string'
+          ? raw['pageId']
+          : DEFAULT_PAGE_ID;
+      prepared['isLocked'] = raw['isLocked'] ?? false;
+      prepared['isHidden'] = raw['isHidden'] ?? false;
+      delete prepared['pageId'];
+    } else if (kind === 'page') {
+      prepared['index'] = typeof raw['index'] === 'string' && raw['index'].length > 0
+        ? raw['index']
+        : DEFAULT_PAGE_INDEX;
+    }
+    return prepared;
   }
 
   validateProps(shape: GlideShape): void {
@@ -213,6 +273,22 @@ export class GlideSchema {
       if (typeof record['index'] !== 'string' || record['index'].length === 0 || record['index'].length > 256) {
         throw new DocumentValidationError('index must be a non-empty string no longer than 256 characters', id);
       }
+      if (typeof record['parentId'] !== 'string' || record['parentId'].length === 0) {
+        throw new DocumentValidationError('parentId must be a non-empty page or shape ID', id);
+      }
+      if (typeof record['isLocked'] !== 'boolean') {
+        throw new DocumentValidationError('isLocked must be a boolean', id);
+      }
+      if (typeof record['isHidden'] !== 'boolean') {
+        throw new DocumentValidationError('isHidden must be a boolean', id);
+      }
+      if (record['name'] !== undefined
+        && (typeof record['name'] !== 'string' || record['name'].length > 512)) {
+        throw new DocumentValidationError('name must be a string no longer than 512 characters', id);
+      }
+      if (record['pageId'] !== undefined) {
+        throw new DocumentValidationError('legacy pageId is not allowed in store-v5 shapes', id);
+      }
       if (!isPlainObject(record['props'])) throw new DocumentValidationError('props must be a plain JSON object', id);
       if (jsonBytes(record['props']) > this.limits.maxPropsBytes) throw new DocumentValidationError('props exceeds configured size limit', id);
       const util = this._shapeUtils.get(type);
@@ -234,6 +310,12 @@ export class GlideSchema {
     if (kind === 'page') {
       if (typeof record['name'] !== 'string' || record['name'].length === 0 || record['name'].length > 512) {
         throw new DocumentValidationError('page name must be a non-empty string no longer than 512 characters', id);
+      }
+      if (typeof record['index'] !== 'string' || record['index'].length === 0 || record['index'].length > 256) {
+        throw new DocumentValidationError('page index must be a non-empty string no longer than 256 characters', id);
+      }
+      if (record['parentId'] !== undefined) {
+        throw new DocumentValidationError('pages cannot have parents', id);
       }
       return;
     }
@@ -263,6 +345,9 @@ export class GlideSchema {
     }
 
     const terminalOwners = new Set<string>();
+    if (!records.some(record => record['kind'] === 'page')) {
+      throw new DocumentValidationError('document must contain at least one page');
+    }
     for (const record of records) {
       const id = record['id'] as string;
       if (record['kind'] === 'binding') {
@@ -278,7 +363,7 @@ export class GlideSchema {
         }
       }
 
-      for (const [field, expectedKind] of [['pageId', 'page'], ['assetId', 'asset']] as const) {
+      for (const [field, expectedKind] of [['assetId', 'asset']] as const) {
         const targetId = record[field];
         if (targetId === undefined || targetId === null) continue;
         const target = typeof targetId === 'string' ? byId.get(targetId) : undefined;
@@ -357,6 +442,21 @@ export class GlideSchema {
       const inferredKind = typeof raw['kind'] === 'string'
         ? raw['kind']
         : inferLegacyKind(raw, this._shapeUtils, this._bindingUtils);
+      if (sourceStoreVersion >= 5 && inferredKind === 'shape') {
+        if (typeof raw['parentId'] !== 'string' || raw['parentId'].length === 0) {
+          throw new DocumentValidationError('store-v5 shape is missing parentId', String(raw['id'] ?? ordinal));
+        }
+        if (typeof raw['isLocked'] !== 'boolean' || typeof raw['isHidden'] !== 'boolean') {
+          throw new DocumentValidationError('store-v5 shape is missing lock/visibility fields', String(raw['id'] ?? ordinal));
+        }
+        if (raw['pageId'] !== undefined) {
+          throw new DocumentValidationError('store-v5 shape cannot contain legacy pageId', String(raw['id'] ?? ordinal));
+        }
+      }
+      if (sourceStoreVersion >= 5 && inferredKind === 'page'
+        && (typeof raw['index'] !== 'string' || raw['index'].length === 0)) {
+        throw new DocumentValidationError('store-v5 page is missing index', String(raw['id'] ?? ordinal));
+      }
       const type = String(raw['type'] ?? '');
       const util = inferredKind === 'shape'
         ? this._shapeUtils.get(type)
@@ -382,35 +482,6 @@ export class GlideSchema {
       }
       return prepared;
     });
-
-    if (sourceStoreVersion < 2) {
-      const shapes = records.filter(record => record['kind'] === 'shape');
-      if (shapes.length > 0) {
-        const existingPage = records.find(record => record['kind'] === 'page');
-        let pageId = typeof existingPage?.['id'] === 'string' ? existingPage['id'] : 'page:default';
-        let pageSuffix = 1;
-        while (!existingPage && ids.has(pageId)) pageId = `page:default:${pageSuffix++}`;
-        if (!existingPage) {
-          const page: AnyRecord = {
-            id: pageId,
-            kind: 'page',
-            type: 'page',
-            schemaVersion: 0,
-            name: 'Page 1',
-            meta: {},
-          };
-          records = [...records, page];
-          ids.add(pageId);
-          migrations.push('legacy:add-default-page');
-        }
-
-        records = records.map(record => record['kind'] === 'shape' && record['pageId'] === undefined
-          ? { ...record, pageId }
-          : record);
-
-        migrations.push('legacy:add-page-membership');
-      }
-    }
 
     if (sourceStoreVersion < 3) {
       const originalOrdinal = new Map(records.map((record, ordinal) => [String(record['id']), ordinal]));
@@ -488,6 +559,114 @@ export class GlideSchema {
       migrations.push('store:fold-arrow-rotation');
     }
 
+    if (sourceStoreVersion < 5) {
+      const pages = records.filter(record => record['kind'] === 'page');
+      const referencedDefaultPage = records.some(record =>
+        record['kind'] === 'shape' && record['parentId'] === DEFAULT_PAGE_ID);
+      if (pages.length === 0 || referencedDefaultPage) {
+        const existingDefault = records.find(record => record['id'] === DEFAULT_PAGE_ID);
+        if (existingDefault && existingDefault['kind'] !== 'page') {
+          throw new DocumentValidationError(`default page ID "${DEFAULT_PAGE_ID}" collides with a non-page record`);
+        }
+        if (!existingDefault) {
+          records = [...records, createDefaultPageRecord()];
+          ids.add(DEFAULT_PAGE_ID);
+          migrations.push('legacy:add-default-page');
+        }
+      }
+
+      const pageRecords = records
+        .filter(record => record['kind'] === 'page')
+        .sort((left, right) => String(left['index'] ?? '').localeCompare(String(right['index'] ?? ''))
+          || String(left['id']).localeCompare(String(right['id'])));
+      const pageIndices = generateRebalancedOrderKeys(pageRecords.length);
+      const pageIndexById = new Map(pageRecords.map((record, ordinal) => [String(record['id']), pageIndices[ordinal]!]));
+      records = records.map(record => {
+        if (record['kind'] === 'page') {
+          return { ...record, index: pageIndexById.get(String(record['id']))! };
+        }
+        if (record['kind'] !== 'shape') return record;
+        const migrated: AnyRecord = {
+          ...record,
+          parentId: typeof record['parentId'] === 'string'
+            ? record['parentId']
+            : DEFAULT_PAGE_ID,
+          isLocked: record['isLocked'] ?? false,
+          isHidden: record['isHidden'] ?? false,
+        };
+        delete migrated['pageId'];
+        return migrated;
+      });
+      migrations.push('store:add-hierarchy-envelope');
+    }
+
+    if (sourceStoreVersion < 6) {
+      const byId = new Map(records.map(record => [String(record['id']), record]));
+      const oldWorld = new Map<string, Matrix2d>();
+      for (const record of records) {
+        if (record['kind'] !== 'shape') continue;
+        const bounds = this._getMigrationBounds(record);
+        oldWorld.set(String(record['id']), shapeTransform(record, {
+          x: bounds.minX + bounds.w / 2,
+          y: bounds.minY + bounds.h / 2,
+        }));
+      }
+
+      records = records.map(record => {
+        if (record['kind'] !== 'shape') return record;
+        const parent = byId.get(String(record['parentId']));
+        if (parent?.['kind'] !== 'shape') return record;
+        const parentWorld = oldWorld.get(String(parent['id'])) ?? IDENTITY_MATRIX;
+        const parentInverse = invertMatrix(parentWorld);
+
+        if (record['type'] === 'arrow') {
+          const props = isPlainObject(record['props']) ? record['props'] : {};
+          const start = isPlainObject(props['start']) ? props['start'] : {};
+          const end = isPlainObject(props['end']) ? props['end'] : {};
+          const startPoint = isPlainObject(start['point']) ? start['point'] : {};
+          const endPoint = isPlainObject(end['point']) ? end['point'] : {};
+          const origin = { x: Number(record['x']), y: Number(record['y']) };
+          const oldStart = {
+            x: origin.x + Number(startPoint['x'] ?? 0),
+            y: origin.y + Number(startPoint['y'] ?? 0),
+          };
+          const oldEnd = {
+            x: origin.x + Number(endPoint['x'] ?? 0),
+            y: origin.y + Number(endPoint['y'] ?? 0),
+          };
+          const localStart = applyMatrixToPoint(parentInverse, oldStart);
+          const localEnd = applyMatrixToPoint(parentInverse, oldEnd);
+          return {
+            ...record,
+            x: localStart.x,
+            y: localStart.y,
+            rotation: 0,
+            props: {
+              ...props,
+              start: { ...start, point: { x: 0, y: 0 } },
+              end: {
+                ...end,
+                point: { x: localEnd.x - localStart.x, y: localEnd.y - localStart.y },
+              },
+            },
+          };
+        }
+
+        const relative = multiplyMatrices(parentInverse, oldWorld.get(String(record['id']))!);
+        const rotation = getMatrixRotation(relative);
+        const bounds = this._getMigrationBounds(record);
+        const center = { x: bounds.minX + bounds.w / 2, y: bounds.minY + bounds.h / 2 };
+        const rotatedCenter = applyMatrixToPoint(rotationMatrix(rotation), center);
+        return {
+          ...record,
+          x: relative.e - center.x + rotatedCenter.x,
+          y: relative.f - center.y + rotatedCenter.y,
+          rotation,
+        };
+      });
+      migrations.push('store:parent-local-coordinates');
+    }
+
     this.validateCandidate(records);
     return {
       records,
@@ -521,6 +700,26 @@ export class GlideSchema {
   getBindingUtil(type: string): UtilClass | undefined { return this._bindingUtils.get(type); }
   hasUtil(type: string): boolean { return this._shapeUtils.has(type); }
   hasBindingUtil(type: string): boolean { return this._bindingUtils.has(type); }
+
+  private _getMigrationBounds(record: AnyRecord): { minX: number; minY: number; w: number; h: number } {
+    const util = this._shapeUtils.get(String(record['type']));
+    const Constructor = util as unknown as (new () => {
+      getGeometry?(shape: GlideShape): { getBounds(): { minX: number; minY: number; w: number; h: number } };
+    });
+    try {
+      const bounds = new Constructor().getGeometry?.(record as unknown as GlideShape).getBounds();
+      if (bounds && [bounds.minX, bounds.minY, bounds.w, bounds.h].every(Number.isFinite)) return bounds;
+    } catch {
+      // Custom migration-only utilities may require an editor; use their common rectangular props below.
+    }
+    const props = isPlainObject(record['props']) ? record['props'] : {};
+    return {
+      minX: 0,
+      minY: 0,
+      w: finite(props['w']) ? props['w'] : 0,
+      h: finite(props['h']) ? props['h'] : 0,
+    };
+  }
 
   isShapeRecord(record: AnyRecord): boolean { return record['kind'] === 'shape'; }
   isBindingRecord(record: AnyRecord): boolean { return record['kind'] === 'binding'; }
@@ -566,18 +765,37 @@ export class GlideSchema {
 
   private _validateParentGraph(byId: Map<string, AnyRecord>): void {
     for (const record of byId.values()) {
+      if (record['kind'] !== 'shape') continue;
       const id = record['id'] as string;
       const parentId = record['parentId'];
-      if (parentId === undefined || parentId === null) continue;
-      if (typeof parentId !== 'string' || !byId.has(parentId)) throw new DocumentValidationError('parentId must reference an existing record', id);
+      if (typeof parentId !== 'string') {
+        throw new DocumentValidationError('parentId must reference an existing page or container shape', id);
+      }
+      const parent = byId.get(parentId);
+      if (!parent) throw new DocumentValidationError('parentId must reference an existing record', id);
+      if (parent['kind'] === 'shape') {
+        const parentUtil = this._shapeUtils.get(String(parent['type']));
+        if (!parentUtil?.canContainChildren || !this._isVersionSupported(parent, parentUtil)) {
+          throw new DocumentValidationError('parentId must reference a registered container shape', id);
+        }
+      } else if (parent['kind'] !== 'page') {
+        throw new DocumentValidationError('parentId must reference a page or container shape', id);
+      }
+
       const seen = new Set([id]);
       let cursor: AnyRecord | undefined = record;
+      let reachedPage = false;
       while (typeof cursor?.['parentId'] === 'string') {
         const nextId = cursor['parentId'] as string;
         if (seen.has(nextId)) throw new DocumentValidationError('parent relationship contains a cycle', id);
         seen.add(nextId);
         cursor = byId.get(nextId);
+        if (cursor?.['kind'] === 'page') {
+          reachedPage = true;
+          break;
+        }
       }
+      if (!reachedPage) throw new DocumentValidationError('shape ancestry must terminate at a page', id);
     }
   }
 }

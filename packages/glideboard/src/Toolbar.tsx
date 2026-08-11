@@ -15,6 +15,8 @@ import {
   FiRepeat,
   FiRotateCcw,
   FiRotateCw,
+  FiLayout,
+  FiLayers,
 } from 'react-icons/fi';
 import {
   LuEraser,
@@ -68,6 +70,7 @@ const TOOLS: ToolDef[] = [
   { id: 'shape-picker', label: 'Shapes', shortcut: 'R', icon: FiSquare },
   { id: 'text', label: 'Text', shortcut: 'T', icon: FiType },
   { id: 'sticky-note', label: 'Sticky', shortcut: 'S', icon: FiFileText },
+  { id: 'frame', label: 'Frame', shortcut: 'F', icon: FiLayout },
   { id: 'draw', label: 'Draw', shortcut: 'D', icon: FiPenTool },
   { id: 'eraser', label: 'Eraser', shortcut: 'X', icon: LuEraser },
   { id: 'arrow-picker', label: 'Arrow', shortcut: 'A', icon: FiArrowRight },
@@ -287,7 +290,7 @@ function ArrowPickerButton({
   );
 }
 
-export function Toolbar() {
+export function Toolbar({ layersOpen = false, onToggleLayers }: { layersOpen?: boolean; onToggleLayers?: () => void }) {
   const controller = useGlideboardController();
   const { editor } = controller;
   const activeTool = useSignalValue(editor.currentToolId) ?? 'select';
@@ -406,6 +409,7 @@ export function Toolbar() {
 
       <ToolButton tool={{ id: 'undo', label: 'Undo', shortcut: '⌘Z', icon: FiRotateCcw }} active={false} onClick={() => editor.undo()} />
       <ToolButton tool={{ id: 'redo', label: 'Redo', shortcut: '⌘⇧Z', icon: FiRotateCw }} active={false} onClick={() => editor.redo()} />
+      <ToolButton tool={{ id: 'layers', label: 'Layers', icon: FiLayers }} active={layersOpen} onClick={() => onToggleLayers?.()} />
     </div>
   );
 }

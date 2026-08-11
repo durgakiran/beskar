@@ -108,6 +108,24 @@ describe('Phase Infinity MCP tool server', () => {
     expect(result).toEqual(editor.getAIContext());
   });
 
+  it('exposes hierarchy-aware arrange and precision tools', async () => {
+    const editor = makeEditor();
+    const server = createCanvasToolServer(editor);
+    const first = createBox(editor, 'shape:arrange-a', 20, 20);
+    const second = createBox(editor, 'shape:arrange-b', 280, 100);
+
+    expect(await server.callTool('arrange_shapes', {
+      shapeIds: [first, second], operation: 'align-top',
+    })).toEqual({ ok: true });
+    expect(editor.getShapeVisualWorldBounds(first).minY)
+      .toBeCloseTo(editor.getShapeVisualWorldBounds(second).minY, 7);
+
+    expect(await server.callTool('set_shape_geometry', { id: first, x: 160, y: 140 }))
+      .toEqual({ ok: true });
+    expect(editor.getShapeVisualWorldBounds(first).minX).toBeCloseTo(160, 7);
+    expect(editor.getShapeVisualWorldBounds(first).minY).toBeCloseTo(140, 7);
+  });
+
   it('T∞.2-06: tool manifest is generated from Zod and round-trips as JSON Schema', () => {
     const editor = makeEditor();
     const server = createCanvasToolServer(editor);
@@ -122,6 +140,9 @@ describe('Phase Infinity MCP tool server', () => {
       'get_canvas_state',
       'create_diagram',
       'layout_shapes',
+      'arrange_shapes',
+      'set_shape_geometry',
+      'reparent_shapes',
       'get_canvas_image',
     ]);
     for (const tool of manifest) {

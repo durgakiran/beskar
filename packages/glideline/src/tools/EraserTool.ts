@@ -75,8 +75,9 @@ class Erasing extends StateNode {
     const hits = this.editor.getShapesAtPoint(point);
     let changed = false;
     for (const shape of hits) {
-      if (!this.erasedIds.has(shape.id as ShapeId)) {
-        this.erasedIds.add(shape.id as ShapeId);
+      const id = this.editor.getSelectableShapeId(shape.id as ShapeId);
+      if (id && !this.editor.isShapeEffectivelyLocked(id) && !this.erasedIds.has(id)) {
+        this.erasedIds.add(id);
         changed = true;
       }
     }

@@ -20,9 +20,14 @@ class AssetBoxUtil extends (BoxUtil as new () => BoxUtil) {
   ] as const;
 }
 
+class ContainerBoxUtil extends (BoxUtil as new () => BoxUtil) {
+  static readonly type = 'container-box';
+  static readonly canContainChildren = true;
+}
+
 const TestPlugin: GlidePlugin = {
   id: 'workstream-d-test',
-  shapes: [BoxUtil as any, AssetBoxUtil as any, ArrowUtil as any],
+  shapes: [BoxUtil as any, ContainerBoxUtil as any, AssetBoxUtil as any, ArrowUtil as any],
   bindings: [ArrowBindingUtil as any],
 };
 
@@ -47,6 +52,13 @@ function createBox(editor: ReturnType<typeof makeEditor>, id: string, x: number,
     meta: {},
     props: { w: 100, h: 60 },
     ...overrides,
+  });
+}
+
+function createContainer(editor: ReturnType<typeof makeEditor>, id: string, x: number, overrides: AnyRecord = {}): ShapeId {
+  return editor.createShape({
+    id: sid(id), type: 'container-box', x, y: 0, rotation: 0,
+    props: { w: 100, h: 60 }, ...overrides,
   });
 }
 
@@ -91,11 +103,11 @@ describe('Workstream D derived indices and graph integrity', () => {
       tx.insert({ id: 'asset:one', kind: 'asset', type: 'image', props: { contentHash: 'one' }, meta: {} });
       tx.insert({ id: 'asset:two', kind: 'asset', type: 'image', props: { contentHash: 'two' }, meta: {} });
     });
-    const parentA = createBox(editor, 'parent:a', 0, { pageId: 'page:a' });
-    const parentB = createBox(editor, 'parent:b', 200, { pageId: 'page:b' });
+    const parentA = createContainer(editor, 'parent:a', 0, { parentId: 'page:a' });
+    const parentB = createContainer(editor, 'parent:b', 200, { parentId: 'page:b' });
     editor.createShape({
       id: sid('child'), type: 'asset-box', x: 10, y: 10, rotation: 0, index: 'a:child', meta: {},
-      pageId: 'page:a', parentId: parentA,
+      parentId: parentA,
       props: { w: 40, h: 30, assetId: 'asset:one' },
     });
 
@@ -103,7 +115,6 @@ describe('Workstream D derived indices and graph integrity', () => {
       tx.update('child', record => ({
         ...record,
         x: 350,
-        pageId: 'page:b',
         parentId: parentB,
         props: { ...(record['props'] as AnyRecord), assetId: 'asset:two' },
       }));
@@ -115,8 +126,8 @@ describe('Workstream D derived indices and graph integrity', () => {
     expect(editor.store.getChildren(parentB).map(record => record['id'])).toEqual(['child']);
     expect(editor.store.getAssetUserIds('asset:one' as any)).toEqual([]);
     expect(editor.store.getAssetUserIds('asset:two' as any)).toEqual(['child']);
-    expect(editor.getShapesAtPoint({ x: 355, y: 15 }).map(shape => shape.id)).toContain(sid('child'));
-    expect(editor.store.assertIntegrity()).toMatchObject({ ok: true, recordCount: 7 });
+    expect(editor.getShapesAtPoint({ x: 555, y: 15 }).map(shape => shape.id)).toContain(sid('child'));
+    expect(editor.store.assertIntegrity()).toMatchObject({ ok: true, recordCount: 8 });
 
     (editor.store as any)._childrenByParent.get(parentB).clear();
     expect(editor.store.assertIntegrity().issues.map(issue => issue.code))
@@ -196,7 +207,7 @@ describe('Workstream D derived indices and graph integrity', () => {
 
   it('cascades descendants and bindings in one deletion history entry', () => {
     const editor = makeEditor();
-    const parent = createBox(editor, 'group', 0);
+    const parent = createContainer(editor, 'group', 0);
     const child = createBox(editor, 'child', 20, { parentId: parent });
     const target = createBox(editor, 'target', 300);
     const arrowId = sid('arrow');
@@ -272,7 +283,7 @@ describe('Workstream D graph-aware clipboard and duplication', () => {
     getMutableStoreForTesting(editor).transact({ origin: 'system', history: 'ignore' }, tx => {
       tx.insert({ id: 'asset:source', kind: 'asset', type: 'image', props: { contentHash: 'image' }, meta: {} });
     });
-    const parent = createBox(editor, 'parent', 0);
+    const parent = createContainer(editor, 'parent', 0);
     editor.createShape({
       id: sid('asset-child'), type: 'asset-box', x: 10, y: 10, rotation: 0, index: 'a:child', meta: {},
       parentId: parent,

@@ -20,32 +20,46 @@ export interface FrameProps {
   h:     number;
   label: string;
   color: string;
+  clipContent: boolean;
 }
 
 export type FrameShape = GlideShape<FrameProps>;
 
 export class FrameUtil extends ShapeUtil<FrameShape> {
   static override readonly type = 'frame';
+  static override readonly canContainChildren = true;
 
   static override readonly props = {
     w:     T.number,
     h:     T.number,
     label: T.string,
     color: T.string,
+    clipContent: T.boolean,
   };
 
   static override readonly migrations = defineMigrations({
-    currentVersion: 1,
+    currentVersion: 2,
     migrators: {
       1: {
         up:   r => ({ ...r, props: { label: 'Frame', color: '#313244', ...(r['props'] as object) } }),
         down: r => r,
       },
+      2: {
+        up: r => ({
+          ...r,
+          props: { ...(r['props'] as object), clipContent: false },
+        }),
+        down: r => {
+          const props = { ...(r['props'] as Record<string, unknown>) };
+          delete props.clipContent;
+          return { ...r, props };
+        },
+      },
     },
   });
 
   getDefaultProps(): FrameProps {
-    return { w: 400, h: 300, label: 'Frame', color: '#313244' };
+    return { w: 400, h: 300, label: 'Frame', color: '#313244', clipContent: false };
   }
 
   getGeometry(shape: FrameShape): Geometry2d {

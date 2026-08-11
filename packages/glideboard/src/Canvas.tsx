@@ -95,25 +95,20 @@ function useViewportShapeEntries(
 function Grid() {
   const controller = useGlideboardController();
   const camera = useSignalValue(controller.editor.camera.signal)!;
-  const spacing = 24 * camera.z;
+  const settings = useSignalValue(controller.editor.snapping.settings)!;
+  const spacing = settings.gridSize * camera.z;
   const dotR = 1;
   const ox = ((-camera.x * camera.z) % spacing + spacing) % spacing;
   const oy = ((-camera.y * camera.z) % spacing + spacing) % spacing;
 
-  return (
+  return <>
     <defs>
-      <pattern
-        id={controller.domId('grid-pattern')}
-        x={ox}
-        y={oy}
-        width={spacing}
-        height={spacing}
-        patternUnits="userSpaceOnUse"
-      >
+      <pattern id={controller.domId('grid-pattern')} x={ox} y={oy} width={spacing} height={spacing} patternUnits="userSpaceOnUse">
         <circle cx={dotR} cy={dotR} r={dotR} fill={wbTheme.grid} />
       </pattern>
     </defs>
-  );
+    {settings.showGrid ? <rect x="0" y="0" width="100%" height="100%" fill={`url(#${controller.domId('grid-pattern')})`} /> : null}
+  </>;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -133,6 +128,7 @@ const ShapeLayer = memo(({
   const editor = controller.editor;
   const sig = editor.getShapeSignal(id);
   const shape = useSignalValue(sig as any) as GlideShape | null;
+  useSignalValue(editor.getDocumentVersionSignal());
   const svgRef = useRef<SVGSVGElement>(null);
 
   // Inject toSvg() geometry output into the per-shape <svg>
@@ -155,7 +151,7 @@ const ShapeLayer = memo(({
   const util = shape ? editor.getShapeUtil(shape.type) : null;
   const labelProps: LabelProps | null = (shape && util) ? ((util as any).getLabelProps?.(shape) ?? null) : null;
 
-  if (!shape || !util) return null;
+  if (!shape || !util || editor.isShapeEffectivelyHidden(shape.id as ShapeId)) return null;
 
   const isTextType = shape.type === 'text';
   const hasFixedWidth = isTextType && typeof (shape.props as any).w === 'number';
@@ -163,6 +159,16 @@ const ShapeLayer = memo(({
   const localBounds = util.getGeometry(shape as any).getBounds();
   const world = editor.getWorldTransform(shape.id as ShapeId);
   const worldTransform = `matrix(${world.a}, ${world.b}, ${world.c}, ${world.d}, ${world.e}, ${world.f})`;
+  const clippingFrame = editor.getClippingFrameAncestors(shape.id as ShapeId)[0];
+  const clipPath = clippingFrame ? (() => {
+    const bounds = editor.transforms.getLocalGeometry(clippingFrame.id as ShapeId).getBounds();
+    return `polygon(${[
+      { x: bounds.minX, y: bounds.minY }, { x: bounds.maxX, y: bounds.minY },
+      { x: bounds.maxX, y: bounds.maxY }, { x: bounds.minX, y: bounds.maxY },
+    ].map(point => editor.pageToLocal(shape.id as ShapeId,
+      editor.localToPage(clippingFrame.id as ShapeId, point)))
+      .map(point => `${point.x}px ${point.y}px`).join(', ')})`;
+  })() : undefined;
 
   return (
     <div
@@ -178,6 +184,7 @@ const ShapeLayer = memo(({
         transformOrigin: '0 0',
         zIndex,
         pointerEvents: 'none',
+        clipPath,
       }}
     >
       {/* Geometry: 1×1px SVG with overflow:visible — contains toSvg() output */}
@@ -661,7 +668,7 @@ export function Canvas() {
       containerRef.current.releasePointerCapture(event.pointerId);
     }
     const { screen, page } = getPagePoint(event);
-    editor.dispatchEvent({ type: 'pointerUp', point: page, screenPoint: screen, shiftKey: event.shiftKey } as any);
+    editor.dispatchEvent({ type: 'pointerUp', point: page, screenPoint: screen, shiftKey: event.shiftKey, altKey: event.altKey } as any);
 
     controller.isCanvasDraggingRef.current = false;
 
@@ -790,7 +797,6 @@ export function Canvas() {
         }}
       >
         <Grid />
-        <rect x="0" y="0" width="100%" height="100%" fill={`url(#${controller.domId('grid-pattern')})`} />
       </svg>
 
       {/* 2. World layer — one camera transform for visible and pinned content */}

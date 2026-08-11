@@ -213,7 +213,10 @@ export class GlideboardController {
       x: origin.x,
       y: origin.y,
       rotation: 0,
-      index: this.editor.generateIndexAbove('root'),
+      parentId: this.editor.getDefaultPageId(),
+      isLocked: false,
+      isHidden: false,
+      index: this.editor.generateIndexAbove(this.editor.getDefaultPageId()),
       props: {
         w: width,
         h: height,
@@ -286,7 +289,10 @@ export class GlideboardController {
         x: origin.x,
         y: origin.y,
         rotation: 0,
-        index: this.editor.generateIndexAbove('root'),
+        parentId: this.editor.getDefaultPageId(),
+        isLocked: false,
+        isHidden: false,
+        index: this.editor.generateIndexAbove(this.editor.getDefaultPageId()),
         props: { w: width, h: height, assetId: prepared.asset.id },
         meta: {},
       };
@@ -421,6 +427,7 @@ export class GlideboardController {
 
   clearDocument(): void {
     const ids = this.editor.serialize().records
+      .filter(record => record.kind !== 'page')
       .map(record => String(record.id ?? ''))
       .filter(Boolean);
     if (ids.length > 0) {
@@ -695,6 +702,10 @@ export class GlideboardController {
       callTool: async (name: CanvasToolName, input: unknown) => this.toolServer.callTool(name, input),
       getToolManifest: () => this.toolServer.generateToolManifest(),
       getAIContext: (opts?: { viewport?: boolean }) => this.editor.getAIContext(opts),
+      getDocument: () => this.editor.serialize(),
+      getSelection: () => this.editor.getSelectedShapeIds(),
+      getFocusedGroupId: () => this.editor.focusedGroupId.peek(),
+      getShapeLocalBounds: (id: string) => this.editor.getShapeLocalBounds(id as ShapeId),
       takeScreenshot: (box?: Box2d) => this.editor.takeScreenshot(box),
       select: (ids: string[]) => this.editor.setSelectedShapeIds(ids as any),
       getSmartRoutingSnapshot: () => this.editor.getSmartRoutingSnapshot(),

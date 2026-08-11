@@ -9,6 +9,7 @@ import { ZoomWidget, fitToScreen } from './ZoomWidget';
 import { useSignalValue } from './useSignalValue';
 import { BackToContentButton } from './BackToContentButton';
 import { CollaborationCursors } from './CollaborationCursors';
+import { LayersPanel } from './LayersPanel';
 import { ContentIngressError, normalizeClipboardText } from '@durgakiran/glideline';
 
 const TOOL_KEYS: Record<string, string> = {
@@ -21,6 +22,7 @@ const TOOL_KEYS: Record<string, string> = {
   d: 'draw',
   x: 'eraser',
   a: 'arrow',
+  f: 'frame',
 };
 
 export function WhiteboardApp() {
@@ -31,6 +33,7 @@ export function WhiteboardApp() {
   const camera = useSignalValue(editor.camera.signal);
   const readOnly = useSignalValue(controller.readOnlySignal) ?? false;
   const [contextMenuPosition, setContextMenuPosition] = React.useState<{ x: number; y: number } | null>(null);
+  const [layersOpen, setLayersOpen] = React.useState(false);
 
   const isSpacebarHeldRef = React.useRef(false);
   const previousToolRef = React.useRef<string | null>(null);
@@ -130,9 +133,25 @@ export function WhiteboardApp() {
         }
       }
 
+      if (event.key.startsWith('Arrow')) {
+        const ids = editor.getSelectedShapeIds();
+        if (ids.length > 0) {
+          event.preventDefault();
+          const amount = event.shiftKey ? 10 : 1;
+          const delta = event.key === 'ArrowLeft' ? { x: -amount, y: 0 }
+            : event.key === 'ArrowRight' ? { x: amount, y: 0 }
+            : event.key === 'ArrowUp' ? { x: 0, y: -amount }
+            : { x: 0, y: amount };
+          editor.nudgeShapes(ids, delta);
+        }
+      }
+
       if (event.metaKey || event.ctrlKey) {
         const ids = editor.getSelectedShapeIds();
-        if (event.key === 'c' && ids.length > 0) {
+        if (event.key.toLowerCase() === 'a') {
+          event.preventDefault();
+          editor.selectAll();
+        } else if (event.key === 'c' && ids.length > 0) {
           editor.copy(ids);
         } else if (event.key === 'x' && ids.length > 0) {
           event.preventDefault();
@@ -143,6 +162,18 @@ export function WhiteboardApp() {
         } else if (event.key === 'd' && ids.length > 0) {
           event.preventDefault();
           editor.duplicateShapes(ids, { x: 20, y: 20 });
+        } else if (event.key.toLowerCase() === 'g' && ids.length > 0) {
+          event.preventDefault();
+          if (event.shiftKey) editor.ungroupShapes(ids);
+          else if (ids.length >= 2) editor.groupShapes(ids);
+        } else if (event.key.toLowerCase() === 'l' && ids.length > 0) {
+          event.preventDefault();
+          const lock = !ids.every(id => editor.getShape(id)?.isLocked);
+          editor.setLocked(ids, lock);
+        } else if (event.key.toLowerCase() === 'h' && event.shiftKey && ids.length > 0) {
+          event.preventDefault();
+          const hide = !ids.every(id => editor.getShape(id)?.isHidden);
+          editor.setHidden(ids, hide);
         } else if (event.key === ']' && ids.length > 0) {
           event.preventDefault();
           editor.reorderShapes(ids, event.shiftKey ? 'front' : 'forward');
@@ -239,9 +270,10 @@ export function WhiteboardApp() {
     >
       <Canvas />
       <CollaborationCursors />
-      {!readOnly ? <Toolbar /> : null}
+      {!readOnly ? <Toolbar layersOpen={layersOpen} onToggleLayers={() => setLayersOpen(open => !open)} /> : null}
+      {layersOpen ? <LayersPanel /> : null}
       <ZoomWidget />
-      {!readOnly ? <StylePanel /> : null}
+      {!readOnly && !layersOpen ? <StylePanel /> : null}
       {!readOnly ? (
         <ContextMenu position={contextMenuPosition} onClose={() => setContextMenuPosition(null)} />
       ) : null}

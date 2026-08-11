@@ -33,6 +33,35 @@ function createBoxRecord(id: string, x: number, y: number) {
 }
 
 describe('bindGlideboardCollaboration', () => {
+  it('projects grouping as one Yjs transaction and preserves hierarchy remotely', async () => {
+    const capabilityA = createMutationCapability();
+    const capabilityB = createMutationCapability();
+    const editorA = createGlideboardEditorInstance([], undefined, capabilityA);
+    const editorB = createGlideboardEditorInstance([], undefined, capabilityB);
+    const docA = new Y.Doc();
+    const docB = new Y.Doc();
+    connectDocs(docA, docB);
+    const cleanupA = bindGlideboardCollaboration(editorA, { doc: docA }, capabilityA);
+    const cleanupB = bindGlideboardCollaboration(editorB, { doc: docB }, capabilityB);
+    editorA.createShape(createBoxRecord('shape:group-a', 20, 20) as any);
+    editorA.createShape(createBoxRecord('shape:group-b', 180, 80) as any);
+    await Promise.resolve();
+    let transactions = 0;
+    const count = () => { transactions += 1; };
+    docA.on('afterTransaction', count);
+
+    const group = editorA.groupShapes(['shape:group-a', 'shape:group-b'] as any);
+    await Promise.resolve();
+
+    expect(transactions).toBe(1);
+    expect(editorB.getShape(group)?.type).toBe('group');
+    expect(editorB.getShape('shape:group-a' as any)?.parentId).toBe(group);
+    expect(editorB.getShape('shape:group-b' as any)?.parentId).toBe(group);
+    docA.off('afterTransaction', count);
+    cleanupA();
+    cleanupB();
+  });
+
   it('synchronizes shape creates and updates between editors', async () => {
     const capabilityA = createMutationCapability();
     const capabilityB = createMutationCapability();
@@ -70,7 +99,7 @@ describe('bindGlideboardCollaboration', () => {
     const cleanup = bindGlideboardCollaboration(editor, { doc }, capability);
 
     const records = doc.getMap<Y.Map<unknown>>('glideboard-records-v2');
-    expect(records.size).toBe(1);
+    expect(records.size).toBe(2);
     expect(records.get('shape:seed')?.toJSON()).toMatchObject({ id: 'shape:seed', x: 12, y: 24 });
 
     cleanup();
@@ -121,7 +150,7 @@ describe('bindGlideboardCollaboration', () => {
     await Promise.resolve();
 
     expect(editorA.getShape('shape:preview' as any)).toBeDefined();
-    expect(editorA.serialize().records).toHaveLength(0);
+    expect(editorA.serialize().records.filter(record => record.kind !== 'page')).toHaveLength(0);
     expect(editorB.getShape('shape:preview' as any)).toBeUndefined();
     expect(docA.getMap('glideboard-records-v2').has('shape:preview')).toBe(false);
 
@@ -361,7 +390,7 @@ describe('bindGlideboardCollaboration', () => {
     expect(binding.checkpoints.status.peek()).toBe('incompatible');
     await expect(binding.checkpoints.captureTarget()).rejects.toThrow('incompatible');
     expect(() => editor.createShape(createBoxRecord('shape:nope', 1, 2) as any)).toThrow('incompatible');
-    expect(editor.serialize().records).toHaveLength(0);
+    expect(editor.serialize().records.filter(record => record.kind !== 'page')).toHaveLength(0);
     binding();
   });
 

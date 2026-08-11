@@ -126,7 +126,8 @@ export function getHandleAtPagePoint(editor: GlideEditor, pageX: number, pageY: 
     const bounds = util.getGeometry(shape as any).getBounds();
     const centerX = bounds.minX + bounds.w / 2;
     const centerY = bounds.minY + bounds.h / 2;
-    const handles: { id: ResizeHandle; point: { x: number; y: number } }[] = [
+    const supportedHandles = util.getResizeHandles(shape as any);
+    const allHandles: { id: ResizeHandle; point: { x: number; y: number } }[] = [
       { id: 'nw', point: { x: bounds.minX, y: bounds.minY } },
       { id: 'n', point: { x: centerX, y: bounds.minY } },
       { id: 'ne', point: { x: bounds.maxX, y: bounds.minY } },
@@ -136,6 +137,7 @@ export function getHandleAtPagePoint(editor: GlideEditor, pageX: number, pageY: 
       { id: 'sw', point: { x: bounds.minX, y: bounds.maxY } },
       { id: 'w', point: { x: bounds.minX, y: centerY } },
     ];
+    const handles = allHandles.filter(handle => supportedHandles.includes(handle.id));
     if (!util.hideRotateHandle(shape as any)) {
       const rotatePoint = editor.localToPage(shape.id as any, {
         x: centerX,
@@ -367,12 +369,18 @@ function drawSelection(editor: GlideEditor, ctx: CanvasRenderingContext2D, zoom:
     }
     if (!util.hideResizeHandles(shape as any)) {
       const hs = HANDLE_SIZE / zoom;
-      const points = [
-        [bounds.minX, bounds.minY], [centerX, bounds.minY], [bounds.maxX, bounds.minY],
-        [bounds.maxX, bounds.minY + bounds.h / 2], [bounds.maxX, bounds.maxY],
-        [centerX, bounds.maxY], [bounds.minX, bounds.maxY], [bounds.minX, bounds.minY + bounds.h / 2],
+      const allPoints: { id: ResizeHandle; x: number; y: number }[] = [
+        { id: 'nw', x: bounds.minX, y: bounds.minY },
+        { id: 'n', x: centerX, y: bounds.minY },
+        { id: 'ne', x: bounds.maxX, y: bounds.minY },
+        { id: 'e', x: bounds.maxX, y: bounds.minY + bounds.h / 2 },
+        { id: 'se', x: bounds.maxX, y: bounds.maxY },
+        { id: 's', x: centerX, y: bounds.maxY },
+        { id: 'sw', x: bounds.minX, y: bounds.maxY },
+        { id: 'w', x: bounds.minX, y: bounds.minY + bounds.h / 2 },
       ];
-      for (const [x, y] of points) {
+      const points = allPoints.filter(handle => util.getResizeHandles(shape as any).includes(handle.id));
+      for (const { x, y } of points) {
         ctx.fillRect(x! - hs / 2, y! - hs / 2, hs, hs);
         ctx.strokeRect(x! - hs / 2, y! - hs / 2, hs, hs);
       }
@@ -478,6 +486,27 @@ function drawMarquee(editor: GlideEditor, ctx: CanvasRenderingContext2D, zoom: n
   ctx.restore();
 }
 
+function drawSnapGuides(editor: GlideEditor, ctx: CanvasRenderingContext2D, zoom: number) {
+  const guides = editor.snapping.guides.peek();
+  if (guides.length === 0) return;
+  ctx.save();
+  ctx.strokeStyle = resolveColor(wbTheme.accent);
+  ctx.lineWidth = 1 / zoom;
+  ctx.setLineDash([3 / zoom, 3 / zoom]);
+  for (const guide of guides) {
+    ctx.beginPath();
+    if (guide.axis === 'x') {
+      ctx.moveTo(guide.position, guide.start);
+      ctx.lineTo(guide.position, guide.end);
+    } else {
+      ctx.moveTo(guide.start, guide.position);
+      ctx.lineTo(guide.end, guide.position);
+    }
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
 function drawBindingPreview(editor: GlideEditor, ctx: CanvasRenderingContext2D, zoom: number) {
   const preview = editor.bindingPreview.value;
   if (!preview) return;
@@ -579,6 +608,7 @@ export function CanvasOverlays() {
       ctx.translate(-cx, -cy);
 
       drawSelection(editor, ctx, zoom);
+      drawSnapGuides(editor, ctx, zoom);
       drawMarquee(editor, ctx, zoom);
       drawBindingPreview(editor, ctx, zoom);
     };
@@ -589,6 +619,7 @@ export function CanvasOverlays() {
       editor.getSelectionSignal(),
       editor.currentToolId,
       editor.interactions.getChangedIdsSignal(),
+      editor.snapping.guides,
     ];
     let subscribingBaseSignals = true;
     const disposers = observedSignals.map(observed => observed.subscribe(() => {

@@ -186,7 +186,7 @@ describe('Glideboard board-scoped lifecycle', () => {
     expect(firstCallback).not.toHaveBeenCalled();
     expect(latestCallback).toHaveBeenCalledTimes(1);
     const savedDocument = latestCallback.mock.calls[0]![0] as GlideDocument;
-    expect(savedDocument.records).toEqual([
+    expect(savedDocument.records.filter(record => record.kind !== 'page')).toEqual([
       expect.objectContaining({ id: 'box:persisted', x: 64 }),
     ]);
   });
@@ -211,7 +211,7 @@ describe('Glideboard board-scoped lifecycle', () => {
     expect(secondController).not.toBe(firstController);
     expect(capturedControllers.all).toHaveLength(2);
     expect(secondController.sessionKey).toBe('session-two');
-    expect(secondController.editor.serialize().records).toEqual([]);
+    expect(secondController.editor.serialize().records.filter(record => record.kind !== 'page')).toEqual([]);
     expect(secondController.editor.getSelectedShapeIds()).toEqual([]);
     expect(secondController.editor.history.undoStack).toEqual([]);
     expect(secondController.editor.camera.getCamera()).toEqual({ x: 0, y: 0, z: 1 });
@@ -249,7 +249,7 @@ describe('Glideboard board-scoped lifecycle', () => {
 
     await advanceTimers(20);
     expect(onDocumentChange).toHaveBeenCalledTimes(1);
-    expect((onDocumentChange.mock.calls[0]![0] as GlideDocument).records).toEqual([
+    expect((onDocumentChange.mock.calls[0]![0] as GlideDocument).records.filter(record => record.kind !== 'page')).toEqual([
       expect.objectContaining({ id: 'box:strict', x: 88 }),
     ]);
 
@@ -369,7 +369,7 @@ describe('Glideboard board-scoped lifecycle', () => {
     });
 
     expect(onDocumentChange).toHaveBeenCalledTimes(1);
-    expect((onDocumentChange.mock.calls[0]![0] as GlideDocument).records).toEqual([
+    expect((onDocumentChange.mock.calls[0]![0] as GlideDocument).records.filter(record => record.kind !== 'page')).toEqual([
       expect.objectContaining({ id: 'box:flush-on-unmount', x: 24 }),
     ]);
   });
