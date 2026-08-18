@@ -6,9 +6,9 @@ import {
   signal,
   type ReadonlySignal,
 } from '@preact/signals';
-import type { GlideStore, JsonPointer, StoreRecord, StoreTransaction } from './store';
-import type { AnyRecord, ShapeId } from './types';
-import type { MutationCapability } from './mutation-policy';
+import type { GlideStore, JsonPointer, StoreRecord, StoreTransaction } from './store.js';
+import type { AnyRecord, ShapeId } from './types.js';
+import type { MutationCapability } from './mutation-policy.js';
 
 export interface InteractionConflict {
   readonly id: string;

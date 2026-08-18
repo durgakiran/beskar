@@ -15,11 +15,11 @@
  * Pressure is taken from PointerEvent.pressure (0.5 for mouse / keyboard).
  */
 
-import { StateNode } from '../state-node';
-import type { PointerDownEvent, PointerMoveEvent, PointerUpEvent, KeyDownEvent } from '../state-node';
-import type { Vec2 } from '../types';
-import { sid } from '../types';
-import type { FreehandPoint } from '../shapes/FreehandUtil';
+import { StateNode } from '../state-node.js';
+import type { PointerDownEvent, PointerMoveEvent, PointerUpEvent, KeyDownEvent } from '../state-node.js';
+import type { Vec2 } from '../types.js';
+import { sid } from '../types.js';
+import type { FreehandPoint } from '../shapes/FreehandUtil.js';
 
 const PREVIEW_ID = sid('__draw-preview__');
 /** Minimum squared distance between successive points (de-duplicate near-idle). */
@@ -50,12 +50,16 @@ class Drawing extends StateNode {
 
   private _points: FreehandPoint[] = [];
   private _lastPt: Vec2 = { x: 0, y: 0 };
+  private _pressureSensitive = false;
+  private _simulatePressure = false;
 
   override onEnter(info: PointerDownEvent): void {
+    this._pressureSensitive = this.editor.activeStyles.value.pressureSensitive === true;
+    this._simulatePressure = this._pressureSensitive && info.pointerType !== 'pen';
     const firstPt: FreehandPoint = {
       x:        info.point.x,
       y:        info.point.y,
-      pressure: (info as any).pressure ?? 0.5,
+      pressure: info.pressure ?? 0.5,
     };
     this._points    = [firstPt];
     this._lastPt    = info.point;
@@ -72,6 +76,8 @@ class Drawing extends StateNode {
           points:     [firstPt],
           strokeWidth: this.editor.activeStyles.value.strokeWidth ?? 'medium',
           strokeStyle: this.editor.activeStyles.value.strokeStyle ?? 'solid',
+          pressureSensitive: this._pressureSensitive,
+          simulatePressure: this._simulatePressure,
           opacity:    1,
           isClosed:   false,
           isComplete: false,
@@ -88,7 +94,7 @@ class Drawing extends StateNode {
     const newPt: FreehandPoint = {
       x:        e.point.x,
       y:        e.point.y,
-      pressure: (e as any).pressure ?? 0.5,
+      pressure: e.pressure ?? 0.5,
     };
     this._points = [...this._points, newPt];
 
@@ -98,6 +104,8 @@ class Drawing extends StateNode {
           points:     this._points,
           strokeWidth: this.editor.activeStyles.value.strokeWidth ?? 'medium',
           strokeStyle: this.editor.activeStyles.value.strokeStyle ?? 'solid',
+          pressureSensitive: this._pressureSensitive,
+          simulatePressure: this._simulatePressure,
           opacity:    1,
           isClosed:   false,
           isComplete: false,
@@ -136,6 +144,8 @@ class Drawing extends StateNode {
             points:     pts,
             strokeWidth: this.editor.activeStyles.value.strokeWidth ?? 'medium',
             strokeStyle: this.editor.activeStyles.value.strokeStyle ?? 'solid',
+            pressureSensitive: this._pressureSensitive,
+            simulatePressure: this._simulatePressure,
             opacity:    1,
             isClosed:   false,
             isComplete: true,

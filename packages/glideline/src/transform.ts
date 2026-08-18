@@ -1,6 +1,6 @@
-import type { Geometry2d } from './geometry';
-import { STROKE_WIDTHS, type SizeStyle } from './styles';
-import { makeBox, type Box2d, type EdgeName, type GlideShape, type PageId, type ShapeId, type Vec2 } from './types';
+import type { Geometry2d } from './geometry/index.js';
+import { STROKE_WIDTHS, type SizeStyle } from './styles.js';
+import { makeBox, type Box2d, type EdgeName, type GlideShape, type PageId, type ShapeId, type Vec2 } from './types.js';
 
 /** Affine 2D matrix using the SVG/Canvas `a b c d e f` convention. */
 export interface Matrix2d {

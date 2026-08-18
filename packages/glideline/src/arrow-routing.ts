@@ -1,8 +1,8 @@
-import { computeArcPath } from './arc-router';
-import type { GlideEditor } from './editor';
-import { computeFallbackLocalElbowPoints, getArrowBindingEdge } from './smart-router';
-import type { ArrowRouteStyle, ArrowShape } from './shapes/ArrowUtil';
-import { makeBox, type Box2d, type ShapeId, type Vec2 } from './types';
+import { computeArcPath } from './arc-router.js';
+import type { GlideEditor } from './editor.js';
+import { computeFallbackLocalElbowPoints, getArrowBindingEdge } from './smart-router.js';
+import type { ArrowRouteStyle, ArrowShape } from './shapes/ArrowUtil.js';
+import { makeBox, type Box2d, type ShapeId, type Vec2 } from './types.js';
 
 const CURVE_SAMPLE_STEPS = 24;
 

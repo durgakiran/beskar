@@ -8,7 +8,7 @@
  */
 
 // ─────────────────────────────────────────────────────────────
-// Color palette (14 tldraw colours)
+// Color palette (15 canvas colours)
 // ─────────────────────────────────────────────────────────────
 
 export const TLDRAW_COLORS = {
@@ -26,6 +26,7 @@ export const TLDRAW_COLORS = {
   blue:     '#1971c2',
   violet:   '#7048e8',
   grape:    '#ae3ec9',
+  pink:     '#d6336c',
 } as const;
 
 export type TldrawColor = keyof typeof TLDRAW_COLORS;
@@ -150,6 +151,8 @@ export interface ShapeStyleProps {
   strokeStyle?: StrokeStyle;
   /** Stroke width token. */
   strokeWidth?: SizeStyle;
+  /** Whether freehand width follows pointer pressure or simulated drawing speed. */
+  pressureSensitive?: boolean;
   /** Text color */
   labelColor?: string;
   /** Font size token (text / sticky). */
@@ -285,6 +288,7 @@ export interface LabelProps {
   verticalAlign: 'top' | 'center';
   /** Inner padding in page-space px. */
   padding:       number;
+  lineHeight?:   number;
   /** Optional background color (used by sticky-note to match shape fill on label div). */
   background?:   string;
   /** Optional positioned label box in shape-local coordinates. */

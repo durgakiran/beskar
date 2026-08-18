@@ -6,7 +6,7 @@
  * Zod is reserved for external/MCP API validation only.
  */
 
-import type { Validator, GlideProps } from './types';
+import type { Validator, GlideProps } from './types.js';
 
 export type { Validator, GlideProps };
 

@@ -8,14 +8,14 @@ import type {
   RecordKind,
   RecordReferenceDescriptor,
   PageId,
-} from './types';
-import { isGlideBinding, isGlideShape } from './types';
-import { migrateRecord } from './migrations';
+} from './types.js';
+import { isGlideBinding, isGlideShape } from './types.js';
+import { migrateRecord } from './migrations.js';
 import {
   generateRebalancedOrderKeys,
   getShapeOrderParentId,
-} from './ordering';
-import { ContentIngressError, validateAssetRecord } from './content-ingress';
+} from './ordering.js';
+import { ContentIngressError, validateAssetRecord } from './content-ingress.js';
 import {
   applyMatrixToPoint,
   getMatrixRotation,
@@ -25,7 +25,7 @@ import {
   rotationMatrix,
   translationMatrix,
   type Matrix2d,
-} from './transform';
+} from './transform.js';
 
 /**
  * Version of the persisted GlideDocument/store envelope.
@@ -401,6 +401,7 @@ export class GlideSchema {
     }
 
     this._validateParentGraph(byId);
+    this._validateBindingPages(byId);
   }
 
   loadDocument(input: unknown): LoadedDocument {
@@ -796,6 +797,30 @@ export class GlideSchema {
         }
       }
       if (!reachedPage) throw new DocumentValidationError('shape ancestry must terminate at a page', id);
+    }
+  }
+
+  private _validateBindingPages(byId: Map<string, AnyRecord>): void {
+    const pageForShape = (shapeId: string): string | null => {
+      let cursor = byId.get(shapeId);
+      const seen = new Set<string>();
+      while (cursor?.['kind'] === 'shape' && typeof cursor['parentId'] === 'string') {
+        const parentId = cursor['parentId'] as string;
+        if (seen.has(parentId)) return null;
+        seen.add(parentId);
+        const parent = byId.get(parentId);
+        if (parent?.['kind'] === 'page') return parentId;
+        cursor = parent;
+      }
+      return null;
+    };
+    for (const record of byId.values()) {
+      if (record['kind'] !== 'binding') continue;
+      const fromPage = pageForShape(String(record['fromId']));
+      const toPage = pageForShape(String(record['toId']));
+      if (!fromPage || fromPage !== toPage) {
+        throw new DocumentValidationError('bindings cannot cross pages', String(record['id']));
+      }
     }
   }
 }

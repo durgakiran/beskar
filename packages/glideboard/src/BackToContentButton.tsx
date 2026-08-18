@@ -1,13 +1,13 @@
 import React, { useMemo } from 'react';
-import { useSignalValue } from './useSignalValue';
-import { useGlideboardController } from './GlideboardContext';
-import { wbTheme } from './theme';
+import { useSignalValue } from './useSignalValue.js';
+import { useGlideboardController } from './GlideboardContext.js';
+import { wbTheme } from './theme.js';
 
 export function BackToContentButton() {
   const controller = useGlideboardController();
   const editor = controller.editor;
   const camera = useSignalValue(editor.camera.signal);
-  const shapeIds = useSignalValue(editor.getShapeIdsSignal());
+  const shapeIds = useSignalValue(editor.getCurrentPageShapeIdsSignal());
 
   const isOffscreen = useMemo(() => {
     if (!shapeIds || shapeIds.length === 0) return false;

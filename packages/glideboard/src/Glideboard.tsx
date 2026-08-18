@@ -1,8 +1,8 @@
 import React from 'react';
-import { WhiteboardApp } from './WhiteboardApp';
-import { GlideboardController } from './GlideboardController';
-import { GlideboardProvider } from './GlideboardContext';
-import type { GlideboardHandle, GlideboardProps } from './types';
+import { WhiteboardApp } from './WhiteboardApp.js';
+import { GlideboardController } from './GlideboardController.js';
+import { GlideboardProvider } from './GlideboardContext.js';
+import type { GlideboardHandle, GlideboardProps } from './types.js';
 
 interface GlideboardSessionProps extends GlideboardProps {
   resolvedSessionKey: string;
@@ -19,6 +19,8 @@ function MountedGlideboardSession({
   forwardedRef,
   collaboration,
   readOnly = false,
+  assetLibraryProvider,
+  toolbarLayout = 'split',
   onDocumentChange,
   documentChangeDebounceMs = 500,
   debugApiKey,
@@ -29,11 +31,26 @@ function MountedGlideboardSession({
     },
     serialize: () => controller.editor.serialize(),
     replaceDocument: (document) => controller.replaceDocument(document),
+    getPages: () => controller.editor.getPageIds().map(id => controller.editor.getPage(id)!),
+    getActivePageId: () => controller.editor.getActivePageId(),
+    setActivePage: (pageId) => controller.editor.setActivePage(pageId),
+    createPage: (name) => controller.editor.createPage(name),
+    renamePage: (pageId, name) => controller.editor.renamePage(pageId, name),
+    duplicatePage: (pageId) => controller.editor.duplicatePage(pageId),
+    movePage: (pageId, direction) => controller.editor.movePage(pageId, direction),
+    deletePage: (pageId) => controller.editor.deletePage(pageId),
     exportSvg: (options) => controller.exportSvgAtTarget(options),
+    createPortableFragment: (options) => controller.createPortableFragment(options),
+    pastePortableFragment: (fragment, options) => controller.pastePortableFragment(fragment, options),
     importSvg: (source) => controller.importSvg(source),
-    importRaster: (bytes, declaredMimeType) => controller.importRaster(bytes, declaredMimeType),
+		importRaster: (bytes, declaredMimeType) => controller.importRaster(bytes, declaredMimeType),
+		replaceAsset: (shapeId, request) => controller.replaceAsset(shapeId, request),
+		downloadAsset: (recordId, signal, context) => controller.downloadAsset(recordId, signal, context),
+		clearAssetImportHistory: () => controller.clearAssetImportHistory(),
+    configureAssetPlacement: (config) => controller.configureAssetPlacement(config),
     getRecoverableTextDraft: () => controller.recoverableTextDraftSignal.peek(),
-    setCurrentTool: (toolId) => controller.setCurrentTool(toolId),
+		setCurrentTool: (toolId) => controller.setCurrentTool(toolId),
+		setReadOnly: (value) => controller.setReadOnly(value),
     settleActiveEdit: (policy) => controller.settleActiveEdit(policy),
     acquireMutationFence: (reason) => controller.acquireMutationFence(reason),
     captureProjectionTarget: () => controller.captureProjectionTarget(),
@@ -54,6 +71,8 @@ function MountedGlideboardSession({
   const collaborationUserId = collaboration?.user?.id;
   const collaborationUserName = collaboration?.user?.name;
   const collaborationUserColor = collaboration?.user?.color;
+  const collaborationBoardIdentity = collaboration?.boardIdentity;
+  const collaborationBootstrapRevision = collaboration?.bootstrapRevision;
 
   React.useEffect(() => {
     if (!collaborationDoc) return;
@@ -62,23 +81,25 @@ function MountedGlideboardSession({
       provider: collaborationProvider
         ? {
           synced: collaborationProvider.synced,
+          awareness: collaborationProvider.awareness,
           on: collaborationProvider.on?.bind(collaborationProvider),
           off: collaborationProvider.off?.bind(collaborationProvider),
         }
         : null,
-    });
-  }, [collaborationDoc, collaborationProvider, controller]);
-
-  React.useEffect(() => controller.attachPresence(
-    collaborationProvider,
-    collaborationUserId && collaborationUserName && collaborationUserColor
-      ? {
+      user: collaborationUserId && collaborationUserName && collaborationUserColor
+        ? {
           id: collaborationUserId,
           name: collaborationUserName,
           color: collaborationUserColor,
         }
-      : null,
-  ), [
+        : null,
+      boardIdentity: collaborationBoardIdentity,
+      bootstrapRevision: collaborationBootstrapRevision,
+    });
+  }, [
+    collaborationBoardIdentity,
+    collaborationBootstrapRevision,
+    collaborationDoc,
     collaborationProvider,
     collaborationUserColor,
     collaborationUserId,
@@ -95,7 +116,7 @@ function MountedGlideboardSession({
 
   return (
     <GlideboardProvider controller={controller}>
-      <WhiteboardApp />
+      <WhiteboardApp assetLibraryProvider={assetLibraryProvider} toolbarLayout={toolbarLayout} />
     </GlideboardProvider>
   );
 }
@@ -107,6 +128,7 @@ function GlideboardSession({
   initialDocumentDisposition,
   customShapes,
   assetStorage,
+  assetResolutionContext,
   readOnly = false,
   pendingSaveOnUnmount = 'cancel',
   ...props
@@ -116,6 +138,7 @@ function GlideboardSession({
     initialDocumentDisposition,
     customShapes,
     assetStorage,
+    assetResolutionContext,
     readOnly,
   });
   const pendingSavePolicyRef = React.useRef(pendingSaveOnUnmount);
@@ -141,6 +164,7 @@ function GlideboardSession({
           initialDocumentDisposition: startup.initialDocumentDisposition,
           readOnly: startup.readOnly,
           assetStorage: startup.assetStorage,
+          assetResolutionContext: startup.assetResolutionContext,
         });
         setController(ownedController);
       } catch (error) {

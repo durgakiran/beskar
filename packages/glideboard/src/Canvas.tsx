@@ -1,22 +1,38 @@
 import React, { memo, useCallback, useEffect, useRef, useState } from 'react';
+import { CanvasTextView } from '@durgakiran/canvas-text-editor/view';
+import type { CanvasRichTextDocument } from '@durgakiran/canvas-text-editor/model';
+import { projectCanvasRichTextToPlainText } from '@durgakiran/canvas-text-editor/model';
 import type {
   GlideEditor,
   GlideShape,
   ShapeId,
   Vec2,
   LabelProps,
+  RichTextDescriptor,
   TextEditSession,
 } from '@durgakiran/glideline';
 import { FONT_FAMILIES } from '@durgakiran/glideline';
-import { CanvasOverlays, getHandleAtPagePoint, getCursorForHandle } from './CanvasOverlays';
-import { useGlideboardController } from './GlideboardContext';
-import { wbTheme } from './theme';
-import { useSignalValue } from './useSignalValue';
+import { CanvasOverlays, getHandleAtPagePoint, getCursorForHandle } from './CanvasOverlays.js';
+import { useGlideboardController } from './GlideboardContext.js';
+import { wbTheme } from './theme.js';
+import { useSignalValue } from './useSignalValue.js';
 import {
   getViewportShapeEntries,
   sameViewportEntries,
   type ViewportShapeEntry,
-} from './viewport-rendering';
+} from './viewport-rendering.js';
+import { shouldIgnoreGlideboardShortcuts } from './shortcut-guards.js';
+
+const LazyCanvasTextEditor = React.lazy(async () => {
+  const module = await import('@durgakiran/canvas-text-editor/editor');
+  return { default: module.CanvasTextEditor };
+});
+
+export function getCanvasToolCursor(tool: string | undefined, handleId: string | null, buttons = 0): string {
+  if (tool === 'hand') return buttons === 1 ? 'grabbing' : 'grab';
+  if (tool === 'asset') return 'crosshair';
+  return handleId ? getCursorForHandle(handleId) : 'default';
+}
 
 // ─────────────────────────────────────────────────────────────
 // Shared helpers
@@ -76,6 +92,7 @@ function useViewportShapeEntries(
       editor.editingShapeId.subscribe(schedule),
       editor.erasingShapeIds.subscribe(schedule),
       editor.bindingPreview.subscribe(schedule),
+      editor.activePageId.subscribe(schedule),
       editor.interactions.getChangedIdsSignal().subscribe(schedule),
     ];
     schedule();
@@ -128,7 +145,10 @@ const ShapeLayer = memo(({
   const editor = controller.editor;
   const sig = editor.getShapeSignal(id);
   const shape = useSignalValue(sig as any) as GlideShape | null;
+  const remoteTextEditingShapeIds = useSignalValue(controller.remoteTextEditingShapeIdsSignal);
+  const isRemoteTextEditing = remoteTextEditingShapeIds?.has(id) ?? false;
   useSignalValue(editor.getDocumentVersionSignal());
+  useSignalValue(controller.collaborationTextVersionSignal);
   const svgRef = useRef<SVGSVGElement>(null);
 
   // Inject toSvg() geometry output into the per-shape <svg>
@@ -150,6 +170,10 @@ const ShapeLayer = memo(({
 
   const util = shape ? editor.getShapeUtil(shape.type) : null;
   const labelProps: LabelProps | null = (shape && util) ? ((util as any).getLabelProps?.(shape) ?? null) : null;
+  const richText = (shape && util) ? util.getRichTextDescriptor(shape as any) : null;
+  const textCollaboration = richText
+    ? controller.getCanvasTextCollaboration(id as ShapeId, { create: false })
+    : undefined;
 
   if (!shape || !util || editor.isShapeEffectivelyHidden(shape.id as ShapeId)) return null;
 
@@ -201,8 +225,61 @@ const ShapeLayer = memo(({
       />
 
       {/* Label: native HTML div */}
-      {labelProps && (labelProps.text.length > 0 || isEditing) && (
+      {richText && (richText.fallbackText.length > 0 || isEditing || textCollaboration) ? (
         <div
+          className="glideboard-rich-text-view"
+          style={{
+            position: 'absolute',
+            inset: 0,
+            width: richText.sizeMode === 'auto' ? 'max-content' : richText.w,
+            height: richText.h,
+            minWidth: richText.sizeMode === 'auto' ? 1 : undefined,
+            overflow: richText.sizeMode === 'fixed' ? 'hidden' : 'visible',
+            fontFamily: richText.fontFamily,
+            fontSize: richText.fontSize,
+            color: richText.color,
+            opacity: typeof shape.props['opacity'] === 'number' ? shape.props['opacity'] : 1,
+            textAlign: richText.textAlign,
+            lineHeight: richText.lineHeight,
+            pointerEvents: 'none',
+            userSelect: 'none',
+            visibility: isEditing ? 'hidden' : 'visible',
+          }}
+        >
+          {isRemoteTextEditing && textCollaboration ? (
+            <React.Suspense fallback={(
+              <CanvasTextView
+                value={richText.value}
+                fallbackText={richText.fallbackText}
+                fragment={textCollaboration.fragment}
+              />
+            )}>
+              <LazyCanvasTextEditor
+                value={richText.value}
+                collaboration={textCollaboration}
+                editable={false}
+                autoFocus={false}
+                showToolbar={false}
+                className={`glideboard-rich-text-remote-editor glideboard-rich-text-editor--${richText.sizeMode}`}
+              />
+            </React.Suspense>
+          ) : (
+            <CanvasTextView
+              value={richText.value}
+              fallbackText={richText.fallbackText}
+              fragment={textCollaboration?.fragment}
+              linkActivation="modified-click"
+              style={richText.sizeMode === 'auto' ? {
+                width: 'max-content',
+                maxWidth: 'none',
+                overflowWrap: 'normal',
+              } : undefined}
+            />
+          )}
+        </div>
+      ) : labelProps && (labelProps.text.length > 0 || isEditing) && (
+        <div
+          data-glideboard-role="shape-label"
           style={{
             position: 'absolute',
             left: labelProps.x ?? labelProps.padding,
@@ -212,6 +289,7 @@ const ShapeLayer = memo(({
             fontFamily: labelProps.fontFamily,
             fontSize: labelProps.fontSize,
             color: labelProps.color,
+            opacity: typeof shape.props['opacity'] === 'number' ? shape.props['opacity'] : 1,
             background: labelProps.background ?? 'transparent',
             textAlign: labelProps.textAlign,
             display: 'flex',
@@ -225,7 +303,7 @@ const ShapeLayer = memo(({
             wordBreak: 'break-word',
             outline: 'none',
             boxSizing: 'border-box',
-            lineHeight: 1.35,
+            lineHeight: labelProps.lineHeight ?? 1.35,
             visibility: isEditing ? 'hidden' : 'visible',
           }}
         >
@@ -302,6 +380,162 @@ function EraserPreviewOverlay() {
 // TextEditingOverlay — the only live text editor on the canvas
 // ─────────────────────────────────────────────────────────────
 
+function RichTextEditingOverlay({
+  shape,
+  session,
+  descriptor,
+}: {
+  shape: GlideShape;
+  session: TextEditSession;
+  descriptor: RichTextDescriptor;
+}) {
+  const controller = useGlideboardController();
+  const editor = controller.editor;
+  const rootRef = useRef<HTMLDivElement>(null);
+  const documentRef = useRef(descriptor.value as CanvasRichTextDocument);
+  const measuredRef = useRef({ w: descriptor.w, h: descriptor.h });
+  const hasUserChangedRef = useRef(false);
+  const livePublishFrameRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    const awareness = controller.awarenessSignal.peek();
+    if (!awareness) return;
+    awareness.setLocalStateField('canvasTextEditing', {
+      shapeId: shape.id,
+      pageId: editor.getActivePageId(),
+    });
+    return () => awareness.setLocalStateField('canvasTextEditing', null);
+  }, [controller, editor, shape.id]);
+
+  const syncDraft = useCallback((
+    document: CanvasRichTextDocument,
+    measured = measuredRef.current,
+    forceDirty = false,
+  ) => {
+    documentRef.current = document;
+    measuredRef.current = measured;
+    const w = descriptor.sizeMode === 'auto'
+      ? Math.max(descriptor.fontSize * 0.6, Math.ceil(measured.w))
+      : descriptor.w;
+    const h = descriptor.sizeMode === 'fixed'
+      ? descriptor.h
+      : Math.max(descriptor.fontSize * descriptor.lineHeight, Math.ceil(measured.h));
+    editor.updateEditingDraft(projectCanvasRichTextToPlainText(document), {
+      richText: document,
+      w,
+      h,
+      sizeMode: descriptor.sizeMode,
+    }, forceDirty);
+    if (forceDirty || hasUserChangedRef.current) editor.publishEditingDraft();
+  }, [descriptor.fontSize, descriptor.h, descriptor.lineHeight, descriptor.sizeMode, descriptor.w, editor]);
+
+  const commit = useCallback((document = documentRef.current) => {
+    if (livePublishFrameRef.current !== null) {
+      cancelAnimationFrame(livePublishFrameRef.current);
+      livePublishFrameRef.current = null;
+    }
+    const content = rootRef.current?.querySelector<HTMLElement>('.canvas-text-editor__content');
+    syncDraft(document, content ? {
+      w: Math.max(1, content.scrollWidth),
+      h: Math.max(1, content.scrollHeight),
+    } : measuredRef.current, hasUserChangedRef.current);
+    editor.commitEditing(true);
+  }, [editor, syncDraft]);
+
+  const scheduleLivePublish = useCallback((document: CanvasRichTextDocument) => {
+    documentRef.current = document;
+    hasUserChangedRef.current = true;
+    if (livePublishFrameRef.current !== null) cancelAnimationFrame(livePublishFrameRef.current);
+    livePublishFrameRef.current = requestAnimationFrame(() => {
+      livePublishFrameRef.current = null;
+      const content = rootRef.current?.querySelector<HTMLElement>('.canvas-text-editor__content');
+      syncDraft(documentRef.current, content ? {
+        w: Math.max(1, content.scrollWidth),
+        h: Math.max(1, content.scrollHeight),
+      } : measuredRef.current, true);
+    });
+  }, [syncDraft]);
+
+  useEffect(() => () => {
+    if (livePublishFrameRef.current !== null) cancelAnimationFrame(livePublishFrameRef.current);
+  }, []);
+
+  useEffect(() => {
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as Element | null;
+      if (
+        rootRef.current?.contains(target)
+        || target?.closest('.canvas-text-link-bubble')
+        || target?.closest('[data-glideboard-role="selected-style-panel"]')
+      ) return;
+      const ownBoard = rootRef.current?.closest('[data-glideboard-role="app"]');
+      const targetBoard = target?.closest('[data-glideboard-role="app"]');
+      if (targetBoard && targetBoard !== ownBoard) return;
+      commit();
+    };
+    document.addEventListener('pointerdown', onPointerDown, true);
+    return () => document.removeEventListener('pointerdown', onPointerDown, true);
+  }, [commit]);
+
+  const world = editor.getWorldTransform(shape.id as ShapeId);
+  const worldTransform = `matrix(${world.a}, ${world.b}, ${world.c}, ${world.d}, ${world.e}, ${world.f})`;
+  const width = descriptor.sizeMode === 'auto' ? 'max-content' : descriptor.w;
+  const height = descriptor.sizeMode === 'fixed' ? descriptor.h : 'auto';
+
+  return (
+    <div
+      ref={rootRef}
+      data-glideboard-role="rich-text-editing-overlay"
+      data-shape-id={shape.id}
+      style={{
+        position: 'absolute',
+        left: 0,
+        top: 0,
+        width: descriptor.w,
+        height: descriptor.h,
+        transform: worldTransform,
+        transformOrigin: '0 0',
+        zIndex: 1_000_000,
+        pointerEvents: 'none',
+      }}
+    >
+      <div
+        style={{
+          width,
+          height,
+          minWidth: descriptor.sizeMode === 'auto' ? 10 : undefined,
+          minHeight: descriptor.fontSize * descriptor.lineHeight,
+          outline: session.status === 'conflicted' ? '2px solid #ef4444' : '2px solid #4f8cff',
+          outlineOffset: 2,
+          fontFamily: descriptor.fontFamily,
+          fontSize: descriptor.fontSize,
+          color: descriptor.color,
+          opacity: typeof shape.props['opacity'] === 'number' ? shape.props['opacity'] : 1,
+          textAlign: descriptor.textAlign,
+          lineHeight: descriptor.lineHeight,
+          overflow: descriptor.sizeMode === 'fixed' ? 'hidden' : 'visible',
+          pointerEvents: 'auto',
+          cursor: 'text',
+        }}
+      >
+        <React.Suspense fallback={<CanvasTextView value={descriptor.value} fallbackText={descriptor.fallbackText} />}>
+          <LazyCanvasTextEditor
+            value={descriptor.value}
+            collaboration={controller.getCanvasTextCollaboration(shape.id as ShapeId)}
+            restoreValueOnCancel={descriptor.value}
+            syncExternalValue={false}
+            className={`glideboard-rich-text-editor glideboard-rich-text-editor--${descriptor.sizeMode}`}
+            onChange={scheduleLivePublish}
+            onSizeChange={size => syncDraft(documentRef.current, size)}
+            onCommit={commit}
+            onCancel={() => editor.cancelEditing(true, session.status === 'conflicted')}
+          />
+        </React.Suspense>
+      </div>
+    </div>
+  );
+}
+
 function TextEditingOverlay() {
   const controller = useGlideboardController();
   const editor = controller.editor;
@@ -336,6 +570,10 @@ function TextEditingOverlay() {
     : shape;
   const labelProps = util.getLabelProps(layoutShape as any);
   if (!labelProps) return null;
+  const richText = util.getRichTextDescriptor(layoutShape as any);
+  if (shape.type === 'text' && richText) {
+    return <RichTextEditingOverlay shape={shape} session={session} descriptor={richText} />;
+  }
 
   const localBounds = util.getGeometry(layoutShape as any).getBounds();
   const world = editor.getWorldTransform(shape.id as ShapeId);
@@ -386,6 +624,7 @@ function TextEditingOverlay() {
           fontFamily: labelProps.fontFamily,
           fontSize: labelProps.fontSize,
           color: labelProps.color,
+          opacity: typeof shape.props['opacity'] === 'number' ? shape.props['opacity'] : 1,
           background: labelProps.background ?? 'transparent',
           display: 'flex',
           flexDirection: 'column',
@@ -602,6 +841,8 @@ export function Canvas() {
         point: page,
         screenPoint: screen,
         shiftKey: event.shiftKey,
+        pressure: event.pressure,
+        pointerType: event.pointerType,
         target: 'handle',
         handleId,
       } as any);
@@ -626,6 +867,8 @@ export function Canvas() {
       point: page,
       screenPoint: screen,
       shiftKey: event.shiftKey,
+      pressure: event.pressure,
+      pointerType: event.pointerType,
       target: (hit && event.button === 0) ? 'shape' : 'canvas',
       shapeId: (hit && event.button === 0) ? (hit.id as ShapeId) : undefined,
     } as any);
@@ -641,25 +884,37 @@ export function Canvas() {
       : getHandleAtPagePoint(editor, page.x, page.y);
     if (containerRef.current) {
       const currentTool = editor.currentToolId.peek();
-      if (currentTool === 'hand') {
-        containerRef.current.style.cursor = event.buttons === 1 ? 'grabbing' : 'grab';
-      } else {
-        containerRef.current.style.cursor = handleId ? getCursorForHandle(handleId) : 'default';
-      }
+      containerRef.current.style.cursor = getCanvasToolCursor(currentTool, handleId, event.buttons);
     }
-    editor.dispatchEvent({ type: 'pointerMove', point: page, screenPoint: screen, shiftKey: event.shiftKey, altKey: event.altKey } as any);
+    editor.dispatchEvent({
+      type: 'pointerMove', point: page, screenPoint: screen,
+      shiftKey: event.shiftKey, altKey: event.altKey,
+      pressure: event.pressure, pointerType: event.pointerType,
+    } as any);
     
     const awareness = controller.awarenessSignal.peek();
     if (awareness) {
+      if (editor.editingShapeId.peek()) {
+        latestAwarenessCursorRef.current = null;
+        awareness.setLocalStateField('canvasCursor', null);
+        return;
+      }
       latestAwarenessCursorRef.current = page;
       if (awarenessCursorFrameRef.current === null) {
         awarenessCursorFrameRef.current = requestAnimationFrame(() => {
           awarenessCursorFrameRef.current = null;
-          awareness.setLocalStateField('cursor', latestAwarenessCursorRef.current);
+          awareness.setLocalStateField('canvasCursor', latestAwarenessCursorRef.current);
         });
       }
     }
   }, [controller, editor, getPagePoint]);
+
+  useEffect(() => {
+    const awareness = controller.awarenessSignal.peek();
+    if (!awareness || !editingId) return;
+    latestAwarenessCursorRef.current = null;
+    awareness.setLocalStateField('canvasCursor', null);
+  }, [controller, editingId]);
 
   const onPointerUp = useCallback((event: React.PointerEvent) => {
     isPointerDownRef.current = false;
@@ -668,7 +923,11 @@ export function Canvas() {
       containerRef.current.releasePointerCapture(event.pointerId);
     }
     const { screen, page } = getPagePoint(event);
-    editor.dispatchEvent({ type: 'pointerUp', point: page, screenPoint: screen, shiftKey: event.shiftKey, altKey: event.altKey } as any);
+    editor.dispatchEvent({
+      type: 'pointerUp', point: page, screenPoint: screen,
+      shiftKey: event.shiftKey, altKey: event.altKey,
+      pressure: event.pressure, pointerType: event.pointerType,
+    } as any);
 
     controller.isCanvasDraggingRef.current = false;
 
@@ -723,7 +982,7 @@ export function Canvas() {
   }, [editor, readOnly]);
 
   const onKeyDown = useCallback((event: React.KeyboardEvent) => {
-    if (readOnly || editor.editingShapeId.peek()) return;
+    if (shouldIgnoreGlideboardShortcuts(event) || readOnly || editor.editingShapeId.peek()) return;
     editor.dispatchEvent({ type: 'keyDown', key: event.key } as any);
   }, [editor, readOnly]);
 
@@ -735,27 +994,20 @@ export function Canvas() {
         awarenessCursorFrameRef.current = null;
       }
       latestAwarenessCursorRef.current = null;
-      awareness.setLocalStateField('cursor', null);
+      awareness.setLocalStateField('canvasCursor', null);
     }
   }, [controller]);
 
-  // Sync canvas cursor when active tool changes (e.g. spacebar activates hand tool)
-  useEffect(() => {
-    if (!containerRef.current) return;
-    if (activeTool === 'hand') {
-      containerRef.current.style.cursor = 'grab';
-    } else {
-      containerRef.current.style.cursor = 'default';
-    }
-  }, [activeTool]);
-
   const cameraTransform = `matrix(${camera.z}, 0, 0, ${camera.z}, ${-camera.x * camera.z}, ${-camera.y * camera.z})`;
+  const assetPlacementArmed = activeTool === 'asset' || undefined;
+  const canvasCursor = getCanvasToolCursor(activeTool, null);
 
   return (
     <div
       ref={containerRef}
       id={controller.domId('canvas')}
       data-glideboard-role="canvas"
+      data-asset-placement-armed={assetPlacementArmed}
       tabIndex={0}
       style={{
         flex: 1,
@@ -764,7 +1016,7 @@ export function Canvas() {
         overflow: 'hidden',
         touchAction: 'none',
         outline: 'none',
-        cursor: 'default',
+        cursor: canvasCursor,
       }}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}

@@ -12,7 +12,7 @@
  * Overlap fallback: straight line.
  */
 
-import type { Box2d, EdgeName, Vec2 } from './types';
+import type { Box2d, EdgeName, Vec2 } from './types.js';
 
 const GAP = 20; // gap for U-bend routing around same-side edges
 

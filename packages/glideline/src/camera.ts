@@ -21,8 +21,8 @@
  */
 
 import { signal, type Signal } from '@preact/signals';
-import type { Vec2, Box2d } from './types';
-import { makeBox } from './types';
+import type { Vec2, Box2d } from './types.js';
+import { makeBox } from './types.js';
 
 // ─────────────────────────────────────────────────────────────
 // Constants (LLD §11)

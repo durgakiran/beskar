@@ -8,10 +8,10 @@
  * On pointerUp: commits shape, switches to select tool, selects the new shape.
  */
 
-import { StateNode } from '../state-node';
-import type { PointerDownEvent, PointerMoveEvent, PointerUpEvent, KeyDownEvent } from '../state-node';
-import type { ShapeId, Vec2 } from '../types';
-import { sid } from '../types';
+import { StateNode } from '../state-node.js';
+import type { PointerDownEvent, PointerMoveEvent, PointerUpEvent, KeyDownEvent } from '../state-node.js';
+import type { ShapeId, Vec2 } from '../types.js';
+import { sid } from '../types.js';
 
 const DRAG_THRESHOLD = 4;
 const PREVIEW_ID = sid('__ellipse-preview__');

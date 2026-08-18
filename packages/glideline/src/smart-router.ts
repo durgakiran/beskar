@@ -1,7 +1,7 @@
-import { makeBox, type Box2d, type EdgeName, type GlideShape, type ShapeId, type Vec2 } from './types';
-import type { GlideEditor } from './editor';
-import type { ArrowShape } from './shapes/ArrowUtil';
-import { computeElbowPath, parseElbowPoints } from './elbow-router';
+import { makeBox, type Box2d, type EdgeName, type GlideShape, type ShapeId, type Vec2 } from './types.js';
+import type { GlideEditor } from './editor.js';
+import type { ArrowShape } from './shapes/ArrowUtil.js';
+import { computeElbowPath, parseElbowPoints } from './elbow-router.js';
 
 const OBSTACLE_PADDING = 12;
 const DEFAULT_ROUTE_BUDGET_MS = 12;
@@ -228,6 +228,15 @@ export class SmartRouterCache {
     now: () => number,
   ): number {
     const group = [arrow.id as string];
+    const currentParallelKey = getParallelRouteKey({
+      arrow,
+      startWorld: { x: arrow.x + arrow.props.start.point.x, y: arrow.y + arrow.props.start.point.y },
+      endWorld: { x: arrow.x + arrow.props.end.point.x, y: arrow.y + arrow.props.end.point.y },
+      fromEdge: getArrowBindingEdge(editor, arrow.id as ShapeId, 'start', 'right'),
+      toEdge: getArrowBindingEdge(editor, arrow.id as ShapeId, 'end', 'left'),
+      fromShapeId: arrow.props.start.boundShapeId,
+      toShapeId: arrow.props.end.boundShapeId,
+    });
     const smartArrows = editor.getShapes(true).filter(shape =>
       shape.type === 'arrow' &&
       shape.id !== arrow.id &&
@@ -235,8 +244,7 @@ export class SmartRouterCache {
     ) as ArrowShape[];
 
     for (const other of smartArrows) {
-      if (now() > deadline) break;
-      const otherBase = this._getOrComputeBaseRoute({
+      const otherInput: BaseSmartRouteInput = {
         arrow: other,
         startWorld: {
           x: other.x + other.props.start.point.x,
@@ -252,7 +260,13 @@ export class SmartRouterCache {
         toShapeId: other.props.end.boundShapeId,
         deadline,
         now,
-      });
+      };
+      if (getParallelRouteKey(otherInput) === currentParallelKey) {
+        group.push(other.id as string);
+        continue;
+      }
+      if (now() > deadline) break;
+      const otherBase = this._getOrComputeBaseRoute(otherInput);
       if (!otherBase) continue;
       if (otherBase.baseSignature === current.baseSignature) {
         group.push(other.id as string);
@@ -716,5 +730,19 @@ function getRouteCacheKey(arrow: ArrowShape): string {
     start.point.y,
     end.point.x,
     end.point.y,
+  ].join('|');
+}
+
+function getParallelRouteKey(input: Omit<BaseSmartRouteInput, 'deadline' | 'now'>): string {
+  return [
+    input.startWorld.x,
+    input.startWorld.y,
+    input.endWorld.x,
+    input.endWorld.y,
+    input.fromEdge,
+    input.toEdge,
+    input.fromShapeId ?? '',
+    input.toShapeId ?? '',
+    input.arrow.props.bend,
   ].join('|');
 }

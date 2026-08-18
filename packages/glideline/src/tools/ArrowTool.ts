@@ -21,13 +21,13 @@
  *   end.point   = { x: dx, y: dy } (local offset from start)
  */
 
-import { StateNode } from '../state-node';
-import type { PointerDownEvent, PointerMoveEvent, PointerUpEvent, KeyDownEvent } from '../state-node';
-import type { AnyRecord, ShapeId, Vec2 } from '../types';
-import { makeBox, sid } from '../types';
-import type { ArrowShape } from '../shapes/ArrowUtil';
-import type { BindingPreview, BindingPreviewCandidate } from '../editor';
-import { buildArrowBindingRecord, buildArrowShapeRecord } from '../arrow-records';
+import { StateNode } from '../state-node.js';
+import type { PointerDownEvent, PointerMoveEvent, PointerUpEvent, KeyDownEvent } from '../state-node.js';
+import type { AnyRecord, ShapeId, Vec2 } from '../types.js';
+import { makeBox, sid } from '../types.js';
+import type { ArrowShape } from '../shapes/ArrowUtil.js';
+import type { BindingPreview, BindingPreviewCandidate } from '../editor.js';
+import { buildArrowBindingRecord, buildArrowShapeRecord } from '../arrow-records.js';
 
 const PREVIEW_ID = sid('__arrow-preview__');
 const BINDING_SNAP_RADIUS = 12;
@@ -158,6 +158,7 @@ class Drawing extends StateNode {
         id: PREVIEW_ID,
         startWorld: startPt,
         endWorld: startPt,
+        parentId: this.editor.getActivePageId(),
         routeStyle,
         arrowheadStart,
         arrowheadEnd,
@@ -270,6 +271,7 @@ class Drawing extends StateNode {
         id: finalId,
         startWorld: startPt,
         endWorld: endPt,
+        parentId: this.editor.getActivePageId(),
         routeStyle,
         arrowheadStart,
         arrowheadEnd,

@@ -6,9 +6,9 @@ import type {
   StoreChangeSet,
   StoreRecord,
 } from '@durgakiran/glideline';
-import type { GlideboardCollaborationConfig } from './types';
-import { GlideboardCollaborationCheckpointSource } from './collaboration/CollaborationCheckpointSource';
-import type { CollaborationCheckpointSource } from './durability/types';
+import type { GlideboardCollaborationConfig } from './types.js';
+import { GlideboardCollaborationCheckpointSource } from './collaboration/CollaborationCheckpointSource.js';
+import type { CollaborationCheckpointSource } from './durability/types.js';
 
 const LEGACY_RECORDS_KEY = 'glideboard-records';
 const RECORDS_KEY = 'glideboard-records-v2';

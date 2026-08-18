@@ -1,6 +1,6 @@
-import type { GlideEditor } from './editor';
-import type { Box2d, GlideShape, ShapeId } from './types';
-import type { ArrowShape } from './shapes/ArrowUtil';
+import type { GlideEditor } from './editor.js';
+import type { Box2d, GlideShape, ShapeId } from './types.js';
+import type { ArrowShape } from './shapes/ArrowUtil.js';
 
 export interface AIShapeContext {
   id: ShapeId;

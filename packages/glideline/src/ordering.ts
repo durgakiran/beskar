@@ -1,4 +1,4 @@
-import type { GlideShape, ShapeId } from './types';
+import type { GlideShape, ShapeId } from './types.js';
 
 const ORDER_PREFIX = 'o';
 const ORDER_RADIX = 36n;

@@ -1,5 +1,5 @@
-import { Box2d, Vec2, makeBox } from '../types';
-import { Geometry2d } from './Geometry2d';
+import { Box2d, Vec2, makeBox } from '../types.js';
+import { Geometry2d } from './Geometry2d.js';
 
 interface Polyline2dOptions {
   boundsPadding?: number;

@@ -19,19 +19,19 @@
  * toSvg         → <ellipse> + optional <text> label centred inside
  */
 
-import { ShapeUtil } from './ShapeUtil';
-import { T } from '../validators';
-import { defineMigrations } from '../migrations';
-import { makeBox } from '../types';
-import type { GlideShape, Vec2, GlideProps } from '../types';
-import { Geometry2d, Ellipse2d } from '../geometry';
+import { ShapeUtil } from './ShapeUtil.js';
+import { T } from '../validators.js';
+import { defineMigrations } from '../migrations.js';
+import { makeBox } from '../types.js';
+import type { GlideShape, Vec2, GlideProps } from '../types.js';
+import { Geometry2d, Ellipse2d } from '../geometry/index.js';
 import {
   STROKE_WIDTHS, STROKE_DASH_ARRAYS,
   svgFill, resolveColor, inlinePatternDefs, createTextForeignObjectForExport,
   FONT_FAMILIES, FONT_SIZES,
   type FillStyle, type StrokeStyle, type SizeStyle, type FontSize,
   type TextAlign, type Font, type LabelProps,
-} from '../styles';
+} from '../styles.js';
 
 // ─────────────────────────────────────────────────────────────
 // Props
@@ -260,7 +260,7 @@ export class EllipseUtil extends ShapeUtil<EllipseShape> {
 // Plugin export
 // ─────────────────────────────────────────────────────────────
 
-import type { GlidePlugin } from '../editor';
+import type { GlidePlugin } from '../editor.js';
 
 export const EllipsePlugin: GlidePlugin = {
   id: 'ellipse',

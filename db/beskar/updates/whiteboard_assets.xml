@@ -37,4 +37,117 @@
             <dropTable schemaName="core" tableName="whiteboard_asset"/>
         </rollback>
     </changeSet>
+
+    <changeSet id="whiteboard_assets_2_reference_type" author="Codex">
+        <comment>Allow retained whiteboard raster references to participate in reference-safe rollback</comment>
+        <sql>
+            ALTER TABLE core.asset_reference DROP CONSTRAINT IF EXISTS ck_asset_reference_asset_type;
+            ALTER TABLE core.asset_reference
+            ADD CONSTRAINT ck_asset_reference_asset_type
+            CHECK (asset_type IN ('attachment', 'image', 'whiteboard_asset'));
+        </sql>
+        <rollback>
+            DELETE FROM core.asset_reference WHERE asset_type = 'whiteboard_asset';
+            ALTER TABLE core.asset_reference DROP CONSTRAINT IF EXISTS ck_asset_reference_asset_type;
+            ALTER TABLE core.asset_reference
+            ADD CONSTRAINT ck_asset_reference_asset_type
+            CHECK (asset_type IN ('attachment', 'image'));
+        </rollback>
+    </changeSet>
+
+    <changeSet id="whiteboard_assets_3_staging_transactions" author="Codex">
+        <comment>Token-owned staged uploads with retryable cleanup and quota metadata</comment>
+        <createTable schemaName="core" tableName="whiteboard_asset_staging">
+            <column name="token" type="UUID"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="page_id" type="BIGINT"><constraints nullable="false"/></column>
+            <column name="content_hash" type="CHAR(64)"><constraints nullable="false"/></column>
+            <column name="storage_key" type="TEXT"><constraints nullable="false"/></column>
+            <column name="created_by" type="TEXT"><constraints nullable="false"/></column>
+            <column name="status" type="VARCHAR(32)"><constraints nullable="false"/></column>
+            <column name="file_size" type="BIGINT" defaultValueNumeric="0"><constraints nullable="false"/></column>
+            <column name="mime_type" type="VARCHAR(64)"/>
+            <column name="width" type="INTEGER"/>
+            <column name="height" type="INTEGER"/>
+            <column name="quota_account_id" type="UUID"/>
+            <column name="quota_space_id" type="UUID"/>
+            <column name="quota_reserved_bytes" type="BIGINT" defaultValueNumeric="0"><constraints nullable="false"/></column>
+            <column name="quota_correlation_id" type="TEXT"/>
+			<column name="created_asset" type="BOOLEAN" defaultValueBoolean="false"><constraints nullable="false"/></column>
+            <column name="created_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="NOW()"><constraints nullable="false"/></column>
+            <column name="updated_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="NOW()"><constraints nullable="false"/></column>
+        </createTable>
+        <addForeignKeyConstraint
+            baseTableSchemaName="core" baseTableName="whiteboard_asset_staging" baseColumnNames="page_id"
+            referencedTableSchemaName="core" referencedTableName="page" referencedColumnNames="id"
+            constraintName="whiteboard_asset_staging_page_fk" onDelete="CASCADE"/>
+        <createIndex schemaName="core" tableName="whiteboard_asset_staging" indexName="whiteboard_asset_staging_asset_idx">
+            <column name="page_id"/><column name="content_hash"/><column name="status"/>
+        </createIndex>
+        <sql>
+            ALTER TABLE core.whiteboard_asset_staging
+            ADD CONSTRAINT ck_whiteboard_asset_staging_status
+            CHECK (status IN ('prepared', 'uploading', 'staged', 'cleanup_pending', 'durable_cleanup_pending', 'committed', 'cancelled'));
+            GRANT SELECT, INSERT, UPDATE, DELETE ON core.whiteboard_asset_staging TO ${app_user};
+        </sql>
+        <rollback>
+            <dropTable schemaName="core" tableName="whiteboard_asset_staging"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="whiteboard_assets_4_terminal_cleanup_sweeper" author="Codex">
+        <comment>Replay-safe compensation and bounded staging cleanup retry metadata</comment>
+        <addColumn schemaName="core" tableName="whiteboard_asset_staging">
+            <column name="cleanup_attempts" type="INTEGER" defaultValueNumeric="0"><constraints nullable="false"/></column>
+            <column name="next_cleanup_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="cleanup_error" type="TEXT"/>
+        </addColumn>
+        <createIndex schemaName="core" tableName="whiteboard_asset_staging" indexName="whiteboard_asset_staging_cleanup_idx">
+            <column name="status"/><column name="next_cleanup_at"/><column name="updated_at"/>
+        </createIndex>
+        <sql>
+            ALTER TABLE core.whiteboard_asset_staging DROP CONSTRAINT ck_whiteboard_asset_staging_status;
+            ALTER TABLE core.whiteboard_asset_staging
+            ADD CONSTRAINT ck_whiteboard_asset_staging_status
+            CHECK (status IN ('prepared', 'uploading', 'staged', 'cleanup_pending', 'durable_cleanup_pending', 'committed', 'compensated', 'cancelled'));
+        </sql>
+        <rollback>
+            <sql>
+                ALTER TABLE core.whiteboard_asset_staging DROP CONSTRAINT ck_whiteboard_asset_staging_status;
+                ALTER TABLE core.whiteboard_asset_staging
+                ADD CONSTRAINT ck_whiteboard_asset_staging_status
+                CHECK (status IN ('prepared', 'uploading', 'staged', 'cleanup_pending', 'durable_cleanup_pending', 'committed', 'cancelled'));
+            </sql>
+            <dropIndex schemaName="core" tableName="whiteboard_asset_staging" indexName="whiteboard_asset_staging_cleanup_idx"/>
+            <dropColumn schemaName="core" tableName="whiteboard_asset_staging" columnName="cleanup_error"/>
+            <dropColumn schemaName="core" tableName="whiteboard_asset_staging" columnName="next_cleanup_at"/>
+            <dropColumn schemaName="core" tableName="whiteboard_asset_staging" columnName="cleanup_attempts"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="whiteboard_assets_5_cleanup_dead_letter" author="Codex">
+        <comment>Retain terminal cleanup recovery metadata after bounded retry exhaustion</comment>
+        <addColumn schemaName="core" tableName="whiteboard_asset_staging">
+            <column name="cleanup_source_status" type="VARCHAR(32)"/>
+            <column name="cleanup_exhausted_at" type="TIMESTAMP WITH TIME ZONE"/>
+        </addColumn>
+        <sql>
+            ALTER TABLE core.whiteboard_asset_staging DROP CONSTRAINT ck_whiteboard_asset_staging_status;
+            ALTER TABLE core.whiteboard_asset_staging
+            ADD CONSTRAINT ck_whiteboard_asset_staging_status
+            CHECK (status IN ('prepared', 'uploading', 'staged', 'cleanup_pending', 'durable_cleanup_pending', 'committed', 'compensated', 'cancelled', 'cleanup_exhausted'));
+        </sql>
+        <rollback>
+            <sql>
+                UPDATE core.whiteboard_asset_staging
+                SET status=COALESCE(cleanup_source_status, 'cleanup_pending'), next_cleanup_at=NOW()
+                WHERE status='cleanup_exhausted';
+                ALTER TABLE core.whiteboard_asset_staging DROP CONSTRAINT ck_whiteboard_asset_staging_status;
+                ALTER TABLE core.whiteboard_asset_staging
+                ADD CONSTRAINT ck_whiteboard_asset_staging_status
+                CHECK (status IN ('prepared', 'uploading', 'staged', 'cleanup_pending', 'durable_cleanup_pending', 'committed', 'compensated', 'cancelled'));
+            </sql>
+            <dropColumn schemaName="core" tableName="whiteboard_asset_staging" columnName="cleanup_exhausted_at"/>
+            <dropColumn schemaName="core" tableName="whiteboard_asset_staging" columnName="cleanup_source_status"/>
+        </rollback>
+    </changeSet>
 </databaseChangeLog>

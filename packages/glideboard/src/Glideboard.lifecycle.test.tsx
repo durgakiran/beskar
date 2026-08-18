@@ -5,6 +5,7 @@ import type { GlideDocument, GlidePlugin } from '@durgakiran/glideline';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { GlideboardController } from './GlideboardController';
 import { Glideboard } from './Glideboard';
+import type { GlideboardAssetPlacementConfig, GlideboardHandle } from './types';
 
 const capturedControllers = vi.hoisted(() => ({
   bySession: new Map<string, unknown>(),
@@ -67,6 +68,21 @@ function makeCustomShapes(): GlidePlugin[] {
   return [{ id: 'lifecycle-test-plugin' }];
 }
 
+class CreationErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { error: unknown }
+> {
+  state = { error: null as unknown };
+
+  static getDerivedStateFromError(error: unknown) {
+    return { error };
+  }
+
+  render() {
+    return this.state.error ? <span>creation failed</span> : this.props.children;
+  }
+}
+
 async function advanceTimers(ms: number) {
   await act(async () => {
     await vi.advanceTimersByTimeAsync(ms);
@@ -86,6 +102,145 @@ describe('Glideboard board-scoped lifecycle', () => {
     vi.clearAllTimers();
     vi.useRealTimers();
     delete (window as any)[DEBUG_API_KEY];
+  });
+
+  it('abandons deferred controller creation when unmounted synchronously', async () => {
+    const view = render(<Glideboard sessionKey="abandoned-before-creation" />);
+    view.unmount();
+
+    await flushControllerCreation();
+
+    expect(capturedControllers.bySession.has('abandoned-before-creation')).toBe(false);
+  });
+
+  it('surfaces controller construction failures through React', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      const view = render(
+        <CreationErrorBoundary>
+          <Glideboard sessionKey="invalid-startup" initialDocument={{} as GlideDocument} />
+        </CreationErrorBoundary>,
+      );
+
+      await flushControllerCreation();
+
+      expect(view.getByText('creation failed')).toBeTruthy();
+      expect(capturedControllers.bySession.has('invalid-startup')).toBe(false);
+    } finally {
+      consoleError.mockRestore();
+    }
+  });
+
+  it('does not publish a construction error after a plugin synchronously unmounts the board', async () => {
+    let view!: ReturnType<typeof render>;
+    const plugin: GlidePlugin = {
+      id: 'unmounting-plugin',
+      onInstall: () => {
+        view.unmount();
+        throw new Error('plugin failed after unmount');
+      },
+    };
+    view = render(<Glideboard sessionKey="unmounted-construction-error" customShapes={[plugin]} />);
+
+    await flushControllerCreation();
+
+    expect(capturedControllers.bySession.has('unmounted-construction-error')).toBe(false);
+  });
+
+	it('exposes generic asset placement configuration through the public handle', async () => {
+    const ref = React.createRef<GlideboardHandle>();
+    render(<Glideboard ref={ref} sessionKey="asset-placement-handle" />);
+    await flushControllerCreation();
+    const controller = controllerFor('asset-placement-handle');
+    const configure = vi.spyOn(controller, 'configureAssetPlacement');
+    const config: GlideboardAssetPlacementConfig = {
+      selection: {
+        itemId: 'library:item',
+        mediaType: 'svg',
+        width: 24,
+        height: 24,
+        provenance: {
+          providerId: 'provider',
+          itemId: 'library:item',
+          sourceLibraryId: 'library',
+          sourceVersion: '1',
+          license: 'MIT',
+        },
+      },
+      materializer: async () => { throw new Error('not used'); },
+    };
+
+    act(() => ref.current!.configureAssetPlacement(config));
+
+    expect(configure).toHaveBeenCalledWith(config);
+    expect(controller.editor.currentToolId.peek()).toBe('asset');
+	});
+
+	it('exposes asset replace, verified download, and permission commands through the public handle', async () => {
+		const ref = React.createRef<GlideboardHandle>();
+		render(<Glideboard ref={ref} sessionKey="asset-lifecycle-handle" />);
+		await flushControllerCreation();
+		const controller = controllerFor('asset-lifecycle-handle');
+		const replace = vi.spyOn(controller, 'replaceAsset').mockResolvedValue('shape:asset' as never);
+		const download = vi.spyOn(controller, 'downloadAsset').mockResolvedValue({ bytes: new Uint8Array([1]), mimeType: 'image/png' });
+		const setReadOnly = vi.spyOn(controller, 'setReadOnly');
+		const request = { kind: 'svg' as const, source: '<svg />' };
+
+		await ref.current!.replaceAsset('shape:asset' as never, request);
+		await ref.current!.downloadAsset('shape:asset');
+		ref.current!.setReadOnly(true);
+
+		expect(replace).toHaveBeenCalledWith('shape:asset', request);
+		expect(download).toHaveBeenCalledWith('shape:asset', undefined, undefined);
+		expect(setReadOnly).toHaveBeenCalledWith(true);
+	});
+
+  it('delegates every portability and asset lifecycle command through the public handle', async () => {
+    const ref = React.createRef<GlideboardHandle>();
+    render(<Glideboard ref={ref} sessionKey="complete-phase3-handle" />);
+    await flushControllerCreation();
+    const controller = controllerFor('complete-phase3-handle');
+    const spies = {
+      checkpoints: vi.spyOn(controller, 'getCollaborationCheckpoints').mockReturnValue({} as never),
+      serialize: vi.spyOn(controller.editor, 'serialize').mockReturnValue({} as never),
+      replaceDocument: vi.spyOn(controller, 'replaceDocument').mockImplementation(() => undefined),
+      exportSvg: vi.spyOn(controller, 'exportSvgAtTarget').mockResolvedValue('<svg />'),
+      createPortableFragment: vi.spyOn(controller, 'createPortableFragment').mockResolvedValue(null),
+      pastePortableFragment: vi.spyOn(controller, 'pastePortableFragment').mockResolvedValue([]),
+      importSvg: vi.spyOn(controller, 'importSvg').mockResolvedValue('shape:svg' as never),
+      importRaster: vi.spyOn(controller, 'importRaster').mockResolvedValue('shape:raster' as never),
+      replaceAsset: vi.spyOn(controller, 'replaceAsset').mockResolvedValue('shape:replacement' as never),
+      downloadAsset: vi.spyOn(controller, 'downloadAsset').mockResolvedValue({ bytes: new Uint8Array(), mimeType: 'image/png' }),
+      clearHistory: vi.spyOn(controller, 'clearAssetImportHistory'),
+      configurePlacement: vi.spyOn(controller, 'configureAssetPlacement').mockImplementation(() => undefined),
+      setTool: vi.spyOn(controller, 'setCurrentTool'),
+      setReadOnly: vi.spyOn(controller, 'setReadOnly'),
+      settle: vi.spyOn(controller, 'settleActiveEdit').mockResolvedValue(undefined),
+      fence: vi.spyOn(controller, 'acquireMutationFence').mockResolvedValue({} as never),
+      projection: vi.spyOn(controller, 'captureProjectionTarget').mockReturnValue({} as never),
+      flush: vi.spyOn(controller, 'flush').mockResolvedValue(undefined),
+    };
+    const handle = ref.current!;
+    void handle.checkpoints;
+    handle.serialize();
+    handle.replaceDocument({} as never);
+    await handle.exportSvg({} as never);
+    await handle.createPortableFragment({});
+    await handle.pastePortableFragment({} as never);
+    await handle.importSvg('<svg />');
+    await handle.importRaster(new Uint8Array([1]), 'image/png');
+    await handle.replaceAsset('shape:old' as never, { kind: 'svg', source: '<svg />' });
+    await handle.downloadAsset('asset:one');
+    handle.clearAssetImportHistory();
+    handle.configureAssetPlacement({} as never);
+    handle.getRecoverableTextDraft();
+    handle.setCurrentTool('select');
+    handle.setReadOnly(false);
+    await handle.settleActiveEdit('commit');
+    await handle.acquireMutationFence('test');
+    handle.captureProjectionTarget();
+    await handle.flush();
+    for (const spy of Object.values(spies)) expect(spy).toHaveBeenCalled();
   });
 
   it('gives two mounted boards distinct, independently mutable state', async () => {
@@ -281,12 +436,12 @@ describe('Glideboard board-scoped lifecycle', () => {
 
     await act(async () => Promise.resolve());
     expect(awareness.setLocalStateField.mock.calls).not.toContainEqual(['user', null]);
-    expect(awareness.setLocalStateField.mock.calls).not.toContainEqual(['cursor', null]);
+    expect(awareness.setLocalStateField.mock.calls).not.toContainEqual(['canvasCursor', null]);
 
     view.unmount();
     await act(async () => Promise.resolve());
 
-    expect(awareness.setLocalStateField).toHaveBeenCalledWith('cursor', null);
+    expect(awareness.setLocalStateField).toHaveBeenCalledWith('canvasCursor', null);
     expect(awareness.setLocalStateField).toHaveBeenCalledWith('user', null);
     doc.destroy();
   });

@@ -138,6 +138,10 @@ function routeIntersectsBoxInterior(points: Vec2[], box: Box2d): boolean {
   return false;
 }
 
+function resolveFunctionalRoute(editor: ReturnType<typeof makeEditor>, arrow: ArrowShape) {
+  return resolveArrowRoute(editor, arrow, { now: () => 0 });
+}
+
 describe('Phase 6 smart routing', () => {
   it('T6.1-01: smart route avoids obstacles', () => {
     const editor = makeEditor();
@@ -146,7 +150,7 @@ describe('Phase 6 smart routing', () => {
     const toId = createBox(editor, 'box:c', 460, 140, 120, 80, 'C');
     const arrow = createBoundArrow(editor, 'shape:smart-route', fromId, toId, 'smart');
 
-    const route = resolveArrowRoute(editor, arrow);
+    const route = resolveFunctionalRoute(editor, arrow);
     const obstacleBounds = editor.getShapeWorldBounds(obstacleId);
 
     expect(route.renderKind).toBe('polyline');
@@ -160,7 +164,7 @@ describe('Phase 6 smart routing', () => {
     const toId = createBox(editor, 'box:dirty-c', 460, 140, 120, 80);
     const arrow = createBoundArrow(editor, 'shape:dirty-route', fromId, toId, 'smart');
     // Same-value updates are store no-ops, so build the lazy route explicitly.
-    resolveArrowRoute(editor, arrow);
+    resolveFunctionalRoute(editor, arrow);
     const initialSnapshot = editor.getSmartRoutingSnapshot();
     expect(initialSnapshot.dirty).toBe(false);
     expect(initialSnapshot.buildCount).toBeGreaterThanOrEqual(1);
@@ -169,7 +173,7 @@ describe('Phase 6 smart routing', () => {
     const dirtySnapshot = editor.getSmartRoutingSnapshot();
     expect(dirtySnapshot.layoutRevision).toBeGreaterThan(initialSnapshot.layoutRevision);
 
-    resolveArrowRoute(editor, editor.getShape<ArrowShape>(sid('shape:dirty-route'))!);
+    resolveFunctionalRoute(editor, editor.getShape<ArrowShape>(sid('shape:dirty-route'))!);
     const rebuiltSnapshot = editor.getSmartRoutingSnapshot();
     expect(rebuiltSnapshot.dirty).toBe(false);
     expect(rebuiltSnapshot.buildCount).toBeGreaterThanOrEqual(initialSnapshot.buildCount);
@@ -183,8 +187,8 @@ describe('Phase 6 smart routing', () => {
     const arrowA = createBoundArrow(editor, 'shape:nudge-a', fromId, toId, 'smart');
     const arrowB = createBoundArrow(editor, 'shape:nudge-b', fromId, toId, 'smart');
 
-    const routeA = resolveArrowRoute(editor, arrowA);
-    const routeB = resolveArrowRoute(editor, arrowB);
+    const routeA = resolveFunctionalRoute(editor, arrowA);
+    const routeB = resolveFunctionalRoute(editor, arrowB);
 
     expect(routeA.offset).toBeDefined();
     expect(routeB.offset).toBeDefined();
@@ -247,9 +251,9 @@ describe('Phase 6 smart routing', () => {
     const smartArrow = createBoundArrow(editor, 'shape:smart-cache-route', smartFrom, smartTo, 'smart');
 
     const before = resolveArrowRoute(editor, curveArrow).path;
-    resolveArrowRoute(editor, smartArrow);
+    resolveFunctionalRoute(editor, smartArrow);
     editor.updateShape(smartFrom, { x: 80 });
-    resolveArrowRoute(editor, editor.getShape<ArrowShape>(sid('shape:smart-cache-route'))!);
+    resolveFunctionalRoute(editor, editor.getShape<ArrowShape>(sid('shape:smart-cache-route'))!);
     const after = resolveArrowRoute(editor, curveArrow).path;
 
     expect(after).toBe(before);
@@ -262,7 +266,7 @@ describe('Phase 6 smart routing', () => {
     const toId = createBox(editor, 'box:padding-target', 350, 250, 120, 80);
     const arrow = createBoundArrow(editor, 'shape:padding-route', fromId, toId, 'smart');
 
-    const route = resolveArrowRoute(editor, arrow);
+    const route = resolveFunctionalRoute(editor, arrow);
     const obstacleBounds = editor.getShapeWorldBounds(obstacleId);
 
     expect(route.didFallback).not.toBe(true);
@@ -277,7 +281,7 @@ describe('Phase 6 smart routing', () => {
     const toId = createBox(editor, 'box:fractional-to', 489.8578605647359, 7.318804302490776, 117.0390625, 76.6796875);
     const arrow = createBoundArrow(editor, 'shape:fractional-route', fromId, toId, 'smart');
 
-    const route = resolveArrowRoute(editor, arrow);
+    const route = resolveFunctionalRoute(editor, arrow);
     const obstacleBounds = editor.getShapeWorldBounds(obstacleId);
 
     expect(route.didFallback).not.toBe(true);
@@ -290,12 +294,12 @@ describe('Phase 6 smart routing', () => {
     const fromId = createBox(editor, 'box:group-from', 120, 80, 140, 100);
     const toId = createBox(editor, 'box:group-to', 460, 360, 140, 100);
     const arrow = createBoundArrow(editor, 'shape:group-route', fromId, toId, 'ortho');
-    const before = resolveArrowRoute(editor, arrow).worldPoints;
+    const before = resolveFunctionalRoute(editor, arrow).worldPoints;
 
     editor.groupShapes([fromId, toId, arrow.id as ShapeId]);
 
     const groupedArrow = editor.getShape<ArrowShape>(arrow.id as ShapeId)!;
-    const after = resolveArrowRoute(editor, groupedArrow).worldPoints;
+    const after = resolveFunctionalRoute(editor, groupedArrow).worldPoints;
     expect(after).toHaveLength(before.length);
     after.forEach((point, index) => {
       expect(point.x).toBeCloseTo(before[index]!.x, 7);
@@ -303,10 +307,10 @@ describe('Phase 6 smart routing', () => {
     });
 
     const group = editor.getShape(groupedArrow.parentId as ShapeId)!;
-    const routeBeforeRotation = resolveArrowRoute(editor, groupedArrow).localPoints;
+    const routeBeforeRotation = resolveFunctionalRoute(editor, groupedArrow).localPoints;
     const boundsBeforeRotation = editor.getShapeLocalBounds(group.id as ShapeId);
     editor.updateShape(group.id as ShapeId, { rotation: Math.PI / 3 });
-    const routeAfterRotation = resolveArrowRoute(
+    const routeAfterRotation = resolveFunctionalRoute(
       editor,
       editor.getShape<ArrowShape>(arrow.id as ShapeId)!,
     ).localPoints;

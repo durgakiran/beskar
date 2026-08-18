@@ -1,15 +1,15 @@
-import { ShapeUtil } from './ShapeUtil';
-import { T } from '../validators';
-import { defineMigrations } from '../migrations';
-import type { GlideShape, GlideProps, Vec2 } from '../types';
-import { Geometry2d, Polygon2d, Rectangle2d } from '../geometry';
+import { ShapeUtil } from './ShapeUtil.js';
+import { T } from '../validators.js';
+import { defineMigrations } from '../migrations.js';
+import type { GlideShape, GlideProps, Vec2 } from '../types.js';
+import { Geometry2d, Polygon2d, Rectangle2d } from '../geometry/index.js';
 import {
   StyleValidators, STROKE_WIDTHS, STROKE_DASH_ARRAYS,
   svgFill, resolveColor, inlinePatternDefs, createTextForeignObjectForExport,
   FONT_FAMILIES, FONT_SIZES,
   type FillStyle, type StrokeStyle, type SizeStyle, type FontSize,
   type TextAlign, type Font, type LabelProps,
-} from '../styles';
+} from '../styles.js';
 
 export interface GeoShapeProps {
   [key: string]: unknown;
@@ -468,7 +468,7 @@ export class CalloutUtil extends BasePathShapeUtil<CalloutShape> {
   }
 }
 
-import type { GlidePlugin } from '../editor';
+import type { GlidePlugin } from '../editor.js';
 
 export const GeoShapePlugin: GlidePlugin = {
   id: 'geo-shapes',

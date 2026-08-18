@@ -1,6 +1,6 @@
-import { StateNode } from '../state-node';
-import type { KeyDownEvent, PointerDownEvent, PointerMoveEvent, PointerUpEvent } from '../state-node';
-import { sid, type ShapeId, type Vec2 } from '../types';
+import { StateNode } from '../state-node.js';
+import type { KeyDownEvent, PointerDownEvent, PointerMoveEvent, PointerUpEvent } from '../state-node.js';
+import { sid, type ShapeId, type Vec2 } from '../types.js';
 
 const PREVIEW_ID = sid('__frame-preview__');
 const DRAG_THRESHOLD = 4;

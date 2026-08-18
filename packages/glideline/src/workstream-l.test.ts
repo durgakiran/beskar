@@ -6,6 +6,7 @@ import { ArrowPlugin, ArrowUtil } from './shapes/ArrowUtil';
 import { BoxUtil } from './shapes/BoxUtil';
 import { TextUtil } from './shapes/TextUtil';
 import { SelectTool } from './tools/SelectTool';
+import { TextTool } from './tools/TextTool';
 
 const makeBoxEditor = () => createEditor({
   plugins: [{ id: 'box', shapes: [BoxUtil as any] }],
@@ -25,6 +26,34 @@ function createBox(editor: ReturnType<typeof makeBoxEditor>) {
 }
 
 describe('Workstream L — text edit safety', () => {
+  it('uses left alignment for standalone text and center alignment for shape labels by default', () => {
+    const editor = createEditor({
+      plugins: [{ id: 'text-and-box', shapes: [TextUtil as any, BoxUtil as any] }],
+    });
+    const box = editor.createShape({ type: 'box', x: 0, y: 0, props: { label: 'Label' } });
+    editor.setSelectedShapeIds([box]);
+    const text = editor.createShape({ type: 'text', x: 0, y: 100, props: { text: 'Standalone' } });
+
+    expect(editor.getShape(box)?.props.textAlign).toBe('center');
+    expect(editor.getShape(text)?.props.textAlign).toBe('left');
+
+    editor.activeStyles.value = { ...editor.activeStyles.peek(), textAlign: 'right' };
+    const overridden = editor.createShape({ type: 'text', x: 0, y: 140, props: { text: 'Overridden' } });
+    expect(editor.getShape(overridden)?.props.textAlign).toBe('right');
+  });
+
+  it('places standalone text left-aligned even when a restored active style is centered', () => {
+    const editor = createEditor({
+      plugins: [{ id: 'text-tool', shapes: [TextUtil as any], tools: [SelectTool, TextTool] }],
+    });
+    editor.activeStyles.value = { ...editor.activeStyles.peek(), textAlign: 'center' };
+    editor.setCurrentTool('text');
+    editor.dispatchEvent({ type: 'pointerDown', point: { x: 40, y: 60 }, shiftKey: false, target: 'canvas' });
+
+    const shape = editor.serialize().records.find(record => record.kind === 'shape' && record.type === 'text');
+    expect(shape?.props.textAlign).toBe('left');
+  });
+
   it('commits only the owned text field and preserves concurrent style changes', () => {
     const editor = makeBoxEditor();
     const id = createBox(editor);
@@ -118,6 +147,63 @@ describe('Workstream L — text edit safety', () => {
     editor.startEditing(id);
     expect(editor.commitEditing()).toBe(true);
     expect(editor.getShape(id)).toBeUndefined();
+  });
+
+  it('commits formatting-only rich-text changes as one history entry', () => {
+    const editor = createEditor({ plugins: [{ id: 'text', shapes: [TextUtil as any] }] });
+    const id = editor.createShape({
+      type: 'text', x: 0, y: 0,
+      props: { ...new TextUtil().getDefaultProps(), text: 'Same text' },
+    });
+    const historyBefore = editor.history.undoStack.length;
+    const richText = {
+      format: 'beskar-canvas-rich-text', version: 1, profile: 'text',
+      doc: { type: 'doc', content: [{ type: 'paragraph', content: [{
+        type: 'text', text: 'Same text', marks: [{ type: 'bold' }],
+      }] }] },
+    };
+
+    editor.startEditing(id);
+    editor.updateEditingDraft('Same text', { richText, w: 80, h: 22, sizeMode: 'auto' }, true);
+    expect(editor.commitEditing()).toBe(true);
+
+    expect((editor.getShape(id)?.props as any).richText).toEqual(richText);
+    expect(editor.history.undoStack.length).toBe(historyBefore + 1);
+  });
+
+  it('publishes text while typing and records the edit as one undo step', () => {
+    const editor = makeBoxEditor();
+    const id = createBox(editor);
+    const historyBefore = editor.history.undoStack.length;
+
+    editor.startEditing(id);
+    editor.updateEditingDraft('First');
+    expect(editor.publishEditingDraft()).toBe(true);
+    expect(editor.getShape(id)?.props.label).toBe('First');
+    expect(editor.textEditing.session.peek()?.shapeId).toBe(id);
+
+    editor.updateEditingDraft('Second');
+    expect(editor.publishEditingDraft()).toBe(true);
+    expect(editor.getShape(id)?.props.label).toBe('Second');
+    expect(editor.history.undoStack.length).toBe(historyBefore);
+
+    expect(editor.commitEditing()).toBe(true);
+    expect(editor.history.undoStack.length).toBe(historyBefore + 1);
+    expect(editor.undo().status).toBe('applied');
+    expect(editor.getShape(id)?.props.label).toBe('Original');
+  });
+
+  it('restores the original shape when a live text edit is cancelled', () => {
+    const editor = makeBoxEditor();
+    const id = createBox(editor);
+
+    editor.startEditing(id);
+    editor.updateEditingDraft('Transient');
+    editor.publishEditingDraft();
+    expect(editor.getShape(id)?.props.label).toBe('Transient');
+
+    editor.cancelEditing();
+    expect(editor.getShape(id)?.props.label).toBe('Original');
   });
 
   it('keeps a rotated standalone text anchor fixed when its content grows', () => {

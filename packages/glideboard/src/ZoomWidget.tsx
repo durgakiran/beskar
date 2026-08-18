@@ -1,8 +1,8 @@
 import React from 'react';
-import type { GlideboardController } from './GlideboardController';
-import { useGlideboardController } from './GlideboardContext';
-import { wbTheme } from './theme';
-import { useSignalValue } from './useSignalValue';
+import type { GlideboardController } from './GlideboardController.js';
+import { useGlideboardController } from './GlideboardContext.js';
+import { wbTheme } from './theme.js';
+import { useSignalValue } from './useSignalValue.js';
 
 const MIN_ZOOM = 0.1;
 const MAX_ZOOM = 8;

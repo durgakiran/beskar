@@ -19,7 +19,7 @@ export default defineConfig({
     command: `npm run dev -- --force --host 127.0.0.1 --port ${port}`,
     cwd: '../glideline-demo',
     url: `http://127.0.0.1:${port}`,
-    reuseExistingServer: !process.env.CI,
+    reuseExistingServer: false,
     timeout: 30_000,
   },
 });

@@ -1,13 +1,13 @@
-import type { GlideEditor } from './editor';
-import { type AnyRecord, type EdgeName, type ShapeId, sid, type Vec2 } from './types';
-import { RecordIdService } from './id';
+import type { GlideEditor } from './editor.js';
+import { type AnyRecord, type EdgeName, type PageId, type ShapeId, pid, sid, type Vec2 } from './types.js';
+import { RecordIdService } from './id.js';
 import {
   anchorToEdge,
   type ArrowRouteStyle,
   type ArrowShape,
   type ArrowTerminal,
   type ArrowheadStyle,
-} from './shapes/ArrowUtil';
+} from './shapes/ArrowUtil.js';
 
 const DEFAULT_CURVE_BEND = 0.3;
 
@@ -25,6 +25,7 @@ export function buildArrowShapeRecord(args: {
   routeStyle?: ArrowRouteStyle;
   arrowheadStart?: ArrowheadStyle;
   arrowheadEnd?: ArrowheadStyle;
+  parentId?: PageId;
   index?: string;
 }): ArrowShape {
   const routeStyle = args.routeStyle ?? 'ortho';
@@ -38,7 +39,7 @@ export function buildArrowShapeRecord(args: {
     y: args.startWorld.y,
     index: args.index ?? 'a1',
     rotation: 0,
-    parentId: 'page:default' as any,
+    parentId: args.parentId ?? pid('page:default'),
     isLocked: false,
     isHidden: false,
     meta: {},

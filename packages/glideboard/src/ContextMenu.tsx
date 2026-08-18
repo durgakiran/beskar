@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
-import { useGlideboardController } from './GlideboardContext';
-import { wbTheme } from './theme';
+import { useGlideboardController } from './GlideboardContext.js';
+import { wbTheme } from './theme.js';
 
 interface ContextMenuProps {
   position: { x: number; y: number } | null;

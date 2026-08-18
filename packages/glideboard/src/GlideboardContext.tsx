@@ -1,5 +1,5 @@
 import React from 'react';
-import type { GlideboardController } from './GlideboardController';
+import type { GlideboardController } from './GlideboardController.js';
 
 const GlideboardContext = React.createContext<GlideboardController | null>(null);
 

@@ -9,10 +9,10 @@ import type {
   StoreCommitPreparation,
   StoreTransaction,
   TransactionScope,
-} from './store';
-import type { AnyRecord, DeepReadonly } from './types';
-import type { MutationCapability } from './mutation-policy';
-import { MutationPermissionError } from './mutation-policy';
+} from './store.js';
+import type { AnyRecord, DeepReadonly } from './types.js';
+import type { MutationCapability } from './mutation-policy.js';
+import { MutationPermissionError } from './mutation-policy.js';
 
 const MAX_STACK = 100;
 const MAX_HISTORY_BYTES = 16 * 1024 * 1024;

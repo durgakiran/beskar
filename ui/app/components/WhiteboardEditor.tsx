@@ -63,6 +63,127 @@ function getOrCreateWhiteboardClientId(): string {
     }
 }
 
+export function trustedPortableAssetRequest(reference: string, apiV1: string): { url: string; credentials: RequestCredentials } {
+    const apiBase = new URL(`${apiV1.replace(/\/+$/, "")}/`, window.location.origin);
+    let target: URL;
+    try {
+        target = new URL(reference, window.location.origin);
+    } catch {
+        throw new Error("Portable whiteboard asset reference is invalid");
+    }
+    const escapedApiPath = apiBase.pathname.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const mediaPath = new RegExp(`^${escapedApiPath}media/whiteboard-asset/[1-9]\\d*/[a-f0-9]{64}$`);
+    if (target.origin !== window.location.origin || !mediaPath.test(target.pathname) || target.search || target.hash) {
+        throw new Error("Portable whiteboard asset reference is not a trusted media URL");
+    }
+    return {
+        url: target.href,
+        credentials: "include",
+    };
+}
+
+type AssetHttpCategory = 'invalid-content' | 'unsupported-format' | 'limit-exceeded' | 'storage' | 'network' | 'rate-limit' | 'permission' | 'conflict' | 'not-found';
+
+function retryAfterMilliseconds(response: Response): number | undefined {
+    const value = response.headers?.get?.("retry-after")?.trim();
+    if (!value) return undefined;
+    const seconds = Number(value);
+    if (Number.isFinite(seconds) && seconds >= 0) return Math.ceil(seconds * 1000);
+    const date = Date.parse(value);
+    if (!Number.isFinite(date)) return undefined;
+    return Math.max(0, date - Date.now());
+}
+
+function waitForAssetRetry(delayMs: number, signal: AbortSignal): Promise<void> {
+    if (signal.aborted) return Promise.reject(new DOMException('Asset import cancelled', 'AbortError'));
+    return new Promise((resolve, reject) => {
+        const timeout = window.setTimeout(() => {
+            signal.removeEventListener('abort', abort);
+            resolve();
+        }, delayMs);
+        const abort = () => {
+            window.clearTimeout(timeout);
+            reject(new DOMException('Asset import cancelled', 'AbortError'));
+        };
+        signal.addEventListener('abort', abort, { once: true });
+    });
+}
+
+async function assetHttpError(response: Response, operation: string): Promise<Error> {
+    let detail = "";
+    try {
+        detail = (await response.clone().text()).trim();
+    } catch {
+        // The status remains authoritative when a proxy body cannot be read.
+    }
+    const quotaDenied = response.status === 507 || /quota|storage limit|limit exceeded/i.test(detail);
+    let category: AssetHttpCategory = 'storage';
+    let retryable = response.status >= 500;
+	if (response.status === 429) {
+		category = 'rate-limit';
+		retryable = true;
+	} else if (quotaDenied || response.status === 413) {
+        category = 'limit-exceeded';
+        retryable = false;
+    } else if (response.status === 401 || response.status === 403) {
+        category = 'permission';
+        retryable = false;
+    } else if (response.status === 400 || response.status === 422) {
+        category = 'invalid-content';
+        retryable = false;
+    } else if (response.status === 415) {
+        category = 'unsupported-format';
+        retryable = false;
+    } else if (response.status === 409) {
+        category = 'conflict';
+        retryable = false;
+    } else if (response.status === 404) {
+        category = 'not-found';
+        retryable = false;
+    } else if ([502, 503, 504].includes(response.status)) {
+        category = 'network';
+        retryable = true;
+    }
+    return Object.assign(new Error(`${operation} failed (${response.status})${detail ? `: ${detail}` : ""}`), {
+        category,
+        retryable,
+		status: response.status,
+		retryAfterMs: response.status === 429 ? retryAfterMilliseconds(response) : undefined,
+    });
+}
+
+function assetFetchError(error: unknown, operation: string): unknown {
+    if (error instanceof DOMException && error.name === 'AbortError') return error;
+    if ((error as { category?: unknown } | null)?.category) return error;
+    if (error instanceof TypeError) {
+        return Object.assign(new Error(`${operation} failed: ${error.message}`), {
+            category: 'network' as const,
+            retryable: true,
+            cause: error,
+        });
+    }
+    return error;
+}
+
+function orphanCleanupError(message: string, errors: unknown[]): Error {
+    return Object.assign(new Error(message), {
+        name: 'AssetOrphanCleanupError',
+        code: 'orphan-cleanup',
+        category: 'storage' as const,
+        retryable: true,
+        cause: errors[0],
+        errors,
+    });
+}
+
+async function fetchAsset(input: RequestInfo | URL, init: RequestInit, operation: string): Promise<Response> {
+    try {
+        return await fetch(input, init);
+    } catch (error) {
+        throw assetFetchError(error, operation);
+    }
+}
+
 export default function WhiteboardEditor({
     slug,
     readOnly = false,
@@ -133,38 +254,153 @@ export default function WhiteboardEditor({
         return { id: profileData.data.id, name: profileData.data.name, color };
     }, [profileData]);
 
-    const whiteboardAssetStorage = useMemo<GlideboardAssetStorage>(() => ({
-        async persist(asset, bytes, signal) {
+    const whiteboardAssetStorage = useMemo<GlideboardAssetStorage>(() => {
+        const apiV1 = getApiV1Base({ fallbackBase: import.meta.env.VITE_IMAGE_SERVER_URL });
+        const prepare: GlideboardAssetStorage["prepare"] = async (asset, signal) => {
             const hash = String(asset.props.hash ?? "");
             const mimeType = String(asset.props.mimeType ?? "");
             if (!/^[a-f0-9]{64}$/.test(hash)) throw new Error("Invalid whiteboard asset identity");
             if (!["image/png", "image/jpeg", "image/webp"].includes(mimeType)) {
                 throw new Error("Unsupported whiteboard asset MIME type");
             }
-            const body = new Uint8Array(bytes.byteLength);
-            body.set(bytes);
-            const apiV1 = getApiV1Base({ fallbackBase: import.meta.env.VITE_IMAGE_SERVER_URL });
-            const response = await fetch(`${apiV1}/media/whiteboard-asset/${encodeURIComponent(pageId)}/${hash}`, {
+            const stagingBase = `${apiV1}/media/whiteboard-asset/${encodeURIComponent(pageId)}/${hash}/staging`;
+            const response = await fetchAsset(stagingBase, {
                 method: "POST",
                 credentials: "include",
-                headers: {
-                    "Content-Type": mimeType,
-                    "X-Content-SHA256": hash,
-                },
-                body: body.buffer,
                 signal,
-            });
-            if (!response.ok) {
-                throw new Error(`Whiteboard asset upload failed (${response.status})`);
+            }, "Whiteboard asset staging prepare");
+            if (!response.ok) throw await assetHttpError(response, "Whiteboard asset staging prepare");
+            const payload = await response.json() as { data?: { token?: unknown } };
+            const token = payload.data?.token;
+            if (typeof token !== "string" || !/^[a-f0-9-]{36}$/i.test(token)) {
+                throw new Error("Whiteboard asset staging prepare returned an invalid token");
             }
-        },
+			const transactionUrl = `${stagingBase}/${encodeURIComponent(token)}`;
+			const rollback = async () => {
+					const cleanupResponse = await fetchAsset(transactionUrl, { method: "DELETE", credentials: "include" }, "Whiteboard asset rollback");
+					if (!cleanupResponse.ok) throw await assetHttpError(cleanupResponse, "Whiteboard asset rollback");
+			};
+			return {
+                token,
+                stage: async (bytes, stageSignal) => {
+                    const body = new Uint8Array(bytes.byteLength);
+                    body.set(bytes);
+                    const stageResponse = await fetchAsset(transactionUrl, {
+                        method: "PUT",
+                        credentials: "include",
+                        headers: { "Content-Type": mimeType, "X-Content-SHA256": hash },
+                        body: body.buffer,
+                        signal: stageSignal,
+                    }, "Whiteboard asset staging upload");
+                    if (!stageResponse.ok) throw await assetHttpError(stageResponse, "Whiteboard asset staging upload");
+				},
+					commit: async (commitSignal) => {
+						let ambiguousError: unknown;
+						for (let attempt = 0; attempt < 3; attempt += 1) {
+							if (commitSignal.aborted) throw new DOMException('Asset import cancelled', 'AbortError');
+							const retryController = new AbortController();
+							const abortRetry = () => retryController.abort();
+							commitSignal.addEventListener('abort', abortRetry, { once: true });
+							const timeout = attempt === 0 ? null : window.setTimeout(abortRetry, 5_000);
+							try {
+								const commitResponse = await fetchAsset(`${transactionUrl}/commit`, {
+									method: "POST",
+									credentials: "include",
+									signal: retryController.signal,
+								}, "Whiteboard asset commit");
+								if (!commitResponse.ok) throw await assetHttpError(commitResponse, "Whiteboard asset commit");
+								if (commitSignal.aborted) throw new DOMException('Asset import cancelled', 'AbortError');
+								return;
+							} catch (error) {
+								const mapped = assetFetchError(error, "Whiteboard asset commit");
+								if (commitSignal.aborted) throw new DOMException('Asset import cancelled', 'AbortError');
+								ambiguousError = mapped;
+								if ((mapped as { retryable?: unknown } | null)?.retryable === false) break;
+								const retryAfterMs = (mapped as { category?: unknown; retryAfterMs?: unknown } | null)?.category === 'rate-limit'
+									? (mapped as { retryAfterMs?: unknown }).retryAfterMs
+									: undefined;
+								if (attempt < 2 && typeof retryAfterMs === 'number') {
+									await waitForAssetRetry(retryAfterMs, commitSignal);
+								}
+							} finally {
+								if (timeout !== null) window.clearTimeout(timeout);
+								commitSignal.removeEventListener('abort', abortRetry);
+							}
+					}
+					try {
+						await rollback();
+					} catch (rollbackError) {
+							throw orphanCleanupError("Whiteboard asset commit outcome and rollback both failed", [ambiguousError, rollbackError]);
+					}
+					throw ambiguousError;
+				},
+				rollback,
+            };
+        };
+        return {
+        prepare,
         resolve(asset) {
             const hash = String(asset.props.hash ?? "");
             if (!/^[a-f0-9]{64}$/.test(hash)) return null;
-            const apiV1 = getApiV1Base({ fallbackBase: import.meta.env.VITE_IMAGE_SERVER_URL });
             return `${apiV1}/media/whiteboard-asset/${encodeURIComponent(pageId)}/${hash}`;
         },
-    }), [pageId]);
+        async download(asset, signal) {
+            const hash = String(asset.props.hash ?? "");
+            if (!/^[a-f0-9]{64}$/.test(hash)) throw new Error("Invalid whiteboard asset identity");
+            const response = await fetchAsset(
+                `${apiV1}/media/whiteboard-asset/${encodeURIComponent(pageId)}/${hash}`,
+                { credentials: "include", signal },
+                "Whiteboard asset download",
+            );
+            if (!response.ok) throw await assetHttpError(response, "Whiteboard asset download");
+            return {
+                bytes: new Uint8Array(await response.arrayBuffer()),
+                mimeType: response.headers.get("content-type")?.split(";", 1)[0] ?? "",
+            };
+        },
+        async retainReferences(assetIds, context, signal) {
+            const response = await fetchAsset(
+                `${apiV1}/media/whiteboard-asset/${encodeURIComponent(pageId)}/retain`,
+                {
+                    method: "POST",
+                    credentials: "include",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ assetIds, context }),
+                    signal,
+                },
+                "Whiteboard asset retention",
+            );
+            if (!response.ok) throw await assetHttpError(response, "Whiteboard asset retention");
+        },
+        async materializePortableAsset(payload, asset, _context, signal) {
+            let bytes: Uint8Array;
+            if (payload.kind === "embedded") {
+                bytes = base64ToUint8Array(payload.base64);
+                if (bytes.byteLength !== payload.byteLength) {
+                    throw new Error("Portable whiteboard asset length mismatch");
+                }
+            } else {
+                const request = trustedPortableAssetRequest(payload.reference, apiV1);
+                const response = await fetchAsset(request.url, { credentials: request.credentials, signal }, "Portable whiteboard asset download");
+                if (!response.ok) throw await assetHttpError(response, "Portable whiteboard asset download");
+                bytes = new Uint8Array(await response.arrayBuffer());
+            }
+			const staged = await prepare(asset, signal);
+			try {
+				await staged.stage(bytes, signal);
+				await staged.commit(signal);
+				return { rollback: staged.rollback };
+			} catch (error) {
+				try {
+					await staged.rollback();
+				} catch (rollbackError) {
+					throw orphanCleanupError("Portable whiteboard asset persistence and rollback both failed", [error, rollbackError]);
+				}
+				throw error;
+			}
+        },
+    };
+    }, [pageId]);
 
     const documentSession = useMemo<DocumentSession>(() => ({
         doc: new Y.Doc(),
@@ -731,7 +967,7 @@ export default function WhiteboardEditor({
     // View mode: render canvas directly, no sub-header
     return (
         <div style={{ width: '100%', height: fillParent ? '100%' : 'calc(100vh - 120px)' }}>
-            <WhiteboardCanvas boardRef={boardRef} sessionKey={documentSessionKey} yDoc={yDoc} provider={provider} fetchErr={fetchErr} readOnly={readOnly} collaborationUser={collaborationUser} bootstrapRevision={boardData?.durableRevision ?? "0"} assetStorage={whiteboardAssetStorage} />
+            <WhiteboardCanvas boardRef={boardRef} sessionKey={documentSessionKey} yDoc={yDoc} provider={provider} fetchErr={fetchErr} readOnly={readOnly} collaborationUser={collaborationUser} bootstrapRevision={boardData?.durableRevision ?? "0"} documentId={String(boardData?.docId ?? "")} assetStorage={whiteboardAssetStorage} />
         </div>
     );
 }
@@ -745,6 +981,7 @@ function WhiteboardCanvas({
     readOnly,
     collaborationUser,
     bootstrapRevision,
+    documentId,
     assetStorage,
 }: {
     boardRef: MutableRefObject<GlideboardHandle | null>;
@@ -755,6 +992,7 @@ function WhiteboardCanvas({
     readOnly: boolean;
     collaborationUser: { id: string; name: string; color: string } | null;
     bootstrapRevision: string;
+    documentId: string;
     assetStorage: GlideboardAssetStorage;
 }) {
     if (fetchErr) {
@@ -777,6 +1015,7 @@ function WhiteboardCanvas({
                 collaboration={collaborationProps}
                 readOnly={readOnly}
                 assetStorage={assetStorage}
+                assetResolutionContext={{ documentId }}
             />
         </div>
     );

@@ -9,10 +9,10 @@
 import type {
   GlideShape, GlideBinding, Box2d, Vec2, GlideProps, GlideMigrations, ShapeId,
   RecordReferenceDescriptor,
-} from '../types';
-import type { Geometry2d } from '../geometry';
-import { getMinHeightForShape, type LabelProps } from '../styles';
-import type { EditableTextValue } from '../text-edit';
+} from '../types.js';
+import type { Geometry2d } from '../geometry/index.js';
+import { getMinHeightForShape, type LabelProps } from '../styles.js';
+import type { EditableTextValue } from '../text-edit.js';
 
 // Re-export LabelProps so consumers can import from ShapeUtil directly
 export type { LabelProps };
@@ -26,6 +26,19 @@ export interface ResizeInfo<S extends GlideShape<object> = GlideShape> {
   initialShape: S;
   initialBounds: Box2d;
   newBounds: Box2d;
+}
+
+export interface RichTextDescriptor {
+  readonly value: unknown;
+  readonly fallbackText: string;
+  readonly w: number;
+  readonly h: number;
+  readonly sizeMode: 'auto' | 'fixed-width' | 'fixed';
+  readonly fontFamily: string;
+  readonly fontSize: number;
+  readonly color: string;
+  readonly textAlign: 'left' | 'center' | 'right';
+  readonly lineHeight: number;
 }
 
 // Re-export for convenience
@@ -179,6 +192,9 @@ export abstract class ShapeUtil<S extends GlideShape<object> = GlideShape> {
    * Default: null.
    */
   getLabelProps(_shape: S): LabelProps | null { return null; }
+
+  /** Renderer-neutral rich-text data. React/TipTap remain owned by Glideboard. */
+  getRichTextDescriptor(_shape: S): RichTextDescriptor | null { return null; }
 
   /** Hit-test the rendered text itself rather than the shape geometry. */
   hitTestLabel(shape: S, point: Vec2): boolean {

@@ -1,15 +1,15 @@
 import dagre from 'dagre';
 import { z } from 'zod';
-import type { GlideEditor } from './editor';
-import type { AIContextSnapshot } from './ai-context';
+import type { GlideEditor } from './editor.js';
+import type { AIContextSnapshot } from './ai-context.js';
 import {
   buildArrowBindingRecord,
   buildArrowShapeRecord,
   resolveConnectionTerminal,
-} from './arrow-records';
-import type { ArrowRouteStyle } from './shapes/ArrowUtil';
-import type { AnyRecord, ShapeId } from './types';
-import { MutationPermissionError } from './mutation-policy';
+} from './arrow-records.js';
+import type { ArrowRouteStyle } from './shapes/ArrowUtil.js';
+import type { AnyRecord, ShapeId } from './types.js';
+import { MutationPermissionError } from './mutation-policy.js';
 
 const recordSchema = z.record(z.string(), z.unknown());
 const finiteNumber = z.number().finite();
@@ -81,6 +81,8 @@ const freehandShapeSchema = z.object({
   opacity:     z.number().min(0).max(1).optional(),
   strokeWidth: sizeStyleSchema.optional(),
   strokeStyle: strokeStyleSchema.optional(),
+  pressureSensitive: z.boolean().optional(),
+  simulatePressure: z.boolean().optional(),
 });
 
 // ── Rich discriminated union (replaces generic props: record) ──
@@ -354,6 +356,7 @@ const TOOL_DEFINITIONS = [
         id,
         startWorld: start.point,
         endWorld: end.point,
+        parentId: editor.getShapePageId(fromId) ?? editor.getActivePageId(),
         routeStyle,
       });
       arrow.props = {
@@ -464,7 +467,13 @@ const TOOL_DEFINITIONS = [
 
           const arrowId    = editor.createShapeId('arrow');
           const routeStyle = (edge.routeStyle ?? editor.arrowRouteStyle) as ArrowRouteStyle;
-          const arrow      = buildArrowShapeRecord({ id: arrowId, startWorld: start.point, endWorld: end.point, routeStyle });
+          const arrow      = buildArrowShapeRecord({
+            id: arrowId,
+            startWorld: start.point,
+            endWorld: end.point,
+            parentId: editor.getActivePageId(),
+            routeStyle,
+          });
 
           arrow.props = {
             ...arrow.props,

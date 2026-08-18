@@ -17,7 +17,7 @@
  */
 
 import { computed, signal, type Signal, type ReadonlySignal } from '@preact/signals';
-import { bid, isGlideShape, makeBox, sid } from './types';
+import { bid, isGlideShape, makeBox, pid, sid } from './types.js';
 import {
   GlideStore,
   createReadonlyStoreView,
@@ -28,25 +28,25 @@ import {
   type StoreCommitParticipant,
   type TransactionOptions,
   type TransactionResult,
-} from './store';
-import { CURRENT_STORE_VERSION, DEFAULT_PAGE_ID, GlideSchema } from './schema';
-import { GlideCamera } from './camera';
-import { HistoryManager, commandIdFromLabel, createReadonlyHistoryView } from './history';
-import type { BatchOptions, HistoryResult, ReadonlyHistoryManager } from './history';
-import { Rectangle2d } from './geometry';
-import { matrixToSvg, TransformService, type Matrix2d } from './transform';
-import { StateNode } from './state-node';
-import { SelectTool } from './tools/SelectTool';
-import { BoxTool } from './tools/BoxTool';
-import type { ShapeUtil, BindingUtil } from './shapes/ShapeUtil';
-import type { ArrowheadStyle, ArrowRouteStyle, ArrowShape } from './shapes/ArrowUtil';
-import { buildAIContext, type AIContextSnapshot } from './ai-context';
-import { getWorldBounds, SmartRouterCache, type SmartRouteResolution, type SmartRoutingSnapshot } from './smart-router';
-import type { GlideShape, GlideBinding, GlideAsset, ShapeId, BindingId, PageId, Vec2, Box2d, AnyRecord } from './types';
-import type { GlideEvent } from './state-node';
-import { getMinHeightForShape } from './styles';
-import { RecordIdService } from './id';
-import { InteractionManager } from './interaction';
+} from './store.js';
+import { CURRENT_STORE_VERSION, DEFAULT_PAGE_ID, GlideSchema } from './schema.js';
+import { GlideCamera } from './camera.js';
+import { HistoryManager, commandIdFromLabel, createReadonlyHistoryView } from './history.js';
+import type { BatchOptions, HistoryResult, ReadonlyHistoryManager } from './history.js';
+import { Rectangle2d } from './geometry/index.js';
+import { matrixToSvg, TransformService, type Matrix2d } from './transform.js';
+import { StateNode } from './state-node.js';
+import { SelectTool } from './tools/SelectTool.js';
+import { BoxTool } from './tools/BoxTool.js';
+import type { ShapeUtil, BindingUtil } from './shapes/ShapeUtil.js';
+import type { ArrowheadStyle, ArrowRouteStyle, ArrowShape } from './shapes/ArrowUtil.js';
+import { buildAIContext, type AIContextSnapshot } from './ai-context.js';
+import { getWorldBounds, SmartRouterCache, type SmartRouteResolution, type SmartRoutingSnapshot } from './smart-router.js';
+import type { GlideShape, GlideBinding, GlidePage, GlideAsset, ShapeId, BindingId, PageId, Vec2, Box2d, AnyRecord } from './types.js';
+import type { GlideEvent } from './state-node.js';
+import { getMinHeightForShape } from './styles.js';
+import { RecordIdService } from './id.js';
+import { InteractionManager } from './interaction.js';
 import {
   compareSiblingOrder,
   generateOrderKeysBetween,
@@ -56,7 +56,7 @@ import {
   isCanonicalOrderKey,
   OrderKeySpaceExhaustedError,
   sortShapesByCanonicalOrder,
-} from './ordering';
+} from './ordering.js';
 import {
   allowAllMutations,
   createMutationCapability,
@@ -65,9 +65,9 @@ import {
   type MutationCapabilityGrant,
   type MutationPolicy,
   type MutationRequest,
-} from './mutation-policy';
-import { TextEditSessionController } from './text-edit';
-import { SnapManager } from './snapping';
+} from './mutation-policy.js';
+import { TextEditSessionController } from './text-edit.js';
+import { SnapManager } from './snapping.js';
 
 // ─────────────────────────────────────────────────────────────
 // GlidePlugin — unit of extension
@@ -86,7 +86,7 @@ export interface GlidePlugin {
 interface UtilStatic {
   readonly type: string;
   props?: Record<string, { validate(v: unknown): unknown }>;
-  migrations?: import('./types').GlideMigrations;
+  migrations?: import('./types.js').GlideMigrations;
 }
 
 export interface BindingPreviewAnchor {
@@ -113,9 +113,9 @@ const DEFAULT_ACTIVE_STYLES = Object.freeze({
   fillStyle: 'none',
   strokeStyle: 'solid',
   strokeWidth: 'medium',
+  pressureSensitive: false,
   font: 'sans',
   fontSize: 'md',
-  textAlign: 'center',
 });
 
 export interface ClipboardSchemaHeader {
@@ -131,6 +131,124 @@ export interface ClipboardPayload {
   readonly sourceBounds: Box2d;
 }
 
+/** Host-defined immutable coordinates for resolving assets from a retained snapshot. */
+export interface AssetResolutionContext {
+  readonly documentId?: string;
+  readonly versionId?: string;
+  readonly snapshotId?: string;
+  readonly createdAt?: string;
+  readonly metadata?: Readonly<Record<string, string | number | boolean | null>>;
+}
+
+export type PortableRasterExport =
+  | { readonly kind: 'self-contained'; readonly bytes: Uint8Array }
+  | { readonly kind: 'durable-reference'; readonly reference: string };
+
+export type PortableRasterPayload =
+  | {
+    readonly assetId: string;
+    readonly kind: 'embedded';
+    readonly base64: string;
+    readonly byteLength: number;
+  }
+  | {
+    readonly assetId: string;
+    readonly kind: 'durable-reference';
+    readonly reference: string;
+  };
+
+export interface PortableBoardFragmentSchemaHeader {
+  readonly portableBoardFragmentVersion: 1;
+  readonly storeVersion: number;
+}
+
+export interface PortableBoardFragmentLimits {
+  readonly maxRecords: number;
+  readonly maxRootIds: number;
+  readonly maxAssetRefs: number;
+  readonly maxRasterPayloads: number;
+  readonly maxStringBytes: number;
+  readonly maxRecordBytes: number;
+  readonly maxRecordsBytes: number;
+  readonly maxMetadataBytes: number;
+  readonly maxEmbeddedAssetBytes: number;
+  readonly maxTotalEmbeddedBytes: number;
+  readonly maxEncodedFragmentBytes: number;
+}
+
+export const PORTABLE_BOARD_FRAGMENT_LIMITS: PortableBoardFragmentLimits = Object.freeze({
+  maxRecords: 10_000,
+  maxRootIds: 10_000,
+  maxAssetRefs: 10_000,
+  maxRasterPayloads: 1_000,
+  maxStringBytes: 256 * 1024,
+  maxRecordBytes: 1024 * 1024,
+  maxRecordsBytes: 16 * 1024 * 1024,
+  maxMetadataBytes: 64 * 1024,
+  maxEmbeddedAssetBytes: 20 * 1024 * 1024,
+  maxTotalEmbeddedBytes: 64 * 1024 * 1024,
+  maxEncodedFragmentBytes: 32 * 1024 * 1024,
+});
+
+/** JSON-safe cross-board payload. Raster bytes are embedded or explicitly durable. */
+export interface PortableBoardFragment {
+  readonly schema: PortableBoardFragmentSchemaHeader;
+  readonly rootIds: readonly ShapeId[];
+  readonly records: readonly AnyRecord[];
+  readonly assetRefs: readonly string[];
+  readonly rasterPayloads: readonly PortableRasterPayload[];
+  readonly sourceBounds: Box2d;
+  readonly resolutionContext?: AssetResolutionContext;
+}
+
+export type PortableAssetExportHook = (
+  asset: GlideAsset,
+  context: AssetResolutionContext | undefined,
+) => Promise<PortableRasterExport>;
+
+export interface PortableAssetMaterialization {
+  /** Required compensation used when a later materialization or record import fails. */
+  readonly rollback: () => void | Promise<void>;
+}
+
+export type PortableAssetMaterializer = (
+  payload: PortableRasterPayload,
+  asset: GlideAsset,
+  context: AssetResolutionContext | undefined,
+) => Promise<PortableAssetMaterialization>;
+
+export interface CreatePortableBoardFragmentOptions {
+  readonly exportRasterAsset: PortableAssetExportHook;
+  readonly resolutionContext?: AssetResolutionContext;
+  /** Register live/historical references with durable storage retention. */
+  readonly retainAssetReferences: (
+    assetIds: readonly string[],
+    context: AssetResolutionContext | undefined,
+  ) => void | Promise<void>;
+}
+
+export interface PastePortableBoardFragmentOptions {
+  readonly materializeRasterAsset: PortableAssetMaterializer;
+  readonly point?: Vec2;
+}
+
+export interface PortableSvgExportOptions {
+  readonly exportRasterAsset: PortableAssetExportHook;
+  readonly resolutionContext?: AssetResolutionContext;
+}
+
+export class PortablePasteRollbackError extends Error {
+  readonly importError: unknown;
+  readonly rollbackErrors: readonly unknown[];
+
+  constructor(importError: unknown, rollbackErrors: readonly unknown[]) {
+    super(`Portable paste failed and ${rollbackErrors.length} compensation operation(s) also failed`);
+    this.name = 'PortablePasteRollbackError';
+    this.importError = importError;
+    this.rollbackErrors = Object.freeze([...rollbackErrors]);
+  }
+}
+
 export interface EditorCommand<T = void> {
   /** Stable machine-readable intent name, e.g. `shape.move`. */
   readonly id: string;
@@ -141,7 +259,7 @@ export interface EditorCommand<T = void> {
 
 export interface ExecuteCommandOptions {
   readonly history?: 'ignore';
-  readonly scope?: import('./store').TransactionScope;
+  readonly scope?: import('./store.js').TransactionScope;
   readonly actorId?: string;
 }
 
@@ -234,9 +352,15 @@ export class GlideEditor {
   private _tools = new Map<string, StateNode>();
   private _currentToolSignal: Signal<StateNode | null> = signal(null);
   private readonly _orderedShapeIdsSignal: ReadonlySignal<readonly ShapeId[]>;
+  private readonly _currentPageShapeIdsSignal: ReadonlySignal<readonly ShapeId[]>;
+  private readonly _pageIdsSignal: ReadonlySignal<readonly PageId[]>;
+  private readonly _pageCameras = new Map<PageId, { x: number; y: number; z: number }>();
 
   /** Reactive signal of the active tool id — subscribe in UI for live highlight. */
   readonly currentToolId: Signal<string> = signal('select');
+
+  /** The locally active page. This viewport state is not persisted in the document. */
+  readonly activePageId: Signal<PageId> = signal(DEFAULT_PAGE_ID);
 
   /** Group whose direct content is currently being edited. Ephemeral UI state. */
   readonly focusedGroupId: Signal<ShapeId | null> = signal(null);
@@ -256,6 +380,9 @@ export class GlideEditor {
 
   private readonly _mutationPolicy: MutationPolicy;
   private readonly _assetResolver: AssetResolver | undefined;
+  private readonly _assetResolutionContext: AssetResolutionContext | undefined;
+  private _exportAssetUrlOverrides: ReadonlyMap<string, string> | null = null;
+  private _liveTextEditBaseline: GlideShape | null = null;
 
   constructor(
     store: GlideStore,
@@ -265,6 +392,7 @@ export class GlideEditor {
     private readonly _localMutationCapability: MutationCapability,
     private readonly _loadMutationCapability: MutationCapability,
     assetResolver?: AssetResolver,
+    assetResolutionContext?: AssetResolutionContext,
   ) {
     this._store = store;
     this.store = createReadonlyStoreView(store);
@@ -273,6 +401,9 @@ export class GlideEditor {
     this.camera = camera;
     this._mutationPolicy = mutationPolicy;
     this._assetResolver = assetResolver;
+    this._assetResolutionContext = assetResolutionContext
+      ? Object.freeze(cloneRecord(assetResolutionContext))
+      : undefined;
     this.interactions = new InteractionManager(store, this._localMutationCapability);
     this.transforms = new TransformService({
       getShape: id => this.getShape(id),
@@ -290,44 +421,31 @@ export class GlideEditor {
         return util.canEditLabel(shape as any) ? util.getEditableText(shape as any) : null;
       },
       commit: (id, draft, pendingProps) => {
-        const latest = this.getShape(id);
-        if (!latest) return;
-        if (latest.type === 'text' && draft.trim() === '') {
-          this.batch('Delete Empty Text', () => this.deleteShapes([id]));
-          return;
-        }
-        const util = this.getShapeUtil(latest.type);
-        const patch = util.getTextCommitPatch(
-          latest as any,
-          draft,
-          pendingProps,
-        ) as Partial<GlideShape>;
-        if (latest.type === 'text' && latest.rotation !== 0) {
-          const anchoredPagePoint = this.transforms.localToPage(id, { x: 0, y: 0 });
-          const nextShape = {
-            ...latest,
-            ...patch,
-            props: { ...latest.props, ...(patch.props ?? {}) },
-          } as GlideShape;
-          const translation = this.transforms.getTranslationForLocalPoint(
-            nextShape,
-            { x: 0, y: 0 },
-            anchoredPagePoint,
-          );
-          patch.x = translation.x;
-          patch.y = translation.y;
-        }
-        this.batch('Edit Text', () => this.updateShape(id, patch as any));
+        this._applyTextEdit(id, draft, pendingProps, 'record');
       },
     });
     this.textEditing.session.subscribe(session => {
       this.editingShapeId.value = session?.shapeId ?? null;
     });
     this.interactions.getVersionSignal().subscribe(() => this.textEditing.reconcile());
+    this._pageIdsSignal = computed(() => {
+      this.interactions.getVersionSignal().value;
+      return this._store.getPageIds();
+    });
+    this._currentPageShapeIdsSignal = computed(() => {
+      this.interactions.getVersionSignal().value;
+      const pageId = this.activePageId.value;
+      return Object.freeze(this._getAllShapes()
+        .filter(shape => this.getShapePageId(shape.id as ShapeId) === pageId)
+        .map(shape => shape.id as ShapeId));
+    });
     this._orderedShapeIdsSignal = computed(() => {
       this.interactions.getVersionSignal().value;
-      return getCanonicalShapeIds(this._getAllShapes());
+      const pageId = this.activePageId.value;
+      return getCanonicalShapeIds(this._getAllShapes()
+        .filter(shape => this.getShapePageId(shape.id as ShapeId) === pageId));
     });
+    this.interactions.getVersionSignal().subscribe(() => this._reconcileActivePage());
     this._history = new HistoryManager(store, this._localMutationCapability);
     this.history = createReadonlyHistoryView(this._history);
     mutableEditorHistories.set(this, this._history);
@@ -366,8 +484,10 @@ export class GlideEditor {
   }
 
   /** Resolve immutable asset metadata through trusted host configuration. */
-  resolveAssetUrl(asset: GlideAsset): string | null {
-    const resolved = this._assetResolver?.(asset) ?? null;
+  resolveAssetUrl(asset: GlideAsset, context?: AssetResolutionContext): string | null {
+    const override = this._exportAssetUrlOverrides?.get(String(asset.id));
+    if (override) return override;
+    const resolved = this._assetResolver?.(asset, context ?? this._assetResolutionContext) ?? null;
     if (resolved === null) return null;
     try {
       const url = new URL(resolved, typeof document === 'undefined' ? 'https://localhost/' : document.baseURI);
@@ -438,6 +558,14 @@ export class GlideEditor {
     return this.interactions.getShapeIdsSignal();
   }
 
+  getCurrentPageShapeIdsSignal(): ReadonlySignal<readonly ShapeId[]> {
+    return this._currentPageShapeIdsSignal;
+  }
+
+  getPageIdsSignal(): ReadonlySignal<readonly PageId[]> {
+    return this._pageIdsSignal;
+  }
+
   getOrderedShapeIdsSignal(): ReadonlySignal<readonly ShapeId[]> {
     return this._orderedShapeIdsSignal;
   }
@@ -446,7 +574,7 @@ export class GlideEditor {
     return this._orderedShapeIdsSignal.peek();
   }
 
-  getShapeSignal(id: ShapeId): ReadonlySignal<import('./store').StoreRecord | null> {
+  getShapeSignal(id: ShapeId): ReadonlySignal<import('./store.js').StoreRecord | null> {
     return this.interactions.getSignal(id);
   }
 
@@ -468,6 +596,7 @@ export class GlideEditor {
       .filter((shape): shape is GlideShape => shape !== null)
       .filter(shape => this.transforms.hitTestPagePoint(shape.id as ShapeId, point));
     return this.sortShapesByCanonicalOrder([...committed, ...transient])
+      .filter(shape => this.getShapePageId(shape.id as ShapeId) === this.activePageId.peek())
       .filter(shape => !this.isShapeEffectivelyHidden(shape.id as ShapeId))
       .filter(shape => this._pointInsideClippingAncestors(shape.id as ShapeId, point));
   }
@@ -497,6 +626,7 @@ export class GlideEditor {
           && bounds.maxY >= box.minY && bounds.minY <= box.maxY;
       });
     return this.sortShapesByCanonicalOrder([...committed, ...transient])
+      .filter(shape => this.getShapePageId(shape.id as ShapeId) === this.activePageId.peek())
       .filter(shape => !this.isShapeEffectivelyHidden(shape.id as ShapeId));
   }
 
@@ -639,6 +769,169 @@ export class GlideEditor {
     return this._store.getPageIds()[0] ?? DEFAULT_PAGE_ID;
   }
 
+  getActivePageId(): PageId {
+    return this.activePageId.peek();
+  }
+
+  getPageIds(): readonly PageId[] {
+    return this._store.getPageIds();
+  }
+
+  getPage(pageId: PageId): GlidePage | undefined {
+    const record = this.interactions.get(pageId);
+    return record?.['kind'] === 'page' ? record as unknown as GlidePage : undefined;
+  }
+
+  getShapePageId(shapeId: ShapeId): PageId | null {
+    let cursor = this.interactions.get(shapeId);
+    const seen = new Set<string>();
+    while (cursor && cursor['kind'] === 'shape' && typeof cursor['parentId'] === 'string') {
+      const parentId = cursor['parentId'] as string;
+      if (seen.has(parentId)) return null;
+      seen.add(parentId);
+      const parent = this.interactions.get(parentId);
+      if (parent?.['kind'] === 'page') return parentId as PageId;
+      cursor = parent;
+    }
+    return null;
+  }
+
+  setActivePage(pageId: PageId): void {
+    if (!this.getPage(pageId)) throw new Error(`GlideEditor: page "${pageId}" not found`);
+    const current = this.activePageId.peek();
+    if (current === pageId) return;
+    this._pageCameras.set(current, this.camera.getCamera());
+    this.interactions.cancel();
+    this.textEditing.cancel();
+    this.setSelectedShapeIds([]);
+    this.focusedGroupId.value = null;
+    this.bindingPreview.value = null;
+    this.activePageId.value = pageId;
+    this.camera.setCamera(this._pageCameras.get(pageId) ?? { x: 0, y: 0, z: 1 });
+  }
+
+  createPage(name?: string): PageId {
+    const pages = this.getPageIds().map(id => this.getPage(id)!).filter(Boolean);
+    const pageId = pid(this._store.createRecordId('page'));
+    const pageName = this._normalizePageName(name ?? `Page ${pages.length + 1}`);
+    const allocation = this._allocatePageOrder(pages.length);
+    this.executeCommand({
+      id: 'page.create', label: 'Create Page', affectedIds: [pageId, ...allocation.rebalanced.keys()],
+      execute: tx => {
+        for (const [id, index] of allocation.rebalanced) tx.update(id, record => ({ ...record, index }));
+        tx.insert({ id: pageId, kind: 'page', type: 'page', schemaVersion: 0, name: pageName, index: allocation.index, meta: {} });
+      },
+    });
+    this.setActivePage(pageId);
+    return pageId;
+  }
+
+  renamePage(pageId: PageId, name: string): void {
+    if (!this.getPage(pageId)) throw new Error(`GlideEditor: page "${pageId}" not found`);
+    const nextName = this._normalizePageName(name);
+    this.executeCommand({
+      id: 'page.rename', label: 'Rename Page', affectedIds: [pageId],
+      execute: tx => tx.update(pageId, record => ({ ...record, name: nextName })),
+    });
+  }
+
+  duplicatePage(pageId: PageId): PageId {
+    const page = this.getPage(pageId);
+    if (!page) throw new Error(`GlideEditor: page "${pageId}" not found`);
+    const pages = this.getPageIds();
+    const sourceIndex = pages.indexOf(pageId);
+    const nextPage = sourceIndex >= 0 ? this.getPage(pages[sourceIndex + 1]!) : undefined;
+    const duplicateIndex = generateOrderKeysBetween(page.index, nextPage?.index ?? null, 1)[0]!;
+    const shapeIds = new Set(this._store.getShapeIdsOnPage(pageId));
+    const records = (this.store.serialize().records as AnyRecord[]).filter(record => (
+      record['id'] === pageId
+      || (record['kind'] === 'shape' && shapeIds.has(record['id'] as ShapeId))
+      || (record['kind'] === 'binding'
+        && shapeIds.has(record['fromId'] as ShapeId)
+        && shapeIds.has(record['toId'] as ShapeId))
+    )).map(record => record['id'] === pageId
+      ? { ...cloneRecord(record), name: `${page.name} Copy`, index: duplicateIndex }
+      : cloneRecord(record));
+    const report = this.importRecords(records, {
+      idPolicy: 'remap', relationshipPolicy: 'preserve', preserveExternalKinds: ['asset'], label: 'Duplicate Page',
+    });
+    const duplicateId = report.idMap[pageId] as PageId;
+    this.setActivePage(duplicateId);
+    return duplicateId;
+  }
+
+  movePage(pageId: PageId, direction: -1 | 1): boolean {
+    const pages = [...this.getPageIds()];
+    const from = pages.indexOf(pageId);
+    const to = from + direction;
+    if (from < 0) throw new Error(`GlideEditor: page "${pageId}" not found`);
+    if (to < 0 || to >= pages.length) return false;
+    [pages[from], pages[to]] = [pages[to]!, pages[from]!];
+    const indices = generateRebalancedOrderKeys(pages.length);
+    this.executeCommand({
+      id: 'page.reorder', label: 'Reorder Page', affectedIds: pages,
+      execute: tx => pages.forEach((id, index) => tx.update(id, record => ({ ...record, index: indices[index]! }))),
+    });
+    return true;
+  }
+
+  deletePage(pageId: PageId): PageId {
+    const pages = [...this.getPageIds()];
+    const index = pages.indexOf(pageId);
+    if (index < 0) throw new Error(`GlideEditor: page "${pageId}" not found`);
+    if (pages.length === 1) throw new Error('A whiteboard must contain at least one page.');
+    const fallback = pages[index + 1] ?? pages[index - 1]!;
+    const wasActive = this.activePageId.peek() === pageId;
+    const shapeIds = new Set(this._store.getShapeIdsOnPage(pageId));
+    if ([...shapeIds].some(id => this.isShapeEffectivelyLocked(id))) {
+      throw new Error('Unlock page content before deleting the page.');
+    }
+    const bindingIds = (this.store.serialize().records as AnyRecord[])
+      .filter(record => record['kind'] === 'binding'
+        && (shapeIds.has(record['fromId'] as ShapeId) || shapeIds.has(record['toId'] as ShapeId)))
+      .map(record => String(record['id']));
+    this.executeCommand({
+      id: 'page.delete', label: 'Delete Page', affectedIds: [pageId, ...shapeIds, ...bindingIds],
+      execute: tx => {
+        bindingIds.forEach(id => tx.remove(id));
+        shapeIds.forEach(id => tx.remove(id));
+        tx.remove(pageId);
+      },
+    });
+    this._pageCameras.delete(pageId);
+    if (wasActive) this.setActivePage(fallback);
+    return fallback;
+  }
+
+  private _normalizePageName(name: string): string {
+    const normalized = name.trim();
+    if (!normalized) throw new Error('Page name cannot be empty.');
+    if (normalized.length > 512) throw new Error('Page name cannot exceed 512 characters.');
+    return normalized;
+  }
+
+  private _allocatePageOrder(existingCount: number): { index: string; rebalanced: ReadonlyMap<PageId, string> } {
+    const pageIds = this.getPageIds();
+    const pages = pageIds.map(id => this.getPage(id)!).filter(Boolean);
+    try {
+      return { index: generateOrderKeysBetween(pages[pages.length - 1]?.index ?? null, null, 1)[0]!, rebalanced: new Map() };
+    } catch (error) {
+      if (!(error instanceof OrderKeySpaceExhaustedError)) throw error;
+      const keys = generateRebalancedOrderKeys(existingCount + 1);
+      return { index: keys[existingCount]!, rebalanced: new Map(pageIds.map((id, ordinal) => [id, keys[ordinal]!])) };
+    }
+  }
+
+  private _reconcileActivePage(): void {
+    if (this.getPage(this.activePageId.peek())) return;
+    const fallback = this.getPageIds()[0];
+    if (!fallback) return;
+    this.setSelectedShapeIds([]);
+    this.focusedGroupId.value = null;
+    this.activePageId.value = fallback;
+    this.camera.setCamera(this._pageCameras.get(fallback) ?? { x: 0, y: 0, z: 1 });
+  }
+
   generateIndexAbove(parentId: string): string {
     const siblings = this._getSiblingShapes(parentId);
     const top = siblings[siblings.length - 1]?.index ?? null;
@@ -727,7 +1020,7 @@ export class GlideEditor {
     const requestedType = String(partial['type'] ?? 'shape');
     partial = {
       rotation: 0,
-      parentId: this.getDefaultPageId(),
+      parentId: this.getActivePageId(),
       isLocked: false,
       isHidden: false,
       meta: {},
@@ -1520,11 +1813,12 @@ export class GlideEditor {
 
   setSelectedShapeIds(ids: ShapeId[]): void {
     this._selection.value = new Set(ids.filter(id => this.getShape(id)
+      && this.getShapePageId(id) === this.activePageId.peek()
       && !this.isShapeEffectivelyHidden(id)));
   }
 
   selectAll(): void {
-    this.setSelectedShapeIds([...this.interactions.getShapeIdsSignal().peek()]);
+    this.setSelectedShapeIds([...this._currentPageShapeIdsSignal.peek()]);
   }
 
   // ── Clipboard ──────────────────────────────────────────────
@@ -1541,6 +1835,196 @@ export class GlideEditor {
     const newIds = this._pasteClipboardPayload(this._clipboard, offset, 'Paste');
     this.setSelectedShapeIds(newIds);
     return newIds;
+  }
+
+  /**
+   * Create a versioned, JSON-safe fragment for cross-board or retained-snapshot use.
+   * Every raster must be made self-contained or assigned a durable host reference.
+   */
+  async createPortableBoardFragment(
+    ids: readonly ShapeId[],
+    options: CreatePortableBoardFragmentOptions,
+  ): Promise<PortableBoardFragment | null> {
+    const clipboard = this._createClipboardPayload(ids);
+    if (!clipboard) return null;
+    const context = options.resolutionContext
+      ? cloneRecord(options.resolutionContext)
+      : undefined;
+    if (context !== undefined) validatePortableResolutionContext(context);
+    validatePortableRasterRecordIds(clipboard.records);
+    const assets = new Map<string, GlideAsset>();
+    for (const record of clipboard.records) {
+      if (record['kind'] === 'asset') assets.set(String(record['id']), record as unknown as GlideAsset);
+    }
+
+    const rasterPayloads: PortableRasterPayload[] = [];
+    let totalEmbeddedBytes = 0;
+    for (const assetId of [...clipboard.assetRefs].sort()) {
+      const asset = assets.get(assetId);
+      if (!asset || asset.type !== 'raster-image') continue;
+      const exported = await options.exportRasterAsset(cloneRecord(asset), context);
+      if (exported.kind === 'self-contained') {
+        const bytes = new Uint8Array(exported.bytes);
+        if (bytes.byteLength > PORTABLE_BOARD_FRAGMENT_LIMITS.maxEmbeddedAssetBytes) {
+          throw new Error(`Raster asset "${assetId}" exceeds portable embedded-byte limit`);
+        }
+        totalEmbeddedBytes += bytes.byteLength;
+        if (totalEmbeddedBytes > PORTABLE_BOARD_FRAGMENT_LIMITS.maxTotalEmbeddedBytes) {
+          throw new Error('Portable raster payloads exceed total embedded-byte limit');
+        }
+        rasterPayloads.push(Object.freeze({
+          assetId,
+          kind: 'embedded' as const,
+          base64: bytesToBase64(bytes),
+          byteLength: bytes.byteLength,
+        }));
+      } else {
+        if (exported.reference.length === 0
+          || utf8ByteLength(exported.reference) > PORTABLE_BOARD_FRAGMENT_LIMITS.maxStringBytes) {
+          throw new Error(`Raster asset "${assetId}" has an empty durable reference`);
+        }
+        rasterPayloads.push(Object.freeze({
+          assetId,
+          kind: 'durable-reference' as const,
+          reference: exported.reference,
+        }));
+      }
+    }
+    const fragment = Object.freeze({
+      schema: Object.freeze({
+        portableBoardFragmentVersion: 1 as const,
+        storeVersion: clipboard.schema.storeVersion,
+      }),
+      rootIds: clipboard.rootIds,
+      records: Object.freeze(clipboard.records.map(record => cloneRecord(record))),
+      assetRefs: clipboard.assetRefs,
+      rasterPayloads: Object.freeze(rasterPayloads),
+      sourceBounds: clipboard.sourceBounds,
+      ...(context ? { resolutionContext: Object.freeze(context) } : {}),
+    });
+    validatePortableBoardFragmentStructure(fragment);
+    await options.retainAssetReferences(Object.freeze(rasterPayloads.map(payload => payload.assetId)), context);
+    return fragment;
+  }
+
+  /** Materialize all external raster data before atomically importing any records. */
+  async pastePortableBoardFragment(
+    fragment: PortableBoardFragment,
+    options: PastePortableBoardFragmentOptions,
+  ): Promise<ShapeId[]> {
+    validatePortableBoardFragmentStructure(fragment);
+    const records = fragment.records.map(record => cloneRecord(record));
+    this._preflightPortableBoardFragment(fragment, records);
+    const rasterAssets = new Map<string, GlideAsset>();
+    for (const record of records) {
+      if (record['kind'] !== 'asset' || record['type'] !== 'raster-image') continue;
+      rasterAssets.set(String(record['id']), record as unknown as GlideAsset);
+    }
+    const payloads = new Map<string, PortableRasterPayload>();
+    for (const payload of fragment.rasterPayloads) {
+      if (payloads.has(payload.assetId)) throw new Error(`Duplicate raster payload for asset "${payload.assetId}"`);
+      if (payload.kind === 'embedded') {
+        const bytes = base64ToBytes(payload.base64);
+        if (bytes.byteLength !== payload.byteLength) {
+          throw new Error(`Embedded raster payload length mismatch for asset "${payload.assetId}"`);
+        }
+      } else if (payload.reference.length === 0) {
+        throw new Error(`Raster asset "${payload.assetId}" has an empty durable reference`);
+      }
+      payloads.set(payload.assetId, payload);
+    }
+    for (const assetId of rasterAssets.keys()) {
+      if (!payloads.has(assetId)) throw new Error(`Missing raster payload for asset "${assetId}"`);
+    }
+    for (const assetId of payloads.keys()) {
+      if (!rasterAssets.has(assetId)) throw new Error(`Raster payload references unknown asset "${assetId}"`);
+    }
+
+    const completed: PortableAssetMaterialization[] = [];
+    try {
+      for (const assetId of [...rasterAssets.keys()].sort()) {
+        const asset = rasterAssets.get(assetId)!;
+        const result = await options.materializeRasterAsset(
+          cloneRecord(payloads.get(assetId)!),
+          cloneRecord(asset),
+          fragment.resolutionContext ? cloneRecord(fragment.resolutionContext) : undefined,
+        );
+        if (!result || typeof result.rollback !== 'function') {
+          throw new Error(`Raster materialization for asset "${assetId}" did not provide required compensation`);
+        }
+        completed.push(result);
+      }
+      const offset = options.point
+        ? { x: options.point.x - fragment.sourceBounds.minX, y: options.point.y - fragment.sourceBounds.minY }
+        : { x: 20, y: 20 };
+      const ids = this._pasteClipboardPayload({
+        schema: { clipboardVersion: 1, storeVersion: fragment.schema.storeVersion },
+        rootIds: fragment.rootIds,
+        records,
+        assetRefs: fragment.assetRefs,
+        sourceBounds: fragment.sourceBounds,
+      }, offset, 'Paste');
+      this.setSelectedShapeIds(ids);
+      return ids;
+    } catch (error) {
+      const rollbackResults = await Promise.allSettled(completed.reverse().map(result => result.rollback()));
+      const rollbackErrors = rollbackResults
+        .filter((result): result is PromiseRejectedResult => result.status === 'rejected')
+        .map(result => result.reason);
+      if (rollbackErrors.length > 0) throw new PortablePasteRollbackError(error, rollbackErrors);
+      throw error;
+    }
+  }
+
+  private _preflightPortableBoardFragment(
+    fragment: PortableBoardFragment,
+    records: readonly AnyRecord[],
+  ): void {
+    const byId = new Map<string, AnyRecord>();
+    for (const record of records) {
+      const prepared = this.schema.prepareRecord(record);
+      this.schema.validateRecord(prepared);
+      const id = String(prepared['id']);
+      if (byId.has(id)) throw new Error(`Duplicate portable record id "${id}"`);
+      byId.set(id, prepared);
+    }
+    for (const rootId of fragment.rootIds) {
+      if (byId.get(rootId)?.['kind'] !== 'shape') throw new Error(`Portable root "${rootId}" is not a shape`);
+    }
+    for (const assetId of fragment.assetRefs) {
+      if (byId.get(assetId)?.['kind'] !== 'asset') {
+        throw new Error(`Portable asset reference "${assetId}" is not an imported asset`);
+      }
+    }
+    for (const record of records) {
+      const id = String(record['id']);
+      if (record['kind'] === 'shape') {
+        const parentId = record['parentId'];
+        if (typeof parentId === 'string' && !byId.has(parentId)
+          && this.store.get(parentId)?.['kind'] !== 'page') {
+          throw new Error(`Portable shape "${id}" has an invalid parent`);
+        }
+      }
+      if (record['kind'] === 'binding') {
+        if (byId.get(String(record['fromId']))?.['kind'] !== 'shape'
+          || byId.get(String(record['toId']))?.['kind'] !== 'shape') {
+          throw new Error(`Portable binding "${id}" must reference imported shapes`);
+        }
+      }
+      for (const descriptor of this.schema.getReferenceDescriptors(record)) {
+        const reference = readPointer(record, descriptor.path);
+        if (typeof reference !== 'string') continue;
+        const target = byId.get(reference);
+        if (!target || target['kind'] !== descriptor.targetKind) {
+          throw new Error(`Portable record "${id}" has an invalid ${descriptor.path} reference`);
+        }
+      }
+    }
+    this.assertMutationAllowed({
+      origin: 'local-api',
+      command: 'document.import',
+      affectedIds: records.map(record => String(record['id'])),
+    });
   }
 
   private _createClipboardPayload(ids: readonly ShapeId[]): ClipboardPayload | null {
@@ -1580,7 +2064,7 @@ export class GlideEditor {
       const source = this.getShape(rootId);
       const copied = copiedById.get(rootId);
       if (!source || !copied || !this.getShape(source.parentId as ShapeId)) continue;
-      let pageId: PageId = this.getDefaultPageId();
+      let pageId: PageId = this.getActivePageId();
       let cursor: GlideShape | undefined = source;
       while (cursor) {
         if (!this.getShape(cursor.parentId as ShapeId)) {
@@ -1653,6 +2137,10 @@ export class GlideEditor {
     }
     const records = payload.records.map(record => cloneRecord(record));
     const recordById = new Map(records.map(record => [record['id'] as string, record]));
+    for (const rootId of payload.rootIds) {
+      const root = recordById.get(rootId);
+      if (root?.['kind'] === 'shape') root['parentId'] = this.getActivePageId();
+    }
     const orderedRootIds = [...payload.rootIds].sort((left, right) => {
       const leftRecord = recordById.get(left);
       const rightRecord = recordById.get(right);
@@ -1709,7 +2197,10 @@ export class GlideEditor {
    * fractional `index` field for z-ordered rendering.
    */
   getShapes(sorted = false): GlideShape[] {
-    const shapes = this._getAllShapes().filter(shape => !this.isShapeEffectivelyHidden(shape.id as ShapeId));
+    const activePageId = this.activePageId.peek();
+    const shapes = this._getAllShapes()
+      .filter(shape => this.getShapePageId(shape.id as ShapeId) === activePageId)
+      .filter(shape => !this.isShapeEffectivelyHidden(shape.id as ShapeId));
     return sorted ? sortShapesByCanonicalOrder(shapes, shapes) : shapes;
   }
 
@@ -1841,6 +2332,38 @@ export class GlideEditor {
     return this._pasteClipboardPayload(payload, offset, 'Duplicate Shapes');
   }
 
+  private _applyTextEdit(
+    id: ShapeId,
+    draft: string,
+    pendingProps: Readonly<Record<string, unknown>> | undefined,
+    history: 'record' | 'ignore',
+  ): void {
+    const latest = this.getShape(id);
+    if (!latest) return;
+    if (latest.type === 'text' && draft.trim() === '') {
+      if (history === 'record') this.batch('Delete Empty Text', () => this.deleteShapes([id]));
+      return;
+    }
+    const util = this.getShapeUtil(latest.type);
+    const patch = util.getTextCommitPatch(latest as any, draft, pendingProps) as Partial<GlideShape>;
+    if (latest.type === 'text' && latest.rotation !== 0) {
+      const anchoredPagePoint = this.transforms.localToPage(id, { x: 0, y: 0 });
+      const nextShape = {
+        ...latest,
+        ...patch,
+        props: { ...latest.props, ...(patch.props ?? {}) },
+      } as GlideShape;
+      const translation = this.transforms.getTranslationForLocalPoint(
+        nextShape,
+        { x: 0, y: 0 },
+        anchoredPagePoint,
+      );
+      patch.x = translation.x;
+      patch.y = translation.y;
+    }
+    this.batch('Edit Text', () => this.updateShape(id, patch as any), { history });
+  }
+
   // ── Inline editing state ───────────────────────────────────
 
   /**
@@ -1850,6 +2373,7 @@ export class GlideEditor {
     id: ShapeId,
     pendingProps?: Readonly<Record<string, unknown>>,
   ): void {
+    this._liveTextEditBaseline = null;
     const session = this.textEditing.start(id, pendingProps);
     if (!session) return;
     this.setSelectedShapeIds([]);
@@ -1864,8 +2388,23 @@ export class GlideEditor {
     }
   }
 
-  updateEditingDraft(draft: string): void { this.textEditing.updateDraft(draft); }
+  updateEditingDraft(
+    draft: string,
+    pendingProps?: Readonly<Record<string, unknown>>,
+    forceDirty = false,
+  ): void { this.textEditing.updateDraft(draft, pendingProps, forceDirty); }
   setEditingComposition(composing: boolean): void { this.textEditing.setComposing(composing); }
+
+  /** Publish the active draft without closing the editor or adding a per-key undo entry. */
+  publishEditingDraft(): boolean {
+    const session = this.textEditing.session.peek();
+    if (!session || session.composing || session.status === 'conflicted') return false;
+    const shape = this.getShape(session.shapeId);
+    if (!shape) return false;
+    if (!this._liveTextEditBaseline) this._liveTextEditBaseline = shape;
+    this._applyTextEdit(session.shapeId, session.draft, session.pendingProps, 'ignore');
+    return true;
+  }
 
   commitEditing(selectAgain = true): boolean {
     const id = this.editingShapeId.peek();
@@ -1877,11 +2416,29 @@ export class GlideEditor {
       this.batch('Delete Empty Text', () => this.deleteShapes([id]));
     }
     if (committed && selectAgain && id && this.getShape(id)) this.setSelectedShapeIds([id]);
+    if (committed && this._liveTextEditBaseline) {
+      this.recordHistoryPreview('Edit Text', new Map([
+        [this._liveTextEditBaseline.id, this._liveTextEditBaseline],
+      ]));
+      this._liveTextEditBaseline = null;
+    }
     return committed;
   }
 
   cancelEditing(selectAgain = true, recover = false): void {
     const id = this.editingShapeId.peek();
+    const baseline = this._liveTextEditBaseline;
+    this._liveTextEditBaseline = null;
+    if (baseline && this.getShape(baseline.id as ShapeId)) {
+      this.batch('Cancel Text Edit', () => {
+        this.executeCommand({
+          id: 'text.edit.cancel',
+          label: 'Cancel Text Edit',
+          affectedIds: [baseline.id],
+          execute: tx => tx.update(baseline.id, () => baseline),
+        });
+      }, { history: 'ignore' });
+    }
     this.textEditing.cancel({ recover });
     if (selectAgain && id && this.getShape(id)) this.setSelectedShapeIds([id]);
   }
@@ -2120,8 +2677,8 @@ export class GlideEditor {
     args: {
       startWorld: Vec2;
       endWorld: Vec2;
-      fromEdge: import('./types').EdgeName;
-      toEdge: import('./types').EdgeName;
+      fromEdge: import('./types.js').EdgeName;
+      toEdge: import('./types.js').EdgeName;
       fromShapeId: ShapeId | null;
       toShapeId: ShapeId | null;
       now?: () => number;
@@ -2149,6 +2706,10 @@ export class GlideEditor {
    */
   replaceDocument(doc: ReturnType<GlideStore['serialize']>) {
     const report = this._store.replaceDocument(doc, {}, this._loadMutationCapability);
+    this._pageCameras.clear();
+    this.activePageId.value = this.getDefaultPageId();
+    this.camera.setCamera({ x: 0, y: 0, z: 1 });
+    this.setSelectedShapeIds([]);
     this._smartRouter.markDirty();
     return report;
   }
@@ -2183,6 +2744,8 @@ export class GlideEditor {
     this.textEditing.cancel();
     this.erasingShapeIds.value = new Set<ShapeId>();
     this.bindingPreview.value = null;
+    this._pageCameras.clear();
+    this.activePageId.value = this.getDefaultPageId();
     this.activeStyles.value = { ...DEFAULT_ACTIVE_STYLES };
     this.arrowRouteStyle = 'ortho';
     this.arrowheadStart = 'none';
@@ -2212,6 +2775,59 @@ export class GlideEditor {
       .map(id => this.getShape(id))
       .filter(Boolean) as GlideShape[]);
     return this._renderShapesToSvg(shapes);
+  }
+
+  async exportToPortableSvg(
+    shapeIds: ShapeId[],
+    options: PortableSvgExportOptions,
+  ): Promise<string> {
+    const assets = new Map<string, GlideAsset>();
+    const visit = (id: ShapeId) => {
+      const shape = this.getShape(id);
+      if (!shape) return;
+      for (const descriptor of this.schema.getReferenceDescriptors(shape)) {
+        if (descriptor.targetKind !== 'asset') continue;
+        const assetId = readPointer(shape, descriptor.path);
+        const asset = typeof assetId === 'string' ? this.store.get(assetId) : undefined;
+        if (asset?.['kind'] === 'asset' && asset['type'] === 'raster-image') {
+          assets.set(assetId, asset as unknown as GlideAsset);
+        }
+      }
+      this.getChildren(id).forEach(child => visit(child.id as ShapeId));
+    };
+    shapeIds.forEach(visit);
+
+    const context = options.resolutionContext
+      ? cloneRecord(options.resolutionContext)
+      : this._assetResolutionContext;
+    if (context !== undefined) validatePortableResolutionContext(context);
+    for (const assetId of assets.keys()) {
+      assertCanonicalPortableRasterAssetId(assetId, 'Portable SVG raster asset id');
+    }
+    const overrides = new Map<string, string>();
+    for (const assetId of [...assets.keys()].sort()) {
+      const asset = assets.get(assetId)!;
+      const exported = await options.exportRasterAsset(cloneRecord(asset), context);
+      if (exported.kind === 'self-contained') {
+        const bytes = new Uint8Array(exported.bytes);
+        if (bytes.byteLength > PORTABLE_BOARD_FRAGMENT_LIMITS.maxEmbeddedAssetBytes) {
+          throw new Error(`Raster asset "${assetId}" exceeds portable embedded-byte limit`);
+        }
+        const mimeType = String(asset.props['mimeType']);
+        if (!['image/png', 'image/jpeg', 'image/webp'].includes(mimeType)) {
+          throw new Error(`Raster asset "${assetId}" has an unsupported export MIME type`);
+        }
+        overrides.set(assetId, `data:${mimeType};base64,${bytesToBase64(bytes)}`);
+      } else {
+        overrides.set(assetId, validatePortableExportReference(exported.reference, assetId));
+      }
+    }
+    this._exportAssetUrlOverrides = overrides;
+    try {
+      return this.exportToSvg(shapeIds);
+    } finally {
+      this._exportAssetUrlOverrides = null;
+    }
   }
 
   exportRegionToSvg(box: Box2d): string {
@@ -2411,6 +3027,258 @@ async function blobToDataUrl(blob: Blob): Promise<string> {
   throw new Error('No available blob to data URL conversion path');
 }
 
+function bytesToBase64(bytes: Uint8Array): string {
+  const BufferCtor = (globalThis as { Buffer?: { from(data: Uint8Array): { toString(encoding: string): string } } }).Buffer;
+  if (BufferCtor) return BufferCtor.from(bytes).toString('base64');
+  let binary = '';
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  if (typeof btoa === 'function') return btoa(binary);
+  throw new Error('No available base64 encoding path');
+}
+
+function base64ToBytes(value: string): Uint8Array {
+  const BufferCtor = (globalThis as {
+    Buffer?: { from(data: string, encoding: string): { readonly length: number; readonly [index: number]: number } };
+  }).Buffer;
+  if (BufferCtor) return new Uint8Array(BufferCtor.from(value, 'base64'));
+  if (typeof atob !== 'function') throw new Error('No available base64 decoding path');
+  const binary = atob(value);
+  return Uint8Array.from(binary, character => character.charCodeAt(0));
+}
+
+function validatePortableExportReference(reference: string, assetId: string): string {
+  if (reference.length === 0 || utf8ByteLength(reference) > PORTABLE_BOARD_FRAGMENT_LIMITS.maxStringBytes) {
+    throw new Error(`Raster asset "${assetId}" has an invalid durable export reference`);
+  }
+  try {
+    const url = new URL(reference);
+    if (!['https:', 'http:'].includes(url.protocol)) throw new Error('unsupported protocol');
+  } catch {
+    throw new Error(`Raster asset "${assetId}" has an invalid durable export reference`);
+  }
+  return reference;
+}
+
+function utf8ByteLength(value: string): number {
+  if (typeof TextEncoder !== 'undefined') return new TextEncoder().encode(value).byteLength;
+  const BufferCtor = (globalThis as { Buffer?: { byteLength(value: string, encoding: string): number } }).Buffer;
+  if (BufferCtor) return BufferCtor.byteLength(value, 'utf8');
+  return unescape(encodeURIComponent(value)).length;
+}
+
+const CANONICAL_RASTER_ASSET_ID = /^asset:sha256:[a-f0-9]{64}$/;
+
+export function isCanonicalRasterAssetId(value: unknown): value is string {
+  return typeof value === 'string' && CANONICAL_RASTER_ASSET_ID.test(value);
+}
+
+function assertPortableString(value: unknown, label: string, allowEmpty = false): asserts value is string {
+  if (typeof value !== 'string' || (!allowEmpty && value.length === 0)
+    || utf8ByteLength(value) > PORTABLE_BOARD_FRAGMENT_LIMITS.maxStringBytes) {
+    throw new Error(`${label} is invalid or exceeds the portable string limit`);
+  }
+}
+
+function assertCanonicalPortableRasterAssetId(value: unknown, label: string): asserts value is string {
+  assertPortableString(value, label);
+  if (!isCanonicalRasterAssetId(value)) {
+    throw new Error(`${label} must match asset:sha256:<64 lowercase hex>`);
+  }
+}
+
+function isPlainPortableObject(value: unknown): value is Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+}
+
+function assertExactKeys(value: Record<string, unknown>, keys: readonly string[], label: string): void {
+  const allowed = new Set(keys);
+  const unexpected = Object.keys(value).find(key => !allowed.has(key));
+  if (unexpected) throw new Error(`${label} contains unsupported property "${unexpected}"`);
+}
+
+function assertBoundedJson(value: unknown, label: string, maxBytes: number): void {
+  const seen = new Set<object>();
+  const visit = (candidate: unknown, depth: number) => {
+    if (depth > 64) throw new Error(`${label} exceeds nesting limit`);
+    if (typeof candidate === 'string') {
+      const length = utf8ByteLength(candidate);
+      if (length > PORTABLE_BOARD_FRAGMENT_LIMITS.maxStringBytes) {
+        throw new Error(`${label} contains a string exceeding the portable limit`);
+      }
+    } else if (Array.isArray(candidate)) {
+      if (seen.has(candidate)) throw new Error(`${label} must be JSON-safe`);
+      seen.add(candidate);
+      candidate.forEach(item => visit(item, depth + 1));
+    } else if (candidate && typeof candidate === 'object') {
+      if (!isPlainPortableObject(candidate) || seen.has(candidate)) throw new Error(`${label} must be JSON-safe`);
+      seen.add(candidate);
+      for (const [key, item] of Object.entries(candidate)) {
+        visit(key, depth + 1);
+        visit(item, depth + 1);
+      }
+    } else if (candidate !== null && typeof candidate !== 'boolean'
+      && (typeof candidate !== 'number' || !Number.isFinite(candidate))) {
+      throw new Error(`${label} must be JSON-safe`);
+    }
+  };
+  visit(value, 0);
+  const serialized = JSON.stringify(value);
+  if (serialized === undefined || utf8ByteLength(serialized) > maxBytes) {
+    throw new Error(`${label} exceeds portable size limit`);
+  }
+}
+
+function assertEncodedJsonSize(value: unknown, label: string, maxBytes: number): void {
+  let serialized: string | undefined;
+  try {
+    serialized = JSON.stringify(value);
+  } catch {
+    throw new Error(`${label} must be JSON-safe`);
+  }
+  if (serialized === undefined || utf8ByteLength(serialized) > maxBytes) {
+    throw new Error(`${label} exceeds portable size limit`);
+  }
+}
+
+function validatePortableResolutionContext(context: unknown): asserts context is AssetResolutionContext {
+  if (!isPlainPortableObject(context)) throw new Error('Portable resolutionContext is invalid');
+  assertExactKeys(context, ['documentId', 'versionId', 'snapshotId', 'createdAt', 'metadata'], 'Portable resolutionContext');
+  for (const key of ['documentId', 'versionId', 'snapshotId'] as const) {
+    if (context[key] !== undefined) assertPortableString(context[key], `Portable resolutionContext ${key}`);
+  }
+  if (context['createdAt'] !== undefined) {
+    assertPortableString(context['createdAt'], 'Portable resolutionContext createdAt');
+    const createdAt = context['createdAt'];
+    const isoTimestamp = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})$/;
+    if (!isoTimestamp.test(createdAt) || Number.isNaN(Date.parse(createdAt))) {
+      throw new Error('Portable resolutionContext createdAt must be an ISO-8601 timestamp');
+    }
+  }
+  if (context['metadata'] !== undefined) {
+    const metadata = context['metadata'];
+    if (!isPlainPortableObject(metadata)) throw new Error('Portable resolutionContext metadata is invalid');
+    for (const [key, value] of Object.entries(metadata)) {
+      assertPortableString(key, 'Portable resolutionContext metadata key', true);
+      if (typeof value === 'string') {
+        assertPortableString(value, `Portable resolutionContext metadata value for "${key}"`, true);
+      } else if (value !== null && typeof value !== 'boolean'
+        && (typeof value !== 'number' || !Number.isFinite(value))) {
+        throw new Error(`Portable resolutionContext metadata value for "${key}" is invalid`);
+      }
+    }
+    assertBoundedJson(metadata, 'Portable resolutionContext metadata', PORTABLE_BOARD_FRAGMENT_LIMITS.maxMetadataBytes);
+  }
+  assertBoundedJson(context, 'Portable resolutionContext', PORTABLE_BOARD_FRAGMENT_LIMITS.maxMetadataBytes);
+}
+
+function validatePortableRasterRecordIds(records: readonly unknown[]): void {
+  for (const candidate of records) {
+    if (!isPlainPortableObject(candidate)) continue;
+    if (candidate['kind'] === 'asset' && candidate['type'] === 'raster-image') {
+      assertCanonicalPortableRasterAssetId(candidate['id'], 'Portable raster asset id');
+    }
+    if (candidate['kind'] === 'shape' && candidate['type'] === 'raster-image') {
+      const props = candidate['props'];
+      if (!isPlainPortableObject(props)) throw new Error('Portable raster shape props are invalid');
+      assertCanonicalPortableRasterAssetId(props['assetId'], 'Portable raster shape assetId');
+    }
+  }
+}
+
+function validateCanonicalBase64(value: string, byteLength: number, assetId: string): void {
+  const encodedLength = Math.ceil(byteLength / 3) * 4;
+  if (value.length !== encodedLength) {
+    throw new Error(`Embedded raster payload length mismatch for asset "${assetId}"`);
+  }
+  const canonical = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
+  if (!canonical.test(value)) throw new Error(`Embedded raster payload for asset "${assetId}" is not canonical base64`);
+}
+
+export function validatePortableBoardFragmentStructure(fragment: unknown): asserts fragment is PortableBoardFragment {
+  if (!isPlainPortableObject(fragment)) throw new Error('Portable board fragment must be a plain object');
+  assertExactKeys(fragment, ['schema', 'rootIds', 'records', 'assetRefs', 'rasterPayloads', 'sourceBounds', 'resolutionContext'], 'Portable board fragment');
+  assertEncodedJsonSize(
+    fragment,
+    'Portable board fragment encoded JSON',
+    PORTABLE_BOARD_FRAGMENT_LIMITS.maxEncodedFragmentBytes,
+  );
+  const schema = fragment['schema'];
+  if (!isPlainPortableObject(schema)) throw new Error('Portable board fragment schema is invalid');
+  assertExactKeys(schema, ['portableBoardFragmentVersion', 'storeVersion'], 'Portable board fragment schema');
+  if (schema['portableBoardFragmentVersion'] !== 1
+    || !Number.isInteger(schema['storeVersion'])
+    || Number(schema['storeVersion']) < 1
+    || Number(schema['storeVersion']) > CURRENT_STORE_VERSION) {
+    throw new Error(`Unsupported portable board fragment schema version ${String(schema['portableBoardFragmentVersion'])}`);
+  }
+  const arrays = [
+    ['rootIds', PORTABLE_BOARD_FRAGMENT_LIMITS.maxRootIds],
+    ['records', PORTABLE_BOARD_FRAGMENT_LIMITS.maxRecords],
+    ['assetRefs', PORTABLE_BOARD_FRAGMENT_LIMITS.maxAssetRefs],
+    ['rasterPayloads', PORTABLE_BOARD_FRAGMENT_LIMITS.maxRasterPayloads],
+  ] as const;
+  for (const [key, limit] of arrays) {
+    const value = fragment[key];
+    if (!Array.isArray(value) || value.length > limit) throw new Error(`Portable board fragment ${key} exceeds limit or is invalid`);
+  }
+  for (const key of ['rootIds', 'assetRefs'] as const) {
+    const seen = new Set<string>();
+    for (const value of fragment[key] as unknown[]) {
+      if (typeof value !== 'string' || value.length === 0
+        || utf8ByteLength(value) > PORTABLE_BOARD_FRAGMENT_LIMITS.maxStringBytes) {
+        throw new Error(`Portable board fragment ${key} contains an invalid id`);
+      }
+      if (seen.has(value)) throw new Error(`Portable board fragment ${key} contains a duplicate id`);
+      seen.add(value);
+    }
+  }
+  assertBoundedJson(fragment['records'], 'Portable records', PORTABLE_BOARD_FRAGMENT_LIMITS.maxRecordsBytes);
+  for (const record of fragment['records'] as unknown[]) {
+    if (!isPlainPortableObject(record)) throw new Error('Portable records must contain plain objects');
+    assertBoundedJson(record, 'Portable record', PORTABLE_BOARD_FRAGMENT_LIMITS.maxRecordBytes);
+    if ('meta' in record) assertBoundedJson(record['meta'], 'Portable record metadata', PORTABLE_BOARD_FRAGMENT_LIMITS.maxMetadataBytes);
+  }
+  validatePortableRasterRecordIds(fragment['records'] as unknown[]);
+  const bounds = fragment['sourceBounds'];
+  if (!isPlainPortableObject(bounds)) throw new Error('Portable sourceBounds is invalid');
+  assertExactKeys(bounds, ['x', 'y', 'w', 'h', 'minX', 'minY', 'maxX', 'maxY'], 'Portable sourceBounds');
+  if (Object.values(bounds).some(value => typeof value !== 'number' || !Number.isFinite(value))) {
+    throw new Error('Portable sourceBounds must contain finite numbers');
+  }
+  if (fragment['resolutionContext'] !== undefined) {
+    validatePortableResolutionContext(fragment['resolutionContext']);
+  }
+  let totalEmbeddedBytes = 0;
+  for (const item of fragment['rasterPayloads'] as unknown[]) {
+    if (!isPlainPortableObject(item)) throw new Error('Portable raster payload is invalid');
+    assertCanonicalPortableRasterAssetId(item['assetId'], 'Portable raster payload assetId');
+    if (item['kind'] === 'embedded') {
+      assertExactKeys(item, ['assetId', 'kind', 'base64', 'byteLength'], 'Embedded raster payload');
+      const byteLength = item['byteLength'];
+      if (!Number.isSafeInteger(byteLength) || Number(byteLength) < 0
+        || Number(byteLength) > PORTABLE_BOARD_FRAGMENT_LIMITS.maxEmbeddedAssetBytes
+        || typeof item['base64'] !== 'string') {
+        throw new Error(`Embedded raster payload for asset "${item['assetId']}" exceeds limit or is invalid`);
+      }
+      totalEmbeddedBytes += Number(byteLength);
+      if (totalEmbeddedBytes > PORTABLE_BOARD_FRAGMENT_LIMITS.maxTotalEmbeddedBytes) {
+        throw new Error('Portable raster payloads exceed total embedded-byte limit');
+      }
+      validateCanonicalBase64(item['base64'], Number(byteLength), item['assetId']);
+    } else if (item['kind'] === 'durable-reference') {
+      assertExactKeys(item, ['assetId', 'kind', 'reference'], 'Durable raster payload');
+      if (typeof item['reference'] !== 'string' || item['reference'].length === 0
+        || utf8ByteLength(item['reference']) > PORTABLE_BOARD_FRAGMENT_LIMITS.maxStringBytes) {
+        throw new Error(`Raster asset "${item['assetId']}" has an invalid durable reference`);
+      }
+    } else {
+      throw new Error('Portable raster payload kind is invalid');
+    }
+  }
+}
+
 // ─────────────────────────────────────────────────────────────
 // createEditor() — factory / boot sequence
 // ─────────────────────────────────────────────────────────────
@@ -2425,9 +3293,14 @@ export interface CreateEditorOptions {
   trustedMutationCapabilities?: readonly MutationCapabilityGrant[];
   /** Trusted host lookup; returned URLs are never persisted in the document. */
   assetResolver?: AssetResolver;
+  /** Default immutable snapshot coordinates for rendering and export resolution. */
+  assetResolutionContext?: AssetResolutionContext;
 }
 
-export type AssetResolver = (asset: GlideAsset) => string | null;
+export type AssetResolver = (
+  asset: GlideAsset,
+  context?: AssetResolutionContext,
+) => string | null;
 
 /**
  * Boot sequence (LLD §18):
@@ -2451,6 +3324,7 @@ export function createEditor(opts: CreateEditorOptions = {}): GlideEditor {
     mutationPolicy = allowAllMutations,
     trustedMutationCapabilities = [],
     assetResolver,
+    assetResolutionContext,
   } = opts;
 
   // 1. Schema
@@ -2511,6 +3385,7 @@ export function createEditor(opts: CreateEditorOptions = {}): GlideEditor {
     localMutationCapability,
     loadMutationCapability,
     assetResolver,
+    assetResolutionContext,
   );
 
   // Inject canonical transformed geometry hooks for RBush broad/precise phases.

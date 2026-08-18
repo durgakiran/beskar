@@ -11,9 +11,9 @@
  * The demo layer's InlineEditor handles the actual text input.
  */
 
-import { StateNode } from '../state-node';
-import type { PointerDownEvent } from '../state-node';
-import type { ShapeId } from '../types';
+import { StateNode } from '../state-node.js';
+import type { PointerDownEvent } from '../state-node.js';
+import type { ShapeId } from '../types.js';
 
 // ─────────────────────────────────────────────────────────────
 // Idle

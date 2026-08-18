@@ -6,13 +6,13 @@
  * toSvg() returns geometry; getLabelProps() owns the editable label layout.
  */
 
-import { ShapeUtil } from './ShapeUtil';
-import { T } from '../validators';
-import { defineMigrations } from '../migrations';
-import { makeBox } from '../types';
-import type { GlideShape } from '../types';
-import { Geometry2d, Rectangle2d } from '../geometry';
-import { createTextForeignObjectForExport, type LabelProps } from '../styles';
+import { ShapeUtil } from './ShapeUtil.js';
+import { T } from '../validators.js';
+import { defineMigrations } from '../migrations.js';
+import { makeBox } from '../types.js';
+import type { GlideShape } from '../types.js';
+import { Geometry2d, Rectangle2d } from '../geometry/index.js';
+import { createTextForeignObjectForExport, type LabelProps } from '../styles.js';
 
 export interface FrameProps {
   [key: string]: unknown;
@@ -20,6 +20,7 @@ export interface FrameProps {
   h:     number;
   label: string;
   color: string;
+  opacity: number;
   clipContent: boolean;
 }
 
@@ -34,11 +35,12 @@ export class FrameUtil extends ShapeUtil<FrameShape> {
     h:     T.number,
     label: T.string,
     color: T.string,
+    opacity: T.number,
     clipContent: T.boolean,
   };
 
   static override readonly migrations = defineMigrations({
-    currentVersion: 2,
+    currentVersion: 3,
     migrators: {
       1: {
         up:   r => ({ ...r, props: { label: 'Frame', color: '#313244', ...(r['props'] as object) } }),
@@ -55,11 +57,22 @@ export class FrameUtil extends ShapeUtil<FrameShape> {
           return { ...r, props };
         },
       },
+      3: {
+        up: r => ({
+          ...r,
+          props: { ...(r['props'] as object), opacity: 1 },
+        }),
+        down: r => {
+          const props = { ...(r['props'] as Record<string, unknown>) };
+          delete props.opacity;
+          return { ...r, props };
+        },
+      },
     },
   });
 
   getDefaultProps(): FrameProps {
-    return { w: 400, h: 300, label: 'Frame', color: '#313244', clipContent: false };
+    return { w: 400, h: 300, label: 'Frame', color: '#313244', opacity: 1, clipContent: false };
   }
 
   getGeometry(shape: FrameShape): Geometry2d {
@@ -100,6 +113,7 @@ export class FrameUtil extends ShapeUtil<FrameShape> {
   toSvg(shape: FrameShape): SVGElement {
     const { props } = shape;
     const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    if (props.opacity < 1) g.setAttribute('opacity', String(props.opacity));
 
     // Dashed border (local coords: x=0, y=0)
     const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');

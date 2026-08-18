@@ -16,9 +16,9 @@
  * being erased (visual feedback before commit).
  */
 
-import { StateNode } from '../state-node';
-import type { PointerDownEvent, PointerMoveEvent, PointerUpEvent, KeyDownEvent } from '../state-node';
-import type { ShapeId } from '../types';
+import { StateNode } from '../state-node.js';
+import type { PointerDownEvent, PointerMoveEvent, PointerUpEvent, KeyDownEvent } from '../state-node.js';
+import type { ShapeId } from '../types.js';
 
 // ─────────────────────────────────────────────────────────────
 // Idle

@@ -12,9 +12,9 @@
  * (InlineEditor.tsx in the demo layer) listens to editingShapeId signal.
  */
 
-import { StateNode } from '../state-node';
-import type { PointerDownEvent } from '../state-node';
-import type { ShapeId } from '../types';
+import { StateNode } from '../state-node.js';
+import type { PointerDownEvent } from '../state-node.js';
+import type { ShapeId } from '../types.js';
 
 // ─────────────────────────────────────────────────────────────
 // Idle
@@ -47,6 +47,7 @@ class Idle extends StateNode {
         meta:     {},
         props: {
           text:     '',
+          textAlign: 'left',
         },
       });
     });

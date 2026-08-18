@@ -147,6 +147,25 @@ describe('T4.4-05: ArrowTool creates ArrowShape + 2 bindings', () => {
     expect(arrowCount).toBe(1);
     expect(bindingCount).toBe(2);
   });
+
+  it('creates the arrow and bindings on the active page', () => {
+    const ed = makeEditor();
+    const pageId = ed.createPage('Connectors');
+    const sourceId = ed.createShape(box('page-b-source', 0, 0, 100, 80) as unknown as AnyRecord);
+    const targetId = ed.createShape(box('page-b-target', 300, 0, 100, 80) as unknown as AnyRecord);
+    ed.setCurrentTool('arrow');
+
+    ed.dispatchEvent({ type: 'pointerDown', point: { x: 50, y: 40 }, shiftKey: false, target: 'shape', shapeId: sourceId });
+    ed.dispatchEvent({ type: 'pointerMove', point: { x: 350, y: 40 } });
+    ed.dispatchEvent({ type: 'pointerUp', point: { x: 350, y: 40 } });
+
+    const pageShapes = ed.getShapes();
+    const connector = pageShapes.find(shape => shape.type === 'arrow');
+    expect(connector?.parentId).toBe(pageId);
+    expect(ed.getBindingsFromShape(connector!.id)).toHaveLength(2);
+    expect(ed.getShapePageId(sourceId)).toBe(pageId);
+    expect(ed.getShapePageId(targetId)).toBe(pageId);
+  });
 });
 
 // T4.4-06: Route style switch changes rendered path key

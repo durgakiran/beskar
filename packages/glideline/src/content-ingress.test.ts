@@ -20,6 +20,12 @@ const SAFE_SVG = `
 `;
 
 describe('untrusted content ingress', () => {
+  it('accepts inert accessibility metadata on the SVG root', () => {
+    expect(() => sanitizeSvg(
+      '<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" role="img" aria-label="Chart" aria-hidden="false" focusable="false" class="icon" id="chart" preserveAspectRatio="xMidYMid meet" version="1.1" viewBox="0 0 10 10"><path d="M0 0 L10 10"/></svg>',
+    )).not.toThrow();
+  });
+
   it('normalizes supported SVG into path data without preserving markup', () => {
     const result = sanitizeSvg(SAFE_SVG);
     expect(result).toEqual({

@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { useGlideboardController } from './GlideboardContext';
-import { useSignalValue } from './useSignalValue';
-import { wbTheme } from './theme';
-import type { GlideboardUser } from './types';
-import { safeAwarenessEntries } from './collaboration/awareness';
+import { useGlideboardController } from './GlideboardContext.js';
+import { useSignalValue } from './useSignalValue.js';
+import { wbTheme } from './theme.js';
+import type { GlideboardUser } from './types.js';
+import { safeAwarenessEntries } from './collaboration/awareness.js';
 
 export function CollaborationAvatars() {
   const controller = useGlideboardController();

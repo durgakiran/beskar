@@ -1,11 +1,11 @@
-import { StateNode } from '../state-node';
+import { StateNode } from '../state-node.js';
 import { signal } from '@preact/signals';
-import type { PointerDownEvent, PointerMoveEvent, PointerUpEvent, KeyDownEvent, DoubleClickEvent } from '../state-node';
-import type { ShapeId, Vec2, AnyRecord } from '../types';
-import { makeBox } from '../types';
-import type { ArrowShape, ArrowProps } from '../shapes/ArrowUtil';
-import type { BindingPreview, BindingPreviewCandidate } from '../editor';
-import type { ResizeHandle, ResizeInfo } from '../shapes/ShapeUtil';
+import type { PointerDownEvent, PointerMoveEvent, PointerUpEvent, KeyDownEvent, DoubleClickEvent } from '../state-node.js';
+import type { ShapeId, Vec2, AnyRecord } from '../types.js';
+import { makeBox } from '../types.js';
+import type { ArrowShape, ArrowProps } from '../shapes/ArrowUtil.js';
+import type { BindingPreview, BindingPreviewCandidate } from '../editor.js';
+import type { ResizeHandle, ResizeInfo } from '../shapes/ShapeUtil.js';
 import {
   applyMatrixToPoint,
   invertMatrix,
@@ -13,9 +13,19 @@ import {
   rotationMatrix,
   translationMatrix,
   type Matrix2d,
-} from '../transform';
+} from '../transform.js';
 
 const DRAG_THRESHOLD = 4;
+
+function shouldConstrainResizeAspect(shape: import('../types.js').GlideShape, shiftKey: boolean): boolean {
+  if (shape.type === 'text') return true;
+  const persisted = shape.type === 'raster-image' || shape.type === 'sanitized-svg'
+    ? (shape.props as Record<string, unknown>)['aspectLocked'] !== false
+    : shape.meta['aspectLocked'];
+  if (typeof persisted !== 'boolean') return shiftKey;
+  const locked = persisted;
+  return locked ? !shiftKey : shiftKey;
+}
 
 function dist(a: Vec2, b: Vec2): number {
   return Math.sqrt((b.x - a.x) ** 2 + (b.y - a.y) ** 2);
@@ -106,8 +116,8 @@ class Idle extends StateNode {
           
           const initialShapes = new Map(sel.map(id => {
             const s = this.editor.getShape(id); if (!s) return null;
-            return [id, JSON.parse(JSON.stringify(s))] as [ShapeId, import('../types').GlideShape];
-          }).filter(Boolean) as [ShapeId, import('../types').GlideShape][]);
+            return [id, JSON.parse(JSON.stringify(s))] as [ShapeId, import('../types.js').GlideShape];
+          }).filter(Boolean) as [ShapeId, import('../types.js').GlideShape][]);
 
           const initialWorldTransforms = new Map(sel.map(id => [
             id,
@@ -147,8 +157,8 @@ class Idle extends StateNode {
           const clone = JSON.parse(JSON.stringify(s));
           return [id, { shape: clone, bounds: b, worldTransform: this.editor.getWorldTransform(id) }];
           }).filter(Boolean) as [ShapeId, {
-          shape: import('../types').GlideShape;
-          bounds: import('../types').Box2d;
+          shape: import('../types.js').GlideShape;
+          bounds: import('../types.js').Box2d;
           worldTransform: Matrix2d;
           }][]);
           let groupDescendants: DraggingResizeState['groupDescendants'];
@@ -279,7 +289,7 @@ class PointingShape extends StateNode {
         this.editor.setSelectedShapeIds(Array.from(startPositions.keys()));
       }
 
-      const initialShapes = new Map<ShapeId, import('../types').GlideShape>();
+      const initialShapes = new Map<ShapeId, import('../types.js').GlideShape>();
       for (const id of startPositions.keys()) {
         const shape = this.editor.getShape(id);
         if (!shape) continue;
@@ -342,12 +352,12 @@ class Dragging extends StateNode {
 
   private _origin!: Vec2;
   private _startPositions!: Map<ShapeId, Vec2>;
-  private _initialShapes!: Map<ShapeId, import('../types').GlideShape>;
-  private _initialBounds!: import('../types').Box2d;
+  private _initialShapes!: Map<ShapeId, import('../types.js').GlideShape>;
+  private _initialBounds!: import('../types.js').Box2d;
   /** 'x' | 'y' | null — determined on first significant move when shift held */
   private _axis: 'x' | 'y' | null = null;
 
-  override onEnter(info: { origin: Vec2; startPositions: Map<ShapeId, Vec2>; initialShapes: Map<ShapeId, import('../types').GlideShape>; constrainAxis?: boolean }): void {
+  override onEnter(info: { origin: Vec2; startPositions: Map<ShapeId, Vec2>; initialShapes: Map<ShapeId, import('../types.js').GlideShape>; constrainAxis?: boolean }): void {
     this._origin         = info.origin;
     this._startPositions = info.startPositions;
     this._initialShapes = info.initialShapes;
@@ -836,9 +846,6 @@ class DraggingHandle extends StateNode {
             ...this._initialProps,
           }
         });
-        if (this._initialBinding) {
-          this.editor.createBinding(this._initialBinding);
-        }
       }, { history: 'ignore' });
 
       this.editor.cancelHistoryPreview();
@@ -937,13 +944,13 @@ export interface DraggingResizeState {
   origin:      Vec2;
   /** Per-shape snapshot: clone of shape + initial bounds */
   initialGeom: Map<ShapeId, {
-    shape: import('../types').GlideShape;
-    bounds: import('../types').Box2d;
+    shape: import('../types.js').GlideShape;
+    bounds: import('../types.js').Box2d;
     worldTransform: Matrix2d;
   }>;
-  initialBounds: import('../types').Box2d;
+  initialBounds: import('../types.js').Box2d;
   groupDescendants?: Map<ShapeId, {
-    shape: import('../types').GlideShape;
+    shape: import('../types.js').GlideShape;
     worldTransform: Matrix2d;
     depth: number;
   }>;
@@ -961,13 +968,13 @@ class DraggingResize extends StateNode {
 
   override onPointerMove(e: PointerMoveEvent): void {
     this.editor.batch('Resize Preview', () => {
-      this._applyResize(e.point, (e as any).shiftKey ?? false, (e as any).altKey ?? false);
+      this._applyResize(e.point, this._shouldConstrainAspect((e as any).shiftKey ?? false), (e as any).altKey ?? false);
     }, { history: 'ignore' });
   }
 
   override onPointerUp(e: PointerUpEvent): void {
     this.editor.batch('Resize Shapes Preview', () => {
-      this._applyResize(e.point, (e as any).shiftKey ?? false, (e as any).altKey ?? false);
+      this._applyResize(e.point, this._shouldConstrainAspect((e as any).shiftKey ?? false), (e as any).altKey ?? false);
     }, { history: 'ignore' });
 
     const before = new Map<string, AnyRecord | null>();
@@ -1013,12 +1020,18 @@ class DraggingResize extends StateNode {
     }
     if (initialGeom.size === 1) {
       const entry = initialGeom.entries().next().value as [ShapeId, {
-        shape: import('../types').GlideShape;
-        bounds: import('../types').Box2d;
+        shape: import('../types.js').GlideShape;
+        bounds: import('../types.js').Box2d;
         worldTransform: Matrix2d;
       }] | undefined;
       if (entry) {
-        this._applySingleOrientedResize(entry[0], entry[1], cursor, constrainAspect, disableSnap);
+        this._applySingleOrientedResize(
+          entry[0],
+          entry[1],
+          cursor,
+          shouldConstrainResizeAspect(entry[1].shape, constrainAspect),
+          disableSnap,
+        );
         return;
       }
     }
@@ -1137,7 +1150,7 @@ class DraggingResize extends StateNode {
           Math.max(1, bounds.w * scale), Math.max(1, bounds.h * scale)),
       }) as any;
       const nextShape = { ...shape, ...resized, x: shape.x, y: shape.y,
-        props: { ...shape.props, ...(resized.props ?? {}) } } as import('../types').GlideShape;
+        props: { ...shape.props, ...(resized.props ?? {}) } } as import('../types.js').GlideShape;
       const desiredWorld = multiplyMatrices(scaleWorld, initial.worldTransform);
       const placement = this.editor.transforms.getLocalPlacementForWorldTransform(nextShape, desiredWorld, shape.parentId);
       this.editor.updateShape(id, { ...resized, ...placement });
@@ -1146,7 +1159,7 @@ class DraggingResize extends StateNode {
 
   private _applySingleOrientedResize(
     id: ShapeId,
-    initial: { shape: import('../types').GlideShape; bounds: import('../types').Box2d; worldTransform: Matrix2d },
+    initial: { shape: import('../types.js').GlideShape; bounds: import('../types.js').Box2d; worldTransform: Matrix2d },
     cursor: Vec2,
     constrainAspect: boolean,
     disableSnap: boolean,
@@ -1180,6 +1193,13 @@ class DraggingResize extends StateNode {
     );
     width = snappedDimensions.width;
     height = snappedDimensions.height;
+    if (constrainAspect && bounds.w > 0 && bounds.h > 0) {
+      const aspect = bounds.w / bounds.h;
+      if (!handle.includes('n') && !handle.includes('s')) height = width / aspect;
+      else if (!handle.includes('e') && !handle.includes('w')) width = height * aspect;
+      else if (width / height > aspect) height = width / aspect;
+      else width = height * aspect;
+    }
 
     const util = this.editor.getShapeUtil(shape.type);
     const localInitialShape = { ...shape, x: bounds.minX, y: bounds.minY };
@@ -1198,9 +1218,9 @@ class DraggingResize extends StateNode {
       x: shape.x,
       y: shape.y,
       props: { ...shape.props, ...((result as any).props ?? {}) },
-    } as import('../types').GlideShape;
+    } as import('../types.js').GlideShape;
     const resizedBounds = util.getGeometry(resizedShape as any).getBounds();
-    const opposite = (candidate: import('../types').Box2d): Vec2 => ({
+    const opposite = (candidate: import('../types.js').Box2d): Vec2 => ({
       x: handle.includes('w') ? candidate.maxX
         : handle.includes('e') ? candidate.minX : candidate.minX + candidate.w / 2,
       y: handle.includes('n') ? candidate.maxY
@@ -1218,6 +1238,14 @@ class DraggingResize extends StateNode {
       y: translation.y,
     });
   }
+
+  private _shouldConstrainAspect(shiftKey: boolean): boolean {
+    if (this._info.initialGeom.size === 1) return shiftKey;
+    return shouldConstrainSelectionResizeAspect(
+      Array.from(this._info.initialGeom.values(), entry => entry.shape),
+      shiftKey,
+    );
+  }
 }
 
 // ────────────────────────────────────────────────────────────
@@ -1231,7 +1259,7 @@ export interface RotationInfo {
   initialRotation: Map<ShapeId, number>;
   /** Per-shape center at start */
   initialCenters:  Map<ShapeId, Vec2>;
-  initialShapes:   Map<ShapeId, import('../types').GlideShape>;
+  initialShapes:   Map<ShapeId, import('../types.js').GlideShape>;
   initialWorldTransforms: Map<ShapeId, Matrix2d>;
   /** Angle from center to cursor at drag start (radians). */
   startAngle:      number;
@@ -1363,4 +1391,14 @@ export class SelectTool extends StateNode {
       this.transition('idle');
     }
   }
+}
+
+function shouldConstrainSelectionResizeAspect(
+  shapes: Iterable<import('../types.js').GlideShape>,
+  shiftKey: boolean,
+): boolean {
+  for (const shape of shapes) {
+    if (shouldConstrainResizeAspect(shape, shiftKey)) return true;
+  }
+  return false;
 }

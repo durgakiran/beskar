@@ -1,11 +1,12 @@
 import React from "react";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import Page from "./page";
 
 const useGet = vi.fn();
 const useDelete = vi.fn();
-const push = vi.fn();
+const push = vi.hoisted(() => vi.fn());
 
 vi.mock("@http/hooks", () => ({
     useGet: (...args: unknown[]) => useGet(...args),
@@ -14,6 +15,11 @@ vi.mock("@http/hooks", () => ({
 
 vi.mock("next/navigation", () => ({
     useRouter: () => ({ push }),
+}));
+
+vi.mock("react-router-dom", async importOriginal => ({
+    ...(await importOriginal<typeof import("react-router-dom")>()),
+    useNavigate: () => push,
 }));
 
 vi.mock("@components/WhiteboardEditor", () => ({
@@ -97,9 +103,13 @@ describe("whiteboard view page", () => {
     it("renders whiteboards inside the shared read-only shell with edit and delete actions", async () => {
         await act(async () => {
             render(
-                <React.Suspense fallback={<div data-testid="loading" />}>
-                    <Page params={Promise.resolve({ page: "42", spaceId: "space-1" })} />
-                </React.Suspense>
+                <MemoryRouter initialEntries={["/space-1/42"]}>
+                    <React.Suspense fallback={<div data-testid="loading" />}>
+                        <Routes>
+                            <Route path="/:spaceId/:page" element={<Page />} />
+                        </Routes>
+                    </React.Suspense>
+                </MemoryRouter>
             );
         });
 

@@ -1,7 +1,8 @@
-import type { AnyRecord, GlideAsset } from './types';
-import { aid } from './types';
+import type { AnyRecord, GlideAsset } from './types.js';
+import { aid } from './types.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
+const XLINK_NS = 'http://www.w3.org/1999/xlink';
 const MAX_SVG_BYTES = 1024 * 1024;
 const MAX_SVG_ELEMENTS = 2_000;
 const MAX_SVG_DEPTH = 32;
@@ -20,7 +21,13 @@ const SAFE_PATH_ATTRIBUTES = new Set([
   'd', 'fill', 'stroke', 'stroke-width', 'opacity', 'fill-opacity',
   'stroke-opacity', 'fill-rule', 'stroke-linecap', 'stroke-linejoin',
 ]);
-const SAFE_CONTAINER_ATTRIBUTES = new Set(['xmlns', 'viewBox', 'width', 'height']);
+const SAFE_CONTAINER_ATTRIBUTES = new Set([
+  'xmlns', 'viewBox', 'width', 'height',
+  // Accessibility metadata is inert and is not copied into the sanitized path model.
+  'role', 'aria-label', 'aria-hidden', 'focusable',
+  // Common exporter metadata is also discarded after validation.
+  'class', 'id', 'preserveAspectRatio', 'version',
+]);
 
 export interface SanitizedSvgPath {
   readonly d: string;
@@ -173,7 +180,8 @@ function parseViewBox(root: Element): readonly [number, number, number, number] 
 
 function rejectUnsafeAttribute(attribute: Attr, allowed: ReadonlySet<string>): void {
   const isSvgNamespaceDeclaration = attribute.name === 'xmlns' && attribute.value === SVG_NS;
-  if (isSvgNamespaceDeclaration) return;
+  const isXlinkNamespaceDeclaration = attribute.name === 'xmlns:xlink' && attribute.value === XLINK_NS;
+  if (isSvgNamespaceDeclaration || isXlinkNamespaceDeclaration) return;
   if (
     attribute.namespaceURI
     || /^on/i.test(attribute.name)

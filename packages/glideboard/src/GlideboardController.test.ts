@@ -1,5 +1,11 @@
 import * as Y from 'yjs';
-import { createSvgPathShape, MutationPermissionError, type GlideDocument } from '@durgakiran/glideline';
+import {
+  aid,
+  AssetPlacementTool,
+  createSvgPathShape,
+  MutationPermissionError,
+  type GlideDocument,
+} from '@durgakiran/glideline';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { GlideboardController } from './GlideboardController';
 
@@ -46,11 +52,150 @@ function createDeferred() {
   return { promise, resolve };
 }
 
+function createPng(width: number, height: number): Uint8Array {
+  const png = new Uint8Array(24);
+  png.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  png.set([0x49, 0x48, 0x44, 0x52], 12);
+  new DataView(png.buffer).setUint32(16, width);
+  new DataView(png.buffer).setUint32(20, height);
+  return png;
+}
+
+function successfulAssetPersistence() {
+  return {
+    token: '11111111-1111-4111-8111-111111111111',
+    stage: vi.fn(async () => {}),
+    commit: vi.fn(async () => {}),
+    rollback: vi.fn(async () => {}),
+  };
+}
+
 afterEach(() => {
   vi.useRealTimers();
 });
 
 describe('GlideboardController', () => {
+  it('configures and activates the registered generic asset placement tool', async () => {
+    const controller = new GlideboardController({ sessionKey: 'asset-placement' });
+    const hash = 'c'.repeat(64);
+    const rollback = vi.fn();
+    try {
+      controller.configureAssetPlacement({
+        selection: {
+          itemId: 'vendor:mark',
+          mediaType: 'svg',
+          width: 100,
+          height: 50,
+          provenance: {
+            providerId: 'vendor',
+            itemId: 'vendor:mark',
+            sourceLibraryId: 'brand-kit',
+            sourceVersion: '1.0.0',
+            license: 'MIT',
+          },
+        },
+        materializer: async () => ({
+          asset: {
+            id: aid(`asset:sha256:${hash}`),
+            kind: 'asset',
+            type: 'sanitized-svg',
+            schemaVersion: 1,
+            props: {
+              hash,
+              mimeType: 'image/svg+xml',
+              sanitizerVersion: 1,
+              byteLength: 8,
+              width: 100,
+              height: 50,
+              viewBox: [0, 0, 100, 50],
+              paths: [{ d: 'M0 0 L100 50' }],
+            },
+            meta: {},
+          },
+          contentHash: hash,
+          rollback,
+        }),
+      });
+
+      expect(controller.editor.currentToolId.peek()).toBe('asset');
+      const shapeId = await (controller.editor.getCurrentTool() as AssetPlacementTool)
+        .place({ x: 10, y: 20, w: 100, h: 50 });
+      expect(controller.editor.getShape(shapeId!)).toMatchObject({ type: 'sanitized-svg' });
+      expect(rollback).not.toHaveBeenCalled();
+    } finally {
+      void controller.dispose();
+    }
+  });
+
+  it('exposes generic asset placement configuration through the debug API', () => {
+    const controller = new GlideboardController({ sessionKey: 'asset-placement-debug' });
+    const debugKey = '__glideboardAssetPlacementTest';
+    const detachDebug = controller.attachDebugApi(debugKey);
+    const config = {
+      selection: {
+        itemId: 'vendor:mark',
+        mediaType: 'svg' as const,
+        width: 100,
+        height: 50,
+        provenance: {
+          providerId: 'vendor',
+          itemId: 'vendor:mark',
+          sourceLibraryId: 'brand-kit',
+          sourceVersion: '1.0.0',
+          license: 'MIT',
+        },
+      },
+      materializer: async () => { throw new Error('not used'); },
+    };
+
+    try {
+      const debugApi = (window as Window & Record<string, unknown>)[debugKey] as {
+        configureAssetPlacement(config: typeof config): void;
+      };
+      debugApi.configureAssetPlacement(config);
+
+      expect(controller.editor.currentToolId.peek()).toBe('asset');
+    } finally {
+      detachDebug();
+      void controller.dispose();
+    }
+  });
+
+  it('exposes deterministic record and history evidence through the debug API', () => {
+    const controller = new GlideboardController({ sessionKey: 'acceptance-debug' });
+    const debugKey = '__glideboardAcceptanceTest';
+    const detachDebug = controller.attachDebugApi(debugKey);
+
+    try {
+      const id = controller.editor.createShape(createBoxRecord('shape:debug', 10, 20) as any);
+      const debugApi = (window as any)[debugKey];
+      expect(debugApi.getAcceptanceState()).toMatchObject({
+        shapeCount: 1,
+        assetCount: 0,
+        history: { undoDepth: 1, redoDepth: 0 },
+      });
+
+      expect(debugApi.duplicateShapes([id], { x: 20, y: 20 })).toHaveLength(1);
+      expect(debugApi.getAcceptanceState()).toMatchObject({
+        shapeCount: 2,
+        history: { undoDepth: 2, redoDepth: 0 },
+      });
+      expect(debugApi.undo()).toMatchObject({ status: 'applied' });
+      expect(debugApi.getAcceptanceState()).toMatchObject({
+        shapeCount: 1,
+        history: { undoDepth: 1, redoDepth: 1 },
+      });
+      expect(debugApi.redo()).toMatchObject({ status: 'applied' });
+      expect(debugApi.getAcceptanceState()).toMatchObject({
+        shapeCount: 2,
+        history: { undoDepth: 2, redoDepth: 0 },
+      });
+    } finally {
+      detachDebug();
+      void controller.dispose();
+    }
+  });
+
   it('requires initial durability disposition and schedules unsaved seeds', async () => {
     expect(() => new GlideboardController({
       sessionKey: 'missing-disposition',
@@ -514,6 +659,44 @@ describe('GlideboardController', () => {
     expect(getRecordIds(onDocumentChange.mock.calls[0]![0])).toEqual(['shape:flush']);
   });
 
+  it('aborts and settles imports before the final disposal flush', async () => {
+    const persistStarted = createDeferred();
+    const order: string[] = [];
+    const commit = vi.fn(async () => { order.push('commit'); });
+    const rollback = vi.fn(async () => { order.push('rollback'); });
+    const controller = new GlideboardController({
+      sessionKey: 'flush-after-import-settlement',
+      assetStorage: {
+        prepare: async () => ({
+          token: '11111111-1111-4111-8111-111111111111', commit, rollback,
+          stage: async (_bytes, signal) => {
+            persistStarted.resolve();
+            await new Promise<void>(resolve => {
+              signal.addEventListener('abort', () => resolve(), { once: true });
+            });
+          },
+        }),
+        resolve: () => null,
+      },
+    });
+    const onDocumentChange = vi.fn((_document: GlideDocument) => { order.push('save'); });
+    controller.configureDocumentChanges(onDocumentChange, 1_000);
+    controller.startDocumentChangeTracking();
+    controller.editor.createShape(createBoxRecord('shape:flush-before-import', 10, 20) as any);
+    const task = controller.queueAssetImport({ kind: 'raster', bytes: createPng(8, 8) });
+    const rejected = expect(task.result).rejects.toMatchObject({ name: 'AbortError' });
+    await persistStarted.promise;
+
+    await controller.dispose({ pendingSave: 'flush' });
+    await rejected;
+
+    expect(commit).not.toHaveBeenCalled();
+    expect(rollback).toHaveBeenCalledOnce();
+    expect(order).toEqual(['rollback', 'save']);
+    expect(getRecordIds(onDocumentChange.mock.calls[0]![0])).toEqual(['shape:flush-before-import']);
+    expect(controller.editor.serialize().records.filter(record => record.kind === 'asset')).toEqual([]);
+  });
+
   it('aborts an abort-aware in-flight save when disposal cancels it', async () => {
     vi.useFakeTimers();
     const controller = new GlideboardController({ sessionKey: 'cancel-in-flight' });
@@ -582,9 +765,10 @@ describe('GlideboardController', () => {
       controllerA.dispose();
 
       expect(controllerA.awarenessSignal.peek()).toBeNull();
-      expect(awarenessA.setLocalStateField).toHaveBeenLastCalledWith('user', null);
+      expect(awarenessA.setLocalStateField).toHaveBeenCalledWith('user', null);
+      expect(awarenessA.setLocalStateField).toHaveBeenLastCalledWith('pageId', null);
       expect(controllerB.awarenessSignal.peek()).toBe(awarenessB);
-      expect(awarenessB.setLocalStateField).toHaveBeenCalledTimes(1);
+      expect(awarenessB.setLocalStateField).toHaveBeenCalledTimes(2);
 
       controllerB.editor.createShape(createBoxRecord('shape:b2', 50, 60, 'a0002') as any);
       expect(docA.getMap('glideboard-records-v2').size).toBe(2);
@@ -594,6 +778,45 @@ describe('GlideboardController', () => {
       controllerB.dispose();
       docA.destroy();
       docB.destroy();
+    }
+  });
+
+  it('reuses one Y.Doc for per-shape rich text and garbage-collects deleted fragments', () => {
+    const first = new GlideboardController({ sessionKey: 'rich-text-first' });
+    const second = new GlideboardController({ sessionKey: 'rich-text-second' });
+    const firstDoc = new Y.Doc();
+    const secondDoc = new Y.Doc();
+    firstDoc.on('update', (update, origin) => {
+      if (origin !== secondDoc) Y.applyUpdate(secondDoc, update, firstDoc);
+    });
+    secondDoc.on('update', (update, origin) => {
+      if (origin !== firstDoc) Y.applyUpdate(firstDoc, update, secondDoc);
+    });
+    try {
+      first.attachCollaboration({ doc: firstDoc });
+      second.attachCollaboration({ doc: secondDoc });
+      const shapeId = first.editor.createShape({ type: 'text', x: 10, y: 20, props: { text: 'Shared' } } as any);
+      expect(first.getCanvasTextCollaboration(shapeId, { create: false })).toBeUndefined();
+      const firstBinding = first.getCanvasTextCollaboration(shapeId)!;
+      expect(first.getCanvasTextCollaboration(shapeId)!.fragment).toBe(firstBinding.fragment);
+
+      const paragraph = new Y.XmlElement('paragraph');
+      const content = new Y.XmlText();
+      content.insert(0, 'Shared');
+      paragraph.insert(0, [content]);
+      (firstBinding.fragment as Y.XmlFragment).insert(0, [paragraph]);
+
+      const secondBinding = second.getCanvasTextCollaboration(shapeId)!;
+      expect((secondBinding.fragment as Y.XmlFragment).toJSON()).toBe((firstBinding.fragment as Y.XmlFragment).toJSON());
+
+      first.editor.deleteShapes([shapeId]);
+      expect(firstDoc.getMap('glideboard-rich-text-fragments-v1').has(shapeId)).toBe(false);
+      expect(secondDoc.getMap('glideboard-rich-text-fragments-v1').has(shapeId)).toBe(false);
+    } finally {
+      void first.dispose();
+      void second.dispose();
+      firstDoc.destroy();
+      secondDoc.destroy();
     }
   });
 
@@ -618,13 +841,14 @@ describe('GlideboardController', () => {
         { id: 'user-b', name: 'B', color: '#00f' },
       )).toThrow('cannot be shared by multiple boards');
 
-      expect(awareness.setLocalStateField).toHaveBeenCalledTimes(1);
+      expect(awareness.setLocalStateField).toHaveBeenCalledTimes(2);
       expect(controllerA.awarenessSignal.peek()).toBe(awareness);
       expect(controllerB.awarenessSignal.peek()).toBeNull();
 
       controllerA.dispose();
-      expect(awareness.setLocalStateField).toHaveBeenNthCalledWith(2, 'cursor', null);
-      expect(awareness.setLocalStateField).toHaveBeenNthCalledWith(3, 'user', null);
+      expect(awareness.setLocalStateField).toHaveBeenNthCalledWith(3, 'canvasCursor', null);
+      expect(awareness.setLocalStateField).toHaveBeenNthCalledWith(4, 'user', null);
+      expect(awareness.setLocalStateField).toHaveBeenNthCalledWith(5, 'pageId', null);
     } finally {
       controllerA.dispose();
       controllerB.dispose();
@@ -943,11 +1167,12 @@ describe('GlideboardController', () => {
     png.set([0x49, 0x48, 0x44, 0x52], 12);
     new DataView(png.buffer).setUint32(16, 16);
     new DataView(png.buffer).setUint32(20, 8);
-    const persist = vi.fn(async () => {});
+    const persistence = successfulAssetPersistence();
+    const prepare = vi.fn(async () => persistence);
     const controller = new GlideboardController({
       sessionKey: 'safe-raster-import',
       assetStorage: {
-        persist,
+        prepare,
         resolve: asset => `https://media.example.test/${asset.props['hash']}`,
       },
     });
@@ -955,7 +1180,9 @@ describe('GlideboardController', () => {
       const id = await controller.importRaster(png, 'image/png', { x: 10, y: 20 });
       const shape = controller.editor.getShape(id)!;
       const asset = controller.editor.store.get(shape.props['assetId'] as string)!;
-      expect(persist).toHaveBeenCalledOnce();
+      expect(prepare).toHaveBeenCalledOnce();
+      expect(persistence.stage).toHaveBeenCalledOnce();
+      expect(persistence.commit).toHaveBeenCalledOnce();
       expect(asset['props']).not.toHaveProperty('src');
       expect(asset['props']).not.toHaveProperty('bytes');
       expect(controller.editor.getShapeUtil(shape).toSvg(shape).querySelector('image')?.getAttribute('href'))
@@ -974,7 +1201,7 @@ describe('GlideboardController', () => {
     const controller = new GlideboardController({
       sessionKey: 'failed-raster-import',
       assetStorage: {
-        persist: async () => { throw new Error('storage unavailable'); },
+        prepare: async () => { throw new Error('storage unavailable'); },
         resolve: () => null,
       },
     });
@@ -983,6 +1210,594 @@ describe('GlideboardController', () => {
       expect(controller.editor.serialize().records.filter(record => record.kind !== 'page')).toHaveLength(0);
     } finally {
       void controller.dispose();
+    }
+  });
+
+  it('exposes stable queued, uploading, progress, and complete import job state', async () => {
+    const persisted = createDeferred();
+    let reportProgress: ((progress: number) => void) | undefined;
+    const stage = vi.fn(async (
+      _bytes: Uint8Array,
+      _signal: AbortSignal,
+      progress?: (value: number) => void,
+    ) => {
+      reportProgress = progress;
+      await persisted.promise;
+    });
+    const controller = new GlideboardController({
+      sessionKey: 'asset-job-progress',
+      assetStorage: { prepare: async () => ({ ...successfulAssetPersistence(), stage }), resolve: () => null },
+    });
+    try {
+      const task = controller.queueAssetImport({
+        kind: 'raster',
+        bytes: createPng(32, 16),
+        declaredMimeType: 'image/png',
+        name: 'diagram.png',
+      });
+      expect(controller.getAssetImportJob(task.id)).toMatchObject({
+        id: task.id,
+        name: 'diagram.png',
+        status: 'queued',
+        progress: 0,
+        attempt: 1,
+      });
+
+      await vi.waitFor(() => expect(stage).toHaveBeenCalledOnce());
+      expect(controller.getAssetImportJob(task.id)?.status).toBe('uploading');
+      reportProgress?.(0.4);
+      expect(controller.getAssetImportJob(task.id)?.progress).toBe(0.4);
+      reportProgress?.(0.2);
+      expect(controller.getAssetImportJob(task.id)?.progress).toBe(0.4);
+
+      persisted.resolve();
+      const shapeId = await task.result;
+      expect(controller.getAssetImportJob(task.id)).toMatchObject({
+        status: 'complete',
+        progress: 1,
+        shapeId,
+      });
+      expect(controller.assetImportJobsSignal.peek()).toHaveLength(1);
+    } finally {
+      persisted.resolve();
+      void controller.dispose();
+    }
+  });
+
+  it('cancels imports without reporting cancellation as an error', async () => {
+    const stage = vi.fn(async (_bytes: Uint8Array, signal: AbortSignal) => {
+      await new Promise<void>((_resolve, reject) => {
+        signal.addEventListener('abort', () => reject(new DOMException('cancelled', 'AbortError')),
+          { once: true });
+      });
+    });
+    const controller = new GlideboardController({
+      sessionKey: 'asset-job-cancel',
+      assetStorage: { prepare: async () => ({ ...successfulAssetPersistence(), stage }), resolve: () => null },
+    });
+    try {
+      const task = controller.queueAssetImport({ kind: 'raster', bytes: createPng(8, 8) });
+      const rejected = expect(task.result).rejects.toMatchObject({ name: 'AbortError' });
+      await vi.waitFor(() => expect(stage).toHaveBeenCalledOnce());
+
+      expect(controller.cancelAssetImport(task.id)).toBe(true);
+      await rejected;
+      expect(controller.getAssetImportJob(task.id)).toMatchObject({ status: 'cancelled' });
+      expect(controller.getAssetImportJob(task.id)?.error).toBeUndefined();
+      expect(controller.editor.serialize().records.filter(record => record.kind !== 'page')).toEqual([]);
+      expect(controller.dismissAssetImport(task.id)).toBe(true);
+      expect(controller.assetImportJobsSignal.peek()).toEqual([]);
+    } finally {
+      void controller.dispose();
+    }
+  });
+
+  it('fences a commit response that arrives after cancellation and compensates it', async () => {
+    const commitStarted = createDeferred();
+    const releaseCommit = createDeferred();
+    const rollback = vi.fn(async () => {});
+    const controller = new GlideboardController({
+      sessionKey: 'asset-job-cancel-late-commit',
+      assetStorage: {
+        prepare: async () => ({
+          token: '33333333-3333-4333-8333-333333333333',
+          stage: async () => {},
+          commit: async () => {
+            commitStarted.resolve();
+            await releaseCommit.promise;
+          },
+          rollback,
+        }),
+        resolve: () => null,
+      },
+    });
+    try {
+      const task = controller.queueAssetImport({ kind: 'raster', bytes: createPng(8, 8) });
+      const rejected = expect(task.result).rejects.toMatchObject({ name: 'AbortError' });
+      await commitStarted.promise;
+      expect(controller.cancelAssetImport(task.id)).toBe(true);
+      releaseCommit.resolve();
+      await rejected;
+      expect(rollback).toHaveBeenCalledOnce();
+      expect(controller.getAssetImportJob(task.id)?.status).toBe('cancelled');
+      expect(controller.editor.serialize().records.filter(record => record.kind !== 'page')).toEqual([]);
+    } finally {
+      releaseCommit.resolve();
+      await controller.dispose();
+    }
+  });
+
+  it('keeps rollback failure actionable when cancellation races a commit response', async () => {
+    const commitStarted = createDeferred();
+    const releaseCommit = createDeferred();
+    const cleanupFailure = new Error('orphan blob could not be deleted');
+    const controller = new GlideboardController({
+      sessionKey: 'asset-job-cancel-cleanup-failure',
+      assetStorage: {
+        prepare: async () => ({
+          token: '44444444-4444-4444-8444-444444444444',
+          stage: async () => {},
+          commit: async () => {
+            commitStarted.resolve();
+            await releaseCommit.promise;
+          },
+          rollback: async () => { throw cleanupFailure; },
+        }),
+        resolve: () => null,
+      },
+    });
+    try {
+      const task = controller.queueAssetImport({ kind: 'raster', bytes: createPng(8, 8) });
+      await commitStarted.promise;
+      controller.cancelAssetImport(task.id);
+      releaseCommit.resolve();
+      await expect(task.result).rejects.toMatchObject({
+        name: 'AssetOrphanCleanupError',
+        code: 'orphan-cleanup',
+      });
+      expect(controller.getAssetImportJob(task.id)).toMatchObject({
+        status: 'error',
+        error: { category: 'storage', retryable: true },
+      });
+    } finally {
+      releaseCommit.resolve();
+      await controller.dispose();
+    }
+  });
+
+  it('clears import history immediately while active cleanup settles', async () => {
+    const stageStarted = createDeferred();
+    const releaseStage = createDeferred();
+    const controller = new GlideboardController({
+      sessionKey: 'asset-job-reset-history',
+      assetStorage: {
+        prepare: async () => ({
+          ...successfulAssetPersistence(),
+          stage: async () => {
+            stageStarted.resolve();
+            await releaseStage.promise;
+          },
+        }),
+        resolve: () => null,
+      },
+    });
+    const task = controller.queueAssetImport({ kind: 'raster', bytes: createPng(8, 8) });
+    const rejected = expect(task.result).rejects.toMatchObject({ name: 'AbortError' });
+    await stageStarted.promise;
+    controller.clearAssetImportHistory();
+    expect(controller.assetImportJobsSignal.peek()).toEqual([]);
+    releaseStage.resolve();
+    await rejected;
+    await controller.dispose();
+  });
+
+  it('ignores stale callbacks when a cancelled job is retried immediately', async () => {
+    let persistAttempt = 0;
+    const stage = vi.fn(async (_bytes: Uint8Array, signal: AbortSignal) => {
+      persistAttempt += 1;
+      if (persistAttempt === 1) {
+        await new Promise<void>((_resolve, reject) => {
+          signal.addEventListener('abort', () => reject(new DOMException('cancelled', 'AbortError')),
+            { once: true });
+        });
+      }
+    });
+    const controller = new GlideboardController({
+      sessionKey: 'asset-job-cancel-retry-race',
+      assetStorage: { prepare: async () => ({ ...successfulAssetPersistence(), stage }), resolve: () => null },
+    });
+    try {
+      const first = controller.queueAssetImport({ kind: 'raster', bytes: createPng(9, 9) });
+      const firstRejected = expect(first.result).rejects.toMatchObject({ name: 'AbortError' });
+      await vi.waitFor(() => expect(stage).toHaveBeenCalledOnce());
+      expect(controller.cancelAssetImport(first.id)).toBe(true);
+
+      const retried = controller.retryAssetImport(first.id);
+      await firstRejected;
+      const shapeId = await retried.result;
+      expect(controller.getAssetImportJob(first.id)).toMatchObject({
+        status: 'complete',
+        attempt: 2,
+        shapeId,
+      });
+      expect(stage).toHaveBeenCalledTimes(2);
+    } finally {
+      void controller.dispose();
+    }
+  });
+
+  it('categorizes host errors and retries a stable job before dismissal', async () => {
+    let attempt = 0;
+    const prepare = vi.fn(async () => {
+      attempt += 1;
+      if (attempt === 1) {
+        throw Object.assign(new Error('object store offline'), {
+          category: 'network',
+          retryable: true,
+        });
+      }
+      return successfulAssetPersistence();
+    });
+    const controller = new GlideboardController({
+      sessionKey: 'asset-job-retry',
+      assetStorage: { prepare: prepare as any, resolve: () => null },
+    });
+    try {
+      const first = controller.queueAssetImport({ kind: 'raster', bytes: createPng(10, 5) });
+      await expect(first.result).rejects.toThrow('object store offline');
+      expect(controller.getAssetImportJob(first.id)).toMatchObject({
+        status: 'error',
+        attempt: 1,
+        error: { category: 'network', retryable: true },
+      });
+      expect(controller.dismissAssetImport(first.id)).toBe(true);
+      expect(controller.getAssetImportJob(first.id)).toBeUndefined();
+
+      const retryable = controller.queueAssetImport({ kind: 'raster', bytes: createPng(12, 6) });
+      await retryable.result;
+      expect(() => controller.retryAssetImport(retryable.id)).toThrow('cannot be retried');
+
+      attempt = 0;
+      const failed = controller.queueAssetImport({ kind: 'raster', bytes: createPng(14, 7) });
+      await expect(failed.result).rejects.toThrow('object store offline');
+      const retried = controller.retryAssetImport(failed.id);
+      expect(retried.id).toBe(failed.id);
+      await retried.result;
+      expect(controller.getAssetImportJob(failed.id)).toMatchObject({
+        status: 'complete',
+        attempt: 2,
+      });
+      expect(controller.dismissAssetImport(failed.id)).toBe(true);
+      expect(controller.getAssetImportJob(failed.id)).toBeUndefined();
+    } finally {
+      void controller.dispose();
+    }
+  });
+
+  it('publishes ingress limits and categorizes limit failures', async () => {
+    const controller = new GlideboardController({ sessionKey: 'asset-limit-error' });
+    try {
+      expect(controller.assetLimits.maxSvgBytes).toBe(1024 * 1024);
+      expect(controller.assetLimits.supportedMimeTypes).toContain('image/webp');
+      const task = controller.queueAssetImport({
+        kind: 'svg',
+        source: `<svg viewBox="0 0 1 1"><path d="${'M0 0 '.repeat(250_000)}"/></svg>`,
+      });
+      await expect(task.result).rejects.toThrow('byte limit');
+      expect(controller.getAssetImportJob(task.id)).toMatchObject({
+        status: 'error',
+        error: { category: 'limit-exceeded', retryable: false },
+      });
+    } finally {
+      void controller.dispose();
+    }
+  });
+
+  it('atomically replaces immutable asset references while preserving shape state', async () => {
+    const persisted: Uint8Array[] = [];
+    const controller = new GlideboardController({
+      sessionKey: 'asset-replace',
+      assetStorage: {
+        prepare: async () => ({
+          ...successfulAssetPersistence(),
+          stage: async bytes => { persisted.push(new Uint8Array(bytes)); },
+        }),
+        resolve: () => null,
+      },
+    });
+    try {
+      const shapeId = await controller.importRaster(createPng(20, 10), 'image/png', { x: 11, y: 22 });
+      controller.editor.updateShape(shapeId, {
+        rotation: Math.PI / 4,
+        props: {
+          w: 333,
+          h: 222,
+          crop: { x: 0.1, y: 0.2, w: 0.7, h: 0.6 },
+          altText: 'Architecture diagram',
+        },
+      } as any);
+      const before = controller.editor.getShape(shapeId)!;
+      const oldAssetId = before.props['assetId'];
+      const historyLength = controller.editor.history.undoStack.length;
+
+      const replacedId = await controller.replaceAsset(shapeId, {
+        kind: 'raster',
+        bytes: createPng(40, 30),
+        declaredMimeType: 'image/png',
+      });
+      const after = controller.editor.getShape(shapeId)!;
+      expect(replacedId).toBe(shapeId);
+      expect(after).toMatchObject({ x: 11, y: 22, rotation: Math.PI / 4 });
+      expect(after.props).toMatchObject({
+        w: 333,
+        h: 222,
+        crop: { x: 0.1, y: 0.2, w: 0.7, h: 0.6 },
+        altText: 'Architecture diagram',
+      });
+      expect(after.props['assetId']).not.toBe(oldAssetId);
+      expect(controller.editor.history.undoStack).toHaveLength(historyLength + 1);
+      expect(controller.editor.history.undoStack[controller.editor.history.undoStack.length - 1]?.label)
+        .toBe('Replace Asset');
+      expect(persisted).toHaveLength(2);
+
+      controller.editor.undo();
+      expect(controller.editor.getShape(shapeId)?.props['assetId']).toBe(oldAssetId);
+      expect(controller.editor.store.get(after.props['assetId'] as string)).toBeUndefined();
+    } finally {
+      void controller.dispose();
+    }
+  });
+
+  it('leaves the existing reference untouched when replacement persistence fails', async () => {
+    let persistCount = 0;
+    const controller = new GlideboardController({
+      sessionKey: 'asset-replace-failure',
+      assetStorage: {
+        prepare: async () => {
+          persistCount += 1;
+          if (persistCount > 1) throw new Error('replacement unavailable');
+          return successfulAssetPersistence();
+        },
+        resolve: () => null,
+      },
+    });
+    try {
+      const shapeId = await controller.importRaster(createPng(20, 10));
+      const oldAssetId = controller.editor.getShape(shapeId)?.props['assetId'];
+      await expect(controller.replaceAsset(shapeId, {
+        kind: 'raster',
+        bytes: createPng(30, 15),
+      })).rejects.toThrow('replacement unavailable');
+      expect(controller.editor.getShape(shapeId)?.props['assetId']).toBe(oldAssetId);
+      expect(controller.editor.serialize().records.filter(record => record.kind === 'asset')).toHaveLength(1);
+    } finally {
+      void controller.dispose();
+    }
+  });
+
+  it('rolls back staged bytes when a replacement target disappears after persistence', async () => {
+    const replacementPersisted = createDeferred();
+    const releaseReplacement = createDeferred();
+    const commit = vi.fn(async () => {});
+    const rollback = vi.fn(async () => {});
+    let persistCount = 0;
+    const controller = new GlideboardController({
+      sessionKey: 'asset-replace-late-validation',
+      assetStorage: {
+        prepare: async () => {
+          persistCount += 1;
+          if (persistCount === 1) return successfulAssetPersistence();
+          return {
+            token: '22222222-2222-4222-8222-222222222222', commit, rollback,
+            stage: async () => {
+              replacementPersisted.resolve();
+              await releaseReplacement.promise;
+            },
+          };
+        },
+        resolve: () => null,
+      },
+    });
+    try {
+      const shapeId = await controller.importRaster(createPng(20, 10));
+      const replacement = controller.replaceAsset(shapeId, {
+        kind: 'raster',
+        bytes: createPng(30, 15),
+      });
+      await replacementPersisted.promise;
+      controller.editor.deleteShapes([shapeId]);
+      releaseReplacement.resolve();
+
+      await expect(replacement).rejects.toThrow('was not found');
+      expect(commit).not.toHaveBeenCalled();
+      expect(rollback).toHaveBeenCalledOnce();
+      expect(controller.editor.serialize().records.filter(record => record.kind === 'asset'))
+        .toHaveLength(1);
+    } finally {
+      releaseReplacement.resolve();
+      await controller.dispose();
+    }
+  });
+
+  it('downloads validated original bytes only through the trusted host contract', async () => {
+    const original = createPng(18, 9);
+    const download = vi.fn(async () => ({
+      bytes: original,
+      mimeType: 'image/png',
+      fileName: 'original.png',
+    }));
+    const controller = new GlideboardController({
+      sessionKey: 'asset-download',
+      assetStorage: {
+        prepare: async () => successfulAssetPersistence(),
+        resolve: () => null,
+        download,
+      },
+    });
+    try {
+      const shapeId = await controller.importRaster(original, 'image/png');
+      const result = await controller.downloadAsset(shapeId);
+      expect(download).toHaveBeenCalledOnce();
+      expect(result).toMatchObject({ mimeType: 'image/png', fileName: 'original.png' });
+      expect(result.bytes).toEqual(original);
+      expect(result.bytes).not.toBe(original);
+
+      const assetId = String(controller.editor.getShape(shapeId)?.props['assetId']);
+      download.mockResolvedValueOnce({ bytes: original, mimeType: 'image/png' });
+      await expect(controller.downloadAsset(assetId, new AbortController().signal, {
+        documentId: 'document-explicit', versionId: 'version-explicit',
+      })).resolves.toEqual({ bytes: original, mimeType: 'image/png' });
+
+      download.mockResolvedValueOnce({ bytes: original, mimeType: 'image/jpeg', fileName: 'bad.jpg' });
+      await expect(controller.downloadAsset(shapeId)).rejects.toThrow('did not match');
+
+      download.mockResolvedValueOnce({ bytes: original.slice(0, -1), mimeType: 'image/png' });
+      await expect(controller.downloadAsset(shapeId)).rejects.toThrow('did not match');
+
+      download.mockResolvedValueOnce({ bytes: Array.from(original), mimeType: 'image/png' } as any);
+      await expect(controller.downloadAsset(shapeId)).rejects.toThrow('did not match');
+
+      const corrupted = new Uint8Array(original);
+      corrupted[8] = corrupted[8]! ^ 0xff;
+      download.mockResolvedValueOnce({ bytes: corrupted, mimeType: 'image/png', fileName: 'corrupt.png' });
+      await expect(controller.downloadAsset(shapeId)).rejects.toThrow('did not match');
+    } finally {
+      void controller.dispose();
+    }
+  });
+
+  it('exports raster SVGs with verified embedded bytes instead of runtime URLs', async () => {
+    const original = createPng(18, 9);
+    const context = { documentId: 'board-1', versionId: 'version-4' };
+    const download = vi.fn(async () => ({ bytes: original, mimeType: 'image/png' }));
+    const controller = new GlideboardController({
+      sessionKey: 'portable-svg-export',
+      assetResolutionContext: context,
+      assetStorage: {
+        prepare: async () => successfulAssetPersistence(),
+        resolve: () => 'https://signed.example.test/runtime.png',
+        download,
+      },
+    });
+    try {
+      await controller.importRaster(original, 'image/png');
+      const svg = await controller.exportSvgAtTarget();
+
+      expect(svg).toContain('href="data:image/png;base64,');
+      expect(svg).not.toContain('signed.example.test');
+      expect(download).toHaveBeenCalledWith(expect.anything(), expect.any(AbortSignal), context);
+    } finally {
+      await controller.dispose();
+    }
+  });
+
+  it('registers retention before returning a production portable fragment', async () => {
+    const original = createPng(12, 6);
+    const retainReferences = vi.fn(async () => undefined);
+    const controller = new GlideboardController({
+      sessionKey: 'portable-fragment-retention',
+      assetStorage: {
+        prepare: async () => successfulAssetPersistence(),
+        resolve: () => null,
+        download: async () => ({ bytes: original, mimeType: 'image/png' }),
+        retainReferences,
+      },
+    });
+    try {
+      const shapeId = await controller.importRaster(original, 'image/png');
+      const fragment = await controller.createPortableFragment({ shapeIds: [shapeId] });
+
+      expect(fragment?.rasterPayloads).toHaveLength(1);
+      expect(retainReferences).toHaveBeenCalledWith(
+        expect.arrayContaining([expect.stringMatching(/^asset:/)]),
+        undefined,
+        expect.any(AbortSignal),
+      );
+    } finally {
+      await controller.dispose();
+    }
+  });
+
+  it('imports plain text at explicit and viewport positions and updates connector terminals', () => {
+    const controller = new GlideboardController({ sessionKey: 'plain-text-and-connectors' });
+    try {
+      expect(controller.importPlainText('')).toBeNull();
+      const explicit = controller.importPlainText('Explicit', { x: 12, y: 34 })!;
+      expect(controller.editor.getShape(explicit)).toMatchObject({
+        x: 12,
+        y: 34,
+        props: expect.objectContaining({ text: 'Explicit', textAlign: 'left' }),
+      });
+      controller.editor.camera.setCamera({ x: 100, y: 200, z: 1 });
+      const centered = controller.importPlainText('Centered')!;
+      expect(controller.editor.getShape(centered)?.type).toBe('text');
+      expect(controller.editor.getSelectedShapeIds()).toEqual([centered]);
+
+      controller.setArrowheadStart('arrow');
+      controller.setArrowheadEnd('none');
+      expect(controller.arrowPresetSignal.peek()).toBe('arrow');
+      controller.setConnectorPreset('line');
+      expect(controller.arrowPresetSignal.peek()).toBe('line');
+      controller.setConnectorPreset('double-arrow');
+      expect(controller.arrowPresetSignal.peek()).toBe('double-arrow');
+      controller.setConnectorPreset('arrow');
+      expect(controller.arrowheadStartSignal.peek()).toBe('none');
+      expect(controller.arrowheadEndSignal.peek()).toBe('arrow');
+    } finally {
+      void controller.dispose();
+    }
+  });
+
+  it('fails closed when download, portability, or collaboration checkpoint hooks are absent', async () => {
+    const controller = new GlideboardController({ sessionKey: 'missing-host-hooks' });
+    try {
+      await expect(controller.downloadAsset('asset:missing')).rejects.toMatchObject({ category: 'unavailable' });
+      await expect(controller.createPortableFragment({ shapeIds: [] })).rejects.toThrow(/download and retention/);
+      await expect(controller.pastePortableFragment({} as any)).rejects.toThrow(/materialization hook/);
+      expect(() => controller.getCollaborationCheckpoints()).toThrow(/not attached/);
+      expect(() => controller.captureProjectionTarget()).toThrow(/not attached/);
+    } finally {
+      await controller.dispose();
+    }
+  });
+
+  it('captures collaboration targets and exercises the debug command and inspection surface', async () => {
+    const controller = new GlideboardController({ sessionKey: 'debug-complete-surface' });
+    const doc = new Y.Doc();
+    try {
+      controller.attachCollaboration({ doc });
+      const target = await controller.captureProjectionTarget();
+      expect(target.storeRevision).toBeGreaterThanOrEqual(0);
+      expect(controller.getCollaborationCheckpoints()).toBeTruthy();
+
+      const cleanup = controller.attachDebugApi('__phase3ControllerDebug');
+      const api = (window as any).__phase3ControllerDebug;
+      const first = controller.editor.createShape(createBoxRecord('shape:debug-a', 0, 0) as any);
+      const second = controller.editor.createShape(createBoxRecord('shape:debug-b', 100, 0, 'a0002') as any);
+      api.select([first, second]);
+      expect(api.getSelection()).toEqual([first, second]);
+      expect(api.getCurrentToolId()).toBe('select');
+      api.setCurrentTool('box');
+      expect(api.getCurrentToolId()).toBe('box');
+      expect(api.getDocument().records.length).toBeGreaterThan(2);
+      expect(api.getAIContext()).toBeTruthy();
+      expect(api.getToolManifest()).toBeTruthy();
+      expect(api.getAcceptanceState()).toMatchObject({ shapeCount: 2, assetCount: 0 });
+      expect(api.getFocusedGroupId()).toBeNull();
+      expect(api.getShapeLocalBounds(first)).toBeTruthy();
+      expect(api.getSmartRoutingSnapshot()).toBeTruthy();
+      expect(api.getArrowRoutePoints(first)).toBeNull();
+      expect(api.duplicateShapes([first], { x: 5, y: 5 })).toHaveLength(1);
+      api.undo();
+      api.redo();
+      api.reset();
+      expect(api.getAcceptanceState().shapeCount).toBe(0);
+      cleanup();
+      cleanup();
+      expect((window as any).__phase3ControllerDebug).toBeUndefined();
+    } finally {
+      await controller.dispose();
+      doc.destroy();
     }
   });
 });

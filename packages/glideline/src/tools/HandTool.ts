@@ -15,10 +15,10 @@
  * not an undoable action — it only changes the viewport, not shape data.
  */
 
-import { StateNode } from '../state-node';
-import type { PointerDownEvent, PointerMoveEvent, PointerUpEvent, KeyDownEvent } from '../state-node';
-import type { Vec2 } from '../types';
-import type { CameraState } from '../camera';
+import { StateNode } from '../state-node.js';
+import type { PointerDownEvent, PointerMoveEvent, PointerUpEvent, KeyDownEvent } from '../state-node.js';
+import type { Vec2 } from '../types.js';
+import type { CameraState } from '../camera.js';
 
 // ─────────────────────────────────────────────────────────────
 // Idle

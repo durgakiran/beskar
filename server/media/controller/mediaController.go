@@ -1,10 +1,15 @@
 package media
 
 import (
+	"context"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/durgakiran/beskar/core"
 	media "github.com/durgakiran/beskar/media/services"
@@ -14,6 +19,8 @@ import (
 	"github.com/go-chi/render"
 	"github.com/google/uuid"
 )
+
+const whiteboardAssetIDPrefix = "asset:sha256:"
 
 type fileNameType struct {
 	Name string `json:"name"`
@@ -30,7 +37,222 @@ type whiteboardAssetResponse struct {
 var (
 	getUserInfoForMedia        = core.GetUserInfo
 	validateUserPagePermission = core.ValidateUserPagePermission
+	retainWhiteboardAssets     = media.RetainWhiteboardAssetReferences
+	rollbackWhiteboardAsset    = media.RollbackWhiteboardAsset
+	prepareWhiteboardStaging   = media.PrepareWhiteboardAssetStaging
+	stageWhiteboardAsset       = media.StageWhiteboardAsset
+	commitWhiteboardStaging    = media.CommitWhiteboardAssetStaging
+	cancelWhiteboardStaging    = media.CancelWhiteboardAssetStaging
 )
+
+func cleanupFailedWhiteboardStaging(token uuid.UUID, pageID int64, hash, actorID string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := cancelWhiteboardStaging(ctx, token, pageID, hash, actorID); err != nil {
+		core.Logger.Error("whiteboard staging compensation failed: " + err.Error())
+	}
+}
+
+type whiteboardAssetStagingResponse struct {
+	Token string `json:"token"`
+}
+
+func whiteboardStagingParams(w http.ResponseWriter, r *http.Request) (int64, string, uuid.UUID, core.UserInfo, bool) {
+	pageID, user, ok := authorizedPage(w, r, "edit")
+	if !ok {
+		return 0, "", uuid.Nil, core.UserInfo{}, false
+	}
+	hash := strings.ToLower(strings.TrimSpace(chi.URLParam(r, "hash")))
+	if _, valid := parseCanonicalWhiteboardAssetID(whiteboardAssetIDPrefix + hash); !valid {
+		http.Error(w, "invalid whiteboard asset hash", http.StatusBadRequest)
+		return 0, "", uuid.Nil, core.UserInfo{}, false
+	}
+	token := uuid.Nil
+	if value := chi.URLParam(r, "token"); value != "" {
+		var err error
+		token, err = uuid.Parse(value)
+		if err != nil {
+			http.Error(w, "invalid whiteboard staging token", http.StatusBadRequest)
+			return 0, "", uuid.Nil, core.UserInfo{}, false
+		}
+	}
+	return pageID, hash, token, user, true
+}
+
+func renderWhiteboardStagingError(w http.ResponseWriter, err error) {
+	status := http.StatusInternalServerError
+	switch {
+	case errors.Is(err, media.ErrWhiteboardAssetNotFound):
+		status = http.StatusNotFound
+	case errors.Is(err, media.ErrWhiteboardAssetNotOwner):
+		status = http.StatusForbidden
+	case errors.Is(err, media.ErrWhiteboardAssetCompensated):
+		status = http.StatusConflict
+	case errors.Is(err, quota.ErrAccountStorageLimitExceeded):
+		status = http.StatusInsufficientStorage
+	case strings.Contains(err.Error(), "does not match"), strings.Contains(err.Error(), "transaction is"):
+		status = http.StatusConflict
+	}
+	http.Error(w, err.Error(), status)
+}
+
+func prepareWhiteboardAssetUpload(w http.ResponseWriter, r *http.Request) {
+	pageID, hash, _, user, ok := whiteboardStagingParams(w, r)
+	if !ok {
+		return
+	}
+	record, err := prepareWhiteboardStaging(r.Context(), pageID, hash, user.AId)
+	if err != nil {
+		renderWhiteboardStagingError(w, err)
+		return
+	}
+	render.Status(r, http.StatusCreated)
+	render.Render(w, r, core.NewSucessResponse(core.SUCCESS, whiteboardAssetStagingResponse{Token: record.Token.String()}))
+}
+
+func stageWhiteboardAssetUpload(w http.ResponseWriter, r *http.Request) {
+	pageID, hash, token, user, ok := whiteboardStagingParams(w, r)
+	if !ok {
+		return
+	}
+	if r.ContentLength > media.MaxWhiteboardAssetBytes {
+		http.Error(w, "whiteboard asset exceeds encoded byte limit", http.StatusRequestEntityTooLarge)
+		return
+	}
+	data, err := io.ReadAll(http.MaxBytesReader(w, r.Body, media.MaxWhiteboardAssetBytes+1))
+	if err != nil || len(data) > media.MaxWhiteboardAssetBytes {
+		http.Error(w, "whiteboard asset exceeds encoded byte limit", http.StatusRequestEntityTooLarge)
+		return
+	}
+	inspected, err := media.InspectWhiteboardRaster(data, r.Header.Get("Content-Type"), hash)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusUnsupportedMediaType)
+		return
+	}
+	if _, err = stageWhiteboardAsset(r.Context(), token, pageID, hash, user.AId, inspected, data); err != nil {
+		cleanupFailedWhiteboardStaging(token, pageID, hash, user.AId)
+		renderWhiteboardStagingError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func commitWhiteboardAssetUpload(w http.ResponseWriter, r *http.Request) {
+	pageID, hash, token, user, ok := whiteboardStagingParams(w, r)
+	if !ok {
+		return
+	}
+	record, created, err := commitWhiteboardStaging(r.Context(), token, pageID, hash, user.AId)
+	if err != nil {
+		renderWhiteboardStagingError(w, err)
+		return
+	}
+	if record == nil {
+		renderWhiteboardStagingError(w, media.ErrWhiteboardAssetCompensated)
+		return
+	}
+	status := http.StatusOK
+	if created {
+		status = http.StatusCreated
+	}
+	render.Status(r, status)
+	render.Render(w, r, core.NewSucessResponse(core.SUCCESS, whiteboardAssetResponse{
+		Hash: record.ContentHash, MimeType: record.MimeType, Width: record.Width,
+		Height: record.Height, Bytes: record.FileSize,
+	}))
+}
+
+func cancelWhiteboardAssetUpload(w http.ResponseWriter, r *http.Request) {
+	pageID, hash, token, user, ok := whiteboardStagingParams(w, r)
+	if !ok {
+		return
+	}
+	if err := cancelWhiteboardStaging(r.Context(), token, pageID, hash, user.AId); err != nil {
+		renderWhiteboardStagingError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+type retainWhiteboardAssetsRequest struct {
+	AssetIDs []string `json:"assetIds"`
+	Context  struct {
+		DocumentID string `json:"documentId"`
+	} `json:"context"`
+}
+
+func parseCanonicalWhiteboardAssetID(id string) (string, bool) {
+	if !strings.HasPrefix(id, whiteboardAssetIDPrefix) {
+		return "", false
+	}
+	hash := strings.TrimPrefix(id, whiteboardAssetIDPrefix)
+	if len(hash) != 64 || hash != strings.ToLower(hash) {
+		return "", false
+	}
+	if _, err := hex.DecodeString(hash); err != nil {
+		return "", false
+	}
+	return hash, true
+}
+
+func retainWhiteboardAssetReferences(w http.ResponseWriter, r *http.Request) {
+	pageID, ok := authorizedPageID(w, r, "edit")
+	if !ok {
+		return
+	}
+	var request retainWhiteboardAssetsRequest
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 256*1024))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&request); err != nil || len(request.AssetIDs) > 1000 {
+		http.Error(w, "invalid whiteboard asset retention request", http.StatusBadRequest)
+		return
+	}
+	docID, err := strconv.ParseInt(request.Context.DocumentID, 10, 64)
+	if err != nil || docID < 1 {
+		http.Error(w, "invalid documentId", http.StatusBadRequest)
+		return
+	}
+	hashes := make([]string, 0, len(request.AssetIDs))
+	for _, id := range request.AssetIDs {
+		hash, valid := parseCanonicalWhiteboardAssetID(id)
+		if !valid {
+			http.Error(w, "invalid asset id", http.StatusBadRequest)
+			return
+		}
+		hashes = append(hashes, hash)
+	}
+	if err := retainWhiteboardAssets(r.Context(), pageID, docID, hashes); err != nil {
+		status := http.StatusInternalServerError
+		if errors.Is(err, media.ErrWhiteboardAssetNotFound) {
+			status = http.StatusNotFound
+		}
+		http.Error(w, err.Error(), status)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func deleteWhiteboardAsset(w http.ResponseWriter, r *http.Request) {
+	pageID, user, ok := authorizedPage(w, r, "edit")
+	if !ok {
+		return
+	}
+	hash := strings.ToLower(strings.TrimSpace(chi.URLParam(r, "hash")))
+	if err := rollbackWhiteboardAsset(r.Context(), pageID, hash, user.AId); err != nil {
+		status := http.StatusInternalServerError
+		switch {
+		case errors.Is(err, media.ErrWhiteboardAssetNotFound):
+			status = http.StatusNotFound
+		case errors.Is(err, media.ErrWhiteboardAssetReferenced):
+			status = http.StatusConflict
+		case errors.Is(err, media.ErrWhiteboardAssetNotOwner):
+			status = http.StatusForbidden
+		}
+		http.Error(w, err.Error(), status)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
 
 func applyWhiteboardAssetHeaders(header http.Header, record *media.WhiteboardAssetRecord, contentLength int64) {
 	header.Set("Content-Type", record.MimeType)
@@ -45,27 +267,32 @@ func applyWhiteboardAssetHeaders(header http.Header, record *media.WhiteboardAss
 	}
 }
 
-func authorizedPageID(w http.ResponseWriter, r *http.Request, permission string) (int64, bool) {
+func authorizedPage(w http.ResponseWriter, r *http.Request, permission string) (int64, core.UserInfo, bool) {
 	user, err := getUserInfoForMedia(r.Context())
 	if err != nil || user.Id == "" {
 		render.Status(r, http.StatusForbidden)
 		render.Render(w, r, core.NewFailedResponse(http.StatusForbidden, core.FAILURE, "unauthorized", ""))
-		return 0, false
+		return 0, core.UserInfo{}, false
 	}
 	pageIDString := chi.URLParam(r, "pageId")
 	pageID, err := strconv.ParseInt(pageIDString, 10, 64)
 	if err != nil || pageID < 1 {
 		render.Status(r, http.StatusBadRequest)
 		render.Render(w, r, core.NewFailedResponse(http.StatusBadRequest, core.FAILURE, "invalid pageId", ""))
-		return 0, false
+		return 0, core.UserInfo{}, false
 	}
 	ownerID, err := uuid.Parse(user.AId)
 	if err != nil || !validateUserPagePermission(pageIDString, ownerID, permission) {
 		render.Status(r, http.StatusForbidden)
 		render.Render(w, r, core.NewFailedResponse(http.StatusForbidden, core.FAILURE, "no permission for this whiteboard asset", ""))
-		return 0, false
+		return 0, core.UserInfo{}, false
 	}
-	return pageID, true
+	return pageID, user, true
+}
+
+func authorizedPageID(w http.ResponseWriter, r *http.Request, permission string) (int64, bool) {
+	pageID, _, ok := authorizedPage(w, r, permission)
+	return pageID, ok
 }
 
 func getWhiteboardAsset(w http.ResponseWriter, r *http.Request) {
@@ -106,11 +333,10 @@ func getWhiteboardAsset(w http.ResponseWriter, r *http.Request) {
 }
 
 func saveWhiteboardAsset(w http.ResponseWriter, r *http.Request) {
-	pageID, ok := authorizedPageID(w, r, "edit")
+	pageID, user, ok := authorizedPage(w, r, "edit")
 	if !ok {
 		return
 	}
-	user, _ := getUserInfoForMedia(r.Context())
 	contentHash := strings.ToLower(strings.TrimSpace(chi.URLParam(r, "hash")))
 	if r.ContentLength > media.MaxWhiteboardAssetBytes {
 		render.Status(r, http.StatusRequestEntityTooLarge)
@@ -368,6 +594,11 @@ func Router() *chi.Mux {
 	r.Get("/image/{imageid}", getImage)
 	r.Post("/upload", saveImage)
 	r.Get("/whiteboard-asset/{pageId}/{hash}", getWhiteboardAsset)
-	r.Post("/whiteboard-asset/{pageId}/{hash}", saveWhiteboardAsset)
+	r.Post("/whiteboard-asset/{pageId}/{hash}/staging", prepareWhiteboardAssetUpload)
+	r.Put("/whiteboard-asset/{pageId}/{hash}/staging/{token}", stageWhiteboardAssetUpload)
+	r.Post("/whiteboard-asset/{pageId}/{hash}/staging/{token}/commit", commitWhiteboardAssetUpload)
+	r.Delete("/whiteboard-asset/{pageId}/{hash}/staging/{token}", cancelWhiteboardAssetUpload)
+	r.Post("/whiteboard-asset/{pageId}/retain", retainWhiteboardAssetReferences)
+	r.Delete("/whiteboard-asset/{pageId}/{hash}", deleteWhiteboardAsset)
 	return r
 }

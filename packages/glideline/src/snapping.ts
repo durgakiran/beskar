@@ -1,6 +1,6 @@
 import { signal, type Signal } from '@preact/signals';
-import type { GlideEditor } from './editor';
-import type { Box2d, ShapeId, Vec2 } from './types';
+import type { GlideEditor } from './editor.js';
+import type { Box2d, ShapeId, Vec2 } from './types.js';
 
 export interface SnapSettings {
   showGrid: boolean;

@@ -1,21 +1,21 @@
-import { ShapeUtil } from './ShapeUtil';
-import { StateNode } from '../state-node';
+import { ShapeUtil } from './ShapeUtil.js';
+import { StateNode } from '../state-node.js';
 import type {
   PointerDownEvent, PointerMoveEvent, PointerUpEvent, KeyDownEvent,
-} from '../state-node';
-import type { GlideShape, Vec2 } from '../types';
-import { sid } from '../types';
-import { T } from '../validators';
-import { defineMigrations } from '../migrations';
+} from '../state-node.js';
+import type { GlideShape, Vec2 } from '../types.js';
+import { sid } from '../types.js';
+import { T } from '../validators.js';
+import { defineMigrations } from '../migrations.js';
 import {
   StyleValidators, STROKE_WIDTHS, STROKE_DASH_ARRAYS,
   svgFill, resolveColor, inlinePatternDefs, createTextForeignObjectForExport,
   FONT_FAMILIES, FONT_SIZES,
   type FillStyle, type StrokeStyle, type SizeStyle, type FontSize,
   type TextAlign, type Font, type LabelProps,
-} from '../styles';
-import { Geometry2d, Rectangle2d } from '../geometry';
-import type { GlidePlugin } from '../editor';
+} from '../styles.js';
+import { Geometry2d, Rectangle2d } from '../geometry/index.js';
+import type { GlidePlugin } from '../editor.js';
 
 interface CustomPathProps {
   [key: string]: unknown;

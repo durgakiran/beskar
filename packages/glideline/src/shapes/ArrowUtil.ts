@@ -13,21 +13,21 @@
  *   - onBeforeDeleteToShape: detaches terminal (boundShapeId → null).
  */
 
-import { ShapeUtil, BindingUtil, type ResizeInfo } from './ShapeUtil';
-import { T } from '../validators';
-import { defineMigrations } from '../migrations';
+import { ShapeUtil, BindingUtil, type ResizeInfo } from './ShapeUtil.js';
+import { T } from '../validators.js';
+import { defineMigrations } from '../migrations.js';
 import type {
   GlideShape, GlideBinding, GlideProps,
   Box2d, Vec2, EdgeName, ShapeId,
-} from '../types';
-import { makeBox } from '../types';
-import { Geometry2d, Polyline2d } from '../geometry';
-import { resolveArrowRoute } from '../arrow-routing';
+} from '../types.js';
+import { makeBox } from '../types.js';
+import { Geometry2d, Polyline2d } from '../geometry/index.js';
+import { resolveArrowRoute } from '../arrow-routing.js';
 import {
   StyleValidators, STROKE_WIDTHS, STROKE_DASH_ARRAYS, resolveColor,
   FONT_FAMILIES, FONT_SIZES, createTextForeignObjectForExport,
   type StrokeStyle, type SizeStyle, type Font, type FontSize, type LabelProps,
-} from '../styles';
+} from '../styles.js';
 
 const ARROW_HIT_TEST_PADDING = 8;
 
@@ -724,7 +724,7 @@ export class ArrowBindingUtil extends BindingUtil<ArrowBinding> {
    *  - props.end.point = local offset (world_end - world_start)
    */
   override onAfterChangeToShape(binding: ArrowBinding): void {
-    const editor = this.editor as import('../editor').GlideEditor;
+    const editor = this.editor as import('../editor.js').GlideEditor;
     const arrow = editor.getShape<ArrowShape>(binding.fromId as ShapeId);
     if (!arrow) return;
 
@@ -787,7 +787,7 @@ export class ArrowBindingUtil extends BindingUtil<ArrowBinding> {
    * Detaches the terminal: sets boundShapeId = null, keeps last known point.
    */
   override onBeforeDeleteToShape(binding: ArrowBinding): void {
-    const editor = this.editor as import('../editor').GlideEditor;
+    const editor = this.editor as import('../editor.js').GlideEditor;
     const arrow = editor.getShape<ArrowShape>(binding.fromId as ShapeId);
     if (!arrow) return;
 
@@ -809,7 +809,7 @@ export class ArrowBindingUtil extends BindingUtil<ArrowBinding> {
 // ArrowPlugin convenience export
 // ─────────────────────────────────────────────────────────────
 
-import type { GlidePlugin } from '../editor';
+import type { GlidePlugin } from '../editor.js';
 
 export const ArrowPlugin: GlidePlugin = {
   id: 'arrow',

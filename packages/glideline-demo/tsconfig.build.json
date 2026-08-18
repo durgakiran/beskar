@@ -1,0 +1,13 @@
+{
+  "extends": "./tsconfig.json",
+  "include": [
+    "src/GlideboardDemo.tsx",
+    "src/demo-asset-storage.ts",
+    "src/CollaborationDemo.tsx",
+    "src/collaboration-demo-transport.ts"
+  ],
+  "exclude": [
+    "src/**/*.test.ts",
+    "src/**/*.test.tsx"
+  ]
+}

@@ -1,5 +1,5 @@
 import { signal, type Signal } from '@preact/signals';
-import type { ShapeId } from './types';
+import type { ShapeId } from './types.js';
 
 export type EditableTextField = 'text' | 'label' | 'richText';
 
@@ -73,13 +73,25 @@ export class TextEditSessionController {
     return next;
   }
 
-  updateDraft(draft: string): void {
+  updateDraft(
+    draft: string,
+    pendingProps?: Readonly<Record<string, unknown>>,
+    forceDirty = false,
+  ): void {
     const current = this.session.peek();
     if (!current || current.status === 'committing' || current.status === 'closed') return;
+    const nextPendingProps = pendingProps ? Object.freeze({ ...pendingProps }) : current.pendingProps;
+    if (
+      !forceDirty
+      && draft === current.draft
+      && JSON.stringify(nextPendingProps) === JSON.stringify(current.pendingProps)
+      && current.status !== 'conflicted'
+    ) return;
     this.session.value = Object.freeze({
       ...current,
       draft,
-      dirty: draft !== current.baseValue,
+      dirty: current.dirty || forceDirty || draft !== current.baseValue,
+      ...(nextPendingProps ? { pendingProps: nextPendingProps } : {}),
       status: current.status === 'conflicted' ? 'conflicted' : 'editing',
     });
   }

@@ -6,8 +6,8 @@ import {
   type GlideShape,
   type ResizeHandle,
 } from '@durgakiran/glideline';
-import { useGlideboardController } from './GlideboardContext';
-import { wbTheme } from './theme';
+import { useGlideboardController } from './GlideboardContext.js';
+import { wbTheme } from './theme.js';
 
 const HANDLE_SIZE = 8;
 const ROTATION_HANDLE_OFFSET = 20;

@@ -5,7 +5,7 @@ import type {
   ProjectedYjsState,
   ProjectionStatus,
   ProjectionTarget,
-} from '../durability/types';
+} from '../durability/types.js';
 
 function copyTarget(target: ProjectionTarget): ProjectionTarget {
   return Object.freeze({

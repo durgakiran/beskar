@@ -2,6 +2,7 @@
   "name": "@durgakiran/glideline",
   "version": "0.0.9",
   "description": "",
+  "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "repository": {
@@ -11,9 +12,7 @@
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.js",
-      "require": "./dist/index.js",
-      "default": "./dist/index.js"
+      "import": "./dist/index.js"
     }
   },
   "files": [
@@ -25,10 +24,12 @@
   "scripts": {
     "clean": "rm -rf dist",
     "build": "npm run clean && tsc -p tsconfig.build.json",
+    "test:package-artifact": "tsc -p test/package-artifact-consumer/tsconfig.json && node test/package-artifact-consumer/runtime.mjs",
     "prepublishOnly": "npm run build",
     "publish:dry-run": "npm run build && npm pack --dry-run",
     "publish:github": "npm run build && npm publish",
     "test": "vitest run",
+    "test:phase3:coverage": "node ../../docker/scripts/produce-phase-3-coverage.mjs glideline",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "test:all": "vitest run && playwright test"
@@ -38,16 +39,18 @@
   "license": "ISC",
   "dependencies": {
     "@preact/signals": "^2.9.0",
+    "dagre": "^0.8.5",
     "jotai": "^2.20.0",
+    "perfect-freehand": "^1.2.3",
     "rbush": "^4.0.1",
-    "zod": "^4.4.3",
-    "dagre": "^0.8.5"
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@playwright/test": "^1.60.0",
     "@types/dagre": "^0.7.3",
     "@types/node": "^25.7.0",
     "@types/rbush": "^4.0.0",
+    "@vitest/coverage-v8": "^4.1.6",
     "happy-dom": "^20.9.0",
     "ts-node": "^10.9.2",
     "tsx": "^4.21.0",

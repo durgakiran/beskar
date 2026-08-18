@@ -33,6 +33,7 @@ import {
   TextUtil,
   SanitizedSvgUtil,
   RasterImageUtil,
+  AssetPlacementPlugin,
   type MutationCapability,
   type MutationPolicy,
 } from '@durgakiran/glideline';
@@ -57,9 +58,17 @@ export function createGlideboardEditorInstance(
   mutationPolicy?: MutationPolicy,
   remoteMutationCapability?: MutationCapability,
   assetResolver?: import('@durgakiran/glideline').AssetResolver,
+  assetResolutionContext?: import('@durgakiran/glideline').AssetResolutionContext,
 ) {
   return createEditor({
-    plugins: [CoreShapesPlugin, GeoShapePlugin, ArrowPlugin, P1ShapesPlugin, ...extraPlugins],
+    plugins: [
+      CoreShapesPlugin,
+      GeoShapePlugin,
+      ArrowPlugin,
+      P1ShapesPlugin,
+      AssetPlacementPlugin,
+      ...extraPlugins,
+    ],
     tools: [
       SelectTool,
       BoxTool,
@@ -93,5 +102,6 @@ export function createGlideboardEditorInstance(
         }
       : {}),
     ...(assetResolver ? { assetResolver } : {}),
+    ...(assetResolutionContext ? { assetResolutionContext } : {}),
   });
 }

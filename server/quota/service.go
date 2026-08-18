@@ -631,26 +631,58 @@ func ReserveUploadCapacity(ctx context.Context, pageID int64, attemptBytes int64
 		return UploadReservation{}, nil
 	}
 
-	pageContext, err := resolvePageContext(ctx, pageID)
-	if err != nil {
-		return UploadReservation{}, err
-	}
-
-	limit, err := storageLimitForAccount(ctx, pageContext.AccountID)
-	if err != nil {
-		return UploadReservation{}, err
-	}
-
 	tx, err := core.GetPool().Begin(ctx)
 	if err != nil {
 		return UploadReservation{}, err
 	}
 	defer tx.Rollback(ctx)
 
+	reservation, err := ReserveUploadCapacityTx(ctx, tx, pageID, attemptBytes, sourceType, sourceID, metadata)
+	if err != nil {
+		return UploadReservation{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return UploadReservation{}, err
+	}
+	return reservation, nil
+}
+
+// ReserveUploadCapacityTx keeps quota reservation and caller-owned recovery
+// metadata in one transaction. Callers must persist that metadata before commit.
+func ReserveUploadCapacityTx(ctx context.Context, tx pgx.Tx, pageID int64, attemptBytes int64, sourceType string, sourceID string, metadata map[string]any) (UploadReservation, error) {
+	if !quotaSystemEnabled() || attemptBytes <= 0 {
+		return UploadReservation{}, nil
+	}
+	var pageContext pageQuotaContextRow
+	if err := tx.QueryRow(ctx, getPageQuotaContextQuery, pageID).Scan(
+		&pageContext.PageID, &pageContext.SpaceID, &pageContext.AccountID,
+	); err != nil {
+		return UploadReservation{}, err
+	}
+	var limit *int64
+	var limitValue int64
+	var planID uuid.UUID
+	planErr := tx.QueryRow(ctx, `SELECT s.plan_id
+		FROM billing.account_subscription s
+		WHERE s.account_id = $1
+		  AND (s.effective_to IS NULL OR s.effective_to > now())
+		ORDER BY CASE WHEN lower(s.status) IN ('active','trialing','grace_period') THEN 0 ELSE 1 END,
+		  s.effective_from DESC, s.created_at DESC LIMIT 1`, pageContext.AccountID).Scan(&planID)
+	if planErr != nil && !errors.Is(planErr, pgx.ErrNoRows) {
+		return UploadReservation{}, planErr
+	}
+	if planErr == nil {
+		limitErr := tx.QueryRow(ctx, `SELECT limit_value FROM billing.plan_limit
+			WHERE plan_id=$1 AND metric_key=$2`, planID, metricStorageBytesTotal).Scan(&limitValue)
+		if limitErr == nil {
+			limit = &limitValue
+		} else if !errors.Is(limitErr, pgx.ErrNoRows) {
+			return UploadReservation{}, limitErr
+		}
+	}
 	if _, err := tx.Exec(ctx, ensureSpaceUsageRowQuery, pageContext.SpaceID); err != nil {
 		return UploadReservation{}, err
 	}
-
 	lockedRows, err := loadLockedUsageRows(ctx, tx, pageContext.AccountID)
 	if err != nil {
 		return UploadReservation{}, err
@@ -699,9 +731,6 @@ func ReserveUploadCapacity(ctx context.Context, pageID int64, attemptBytes int64
 	if err := insertUsageEvent(ctx, tx, reservation, "reserve", attemptBytes); err != nil {
 		return UploadReservation{}, err
 	}
-	if err := tx.Commit(ctx); err != nil {
-		return UploadReservation{}, err
-	}
 	return reservation, nil
 }
 
@@ -730,13 +759,20 @@ func ReleaseUploadReservation(ctx context.Context, reservation UploadReservation
 		return err
 	}
 	defer tx.Rollback(ctx)
-	if _, err := tx.Exec(ctx, updateSpaceUsageReleaseQuery, reservation.SpaceID, reservation.ReservedBytes); err != nil {
-		return err
-	}
-	if err := insertUsageEvent(ctx, tx, reservation, "release", -reservation.ReservedBytes); err != nil {
+	if err := ReleaseUploadReservationTx(ctx, tx, reservation); err != nil {
 		return err
 	}
 	return tx.Commit(ctx)
+}
+
+func ReleaseUploadReservationTx(ctx context.Context, tx pgx.Tx, reservation UploadReservation) error {
+	if !quotaSystemEnabled() || reservation.ReservedBytes <= 0 {
+		return nil
+	}
+	if _, err := tx.Exec(ctx, updateSpaceUsageReleaseQuery, reservation.SpaceID, reservation.ReservedBytes); err != nil {
+		return err
+	}
+	return insertUsageEvent(ctx, tx, reservation, "release", -reservation.ReservedBytes)
 }
 
 func ValidateCollaboratorAddition(ctx context.Context, spaceID uuid.UUID, attemptedAdds int, includePendingInvites bool) error {

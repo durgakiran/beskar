@@ -1,6 +1,6 @@
-import { Geometry2d, Rectangle2d } from '../geometry';
-import { makeBox, type GlideShape, type ShapeId, type Vec2 } from '../types';
-import { ShapeUtil, type ResizeHandle } from './ShapeUtil';
+import { Geometry2d, Rectangle2d } from '../geometry/index.js';
+import { makeBox, type GlideShape, type ShapeId, type Vec2 } from '../types.js';
+import { ShapeUtil, type ResizeHandle } from './ShapeUtil.js';
 
 export type GroupShape = GlideShape<Record<string, never>>;
 

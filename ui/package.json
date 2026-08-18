@@ -15,6 +15,7 @@
         "preview": "vite preview",
         "lint": "eslint --ext ts,tsx app src",
         "test": "vitest run",
+        "test:phase3:coverage": "node ../docker/scripts/produce-phase-3-coverage.mjs ui",
         "test:watch": "vitest",
         "build:workers": "tsc -p tsconfig.worker.json && node -e \"require('fs').copyFileSync('workers/wasm_exec.js', 'public/workers/wasm_exec.js')\"",
         "watch:workers": "tsc -p tsconfig.worker.json --watch"
@@ -62,6 +63,7 @@
     },
     "devDependencies": {
         "@testing-library/react": "^16.3.2",
+        "@vitest/coverage-v8": "4.1.7",
         "@types/jsonwebtoken": "^9.0.5",
         "@types/node": "^22.10.1",
         "@types/quill": "^2.0.14",
@@ -77,7 +79,7 @@
         "prettier": "^3.1.1",
         "tailwindcss": "^3.4.15",
         "typescript": "^5.7.2",
-        "vitest": "^4.1.6"
+        "vitest": "4.1.7"
     },
     "overrides": {
         "@tiptap/core": "3.6.6",

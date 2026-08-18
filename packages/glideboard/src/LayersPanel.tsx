@@ -10,9 +10,9 @@ import {
   FiUnlock,
 } from 'react-icons/fi';
 import type { GlideShape, ShapeId } from '@durgakiran/glideline';
-import { useGlideboardController } from './GlideboardContext';
-import { useSignalValue } from './useSignalValue';
-import { wbTheme } from './theme';
+import { useGlideboardController } from './GlideboardContext.js';
+import { useSignalValue } from './useSignalValue.js';
+import { wbTheme } from './theme.js';
 
 const iconButton: React.CSSProperties = {
   width: 24,
@@ -28,11 +28,11 @@ const iconButton: React.CSSProperties = {
 
 export function LayersPanel() {
   const { editor } = useGlideboardController();
-  useSignalValue(editor.getShapeIdsSignal());
+  useSignalValue(editor.getCurrentPageShapeIdsSignal());
   useSignalValue(editor.getDocumentVersionSignal());
+  const pageId = useSignalValue(editor.activePageId) ?? editor.getActivePageId();
   const selectedIds = useSignalValue(editor.getSelectionSignal()) ?? [];
   const [expanded, setExpanded] = React.useState<Set<string>>(new Set());
-  const pageId = editor.getDefaultPageId();
   const page = editor.store.get(pageId) as { name?: string } | undefined;
   const roots = editor.getChildren(pageId);
 
@@ -54,7 +54,7 @@ export function LayersPanel() {
 
   return (
     <aside id="glideboard-layers" data-glideboard-role="layers-panel" style={{
-      position: 'absolute', left: 78, top: 12, bottom: 54, width: 280, zIndex: 95,
+      position: 'absolute', left: 78, top: 'var(--glideboard-floating-panel-top, 12px)', bottom: 54, width: 280, zIndex: 95,
       display: 'flex', flexDirection: 'column', background: wbTheme.surface,
       border: `1px solid ${wbTheme.border}`, borderRadius: 8, boxShadow: wbTheme.shadow,
       color: wbTheme.text, fontFamily: 'inherit', overflow: 'hidden',

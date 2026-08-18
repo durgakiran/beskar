@@ -126,6 +126,7 @@ describe('Workstream D derived indices and graph integrity', () => {
     expect(editor.store.getChildren(parentB).map(record => record['id'])).toEqual(['child']);
     expect(editor.store.getAssetUserIds('asset:one' as any)).toEqual([]);
     expect(editor.store.getAssetUserIds('asset:two' as any)).toEqual(['child']);
+    editor.setActivePage('page:b' as any);
     expect(editor.getShapesAtPoint({ x: 555, y: 15 }).map(shape => shape.id)).toContain(sid('child'));
     expect(editor.store.assertIntegrity()).toMatchObject({ ok: true, recordCount: 8 });
 

@@ -24,15 +24,15 @@ import type {
   GlideDocument,
   AnyRecord,
   DeepReadonly,
-} from './types';
-import type { Geometry2d } from './geometry';
+} from './types.js';
+import type { Geometry2d } from './geometry/index.js';
 import {
   GlideSchema,
   DocumentValidationError,
   createDefaultPageRecord,
   type LoadReport,
-} from './schema';
-import { RecordIdService } from './id';
+} from './schema.js';
+import { RecordIdService } from './id.js';
 import {
   MutationPermissionError,
   allowAllMutations,
@@ -40,7 +40,7 @@ import {
   type MutationCapabilityGrant,
   type MutationOrigin,
   type MutationPolicy,
-} from './mutation-policy';
+} from './mutation-policy.js';
 
 interface RBushEntry {
   id: string;
@@ -1360,15 +1360,26 @@ export class GlideStore {
         .map(([id]) => id),
     ]);
     const idMap: Record<string, string> = {};
+    const reusedIds = new Set<string>();
     const sourceById = new Map(source.map(record => [record['id'] as string, record]));
     for (const oldId of sourceIds) {
+      const sourceRecord = sourceById.get(oldId)!;
+      if (sourceRecord['kind'] === 'asset' && oldId.startsWith('asset:sha256:')) {
+        const existing = this.get(oldId);
+        if (existing && JSON.stringify(existing) !== JSON.stringify(sourceRecord)) {
+          throw new DocumentValidationError(`immutable asset id "${oldId}" has conflicting content`);
+        }
+        idMap[oldId] = oldId;
+        reserved.add(oldId);
+        if (existing) reusedIds.add(oldId);
+        continue;
+      }
       if (idPolicy === 'reject') {
         if (reserved.has(oldId)) throw new DocumentValidationError(`import id "${oldId}" already exists`);
         idMap[oldId] = oldId;
         reserved.add(oldId);
         continue;
       }
-      const sourceRecord = sourceById.get(oldId)!;
       const prefix = `${String(sourceRecord['kind'] ?? 'record')}:${String(sourceRecord['type'] ?? 'unknown')}`;
       const nextId = this.ids.create(prefix, id => reserved.has(id));
       idMap[oldId] = nextId;
@@ -1377,7 +1388,7 @@ export class GlideStore {
 
     const warnings: string[] = [];
     const referenceFields = ['parentId', 'pageId', 'assetId', 'fromId', 'toId'] as const;
-    const imported = source.map(record => {
+    const imported = source.filter(record => !reusedIds.has(String(record['id']))).map(record => {
       const next = cloneJsonValue(record) as AnyRecord;
       next['id'] = idMap[record['id'] as string];
       for (const field of referenceFields) {

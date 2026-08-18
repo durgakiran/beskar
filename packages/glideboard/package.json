@@ -10,7 +10,8 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "default": "./dist/index.js"
-    }
+    },
+    "./styles.css": "./dist/styles.css"
   },
   "files": [
     "dist"
@@ -24,21 +25,26 @@
   },
   "scripts": {
     "clean": "rm -rf dist",
-    "build": "npm run clean && tsc -p tsconfig.build.json",
+    "build": "npm run clean && tsc -p tsconfig.build.json && node scripts/copy-assets.mjs",
+    "test:package-artifact": "npm run build && tsc -p test/package-artifact-consumer/tsconfig.json && node test/package-artifact-consumer/runtime.mjs",
     "prepublishOnly": "npm run build",
     "publish:dry-run": "npm run build && npm pack --dry-run",
     "publish:github": "npm run build && npm publish",
     "test": "vitest run",
+    "test:phase3:coverage": "node ../../docker/scripts/produce-phase-3-coverage.mjs glideboard",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
+    "test:e2e:phase3-security": "playwright test --config playwright.phase3-security.config.ts",
     "test:all": "vitest run && playwright test"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@durgakiran/canvas-text-editor": "file:../canvas-text-editor",
     "@durgakiran/glideline": "0.0.9",
     "@preact/signals": "^2.9.0",
+    "preact": "^10.29.1",
     "react-icons": "^5.6.0",
     "yjs": "^13.6.27"
   },
@@ -52,10 +58,12 @@
     "@types/node": "^25.7.0",
     "@types/react": "^19.2.2",
     "@types/react-dom": "^19.2.2",
+    "@vitest/coverage-v8": "4.1.7",
     "happy-dom": "^20.9.0",
+    "preact": "^10.27.2",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.6"
+    "vitest": "4.1.7"
   }
 }

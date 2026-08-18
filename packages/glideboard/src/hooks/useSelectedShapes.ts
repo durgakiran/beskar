@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import type { GlideShape } from '@durgakiran/glideline';
-import { useSignalValue } from '../useSignalValue';
-import { useGlideboardController } from '../GlideboardContext';
+import { useSignalValue } from '../useSignalValue.js';
+import { useGlideboardController } from '../GlideboardContext.js';
 
 export function useSelectedShapes(): GlideShape[] {
   const { editor } = useGlideboardController();

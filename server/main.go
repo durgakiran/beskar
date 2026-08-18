@@ -4,11 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"net/http"
 	"os"
+	"os/signal"
 	"strconv"
 	"strings"
+	"syscall"
+	"time"
 
 	"github.com/durgakiran/beskar/assetcleanup"
 	attachment "github.com/durgakiran/beskar/attachment/controller"
@@ -20,6 +22,7 @@ import (
 	"github.com/durgakiran/beskar/editor/pageevents"
 	"github.com/durgakiran/beskar/invite"
 	media "github.com/durgakiran/beskar/media/controller"
+	mediaservice "github.com/durgakiran/beskar/media/services"
 	"github.com/durgakiran/beskar/notification"
 	page "github.com/durgakiran/beskar/page"
 	profile "github.com/durgakiran/beskar/profile/controller"
@@ -37,6 +40,19 @@ import (
 	openid "github.com/zitadel/zitadel-go/v3/pkg/authentication/oidc"
 	"go.uber.org/zap"
 )
+
+var launchWhiteboardStagingCleanup = func(ctx context.Context, worker *mediaservice.WhiteboardStagingCleanupWorker) <-chan struct{} {
+	return worker.Start(ctx)
+}
+
+func startWhiteboardStagingCleanup(ctx context.Context, config mediaservice.WhiteboardStagingCleanupConfig) <-chan struct{} {
+	if config.Enabled {
+		return launchWhiteboardStagingCleanup(ctx, mediaservice.NewWhiteboardStagingCleanupWorker(config))
+	}
+	done := make(chan struct{})
+	close(done)
+	return done
+}
 
 func logger() *zap.Logger {
 	return core.Logger
@@ -97,6 +113,8 @@ func QueryParamLogger(next http.Handler) http.Handler {
 func main() {
 	core.InitializeLogger()
 	core.InitializeSlogLogger()
+	appContext, stopApplication := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stopApplication()
 	const port = ":9095"
 	err := godotenv.Load()
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
@@ -130,6 +148,7 @@ func main() {
 	quotaConfig := quota.LoadConfig()
 	assetCleanupConfig := assetcleanup.LoadConfig()
 	documentVersionCleanupConfig := docversioncleanup.LoadConfig()
+	whiteboardStagingCleanupConfig := mediaservice.LoadWhiteboardStagingCleanupConfig()
 	if notificationConfig.WorkerEnabled {
 		go notification.NewWorker(notificationConfig).Start(context.Background())
 	}
@@ -144,6 +163,7 @@ func main() {
 	if documentVersionCleanupConfig.Enabled {
 		go documentVersionCleanupWorker.Start(context.Background())
 	}
+	whiteboardStagingCleanupDone := startWhiteboardStagingCleanup(appContext, whiteboardStagingCleanupConfig)
 
 	r := chi.NewRouter()
 	addCorsMiddleWare(r)
@@ -218,8 +238,22 @@ func main() {
 	}
 
 	logger().Info(fmt.Sprintf("Serving on port: %s", port))
-	err = http.ListenAndServe(port, r)
-	if err != nil {
-		log.Fatal(err)
+	server := &http.Server{Addr: port, Handler: r}
+	serveError := make(chan error, 1)
+	go func() { serveError <- server.ListenAndServe() }()
+	select {
+	case err = <-serveError:
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
+			logger().Error(err.Error())
+		}
+	case <-appContext.Done():
+		shutdownContext, cancelShutdown := context.WithTimeout(context.Background(), 10*time.Second)
+		err = server.Shutdown(shutdownContext)
+		cancelShutdown()
+		if err != nil {
+			logger().Error("HTTP server shutdown failed: " + err.Error())
+		}
 	}
+	stopApplication()
+	<-whiteboardStagingCleanupDone
 }
