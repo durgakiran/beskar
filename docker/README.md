@@ -130,7 +130,7 @@ Optional but important:
 
 - Set `LANDING_DOMAIN_ALIASES` to additional launch-site hostnames, for example `LANDING_DOMAIN=durgakiran.com` and `LANDING_DOMAIN_ALIASES=www.durgakiran.com`
 - Set `UPLOAD_STORAGE_DIR` if uploads should not be stored under the default `public` path inside the server container
-- Set `UI_USE_LOCAL_PACKAGES_DIST=true` only when you want the deployment-style UI image to test local package outputs (`packages/editor/dist` and `packages/glideboard/dist`) instead of published versions.
+- Set `UI_USE_LOCAL_PACKAGES_DIST=true` only when you want the deployment-style UI image to test local Editor, Glideboard, Glideline, and Canvas Text Editor package outputs instead of published versions.
 - Review the log controls if disk usage matters: `DOCKER_LOG_MAX_SIZE`, `DOCKER_LOG_MAX_FILE`, `POSTGRES_LOG_MIN_MESSAGES`, `REDIS_LOG_LEVEL`, `PERMIFY_LOG_LEVEL`, `ZITADEL_ACCESS_LOG_STDOUT_ENABLED`, `SERVER_LOG_TO_FILES`, and `SERVER_HTTP_REQUEST_LOGGING_ENABLED`
 
 ### Configure Email Notifications
@@ -170,11 +170,17 @@ Validate the generated compose config:
 
 ### Local Package Testing
 
-If `UI_USE_LOCAL_PACKAGES_DIST=true`, build both packages first so the deploy UI image can overlay the local artifacts:
+If `UI_USE_LOCAL_PACKAGES_DIST=true`, build the local packages first so the deploy UI image can overlay the local artifacts:
 
 ```bash
 # For editor package
 npm --prefix packages/editor run build
+
+# For glideline package
+npm --prefix packages/glideline run build
+
+# For canvas text editor package
+npm --prefix packages/canvas-text-editor run build
 
 # For glideboard package
 npm --prefix packages/glideboard run build

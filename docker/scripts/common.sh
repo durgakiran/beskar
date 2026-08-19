@@ -253,6 +253,16 @@ load_env_file() {
             echo "Run: npm --prefix packages/glideboard run build" >&2
             exit 1
         fi
+        if [[ ! -f "$ROOT_DIR/packages/glideline/dist/index.js" ]]; then
+            echo "UI_USE_LOCAL_PACKAGES_DIST=true requires built glideline files at $ROOT_DIR/packages/glideline/dist" >&2
+            echo "Run: npm --prefix packages/glideline run build" >&2
+            exit 1
+        fi
+        if [[ ! -f "$ROOT_DIR/packages/canvas-text-editor/dist/index.js" ]]; then
+            echo "UI_USE_LOCAL_PACKAGES_DIST=true requires built canvas text editor files at $ROOT_DIR/packages/canvas-text-editor/dist" >&2
+            echo "Run: npm --prefix packages/canvas-text-editor run build" >&2
+            exit 1
+        fi
     else
         UI_DOCKER_BUILD_TARGET="runner"
     fi

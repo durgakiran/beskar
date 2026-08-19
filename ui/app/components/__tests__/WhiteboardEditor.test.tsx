@@ -11,6 +11,8 @@ const glideboardMock = vi.hoisted(() => ({
     settleActiveEdit: vi.fn(),
     acquireMutationFence: vi.fn(),
     assetStorage: null as any,
+    assetResolutionContext: null as any,
+    deferHandle: false,
 }));
 
 vi.mock("@http/hooks", () => ({
@@ -22,10 +24,12 @@ vi.mock("@durgakiran/glideboard", () => ({
         .filter(([, state]) => Boolean(state?.user))
         .map(([clientId, state]) => ({ clientId, user: state.user, cursor: state.cursor ?? null })),
     Glideboard: React.forwardRef(function MockGlideboard(
-        { readOnly, collaboration, sessionKey, assetStorage }: any,
+        { readOnly, collaboration, sessionKey, assetStorage, assetResolutionContext }: any,
         ref: React.ForwardedRef<unknown>,
     ) {
+        const [handleReady, setHandleReady] = React.useState(!glideboardMock.deferHandle);
         glideboardMock.assetStorage = assetStorage;
+        glideboardMock.assetResolutionContext = assetResolutionContext;
         const checkpointSource = React.useMemo(() => {
             let sequence = 0;
             let latest: any = null;
@@ -70,7 +74,10 @@ vi.mock("@durgakiran/glideboard", () => ({
             };
         }, [collaboration.doc]);
         React.useEffect(() => () => checkpointSource.dispose(), [checkpointSource]);
-        React.useImperativeHandle(ref, () => ({
+        React.useEffect(() => {
+            if (!handleReady) queueMicrotask(() => setHandleReady(true));
+        }, [handleReady]);
+        React.useImperativeHandle(ref, () => handleReady ? ({
             checkpoints: checkpointSource.source,
             captureProjectionTarget: checkpointSource.source.captureTarget,
             settleActiveEdit: glideboardMock.settleActiveEdit,
@@ -78,8 +85,8 @@ vi.mock("@durgakiran/glideboard", () => ({
             serialize: () => ({ records: [] }),
             exportSvg: async () => '<svg />',
             setCurrentTool: vi.fn(),
-        }), [checkpointSource]);
-        return React.createElement("div", {
+        }) : null, [checkpointSource, handleReady]);
+        return handleReady ? React.createElement("div", {
             "data-testid": "glideboard",
             "data-readonly": String(readOnly),
             "data-has-provider": String(Boolean(collaboration?.provider)),
@@ -87,7 +94,7 @@ vi.mock("@durgakiran/glideboard", () => ({
             "data-record-ids": Array.from(
                 collaboration.doc.getMap("glideboard-records").keys(),
             ).sort().join(","),
-        });
+        }) : null;
     }),
 }));
 
@@ -147,6 +154,8 @@ describe("WhiteboardEditor", () => {
         glideboardMock.settleActiveEdit.mockResolvedValue(undefined);
         glideboardMock.acquireMutationFence.mockReturnValue({ release: vi.fn() });
         glideboardMock.assetStorage = null;
+        glideboardMock.assetResolutionContext = null;
+        glideboardMock.deferHandle = false;
         useGet.mockReturnValue([
             {
                 data: { data: { id: "user-1", name: "Asha", email: "asha@example.com" } },
@@ -196,6 +205,7 @@ describe("WhiteboardEditor", () => {
             expect.objectContaining({ credentials: "include", signal: expect.any(AbortSignal) }),
         );
         expect(providerInstances[0]?.room).toBe("2-space-space-1");
+        expect(glideboardMock.assetResolutionContext).toEqual({ documentId: "1" });
     });
 
     it("persists whiteboard raster assets through a page-scoped staging transaction", async () => {
@@ -642,7 +652,8 @@ describe("WhiteboardEditor", () => {
         expect(board.getAttribute("data-record-ids")).toBe("shape:current");
     });
 
-    it("flushes the current Y.Doc before Close finishes navigating", async () => {
+    it("attaches durability after a delayed Glideboard handle and flushes before Close", async () => {
+        glideboardMock.deferHandle = true;
         let resolveSave!: (response: Response) => void;
         const saveResponse = new Promise<Response>(resolve => {
             resolveSave = resolve;
@@ -688,6 +699,86 @@ describe("WhiteboardEditor", () => {
             }),
         } as Response);
         await waitFor(() => expect(closeButton.hasAttribute("disabled")).toBe(false));
+    });
+
+    it("automatically checkpoints draft edits after the durability debounce", async () => {
+        const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+            if (String(input).endsWith("/checkpoint") && init?.method === "PUT") {
+                const body = JSON.parse(String(init.body));
+                return {
+                    ok: true,
+                    status: 200,
+                    json: async () => ({
+                        data: {
+                            draftId: body.draftId,
+                            revision: "1",
+                            acknowledgedCheckpoint: {
+                                transactionSequence: body.transactionSequence,
+                                stateDigest: body.stateDigest,
+                                serverUpdateSequence: 1,
+                            },
+                        },
+                    }),
+                } as Response;
+            }
+            return jsonResponse(boardData("space-1", "2"));
+        });
+        vi.stubGlobal("fetch", fetchMock);
+        renderEditor({ slug: ["space-1", "2"] });
+        await waitFor(() => expect(screen.getByTestId("glideboard")).not.toBeNull());
+
+        providerInstances.at(-1)!.doc.getMap("glideboard-records").set(
+            "shape:autosave",
+            { id: "shape:autosave", type: "box" },
+        );
+
+        await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+            "/editor/space/space-1/whiteboard/2/checkpoint",
+            expect.objectContaining({ method: "PUT", credentials: "include" }),
+        ), { timeout: 2_000 });
+    });
+
+    it("sends the publish draft identity as a JSON number", async () => {
+        const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+            const url = String(input);
+            if (url.endsWith("/checkpoint") && init?.method === "PUT") {
+                const body = JSON.parse(String(init.body));
+                return {
+                    ok: true,
+                    status: 200,
+                    json: async () => ({
+                        data: {
+                            draftId: body.draftId,
+                            revision: "1",
+                            acknowledgedCheckpoint: {
+                                transactionSequence: body.transactionSequence,
+                                stateDigest: body.stateDigest,
+                                serverUpdateSequence: 1,
+                            },
+                        },
+                    }),
+                } as Response;
+            }
+            if (url.endsWith("/publish") && init?.method === "PUT") {
+                return {
+                    ok: true,
+                    status: 200,
+                    json: async () => ({ data: { nextDraftId: 2, nextRevision: "0" } }),
+                } as Response;
+            }
+            return jsonResponse(boardData("space-1", "2"));
+        });
+        vi.stubGlobal("fetch", fetchMock);
+
+        renderEditor({ slug: ["space-1", "2"] });
+        await waitFor(() => expect(screen.getByTestId("glideboard")).not.toBeNull());
+        fireEvent.click(screen.getByRole("button", { name: "Publish" }));
+
+        await waitFor(() => expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith("/publish"))).toBe(true));
+        const publishRequest = fetchMock.mock.calls.find(([url]) => String(url).endsWith("/publish"));
+        const publishBody = JSON.parse(String(publishRequest?.[1]?.body));
+        expect(publishBody.draftId).toBe(1);
+        expect(typeof publishBody.draftId).toBe("number");
     });
 
     it("validates every production asset host response before trusting it", async () => {

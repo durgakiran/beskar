@@ -173,6 +173,8 @@ export class YjsDurabilityCoordinator {
                 throw error;
             }
 
+            if (this.records.has(targetKey(target))) return;
+
             const isInitialProjection = !this.initialProjectionHandled;
             this.initialProjectionHandled = true;
             if (

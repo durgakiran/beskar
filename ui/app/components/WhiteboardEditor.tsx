@@ -1,6 +1,6 @@
 
 import { useGet, Response } from "@http/hooks";
-import { useEffect, useMemo, useState, useRef, type MutableRefObject } from "react";
+import { useCallback, useEffect, useMemo, useState, useRef, type Ref } from "react";
 import * as Y from "yjs";
 import { WebrtcProvider } from "y-webrtc";
 import { Spinner, Flex, Button, IconButton, Avatar, HoverCard, Box, Text } from "@radix-ui/themes";
@@ -225,6 +225,11 @@ export default function WhiteboardEditor({
     } | null>(null);
     const yDocLifetimeGenerationsRef = useRef(new WeakMap<Y.Doc, number>());
     const boardRef = useRef<GlideboardHandle | null>(null);
+    const [boardHandle, setBoardHandle] = useState<GlideboardHandle | null>(null);
+    const handleBoardRef = useCallback((handle: GlideboardHandle | null) => {
+        boardRef.current = handle;
+        setBoardHandle(handle);
+    }, []);
     const activeDraftIdRef = useRef<string | null>(null);
     const draftTransitionInFlightRef = useRef<string | null>(null);
     const [durabilityStatus, setDurabilityStatus] = useState<DurabilityStatus | null>(null);
@@ -566,10 +571,10 @@ export default function WhiteboardEditor({
 
     useEffect(() => {
         const durability = documentSession.durability;
-        const board = boardRef.current;
+        const board = boardHandle;
         if (!durability || !board || !isDbLoaded || readOnly) return;
         return durability.attach(board.checkpoints);
-    }, [documentSession, isDbLoaded, provider, readOnly]);
+    }, [boardHandle, documentSession, isDbLoaded, readOnly]);
 
     useEffect(() => {
         const durability = documentSession.durability;
@@ -584,7 +589,7 @@ export default function WhiteboardEditor({
 
     useEffect(() => {
         const durability = documentSession.durability;
-        const board = boardRef.current;
+        const board = boardHandle;
         if (!durability || !board || !provider || !isDbLoaded || readOnly) return;
         const metadata = yDoc.getMap("glideboard-meta");
         const verifyActiveDraft = async (expectedDraftId?: string) => {
@@ -635,7 +640,7 @@ export default function WhiteboardEditor({
             clearInterval(poll);
             metadata.unobserve(handleDraftTransition);
         };
-    }, [documentSession, isDbLoaded, pageId, provider, readOnly, spaceId, yDoc]);
+    }, [boardHandle, documentSession, isDbLoaded, pageId, provider, readOnly, spaceId, yDoc]);
 
     const [isPublishing, setIsPublishing] = useState(false);
     const [isClosing, setIsClosing] = useState(false);
@@ -739,6 +744,10 @@ export default function WhiteboardEditor({
 
             // 2. Yjs state
             const encoded = uint8ArrayToBase64(durability.getAcknowledgedState(checkpoint));
+            const publishDraftId = Number(checkpoint.draftId);
+            if (!Number.isSafeInteger(publishDraftId) || publishDraftId <= 0) {
+                throw new Error('Whiteboard publish has an invalid draft identity.');
+            }
 
             // 3. Publish
             const publishUrl = `${USER_URI}/editor/space/${spaceId}/whiteboard/${pageId}/publish`;
@@ -749,7 +758,7 @@ export default function WhiteboardEditor({
                     body: JSON.stringify({
                         data: encoded,
                         previewAssetName,
-                        draftId: checkpoint.draftId,
+                        draftId: publishDraftId,
                         expectedDraftRevision: checkpoint.durableRevision,
                         checkpoint: checkpoint.yjs,
                         clientId: whiteboardClientId,
@@ -958,7 +967,7 @@ export default function WhiteboardEditor({
 
                 {/* Canvas */}
                 <div style={{ flex: 1, position: 'relative', minWidth: 0 }}>
-                    <WhiteboardCanvas boardRef={boardRef} sessionKey={documentSessionKey} yDoc={yDoc} provider={provider} fetchErr={fetchErr} readOnly={readOnly} collaborationUser={collaborationUser} bootstrapRevision={boardData?.durableRevision ?? "0"} assetStorage={whiteboardAssetStorage} />
+                    <WhiteboardCanvas boardRef={handleBoardRef} sessionKey={documentSessionKey} yDoc={yDoc} provider={provider} fetchErr={fetchErr} readOnly={readOnly} collaborationUser={collaborationUser} bootstrapRevision={boardData?.durableRevision ?? "0"} documentId={String(boardData?.docId ?? "")} assetStorage={whiteboardAssetStorage} />
                 </div>
             </div>
         );
@@ -967,7 +976,7 @@ export default function WhiteboardEditor({
     // View mode: render canvas directly, no sub-header
     return (
         <div style={{ width: '100%', height: fillParent ? '100%' : 'calc(100vh - 120px)' }}>
-            <WhiteboardCanvas boardRef={boardRef} sessionKey={documentSessionKey} yDoc={yDoc} provider={provider} fetchErr={fetchErr} readOnly={readOnly} collaborationUser={collaborationUser} bootstrapRevision={boardData?.durableRevision ?? "0"} documentId={String(boardData?.docId ?? "")} assetStorage={whiteboardAssetStorage} />
+            <WhiteboardCanvas boardRef={handleBoardRef} sessionKey={documentSessionKey} yDoc={yDoc} provider={provider} fetchErr={fetchErr} readOnly={readOnly} collaborationUser={collaborationUser} bootstrapRevision={boardData?.durableRevision ?? "0"} documentId={String(boardData?.docId ?? "")} assetStorage={whiteboardAssetStorage} />
         </div>
     );
 }
@@ -984,7 +993,7 @@ function WhiteboardCanvas({
     documentId,
     assetStorage,
 }: {
-    boardRef: MutableRefObject<GlideboardHandle | null>;
+    boardRef: Ref<GlideboardHandle>;
     sessionKey: string;
     yDoc: Y.Doc;
     provider: WebrtcProvider | null;
@@ -1010,7 +1019,7 @@ function WhiteboardCanvas({
     return (
         <div style={{ width: "100%", height: "100%", position: "relative" }}>
             <Glideboard
-                ref={boardRef as any}
+                ref={boardRef}
                 sessionKey={sessionKey}
                 collaboration={collaborationProps}
                 readOnly={readOnly}

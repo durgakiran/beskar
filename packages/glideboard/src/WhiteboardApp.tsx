@@ -39,6 +39,9 @@ const TOOL_KEYS: Record<string, string> = {
   f: 'frame',
 };
 
+// Keep page support in the document model while the page navigation UI is deferred.
+const PAGE_TABS_ENABLED = false;
+
 export function WhiteboardApp({
   assetLibraryProvider,
   toolbarLayout = 'split',
@@ -668,7 +671,7 @@ export function WhiteboardApp({
         />
       ) : null}
       <ZoomWidget />
-      <PageTabs />
+      {PAGE_TABS_ENABLED ? <PageTabs /> : null}
       {!readOnly && !layersOpen && !assetsOpen ? (
         <div data-glideboard-role="style-panel-host" style={{ display: 'contents' }}>
           <PositionSizeBar />
@@ -688,7 +691,7 @@ export function WhiteboardApp({
         data-glideboard-role="statusbar"
         style={{
           position: 'absolute',
-          bottom: 62,
+          bottom: PAGE_TABS_ENABLED ? 62 : 12,
           left: '50%',
           transform: 'translateX(-50%)',
           zIndex: 50,

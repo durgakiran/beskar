@@ -44,6 +44,11 @@ export class GlideboardCollaborationCheckpointSource implements CollaborationChe
   private readonly byStoreRevision = new Map<number, Promise<ProjectedYjsState>>();
   private readonly listeners = new Set<(state: ProjectedYjsState) => void>();
 
+  private emit(state: ProjectedYjsState): void {
+    if (this.disposed) return;
+    for (const listener of [...this.listeners]) listener(copyProjectedState(state));
+  }
+
   record(doc: Y.Doc, storeRevision: number): Promise<ProjectedYjsState> {
     if (this.disposed) {
       return Promise.reject(new Error('Glideboard collaboration checkpoint source is disposed.'));
@@ -71,9 +76,7 @@ export class GlideboardCollaborationCheckpointSource implements CollaborationChe
           encodedState,
         });
         resolveState(state);
-        if (!this.disposed) {
-          for (const listener of [...this.listeners]) listener(copyProjectedState(state));
-        }
+        this.emit(state);
       } catch (error) {
         this.status.value = 'quarantined';
         rejectState(error);
@@ -119,7 +122,11 @@ export class GlideboardCollaborationCheckpointSource implements CollaborationChe
     }
     const latest = this.latest;
     if (!latest) throw new Error('Glideboard collaboration projection is not ready.');
-    return copyTarget((await latest).target);
+    const state = await latest;
+    // Close the late-subscriber race at save/publish boundaries. Consumers
+    // can safely deduplicate this immutable target.
+    this.emit(state);
+    return copyTarget(state.target);
   }
 
   async waitForStoreRevision(storeRevision: number): Promise<ProjectionTarget> {

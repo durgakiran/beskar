@@ -73,6 +73,34 @@ describe("YjsDurabilityCoordinator", () => {
         expect(coordinator.getAcknowledgedState(checkpoint)).toEqual(new Uint8Array([1]));
     });
 
+    it("deduplicates a projection replayed at a publish boundary", async () => {
+        const { recovery, writes } = createRecovery();
+        const persistence: YjsPersistenceAdapter = {
+            save: vi.fn(async request => ({
+                draftId: request.draftId,
+                durableRevision: "rev-2",
+                acknowledgedCheckpoint: { ...request.target.yjs },
+            })),
+        };
+        const coordinator = new YjsDurabilityCoordinator({
+            sessionKey: "session",
+            draftId: "draft",
+            clientId: "client",
+            durableRevision: "rev-1",
+            persistence,
+            recovery,
+        });
+        const state = await projectedState(1, 1, 4);
+
+        await coordinator.acceptProjectedState(state);
+        await coordinator.acceptProjectedState(state);
+        await coordinator.flush(state.target);
+
+        expect(writes).toHaveLength(1);
+        expect(persistence.save).toHaveBeenCalledTimes(1);
+        expect(coordinator.getSnapshot().latestGeneration).toBe(1);
+    });
+
     it("does not mark a newer generation clean when an older request completes", async () => {
         const { recovery } = createRecovery();
         let resolveFirst!: (value: YjsSaveResult) => void;

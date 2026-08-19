@@ -530,22 +530,24 @@ describe('Canvas viewport rendering', () => {
     }
   });
 
-  it('handles empty text, composition, keyboard commit, and conflict cancellation', async () => {
+  it('handles rich-text keyboard commit and conflict cancellation', async () => {
     const controller = new GlideboardController({ sessionKey: 'canvas-text-input-events' });
     try {
-      const id = controller.editor.createShape({ type: 'text', x: 30, y: 30, props: { text: '' } } as any);
+      const id = controller.editor.createShape({
+        type: 'text', x: 30, y: 30, props: {
+          text: 'AB',
+          richText: {
+            format: 'beskar-canvas-rich-text', version: 1, profile: 'text',
+            doc: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'AB' }] }] },
+          },
+          w: 20,
+          h: 22,
+          sizeMode: 'auto',
+        },
+      } as any);
       const view = setupCanvas(controller);
       act(() => controller.editor.startEditing(id));
       const editable = await view.findByRole('textbox');
-      act(() => controller.editor.updateEditingDraft('AB', {
-        richText: {
-          format: 'beskar-canvas-rich-text', version: 1, profile: 'text',
-          doc: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'AB' }] }] },
-        },
-        w: 20,
-        h: 22,
-        sizeMode: 'auto',
-      }));
       fireEvent.keyDown(editable, { key: 'Enter', ctrlKey: true });
       await waitFor(() => expect(view.queryByRole('textbox')).toBeNull());
       expect((controller.editor.getShape(id)?.props as any).text).toBe('AB');

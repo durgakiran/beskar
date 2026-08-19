@@ -191,6 +191,45 @@ describe('bindGlideboardCollaboration', () => {
     binding();
   });
 
+  it('checkpoints rich-text Yjs edits without a store commit', async () => {
+    const capability = createMutationCapability();
+    const editor = createGlideboardEditorInstance([], undefined, capability);
+    const doc = new Y.Doc();
+    const binding = bindGlideboardCollaboration(editor, { doc }, capability);
+    const fragments = doc.getMap<Y.XmlFragment>('glideboard-rich-text-fragments-v1');
+    const fragment = new Y.XmlFragment();
+    fragments.set('shape:text', fragment);
+    const beforeTyping = await binding.checkpoints.captureTarget();
+
+    const text = new Y.XmlText();
+    fragment.insert(0, [text]);
+    text.insert(0, 'Saved while typing');
+    const afterTyping = await binding.checkpoints.captureTarget();
+
+    expect(afterTyping.storeRevision).toBe(beforeTyping.storeRevision);
+    expect(afterTyping.yjs.transactionSequence).toBeGreaterThan(beforeTyping.yjs.transactionSequence);
+    expect(afterTyping.yjs.stateDigest).not.toBe(beforeTyping.yjs.stateDigest);
+    binding();
+  });
+
+  it('replays the captured state to durability listeners at a save boundary', async () => {
+    const capability = createMutationCapability();
+    const editor = createGlideboardEditorInstance([], undefined, capability);
+    const doc = new Y.Doc();
+    const binding = bindGlideboardCollaboration(editor, { doc }, capability);
+    await binding.checkpoints.captureTarget();
+    const delivered: Array<{ target: any }> = [];
+    const unsubscribe = binding.checkpoints.subscribe(state => delivered.push(state));
+    await Promise.resolve();
+    delivered.length = 0;
+
+    const target = await binding.checkpoints.captureTarget();
+
+    expect(delivered.at(-1)?.target).toEqual(target);
+    unsubscribe();
+    binding();
+  });
+
   it('quarantines checkpoint capture when a remote projection is invalid', async () => {
     const capability = createMutationCapability();
     const editor = createGlideboardEditorInstance([], undefined, capability);

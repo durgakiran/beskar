@@ -13,6 +13,7 @@ import type { CollaborationCheckpointSource } from './durability/types.js';
 const LEGACY_RECORDS_KEY = 'glideboard-records';
 const RECORDS_KEY = 'glideboard-records-v2';
 const META_KEY = 'glideboard-meta';
+const RICH_TEXT_FRAGMENTS_KEY = 'glideboard-rich-text-fragments-v1';
 const SHARED_SCHEMA_VERSION = 2;
 const SHARED_CAPABILITY_RANGE = Object.freeze({ min: 2, max: 2 });
 const GENERATION_KEY = '$generation';
@@ -211,6 +212,7 @@ export function bindGlideboardCollaboration(
   const records = doc.getMap<Y.Map<unknown>>(RECORDS_KEY);
   const legacyRecords = doc.getMap<AnyRecord>(LEGACY_RECORDS_KEY);
   const metadata = doc.getMap<unknown>(META_KEY);
+  const richTextFragments = doc.getMap<Y.XmlFragment>(RICH_TEXT_FRAGMENTS_KEY);
   const checkpoints = new GlideboardCollaborationCheckpointSource();
   const localDocumentSchema = editor.serialize().schema;
   let disposed = false;
@@ -337,6 +339,10 @@ export function bindGlideboardCollaboration(
   };
   records.observeDeep(handleSharedChange);
   metadata.observeDeep(handleSharedChange);
+  const handleRichTextChange = () => {
+    if (!disposed) recordCheckpoint(editor.store.revision);
+  };
+  richTextFragments.observeDeep(handleRichTextChange);
   const handleLegacyChange = (_event: unknown, transaction: Y.Transaction) => {
     if (disposed || transaction.origin === BOOTSTRAP_ORIGIN) return;
     if (records.size > 0) {
@@ -386,6 +392,7 @@ export function bindGlideboardCollaboration(
     config.provider?.off?.('synced', handleProviderReady);
     records.unobserveDeep(handleSharedChange);
     metadata.unobserveDeep(handleSharedChange);
+    richTextFragments.unobserveDeep(handleRichTextChange);
     legacyRecords.unobserve(handleLegacyChange);
     stopAtomicLocalProjection();
     checkpoints.dispose();
