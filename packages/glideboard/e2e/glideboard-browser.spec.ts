@@ -39,39 +39,39 @@ function routeIntersectsBoxInterior(points: Point[], box: Box): boolean {
 test.describe('glideboard browser automation', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/#whiteboard');
-    await page.waitForSelector('#wb-canvas', { timeout: 10_000 });
+    await page.waitForSelector('[data-glideboard-role="canvas"]', { timeout: 10_000 });
     await page.evaluate(() => {
       localStorage.clear();
     });
     await page.reload();
-    await page.waitForSelector('#wb-canvas', { timeout: 10_000 });
+    await page.waitForSelector('[data-glideboard-role="canvas"]', { timeout: 10_000 });
     await page.evaluate(() => {
       (window as any).__GLIDELINE_WHITEBOARD__?.reset();
     });
   });
 
   test('smart routes avoid obstacles', async ({ page }) => {
-    const state = await page.evaluate(() => {
+    const state = await page.evaluate(async () => {
       const api = (window as any).__GLIDELINE_WHITEBOARD__;
-      const from = api.callTool('create_shape', {
+      const from = await api.callTool('create_shape', {
         type: 'box',
         x: 40,
         y: 140,
         props: { w: 120, h: 80, label: 'A' },
       });
-      const obstacle = api.callTool('create_shape', {
+      const obstacle = await api.callTool('create_shape', {
         type: 'box',
         x: 240,
         y: 110,
         props: { w: 120, h: 140, label: 'B' },
       });
-      const to = api.callTool('create_shape', {
+      const to = await api.callTool('create_shape', {
         type: 'box',
         x: 460,
         y: 140,
         props: { w: 120, h: 80, label: 'C' },
       });
-      const arrow = api.callTool('create_connection', {
+      const arrow = await api.callTool('create_connection', {
         fromId: from.id,
         toId: to.id,
         routeStyle: 'smart',
@@ -93,16 +93,212 @@ test.describe('glideboard browser automation', () => {
     expect(routeIntersectsBoxInterior(routePoints, state.obstacle)).toBe(false);
   });
 
-  test('fit-to-screen updates zoom for wide boards and reset restores 100%', async ({ page }) => {
-    await page.evaluate(() => {
+  test('virtualizes offscreen records without clipping transformed viewport crossings', async ({ page }) => {
+    const state = await page.evaluate(async () => {
       const api = (window as any).__GLIDELINE_WHITEBOARD__;
-      api.callTool('create_shape', {
+      const from = await api.callTool('create_shape', {
+        type: 'box',
+        x: -500,
+        y: 280,
+        w: 120,
+        h: 80,
+        label: 'Offscreen source',
+      });
+      const to = await api.callTool('create_shape', {
+        type: 'box',
+        x: 1_700,
+        y: 280,
+        w: 120,
+        h: 80,
+        label: 'Offscreen target',
+      });
+      const arrow = await api.callTool('create_connection', {
+        fromId: from.id,
+        toId: to.id,
+        routeStyle: 'ortho',
+      });
+      const rotated = await api.callTool('create_shape', {
+        type: 'box',
+        x: -700,
+        y: -400,
+        w: 400,
+        h: 1_000,
+      });
+      await api.callTool('update_shape', {
+        id: rotated.id,
+        rotation: Math.PI / 4,
+      });
+      const far = await api.callTool('create_shape', {
+        type: 'box',
+        x: 5_000,
+        y: 5_000,
+        w: 120,
+        h: 80,
+      });
+      return {
+        arrowId: arrow.id as string,
+        rotatedId: rotated.id as string,
+        farId: far.id as string,
+      };
+    });
+
+    await expect(page.locator(`[data-shape-id="${state.arrowId}"]`)).toHaveCount(1);
+    await expect(page.locator(`[data-shape-id="${state.rotatedId}"]`)).toHaveCount(1);
+    await expect(page.locator(`[data-shape-id="${state.farId}"]`)).toHaveCount(0);
+    await expect.poll(() => page.evaluate((farId) => {
+      return (window as any).__GLIDELINE_WHITEBOARD__.getAIContext().shapes
+        .some((shape: any) => shape.id === farId);
+    }, state.farId)).toBe(true);
+
+    await page.evaluate((farId) => {
+      (window as any).__GLIDELINE_WHITEBOARD__.select([farId]);
+    }, state.farId);
+    await expect(page.locator(`[data-shape-id="${state.farId}"]`)).toHaveCount(1);
+  });
+
+  test('double-click places and then re-edits one arrow label', async ({ page }) => {
+    const state = await page.evaluate(async () => {
+      const api = (window as any).__GLIDELINE_WHITEBOARD__;
+      const from = await api.callTool('create_shape', {
+        type: 'box',
+        x: 120,
+        y: 180,
+        props: { w: 120, h: 80, label: 'From' },
+      });
+      const to = await api.callTool('create_shape', {
+        type: 'box',
+        x: 520,
+        y: 320,
+        props: { w: 120, h: 80, label: 'To' },
+      });
+      const arrow = await api.callTool('create_connection', {
+        fromId: from.id,
+        toId: to.id,
+        routeStyle: 'ortho',
+      });
+      return {
+        arrowId: arrow.id as string,
+        points: api.getArrowRoutePoints(arrow.id) as Point[],
+      };
+    });
+    const canvas = page.locator('[data-glideboard-role="canvas"]');
+    const bounds = await canvas.boundingBox();
+    expect(bounds).not.toBeNull();
+    const first = state.points[0]!;
+    const second = state.points[1]!;
+    await page.mouse.dblclick(
+      bounds!.x + (first.x + second.x) / 2,
+      bounds!.y + (first.y + second.y) / 2,
+    );
+
+    const editor = page.locator('[data-glideboard-role="text-editing-overlay"] [contenteditable]');
+    await expect(editor).toHaveCount(1);
+    await expect(editor).toBeFocused();
+    await expect.poll(() => editor.evaluate(element => element.textContent?.length ?? 0)).toBe(1);
+    const emptyCaretTop = await editor.evaluate((element) => {
+      const range = document.createRange();
+      range.selectNodeContents(element);
+      return range.getBoundingClientRect().top;
+    });
+    await editor.fill('First label');
+    const typedCaretTop = await editor.evaluate((element) => {
+      const range = document.createRange();
+      range.selectNodeContents(element);
+      return range.getBoundingClientRect().top;
+    });
+    expect(Math.abs(emptyCaretTop - typedCaretTop)).toBeLessThan(2);
+    await page.keyboard.press('Control+Enter');
+    await expect(editor).toHaveCount(0);
+    await expect.poll(() => page.evaluate((arrowId) => {
+      return (window as any).__GLIDELINE_WHITEBOARD__.getAIContext().connections
+        .find((connection: any) => connection.id === arrowId)?.label;
+    }, state.arrowId)).toBe('First label');
+    await page.mouse.click(
+      bounds!.x + (first.x + second.x) / 2,
+      bounds!.y + (first.y + second.y) / 2,
+    );
+    await expect(page.getByText('Text Color', { exact: true })).toBeVisible();
+    await expect(page.getByText('Arrow Route', { exact: true })).toHaveCount(0);
+
+    const last = state.points[state.points.length - 1]!;
+    const previous = state.points[state.points.length - 2]!;
+    await page.mouse.dblclick(
+      bounds!.x + (previous.x + last.x) / 2,
+      bounds!.y + (previous.y + last.y) / 2,
+    );
+    await expect(editor).toHaveText('First label');
+    await editor.fill('Updated label');
+    await page.keyboard.press('Control+Enter');
+
+    await expect.poll(() => page.evaluate((arrowId) => {
+      const connections = (window as any).__GLIDELINE_WHITEBOARD__.getAIContext().connections;
+      return {
+        count: connections.filter((connection: any) => connection.id === arrowId).length,
+        label: connections.find((connection: any) => connection.id === arrowId)?.label,
+      };
+    }, state.arrowId)).toEqual({ count: 1, label: 'Updated label' });
+  });
+
+  test('rotated text keeps its anchor and exposes only text styles while editing', async ({ page }) => {
+    const id = await page.evaluate(async () => {
+      const api = (window as any).__GLIDELINE_WHITEBOARD__;
+      const text = await api.callTool('create_shape', {
+        type: 'text',
+        x: 280,
+        y: 220,
+        text: 'Short',
+        fontSize: 'lg',
+      });
+      await api.callTool('update_shape', {
+        id: text.id,
+        rotation: Math.PI / 3,
+      });
+      api.select([text.id]);
+      return text.id as string;
+    });
+
+    await expect(page.getByText('Text Color', { exact: true })).toBeVisible();
+    await expect(page.getByText('Stroke / Fill Color', { exact: true })).toHaveCount(0);
+    await expect(page.getByText('Stroke Width', { exact: true })).toHaveCount(0);
+
+    const shape = page.locator(`[data-shape-id="${id}"]`);
+    const before = await shape.evaluate((element) => {
+      const matrix = new DOMMatrix((element as HTMLElement).style.transform);
+      return { x: matrix.e, y: matrix.f };
+    });
+    const bounds = await shape.boundingBox();
+    expect(bounds).not.toBeNull();
+    await page.mouse.dblclick(
+      bounds!.x + bounds!.width / 2,
+      bounds!.y + bounds!.height / 2,
+    );
+
+    const editor = page.locator('[data-glideboard-role="text-editing-overlay"] [contenteditable]');
+    await expect(editor).toHaveText('Short');
+    await expect(page.getByText('Text Color', { exact: true })).toBeVisible();
+    await expect(page.getByText('Stroke / Fill Color', { exact: true })).toHaveCount(0);
+    await editor.fill('A much longer rotated text label');
+    await page.keyboard.press('Control+Enter');
+
+    await expect(editor).toHaveCount(0);
+    const after = await shape.evaluate((element) => {
+      const matrix = new DOMMatrix((element as HTMLElement).style.transform);
+      return { x: matrix.e, y: matrix.f };
+    });
+    expect(after.x).toBeCloseTo(before.x, 4);
+    expect(after.y).toBeCloseTo(before.y, 4);
+  });
+
+  test('fit-to-screen updates zoom for wide boards and reset restores 100%', async ({ page }) => {
+    await page.evaluate(async () => {
+      const api = (window as any).__GLIDELINE_WHITEBOARD__;
+      await api.callTool('create_shape', {
         type: 'box',
         x: 40,
         y: 180,
         props: { w: 140, h: 100, label: 'A' },
       });
-      api.callTool('create_shape', {
+      await api.callTool('create_shape', {
         type: 'box',
         x: 1280,
         y: 220,
@@ -110,22 +306,22 @@ test.describe('glideboard browser automation', () => {
       });
     });
 
-    await expect(page.locator('#wb-zoom-pct')).toHaveText('100%');
-    await page.locator('#wb-fit').click();
+    await expect(page.locator('[data-glideboard-control="zoom-pct"]')).toHaveText('100%');
+    await page.locator('[data-glideboard-control="fit"]').click();
 
-    const fittedZoom = await page.locator('#wb-zoom-pct').textContent();
+    const fittedZoom = await page.locator('[data-glideboard-control="zoom-pct"]').textContent();
     expect(fittedZoom).not.toBeNull();
     expect(Number.parseInt(fittedZoom!, 10)).toBeLessThan(100);
 
-    await page.locator('#wb-zoom-pct').click();
-    await expect(page.locator('#wb-zoom-pct')).toHaveText('100%');
+    await page.locator('[data-glideboard-control="zoom-pct"]').click();
+    await expect(page.locator('[data-glideboard-control="zoom-pct"]')).toHaveText('100%');
   });
 
   test('uses the light chrome palette instead of a dark theme', async ({ page }) => {
     const styles = await page.evaluate(() => {
-      const app = window.getComputedStyle(document.getElementById('whiteboard-app')!);
-      const toolbar = window.getComputedStyle(document.getElementById('wb-toolbar')!);
-      const zoom = window.getComputedStyle(document.getElementById('wb-zoom-widget')!);
+      const app = window.getComputedStyle(document.querySelector('[data-glideboard-role="app"]')!);
+      const toolbar = window.getComputedStyle(document.querySelector('[data-glideboard-role="toolbar"]')!);
+      const zoom = window.getComputedStyle(document.querySelector('[data-glideboard-role="zoom-widget"]')!);
       return {
         appBackground: app.backgroundColor,
         toolbarBackground: toolbar.backgroundColor,

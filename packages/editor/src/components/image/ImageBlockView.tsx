@@ -7,9 +7,16 @@ import { NodeViewWrapper } from '@tiptap/react';
 import type { NodeViewProps } from '@tiptap/react';
 import { ImageFloatingMenu } from './ImageFloatingMenu';
 import { useFloating, flip, shift, offset, autoUpdate } from '@floating-ui/react';
+import { getImagePasteStorage } from '../../extensions/image-paste-drop';
 
 export function ImageBlockView({ node, updateAttributes, selected, editor, getPos }: NodeViewProps) {
-  const { src, alt, caption, align, width, height, isUploading } = node.attrs;
+  let { src, alt, caption, align, width, height, isUploading } = node.attrs;
+  if (typeof src === 'string') {
+    const imageHandler = getImagePasteStorage(editor)?.imageHandler;
+    if (imageHandler?.getImageUrl) {
+      src = imageHandler.getImageUrl(src);
+    }
+  }
   const [isResizing, setIsResizing] = useState(false);
   const [isToolbarHovered, setIsToolbarHovered] = useState(false);
   

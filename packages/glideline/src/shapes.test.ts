@@ -168,6 +168,80 @@ describe('T2.3-04: toSvg returns SVGElement', () => {
     const el = textUtil.toSvg(shape as any);
     expect(el).toBeInstanceOf(SVGElement);
   });
+
+  it('TextUtil.toSvgExport preserves rich marks and list order as tspans', () => {
+    const shape = {
+      id: sid('text:rich-export'), type: 'text', x: 0, y: 0, index: 'a1', rotation: 0, meta: {},
+      props: {
+        ...textUtil.getDefaultProps(),
+        text: 'Bold link\n1. Code',
+        richText: {
+          format: 'beskar-canvas-rich-text', version: 1, profile: 'text',
+          doc: { type: 'doc', content: [
+            { type: 'paragraph', content: [
+              { type: 'text', text: 'Bold', marks: [{ type: 'bold' }, { type: 'highlight', attrs: { color: '#fff3a3' } }] },
+              { type: 'text', text: ' link', marks: [{ type: 'link', attrs: { href: 'https://example.com/' } }] },
+            ] },
+            { type: 'orderedList', content: [{ type: 'listItem', content: [{ type: 'paragraph', content: [
+              { type: 'text', text: 'Code', marks: [{ type: 'code' }, { type: 'italic' }] },
+            ] }] }] },
+          ] },
+        },
+      },
+    };
+    const svg = textUtil.toSvgExport(shape as any).outerHTML;
+    expect(svg).toContain('font-weight="700"');
+    expect(svg).toContain('font-style="italic"');
+    expect(svg).toContain('text-decoration="underline"');
+    expect(svg).toContain('paint-order="stroke"');
+    expect(svg).toContain('1. ');
+  });
+
+  it('TextUtil.toSvgExport wraps fixed-width rich runs without dropping marks', () => {
+    const shape = {
+      id: sid('text:wrapped-export'), type: 'text', x: 0, y: 0, index: 'a1', rotation: 0, meta: {},
+      props: {
+        ...textUtil.getDefaultProps(),
+        text: 'Bold words wrap here',
+        w: 48,
+        sizeMode: 'fixed-width',
+        richText: {
+          format: 'beskar-canvas-rich-text', version: 1, profile: 'text',
+          doc: { type: 'doc', content: [{ type: 'paragraph', content: [
+            { type: 'text', text: 'Bold words wrap here', marks: [{ type: 'bold' }] },
+          ] }] },
+        },
+      },
+    };
+    const exportElement = textUtil.toSvgExport(shape as any);
+    const lines = exportElement.querySelectorAll('text > tspan');
+    expect(lines.length).toBeGreaterThan(1);
+    expect(Array.from(lines).every(line => line.querySelector('[font-weight="700"]'))).toBe(true);
+    expect(Array.from(lines).map(line => line.textContent).join('').replace(/\s/g, ''))
+      .toBe('Boldwordswraphere');
+  });
+
+  it('TextUtil scales standalone text proportionally without enabling wrapping', () => {
+    const initial = {
+      id: sid('text:scale'), type: 'text', x: 10, y: 20, index: 'a1', rotation: 0, meta: {},
+      props: { ...textUtil.getDefaultProps(), text: 'Scale me', w: 100, h: 24 },
+    };
+    const resized = textUtil.onResize(initial, {
+      handle: 'e',
+      scaleX: 2,
+      scaleY: 2,
+      initialShape: initial,
+      initialBounds: { minX: 0, minY: 0, maxX: 100, maxY: 24, w: 100, h: 24 },
+      newBounds: { minX: 0, minY: 0, maxX: 200, maxY: 48, w: 200, h: 48 },
+    });
+
+    expect(resized.props).toMatchObject({ w: 200, h: 48, scale: 2, sizeMode: 'auto' });
+    const descriptor = textUtil.getRichTextDescriptor({
+      ...initial,
+      props: { ...initial.props, ...(resized.props as typeof initial.props) },
+    });
+    expect(descriptor?.fontSize).toBe(32);
+  });
 });
 
 // ─────────────────────────────────────────────────────────────
@@ -202,6 +276,9 @@ describe('T2.3-05: getDefaultProps()', () => {
     const p = textUtil.getDefaultProps();
     expect(p.fontSize).toBe('md');
     expect(p.text).toBe('');
+    expect(p.opacity).toBe(1);
+    expect(p.scale).toBe(1);
+    expect(p.sizeMode).toBe('auto');
   });
 });
 
@@ -252,14 +329,14 @@ describe('T2.3-06: store.put with invalid props throws; store unchanged', () => 
 // Additional: migrations currentVersion === 1 on all three
 // ─────────────────────────────────────────────────────────────
 
-describe('All three utils have static migrations with currentVersion: Box 2, Text/Frame 1', () => {
+describe('built-in utils expose their current schema versions', () => {
   it('BoxUtil.migrations.currentVersion === 2', () => {
     expect(BoxUtil.migrations?.currentVersion).toBe(2);
   });
-  it('TextUtil.migrations.currentVersion === 3', () => {
-    expect(TextUtil.migrations?.currentVersion).toBe(3);
+  it('TextUtil.migrations.currentVersion === 6', () => {
+    expect(TextUtil.migrations?.currentVersion).toBe(6);
   });
-  it('FrameUtil.migrations.currentVersion === 1', () => {
-    expect(FrameUtil.migrations?.currentVersion).toBe(1);
+  it('FrameUtil.migrations.currentVersion === 3', () => {
+    expect(FrameUtil.migrations?.currentVersion).toBe(3);
   });
 });

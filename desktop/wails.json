@@ -1,0 +1,16 @@
+{
+  "name": "Teddox",
+  "outputfilename": "teddox",
+  "frontend": {
+    "dir": "../ui",
+    "devCommand": "npm run dev:desktop",
+    "buildCommand": "npm run build:desktop",
+    "buildDir": "dist"
+  },
+  "platforms": [
+    "darwin/amd64",
+    "darwin/arm64",
+    "windows/amd64",
+    "linux/amd64"
+  ]
+}

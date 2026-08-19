@@ -3,25 +3,25 @@
  *
  * static props    : w, h, cornerRadius, color, label, etc.
  * static migrations: v2
- * getGeometry()   : AABB from (x, y, w, h)
+ * getGeometry()   : local rectangle from (0, 0, w, h)
  * hitTestPoint()  : AABB (inherited default)
  * canContain()    : false (override in FrameUtil)
  * toSvg()         : <rect> with optional rx for corner radius
  */
 
-import { ShapeUtil } from './ShapeUtil';
-import { T } from '../validators';
-import { defineMigrations } from '../migrations';
-import { makeBox } from '../types';
-import type { GlideShape } from '../types';
-import { Geometry2d, Rectangle2d } from '../geometry';
+import { ShapeUtil } from './ShapeUtil.js';
+import { T } from '../validators.js';
+import { defineMigrations } from '../migrations.js';
+import { makeBox } from '../types.js';
+import type { GlideShape } from '../types.js';
+import { Geometry2d, Rectangle2d } from '../geometry/index.js';
 import {
   StyleValidators, STROKE_WIDTHS, STROKE_DASH_ARRAYS,
   svgFill, resolveColor, inlinePatternDefs, createTextForeignObjectForExport,
   FONT_FAMILIES, FONT_SIZES,
   type FillStyle, type StrokeStyle, type SizeStyle, type FontSize,
   type TextAlign, type Font, type LabelProps,
-} from '../styles';
+} from '../styles.js';
 
 export interface BoxProps {
   [key: string]: unknown;

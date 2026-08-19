@@ -27,6 +27,9 @@ describe('createGlideboardEditorInstance', () => {
 
     editor.setCurrentTool('arrow');
     expect(editor.currentToolId.peek()).toBe('arrow');
+
+    editor.setCurrentTool('asset');
+    expect(editor.currentToolId.peek()).toBe('asset');
   });
 
   it('creates a bound arrow connection when dragged between two boxes', () => {
@@ -56,7 +59,7 @@ describe('createGlideboardEditorInstance', () => {
       expect.objectContaining({
         fromId: 'box:a',
         toId: 'box:b',
-        routeStyle: 'curve',
+        routeStyle: 'ortho',
       }),
     ]);
   });

@@ -381,6 +381,25 @@ func GetBeskarUser(zitadelId string) (string, error) {
 
 func GetUserInfo(ctx context.Context) (UserInfo, error) {
 	var user UserInfo
+
+	// Check for Bearer token claims first (desktop app flow)
+	if claims, ok := ctx.Value("claims").(Claims); ok && claims.Subject != "" {
+		user.Id = claims.Subject
+		user.Email = claims.Email
+		user.IsVerified = claims.EmailVerified
+		user.Name = claims.Name
+		user.Username = claims.Username
+
+		id, err := GetBeskarUser(user.Id)
+		if err != nil {
+			Logger.Error(err.Error())
+			return user, err
+		}
+		user.AId = id
+		return user, nil
+	}
+
+	// Fallback to Cookie session path (web app flow)
 	if !authentication.IsAuthenticated(ctx) {
 		return user, errors.New("not authenticated")
 	}

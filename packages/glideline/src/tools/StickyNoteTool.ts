@@ -11,10 +11,9 @@
  * The demo layer's InlineEditor handles the actual text input.
  */
 
-import { StateNode } from '../state-node';
-import type { PointerDownEvent } from '../state-node';
-import type { ShapeId } from '../types';
-import { sid } from '../types';
+import { StateNode } from '../state-node.js';
+import type { PointerDownEvent } from '../state-node.js';
+import type { ShapeId } from '../types.js';
 
 // ─────────────────────────────────────────────────────────────
 // Idle
@@ -36,17 +35,16 @@ class Idle extends StateNode {
     }
 
     // Place a new sticky note centred on click
-    const newId: ShapeId = sid(`sticky-${Date.now()}`);
+    const newId: ShapeId = this.editor.createShapeId('sticky-note');
     const W = 200;
     const H = 200;
 
-    this.editor.history.batch('Create Sticky Note', () => {
+    this.editor.batch('Create Sticky Note', () => {
       this.editor.createShape({
         id:       newId,
         type:     'sticky-note',
         x:        e.point.x - W / 2,
         y:        e.point.y - H / 2,
-        index:    'a1',
         rotation: 0,
         meta:     {},
         props: {

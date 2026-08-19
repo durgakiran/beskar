@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
-import { wbEditor } from './editor';
-import { wbTheme } from './theme';
+import { useGlideboardController } from './GlideboardContext.js';
+import { wbTheme } from './theme.js';
 
 interface ContextMenuProps {
   position: { x: number; y: number } | null;
@@ -8,6 +8,8 @@ interface ContextMenuProps {
 }
 
 export function ContextMenu({ position, onClose }: ContextMenuProps) {
+  const controller = useGlideboardController();
+  const editor = controller.editor;
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -23,18 +25,25 @@ export function ContextMenu({ position, onClose }: ContextMenuProps) {
 
   if (!position) return null;
 
-  const selectedIds = wbEditor.getSelectedShapeIds();
+  const selectedIds = editor.getSelectedShapeIds();
   const hasSelection = selectedIds.length > 0;
+  const selectedShapes = selectedIds.map(id => editor.getShape(id)).filter(Boolean);
+  const canGroup = selectedShapes.length >= 2
+    && selectedShapes.every(shape => shape!.parentId === selectedShapes[0]!.parentId);
+  const allGroups = selectedShapes.length > 0 && selectedShapes.every(shape => shape!.type === 'group');
+  const allFrames = selectedShapes.length > 0 && selectedShapes.every(shape => shape!.type === 'frame');
+  const allLocked = selectedShapes.length > 0 && selectedShapes.every(shape => shape!.isLocked);
+  const allHidden = selectedShapes.length > 0 && selectedShapes.every(shape => shape!.isHidden);
 
   const handlePaste = () => {
-    const canvas = document.getElementById('wb-canvas');
+    const canvas = controller.getCanvasElement();
     if (!canvas) return;
     const rect = canvas.getBoundingClientRect();
-    const pagePoint = wbEditor.screenToPage({
+    const pagePoint = editor.screenToPage({
       x: position.x - rect.left,
       y: position.y - rect.top,
     });
-    wbEditor.paste(pagePoint);
+    editor.paste(pagePoint);
     onClose();
   };
 
@@ -59,16 +68,38 @@ export function ContextMenu({ position, onClose }: ContextMenuProps) {
       }}
       onContextMenu={event => event.preventDefault()}
     >
-      <MenuItem label="Copy" shortcut="Cmd+C" disabled={!hasSelection} onClick={() => { wbEditor.copy(selectedIds); onClose(); }} />
+      <MenuItem label="Copy" shortcut="Cmd+C" disabled={!hasSelection} onClick={() => { editor.copy(selectedIds); onClose(); }} />
       <MenuItem label="Paste" shortcut="Cmd+V" disabled={false} onClick={handlePaste} />
-      <MenuItem label="Duplicate" shortcut="Cmd+D" disabled={!hasSelection} onClick={() => { wbEditor.duplicateShapes(selectedIds, { x: 20, y: 20 }); onClose(); }} />
+      <MenuItem label="Duplicate" shortcut="Cmd+D" disabled={!hasSelection} onClick={() => { editor.duplicateShapes(selectedIds, { x: 20, y: 20 }); onClose(); }} />
       <div style={{ height: 1, background: wbTheme.border, margin: '6px 0' }} />
-      <MenuItem label="Bring to front" shortcut="Cmd+Shift+]" disabled={!hasSelection} onClick={() => { wbEditor.reorderShapes(selectedIds, 'front'); onClose(); }} />
-      <MenuItem label="Bring forward" shortcut="Cmd+]" disabled={!hasSelection} onClick={() => { wbEditor.reorderShapes(selectedIds, 'forward'); onClose(); }} />
-      <MenuItem label="Send backward" shortcut="Cmd+[" disabled={!hasSelection} onClick={() => { wbEditor.reorderShapes(selectedIds, 'backward'); onClose(); }} />
-      <MenuItem label="Send to back" shortcut="Cmd+Shift+[" disabled={!hasSelection} onClick={() => { wbEditor.reorderShapes(selectedIds, 'back'); onClose(); }} />
+      <MenuItem label="Group" shortcut="Cmd+G" disabled={!canGroup} onClick={() => { editor.groupShapes(selectedIds); onClose(); }} />
+      <MenuItem label="Ungroup" shortcut="Cmd+Shift+G" disabled={!allGroups} onClick={() => { editor.ungroupShapes(selectedIds); onClose(); }} />
+      <MenuItem label="Remove Frame, Keep Content" shortcut="" disabled={!allFrames} onClick={() => { editor.removeFramesKeepContent(selectedIds); onClose(); }} />
+      <MenuItem label={allLocked ? 'Unlock' : 'Lock'} shortcut="Cmd+L" disabled={!hasSelection} onClick={() => { editor.setLocked(selectedIds, !allLocked); onClose(); }} />
+      <MenuItem label={allHidden ? 'Show' : 'Hide'} shortcut="Cmd+Shift+H" disabled={!hasSelection} onClick={() => { editor.setHidden(selectedIds, !allHidden); onClose(); }} />
       <div style={{ height: 1, background: wbTheme.border, margin: '6px 0' }} />
-      <MenuItem label="Delete" shortcut="Backspace" disabled={!hasSelection} color={wbTheme.dangerText} onClick={() => { wbEditor.deleteShapes(selectedIds); onClose(); }} />
+      <MenuItem label="Bring to front" shortcut="Cmd+Shift+]" disabled={!hasSelection} onClick={() => { editor.reorderShapes(selectedIds, 'front'); onClose(); }} />
+      <MenuItem label="Bring forward" shortcut="Cmd+]" disabled={!hasSelection} onClick={() => { editor.reorderShapes(selectedIds, 'forward'); onClose(); }} />
+      <MenuItem label="Send backward" shortcut="Cmd+[" disabled={!hasSelection} onClick={() => { editor.reorderShapes(selectedIds, 'backward'); onClose(); }} />
+      <MenuItem label="Send to back" shortcut="Cmd+Shift+[" disabled={!hasSelection} onClick={() => { editor.reorderShapes(selectedIds, 'back'); onClose(); }} />
+      <div style={{ height: 1, background: wbTheme.border, margin: '6px 0' }} />
+      <MenuItem label="Align left" shortcut="" disabled={selectedIds.length < 2} onClick={() => { editor.alignShapes(selectedIds, 'left'); onClose(); }} />
+      <MenuItem label="Align top" shortcut="" disabled={selectedIds.length < 2} onClick={() => { editor.alignShapes(selectedIds, 'top'); onClose(); }} />
+      <MenuItem label="Distribute horizontally" shortcut="" disabled={selectedIds.length < 3} onClick={() => { editor.distributeShapes(selectedIds, 'horizontal'); onClose(); }} />
+      <MenuItem label="Distribute vertically" shortcut="" disabled={selectedIds.length < 3} onClick={() => { editor.distributeShapes(selectedIds, 'vertical'); onClose(); }} />
+      <MenuItem label="Flip horizontally" shortcut="" disabled={selectedIds.length < 1} onClick={() => { editor.flipShapes(selectedIds, 'horizontal'); onClose(); }} />
+      <MenuItem label="Flip vertically" shortcut="" disabled={selectedIds.length < 1} onClick={() => { editor.flipShapes(selectedIds, 'vertical'); onClose(); }} />
+      <div style={{ height: 1, background: wbTheme.border, margin: '6px 0' }} />
+      <MenuItem
+        label="Delete"
+        shortcut="Backspace"
+        disabled={!hasSelection}
+        color={wbTheme.dangerText}
+        onClick={() => {
+          editor.batch('Delete Shapes', () => editor.deleteShapes(selectedIds));
+          onClose();
+        }}
+      />
     </div>
   );
 }

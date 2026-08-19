@@ -36,6 +36,7 @@ export default function Page() {
     const { page, spaceId } = useParams() as any;
     const workerRef = useRef<Worker | null>(null);
     const [workerInitiated, setWorkerInitiated] = useState(false);
+    const [workerError, setWorkerError] = useState<string | null>(null);
     const [content, setContent] = useState();
     const [isSidePanelOpen, setIsSidePanelOpen] = useState(false);
     const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -89,6 +90,9 @@ export default function Page() {
                     break;
                 case "editorData":
                     setContent(JSON.parse(e.data.data));
+                    break;
+                case "error":
+                    setWorkerError(e.data.error);
                     break;
                 default:
                     break;
@@ -167,6 +171,14 @@ export default function Page() {
             />
         );
     }, [commentPresentation, content, isSidePanelOpen, page, spaceId, title, viewData?.document]);
+
+    if (workerError) {
+        return (
+            <Flex align="center" justify="center" p="4" direction="column" gap="4">
+                <Text color="red">Worker Error: {workerError}</Text>
+            </Flex>
+        );
+    }
 
     if (loadingMetadata || isPageLoading) {
         return (

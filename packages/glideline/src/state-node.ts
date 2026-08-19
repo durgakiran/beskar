@@ -7,17 +7,17 @@
  * unhandled events bubble up to the parent.
  */
 
-import type { GlideEditor } from './editor';
-import type { Vec2, ShapeId } from './types';
+import type { GlideEditor } from './editor.js';
+import type { Vec2, ShapeId } from './types.js';
 
 // ─────────────────────────────────────────────────────────────
 // Event union
 // ─────────────────────────────────────────────────────────────
 
 export type GlideEvent =
-  | { type: 'pointerDown'; point: Vec2; screenPoint?: Vec2; shiftKey: boolean; target: 'shape' | 'canvas' | 'handle'; shapeId?: ShapeId; handleId?: string }
-  | { type: 'pointerMove'; point: Vec2; screenPoint?: Vec2 }
-  | { type: 'pointerUp';   point: Vec2; screenPoint?: Vec2 }
+  | { type: 'pointerDown'; point: Vec2; screenPoint?: Vec2; shiftKey: boolean; pressure?: number; pointerType?: string; target: 'shape' | 'canvas' | 'handle'; shapeId?: ShapeId; handleId?: string }
+  | { type: 'pointerMove'; point: Vec2; screenPoint?: Vec2; shiftKey?: boolean; altKey?: boolean; pressure?: number; pointerType?: string }
+  | { type: 'pointerUp';   point: Vec2; screenPoint?: Vec2; shiftKey?: boolean; altKey?: boolean; pressure?: number; pointerType?: string }
   | { type: 'keyDown';     key: string }
   | { type: 'doubleClick'; point: Vec2; shapeId?: ShapeId };
 
@@ -45,7 +45,7 @@ export abstract class StateNode {
   editor!: GlideEditor;
 
   /** Parent node (undefined for root tools). */
-  parent?: StateNode;
+  parent: StateNode | undefined;
 
   /** Active child state. Points to `this` for leaf nodes. */
   current!: StateNode;

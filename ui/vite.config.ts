@@ -2,7 +2,7 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   plugins: [react()],
   resolve: {
     alias: {
@@ -14,12 +14,35 @@ export default defineConfig({
       '@/lib/utils':        path.resolve(__dirname, 'app/lib/utils/index.ts'),
       'app':                path.resolve(__dirname, 'app'),
     },
+    dedupe: [
+      '@tiptap/core',
+      '@tiptap/pm',
+      '@tiptap/react',
+      'prosemirror-state',
+      'prosemirror-view',
+      'prosemirror-model',
+      'prosemirror-transform',
+      'y-prosemirror',
+      'react',
+      'react-dom'
+    ],
   },
   server: {
     proxy: {
       '/auth': { target: 'http://localhost:9095', changeOrigin: true },
+      '/api/v1/media': { target: 'http://localhost:9245', changeOrigin: true },
       '/api':  { target: 'http://localhost:9095', changeOrigin: true },
       '/ws':   { target: 'ws://localhost:8086',  ws: true, changeOrigin: true },
     },
   },
-});
+  build: {
+    commonjsOptions: {
+      include: [/node_modules/, /packages\/glideline\/dist/],
+    },
+    rollupOptions: {
+      input: mode === 'desktop'
+        ? { desktop: 'index.desktop.html' }
+        : { main: 'index.html' },
+    },
+  },
+}));

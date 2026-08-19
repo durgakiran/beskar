@@ -10,19 +10,22 @@
     "scripts": {
         "dev": "vite",
         "build": "vite build",
+        "build:desktop": "vite build --config vite.config.ts --mode desktop",
+        "dev:desktop": "vite --config vite.config.ts --mode desktop --host 127.0.0.1",
         "preview": "vite preview",
         "lint": "eslint --ext ts,tsx app src",
         "test": "vitest run",
+        "test:phase3:coverage": "node ../docker/scripts/produce-phase-3-coverage.mjs ui",
         "test:watch": "vitest",
-        "build:workers": "tsc -p tsconfig.worker.json && cp workers/wasm_exec.js public/workers/",
+        "build:workers": "tsc -p tsconfig.worker.json && node -e \"require('fs').copyFileSync('workers/wasm_exec.js', 'public/workers/wasm_exec.js')\"",
         "watch:workers": "tsc -p tsconfig.worker.json --watch"
     },
     "keywords": [],
     "author": "",
     "license": "ISC",
     "dependencies": {
-        "@durgakiran/editor": "0.1.10",
-        "@durgakiran/glideboard": "0.0.5",
+        "@durgakiran/editor": "^0.1.10",
+        "@durgakiran/glideboard": "0.0.12-alpha.1",
         "@floating-ui/react": "^0.26.16",
         "@hocuspocus/provider": "^3.0.8-rc.0",
         "@hocuspocus/transformer": "^3.0.8-rc.0",
@@ -39,6 +42,7 @@
         "@tiptap/react": "3.6.6",
         "@tiptap/y-tiptap": "3.0.0",
         "@types/react-is": "^19.2.0",
+        "@wailsio/runtime": "^3.0.0-alpha.97",
         "clsx": "^2.1.1",
         "install": "^0.13.0",
         "jsonwebtoken": "^9.0.2",
@@ -64,6 +68,7 @@
         "@types/quill": "^2.0.14",
         "@types/react": "^19.0.1",
         "@vitejs/plugin-react": "^4.7.0",
+        "@vitest/coverage-v8": "4.1.7",
         "autoprefixer": "^10.4.18",
         "eslint": "^9.15.0",
         "eslint-config-prettier": "^9.1.0",
@@ -74,7 +79,7 @@
         "prettier": "^3.1.1",
         "tailwindcss": "^3.4.15",
         "typescript": "^5.7.2",
-        "vitest": "^4.1.6"
+        "vitest": "4.1.7"
     },
     "overrides": {
         "@tiptap/core": "3.6.6",

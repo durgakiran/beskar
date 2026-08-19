@@ -1,0 +1,14 @@
+gate_id	status	owner	reviewer	environment	build_digest	procedure	result	verified_at_utc	artifact_url	artifact_sha256	notes
+migration_deployed	required	UNASSIGNED									Liquibase update and schema verification in every rollout environment
+object_store_modes	required	UNASSIGNED									Configured filesystem migration source and S3-compatible runtime mode; include dedupe and restore
+quota_modes	required	UNASSIGNED									Blocking monitor-only disabled and reconciliation modes
+deployed_browser_security	required	UNASSIGNED									CSP malicious corpus in the deployed application and media origin topology
+authorization	required	UNASSIGNED									Board version collaboration publish recovery and media routes
+tenant_isolation	required	UNASSIGNED									Database object storage and signed URL isolation
+encryption	required	UNASSIGNED									TLS and encryption at rest
+backup_restore	required	UNASSIGNED									Backup or PITR retention and a successful restore exercise
+deletion_retention	required	UNASSIGNED									Deletion legal retention and historical asset behavior
+local_recovery_privacy	required	UNASSIGNED									Logout account-removal and shared-device cleanup
+telemetry_redaction	required	UNASSIGNED									Payload text token signed URL and Yjs update redaction
+abuse_controls	required	UNASSIGNED									Upload collaboration save retry and version creation controls
+decoder_isolation_decision	required	UNASSIGNED									Named decision; supplied evidence must describe worker isolation when required

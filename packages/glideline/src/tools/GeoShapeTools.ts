@@ -1,7 +1,7 @@
-import { StateNode } from '../state-node';
-import type { PointerDownEvent, PointerMoveEvent, PointerUpEvent, KeyDownEvent } from '../state-node';
-import type { ShapeId, Vec2 } from '../types';
-import { sid } from '../types';
+import { StateNode } from '../state-node.js';
+import type { PointerDownEvent, PointerMoveEvent, PointerUpEvent, KeyDownEvent } from '../state-node.js';
+import type { ShapeId, Vec2 } from '../types.js';
+import { sid } from '../types.js';
 
 const DRAG_THRESHOLD = 4;
 
@@ -30,7 +30,6 @@ function makeShape(node: StateNode, id: ShapeId, x: number, y: number, w: number
     type: shapeType,
     x: Math.min(x, x + w),
     y: Math.min(y, y + h),
-    index: 'a1',
     rotation: 0,
     meta: {},
     props: {
@@ -79,16 +78,16 @@ class Drawing extends StateNode {
     const w = info.current.x - info.origin.x;
     const h = info.current.y - info.origin.y;
 
-    this.editor.history.batch('Geo Shape Preview', () => {
+    this.editor.batch('Geo Shape Preview', () => {
       this.editor.createShape(makeShape(this, getPreviewId(this), info.origin.x, info.origin.y, w, h));
-    }, { history: 'ignore' });
+    }, { history: 'ignore', scope: 'ephemeral' });
   }
 
   override onPointerMove(e: PointerMoveEvent): void {
     const w = e.point.x - this._origin.x;
     const h = e.point.y - this._origin.y;
 
-    this.editor.history.batch('Geo Shape Preview Update', () => {
+    this.editor.batch('Geo Shape Preview Update', () => {
       this.editor.updateShape(getPreviewId(this), {
         x: Math.min(this._origin.x, this._origin.x + w),
         y: Math.min(this._origin.y, this._origin.y + h),
@@ -97,20 +96,20 @@ class Drawing extends StateNode {
           h: Math.max(1, Math.abs(h)),
         },
       });
-    }, { history: 'ignore' });
+    }, { history: 'ignore', scope: 'ephemeral' });
   }
 
   override onPointerUp(e: PointerUpEvent): void {
     const w = e.point.x - this._origin.x;
     const h = e.point.y - this._origin.y;
     const shapeType = getToolClass(this).shapeType;
-    const finalId = sid(`${shapeType}-${Date.now()}`);
+    const finalId = this.editor.createShapeId(shapeType);
 
-    this.editor.history.batch('Geo Shape Preview Cleanup', () => {
+    this.editor.batch('Geo Shape Preview Cleanup', () => {
       this.editor.deleteShapes([getPreviewId(this)]);
-    }, { history: 'ignore' });
+    }, { history: 'ignore', scope: 'ephemeral' });
 
-    this.editor.history.batch(`Create ${shapeType}`, () => {
+    this.editor.batch(`Create ${shapeType}`, () => {
       this.editor.createShape(makeShape(this, finalId, this._origin.x, this._origin.y, w, h));
     });
 
@@ -121,9 +120,9 @@ class Drawing extends StateNode {
 
   override onKeyDown(e: KeyDownEvent): void {
     if (e.key === 'Escape') {
-      this.editor.history.batch('Geo Shape Preview Cleanup', () => {
+      this.editor.batch('Geo Shape Preview Cleanup', () => {
         this.editor.deleteShapes([getPreviewId(this)]);
-      }, { history: 'ignore' });
+    }, { history: 'ignore', scope: 'ephemeral' });
       this.parent!.transition('idle');
     }
   }
@@ -152,4 +151,39 @@ export class HexagonTool extends BaseGeoShapeTool {
 export class StarTool extends BaseGeoShapeTool {
   static override readonly id = 'star';
   static override readonly shapeType = 'star';
+}
+
+export class RoundedRectTool extends BaseGeoShapeTool {
+  static override readonly id = 'rounded-rect';
+  static override readonly shapeType = 'rounded-rect';
+}
+
+export class ParallelogramTool extends BaseGeoShapeTool {
+  static override readonly id = 'parallelogram';
+  static override readonly shapeType = 'parallelogram';
+}
+
+export class ChevronTool extends BaseGeoShapeTool {
+  static override readonly id = 'chevron';
+  static override readonly shapeType = 'chevron';
+}
+
+export class DocumentTool extends BaseGeoShapeTool {
+  static override readonly id = 'document';
+  static override readonly shapeType = 'document';
+}
+
+export class CylinderTool extends BaseGeoShapeTool {
+  static override readonly id = 'cylinder';
+  static override readonly shapeType = 'cylinder';
+}
+
+export class NoteTool extends BaseGeoShapeTool {
+  static override readonly id = 'note';
+  static override readonly shapeType = 'note';
+}
+
+export class CalloutTool extends BaseGeoShapeTool {
+  static override readonly id = 'callout';
+  static override readonly shapeType = 'callout';
 }

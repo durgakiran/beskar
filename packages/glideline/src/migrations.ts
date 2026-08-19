@@ -6,7 +6,7 @@
  * is better than silent corruption).
  */
 
-import type { GlideMigrations, GlideMigrator, AnyRecord } from './types';
+import type { GlideMigrations, GlideMigrator, AnyRecord } from './types.js';
 
 export type { GlideMigrations, GlideMigrator };
 

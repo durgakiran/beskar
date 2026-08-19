@@ -15,10 +15,10 @@
  * not an undoable action — it only changes the viewport, not shape data.
  */
 
-import { StateNode } from '../state-node';
-import type { PointerDownEvent, PointerMoveEvent, PointerUpEvent, KeyDownEvent } from '../state-node';
-import type { Vec2 } from '../types';
-import type { CameraState } from '../camera';
+import { StateNode } from '../state-node.js';
+import type { PointerDownEvent, PointerMoveEvent, PointerUpEvent, KeyDownEvent } from '../state-node.js';
+import type { Vec2 } from '../types.js';
+import type { CameraState } from '../camera.js';
 
 // ─────────────────────────────────────────────────────────────
 // Idle
@@ -42,7 +42,7 @@ class Panning extends StateNode {
   /** Page-space pointer position when pan started. */
   private _startPagePt!: Vec2;
   /** Screen-space pointer position when pan started. */
-  private _startScreenPt?: Vec2;
+  private _startScreenPt: Vec2 | undefined;
   /** Camera state at pan start. */
   private _startCamera!: CameraState;
 

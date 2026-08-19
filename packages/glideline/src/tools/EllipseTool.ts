@@ -8,10 +8,10 @@
  * On pointerUp: commits shape, switches to select tool, selects the new shape.
  */
 
-import { StateNode } from '../state-node';
-import type { PointerDownEvent, PointerMoveEvent, PointerUpEvent, KeyDownEvent } from '../state-node';
-import type { ShapeId, Vec2 } from '../types';
-import { sid } from '../types';
+import { StateNode } from '../state-node.js';
+import type { PointerDownEvent, PointerMoveEvent, PointerUpEvent, KeyDownEvent } from '../state-node.js';
+import type { ShapeId, Vec2 } from '../types.js';
+import { sid } from '../types.js';
 
 const DRAG_THRESHOLD = 4;
 const PREVIEW_ID = sid('__ellipse-preview__');
@@ -26,7 +26,6 @@ function makeEllipseShape(id: ShapeId, x: number, y: number, w: number, h: numbe
     type:     'ellipse',
     x:        Math.min(x, x + w),
     y:        Math.min(y, y + h),
-    index:    'a1',
     rotation: 0,
     meta:     {},
     props: {
@@ -88,9 +87,9 @@ class Drawing extends StateNode {
 
     const w = info.current.x - info.origin.x;
     const h = info.current.y - info.origin.y;
-    this.editor.history.batch('Ellipse Preview', () => {
+    this.editor.batch('Ellipse Preview', () => {
       this.editor.createShape(makeEllipseShape(PREVIEW_ID, info.origin.x, info.origin.y, w, h));
-    }, { history: 'ignore' });
+    }, { history: 'ignore', scope: 'ephemeral' });
   }
 
   override onPointerMove(e: PointerMoveEvent): void {
@@ -105,7 +104,7 @@ class Drawing extends StateNode {
       h = h < 0 ? -s : s;
     }
 
-    this.editor.history.batch('Ellipse Preview Update', () => {
+    this.editor.batch('Ellipse Preview Update', () => {
       this.editor.updateShape(PREVIEW_ID, {
         x:    Math.min(this._origin.x, this._origin.x + w),
         y:    Math.min(this._origin.y, this._origin.y + h),
@@ -114,7 +113,7 @@ class Drawing extends StateNode {
           h:           Math.max(1, Math.abs(h)),
         },
       });
-    }, { history: 'ignore' });
+    }, { history: 'ignore', scope: 'ephemeral' });
   }
 
   override onPointerUp(e: PointerUpEvent): void {
@@ -127,13 +126,13 @@ class Drawing extends StateNode {
     }
 
     // Remove preview
-    this.editor.history.batch('Ellipse Preview Cleanup', () => {
+    this.editor.batch('Ellipse Preview Cleanup', () => {
       this.editor.deleteShapes([PREVIEW_ID]);
-    }, { history: 'ignore' });
+    }, { history: 'ignore', scope: 'ephemeral' });
 
     // Commit final shape
-    const finalId = sid(`ellipse-${Date.now()}`);
-    this.editor.history.batch('Create Ellipse', () => {
+    const finalId = this.editor.createShapeId('ellipse');
+    this.editor.batch('Create Ellipse', () => {
       this.editor.createShape(makeEllipseShape(finalId, this._origin.x, this._origin.y, w, h));
     });
 
@@ -146,9 +145,9 @@ class Drawing extends StateNode {
 
   override onKeyDown(e: KeyDownEvent): void {
     if (e.key === 'Escape') {
-      this.editor.history.batch('Ellipse Preview Cleanup', () => {
+      this.editor.batch('Ellipse Preview Cleanup', () => {
         this.editor.deleteShapes([PREVIEW_ID]);
-      }, { history: 'ignore' });
+    }, { history: 'ignore', scope: 'ephemeral' });
       this.parent!.transition('idle');
     }
   }

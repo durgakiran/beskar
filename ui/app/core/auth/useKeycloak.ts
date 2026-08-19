@@ -12,3 +12,17 @@ export function useLogout() {
 
     return callbackFn;
 }
+
+export function useDesktopLogout() {
+    const callbackFn = useCallback(async () => {
+        try {
+            // @ts-ignore
+            const { Logout } = await import('../../../wailsjs/beskar/desktop/auth/authservice');
+            await Logout();
+        } catch (error) {
+            console.log(error);
+        }
+    }, []);
+
+    return callbackFn;
+}

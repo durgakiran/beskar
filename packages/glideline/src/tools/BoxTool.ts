@@ -8,10 +8,10 @@
  * Drag threshold: 4px.
  */
 
-import { StateNode } from '../state-node';
-import type { PointerDownEvent, PointerMoveEvent, PointerUpEvent, KeyDownEvent } from '../state-node';
-import type { ShapeId, Vec2 } from '../types';
-import { sid } from '../types';
+import { StateNode } from '../state-node.js';
+import type { PointerDownEvent, PointerMoveEvent, PointerUpEvent, KeyDownEvent } from '../state-node.js';
+import type { ShapeId, Vec2 } from '../types.js';
+import { sid } from '../types.js';
 
 const DRAG_THRESHOLD = 4;
 const PREVIEW_ID = sid('__box-preview__');
@@ -26,7 +26,6 @@ function makeBoxShape(id: ShapeId, x: number, y: number, w: number, h: number) {
     type: 'box',
     x: Math.min(x, x + w),
     y: Math.min(y, y + h),
-    index: 'a1',
     rotation: 0,
     meta: {},
     props: {
@@ -89,9 +88,9 @@ class Drawing extends StateNode {
     const { x, y } = info.origin;
     const w = info.current.x - x;
     const h = info.current.y - y;
-    this.editor.history.batch('Preview', () => {
+    this.editor.batch('Preview', () => {
       this.editor.createShape(makeBoxShape(PREVIEW_ID, x, y, w, h));
-    }, { history: 'ignore' });
+    }, { history: 'ignore', scope: 'ephemeral' });
   }
 
   override onPointerMove(e: PointerMoveEvent): void {
@@ -100,7 +99,7 @@ class Drawing extends StateNode {
     const w = e.point.x - x;
     const h = e.point.y - y;
 
-    this.editor.history.batch('Preview Update', () => {
+    this.editor.batch('Preview Update', () => {
       this.editor.updateShape(PREVIEW_ID, {
         x: Math.min(x, x + w),
         y: Math.min(y, y + h),
@@ -109,7 +108,7 @@ class Drawing extends StateNode {
           h: Math.abs(h),
         },
       });
-    }, { history: 'ignore' });
+    }, { history: 'ignore', scope: 'ephemeral' });
   }
 
   override onPointerUp(e: PointerUpEvent): void {
@@ -119,13 +118,13 @@ class Drawing extends StateNode {
     const h = e.point.y - y;
 
     // Remove preview without history
-    this.editor.history.batch('Preview Cleanup', () => {
+    this.editor.batch('Preview Cleanup', () => {
       this.editor.deleteShapes([PREVIEW_ID]);
-    }, { history: 'ignore' });
+    }, { history: 'ignore', scope: 'ephemeral' });
 
     // Commit final shape as a single undo entry
-    const finalId = sid(`box-${Date.now()}`);
-    this.editor.history.batch('Create Box', () => {
+    const finalId = this.editor.createShapeId('box');
+    this.editor.batch('Create Box', () => {
       this.editor.createShape(makeBoxShape(finalId, x, y, w, h));
     });
 
@@ -137,9 +136,9 @@ class Drawing extends StateNode {
   override onKeyDown(e: KeyDownEvent): void {
     if (e.key === 'Escape') {
       // Delete preview without history
-      this.editor.history.batch('Preview Cleanup', () => {
+      this.editor.batch('Preview Cleanup', () => {
         this.editor.deleteShapes([PREVIEW_ID]);
-      }, { history: 'ignore' });
+    }, { history: 'ignore', scope: 'ephemeral' });
 
       this.parent!.transition('idle');
     }

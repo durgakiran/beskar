@@ -136,6 +136,9 @@ export function TipTap({
 
     // Image upload handler for the editor
     const imageHandler: ImageAPIHandler = {
+        getImageUrl: (url: string) => {
+            return url.replace(/^[^?#]*?\/api\/v1\/media\//, '/api/v1/media/');
+        },
         uploadImage: async (file: File) => {
             try {
                 if (!Number.isFinite(id) || id < 1) {
@@ -546,6 +549,20 @@ export function TipTap({
         setEditorContext(editor);
     }, [editor, setEditorContext]);
 
+    const sanitizedContent = useMemo(() => {
+        if (!content) return content;
+        try {
+            // A foolproof way to strip out absolute domains from ANY image/media URLs
+            // inside the TipTap document (including nested attrs, custom extensions, etc).
+            let jsonStr = JSON.stringify(content);
+            jsonStr = jsonStr.replace(/"[^"]*?\/api\/v1\/media\//g, '"/api/v1/media/');
+            return JSON.parse(jsonStr);
+        } catch (e) {
+            console.error("Failed to sanitize content", e);
+            return content;
+        }
+    }, [content]);
+
     return (
         <>
             <div ref={menuContainerRef} className="beskar-editor">
@@ -561,7 +578,7 @@ export function TipTap({
             )} */}
                 {editable ? (
                     <EditorBeskar
-                        initialContent={content}
+                        initialContent={sanitizedContent}
                         imageHandler={imageHandler}
                         attachmentHandler={attachmentHandler}
                         internalResourceHandler={internalResourceHandler}
@@ -580,7 +597,7 @@ export function TipTap({
                     />
                 ) : (
                     <EditorBeskar
-                        initialContent={content}
+                        initialContent={sanitizedContent}
                         imageHandler={imageHandler}
                         attachmentHandler={attachmentHandler}
                         internalResourceHandler={internalResourceHandler}

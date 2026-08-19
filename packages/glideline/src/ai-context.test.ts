@@ -122,6 +122,7 @@ describe('Phase Infinity AI context', () => {
       y: expect.any(Number),
       w: expect.any(Number),
       h: expect.any(Number),
+      rotation: expect.any(Number),
     }));
   });
 

@@ -2,8 +2,8 @@ import { test, expect } from '@playwright/test';
 
 test('Debug arrow geometry', async ({ page }) => {
   await page.goto('/#whiteboard');
-  await page.waitForSelector('#wb-canvas', { timeout: 10_000 });
-  const canvas = page.locator('#wb-canvas');
+  await page.waitForSelector('[data-glideboard-role="canvas"]', { timeout: 10_000 });
+  const canvas = page.locator('[data-glideboard-role="canvas"]');
   const box = await canvas.boundingBox();
 
   // Draw Box 1

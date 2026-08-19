@@ -4,7 +4,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { createEditor } from './editor';
+import { createEditor, getMutableStoreForTesting } from './editor';
 import { ArrowPlugin, ArrowUtil } from './shapes/ArrowUtil';
 import { BoxUtil } from './shapes/BoxUtil';
 import { ArrowTool } from './tools/ArrowTool';
@@ -54,7 +54,7 @@ describe('T4.4-01: terminal point updated when target box moves', () => {
   it('end.point becomes center of box at new position', () => {
     const ed = makeEditor();
     // Box at (100,100) size 200×100 → center = (200,150)
-    ed.store.put([box('boxA', 100, 100, 200, 100), arrow('arrA')]);
+    getMutableStoreForTesting(ed).put([box('boxA', 100, 100, 200, 100), arrow('arrA')]);
     ed.createBinding(binding('bA', 'arrA', 'boxA') as unknown as AnyRecord);
 
     // Move box to (200,200) → center = (300,250)
@@ -70,7 +70,7 @@ describe('T4.4-01: terminal point updated when target box moves', () => {
 describe('T4.4-02: fromEdge derived from normalizedAnchor after move', () => {
   it('anchor {x:1.0, y:0.5} → fromEdge === "right"', () => {
     const ed = makeEditor();
-    ed.store.put([box('boxB', 0, 0, 100, 100), arrow('arrB')]);
+    getMutableStoreForTesting(ed).put([box('boxB', 0, 0, 100, 100), arrow('arrB')]);
     const bnd = {
       ...binding('bB', 'arrB', 'boxB'),
       props: { terminal: 'end', normalizedAnchor: { x: 1.0, y: 0.5 }, fromEdge: 'left' },
@@ -88,11 +88,11 @@ describe('T4.4-02: fromEdge derived from normalizedAnchor after move', () => {
 describe('T4.4-03: detach on target delete', () => {
   it('arrow end.boundShapeId becomes null', () => {
     const ed = makeEditor();
-    ed.store.put([box('boxC', 0, 0, 100, 100), arrow('arrC')]);
+    getMutableStoreForTesting(ed).put([box('boxC', 0, 0, 100, 100), arrow('arrC')]);
     ed.createBinding(binding('bC', 'arrC', 'boxC') as unknown as AnyRecord);
     // Manually mark boundShapeId
     const arr = ed.getShape<ArrowShape>(sid('arrC'))!;
-    ed.store.put([{
+    getMutableStoreForTesting(ed).put([{
       ...arr,
       props: { ...arr.props, end: { ...arr.props.end, boundShapeId: sid('boxC') } },
     }]);
@@ -108,7 +108,7 @@ describe('T4.4-03: detach on target delete', () => {
 describe('T4.4-04: binding removed when target deleted', () => {
   it('getBindingsToShape returns empty after target delete', () => {
     const ed = makeEditor();
-    ed.store.put([box('boxD', 0, 0, 100, 100), arrow('arrD')]);
+    getMutableStoreForTesting(ed).put([box('boxD', 0, 0, 100, 100), arrow('arrD')]);
     ed.createBinding(binding('bD', 'arrD', 'boxD') as unknown as AnyRecord);
 
     ed.deleteShapes([sid('boxD')]);
@@ -122,7 +122,7 @@ describe('T4.4-04: binding removed when target deleted', () => {
 describe('T4.4-05: ArrowTool creates ArrowShape + 2 bindings', () => {
   it('click box A → drag → release on box B creates arrow + 2 bindings', () => {
     const ed = makeEditor();
-    ed.store.put([
+    getMutableStoreForTesting(ed).put([
       box('bx1', 0, 0, 100, 80),
       box('bx2', 300, 0, 100, 80),
     ]);
@@ -147,16 +147,36 @@ describe('T4.4-05: ArrowTool creates ArrowShape + 2 bindings', () => {
     expect(arrowCount).toBe(1);
     expect(bindingCount).toBe(2);
   });
+
+  it('creates the arrow and bindings on the active page', () => {
+    const ed = makeEditor();
+    const pageId = ed.createPage('Connectors');
+    const sourceId = ed.createShape(box('page-b-source', 0, 0, 100, 80) as unknown as AnyRecord);
+    const targetId = ed.createShape(box('page-b-target', 300, 0, 100, 80) as unknown as AnyRecord);
+    ed.setCurrentTool('arrow');
+
+    ed.dispatchEvent({ type: 'pointerDown', point: { x: 50, y: 40 }, shiftKey: false, target: 'shape', shapeId: sourceId });
+    ed.dispatchEvent({ type: 'pointerMove', point: { x: 350, y: 40 } });
+    ed.dispatchEvent({ type: 'pointerUp', point: { x: 350, y: 40 } });
+
+    const pageShapes = ed.getShapes();
+    const connector = pageShapes.find(shape => shape.type === 'arrow');
+    expect(connector?.parentId).toBe(pageId);
+    expect(ed.getBindingsFromShape(connector!.id)).toHaveLength(2);
+    expect(ed.getShapePageId(sourceId)).toBe(pageId);
+    expect(ed.getShapePageId(targetId)).toBe(pageId);
+  });
 });
 
 // T4.4-06: Route style switch changes rendered path key
 describe('T4.4-06: routeStyle switch', () => {
   it('updateShape routeStyle:ortho changes the prop', () => {
     const ed = makeEditor();
-    ed.store.put([arrow('arrF')]);
+    getMutableStoreForTesting(ed).put([arrow('arrF')]);
 
     ed.updateShape<ArrowShape>(sid('arrF'), {
       props: {
+        ...new ArrowUtil().getDefaultProps(),
         start: { boundShapeId: null, normalizedAnchor: { x: 0.5, y: 0.5 }, point: { x: 0, y: 0 } },
         end:   { boundShapeId: null, normalizedAnchor: { x: 0.5, y: 0.5 }, point: { x: 100, y: 0 } },
         routeStyle: 'ortho',
@@ -174,7 +194,7 @@ describe('T4.4-07: curved arrow spatial hit testing', () => {
     const ed = makeEditor();
     const curved = arrow('arrCurveHit', { x: 0, y: 0 }, { x: 300, y: 0 });
     curved.props.bend = 0.3;
-    ed.store.put([curved]);
+    getMutableStoreForTesting(ed).put([curved]);
 
     const hits = ed.getShapesAtPoint({ x: 150, y: -52 });
 
@@ -187,7 +207,7 @@ describe('T4.4-08: arrow preset defaults', () => {
     const ed = makeEditor();
     ed.arrowheadStart = 'arrow';
     ed.arrowheadEnd = 'arrow';
-    ed.store.put([
+    getMutableStoreForTesting(ed).put([
       box('bxPreset1', 0, 0, 100, 80),
       box('bxPreset2', 300, 0, 100, 80),
     ]);
@@ -210,7 +230,7 @@ describe('Arrow handle dragging via SelectTool', () => {
   it('drags bend handle to update bend prop', () => {
     const ed = makeEditor();
     ed.setCurrentTool('select');
-    ed.store.put([arrow('arrG', { x: 0, y: 0 }, { x: 100, y: 0 })]);
+    getMutableStoreForTesting(ed).put([arrow('arrG', { x: 0, y: 0 }, { x: 100, y: 0 })]);
     ed.setSelectedShapeIds([sid('arrG')]);
 
     // Handle is at (50, 0). pointerDown there.
@@ -222,16 +242,20 @@ describe('Arrow handle dragging via SelectTool', () => {
 
     const arr = ed.getShape<ArrowShape>(sid('arrG'))!;
     expect(arr.props.bend).toBeCloseTo(-1, 2);
+    expect(ed.history.undoStack[ed.history.undoStack.length - 1]?.label).toBe('Adjust Arrow Bend');
+
+    ed.undo();
+    expect(ed.getShape<ArrowShape>(sid('arrG'))?.props.bend).toBe(0);
   });
 
   it('drags end handle to detach bound shape and delete binding', () => {
     const ed = makeEditor();
     ed.setCurrentTool('select');
-    ed.store.put([box('boxEnd', 200, 200, 100, 100), arrow('arrH', { x: 0, y: 0 }, { x: 250, y: 250 })]);
+    getMutableStoreForTesting(ed).put([box('boxEnd', 200, 200, 100, 100), arrow('arrH', { x: 0, y: 0 }, { x: 250, y: 250 })]);
     
     // Set boundShapeId and create binding
     const arrInit = ed.getShape<ArrowShape>(sid('arrH'))!;
-    ed.store.put([{
+    getMutableStoreForTesting(ed).put([{
       ...arrInit,
       props: {
         ...arrInit.props,
@@ -251,12 +275,17 @@ describe('Arrow handle dragging via SelectTool', () => {
     expect(arr.props.end.boundShapeId).toBeNull();
     expect(arr.props.end.point).toEqual({ x: 400, y: 400 });
     expect(ed.getBindingsFromShape(sid('arrH'))).toHaveLength(0);
+    expect(ed.history.undoStack[ed.history.undoStack.length - 1]?.label).toBe('Move Arrow Handle');
+
+    ed.undo();
+    expect(ed.getShape<ArrowShape>(sid('arrH'))?.props.end.boundShapeId).toBe(sid('boxEnd'));
+    expect(ed.getBindingsFromShape(sid('arrH'))).toHaveLength(1);
   });
 
   it('drags end handle onto a shape to bind it and create a binding', () => {
     const ed = makeEditor();
     ed.setCurrentTool('select');
-    ed.store.put([box('boxEnd2', 200, 200, 100, 100), arrow('arrH2', { x: 0, y: 0 }, { x: 400, y: 400 })]);
+    getMutableStoreForTesting(ed).put([box('boxEnd2', 200, 200, 100, 100), arrow('arrH2', { x: 0, y: 0 }, { x: 400, y: 400 })]);
     ed.setSelectedShapeIds([sid('arrH2')]);
 
     // End handle is at (400, 400). pointerDown there.
@@ -268,15 +297,51 @@ describe('Arrow handle dragging via SelectTool', () => {
     const arr = ed.getShape<ArrowShape>(sid('arrH2'))!;
     expect(arr.props.end.boundShapeId).toBe(sid('boxEnd2'));
     expect(ed.getBindingsFromShape(sid('arrH2'))).toHaveLength(1);
-    const bnd = ed.getBindingsFromShape(sid('arrH2'))[0];
+    const bnd = ed.getBindingsFromShape(sid('arrH2'))[0]!;
     expect(bnd.toId).toBe(sid('boxEnd2'));
     expect(bnd.props.terminal).toBe('end');
+  });
+
+  it('rebinds an end handle from the top to the bottom anchor of the same shape', () => {
+    const ed = makeEditor();
+    ed.setCurrentTool('select');
+    getMutableStoreForTesting(ed).put([
+      box('sameTarget', 200, 200, 100, 100),
+      arrow('sameTargetArrow', { x: 0, y: 250 }, { x: 250, y: 200 }),
+    ]);
+    ed.createBinding({
+      ...binding('sameTargetBinding', 'sameTargetArrow', 'sameTarget', 'end'),
+      props: {
+        terminal: 'end',
+        normalizedAnchor: { x: 0.5, y: 0 },
+        fromEdge: 'top',
+      },
+    } as unknown as AnyRecord);
+    ed.setSelectedShapeIds([sid('sameTargetArrow')]);
+
+    ed.dispatchEvent({
+      type: 'pointerDown', point: { x: 250, y: 200 },
+      shiftKey: false, target: 'handle', handleId: 'end',
+    });
+    ed.dispatchEvent({ type: 'pointerMove', point: { x: 250, y: 300 } });
+    ed.dispatchEvent({ type: 'pointerUp', point: { x: 250, y: 300 } });
+
+    const updated = ed.getShape<ArrowShape>(sid('sameTargetArrow'))!;
+    expect(updated.props.end.normalizedAnchor).toEqual({ x: 0.5, y: 1 });
+    expect({
+      x: updated.x + updated.props.end.point.x,
+      y: updated.y + updated.props.end.point.y,
+    }).toEqual({ x: 250, y: 300 });
+    const updatedBinding = ed.getBindingsFromShape(sid('sameTargetArrow'))
+      .find(candidate => candidate.props.terminal === 'end')!;
+    expect(updatedBinding.props.normalizedAnchor).toEqual({ x: 0.5, y: 1 });
+    expect(updatedBinding.props.fromEdge).toBe('bottom');
   });
 
   it('cancels bend handle drag on Escape', () => {
     const ed = makeEditor();
     ed.setCurrentTool('select');
-    ed.store.put([arrow('arrI', { x: 0, y: 0 }, { x: 100, y: 0 })]);
+    getMutableStoreForTesting(ed).put([arrow('arrI', { x: 0, y: 0 }, { x: 100, y: 0 })]);
     ed.setSelectedShapeIds([sid('arrI')]);
 
     // Handle is at (50, 0). pointerDown.
@@ -291,7 +356,7 @@ describe('Arrow handle dragging via SelectTool', () => {
 
   it('does not bind to other arrows when drawing or dragging handles', () => {
     const ed = makeEditor();
-    ed.store.put([
+    getMutableStoreForTesting(ed).put([
       box('bxA', 0, 0, 100, 100),
       box('bxB', 300, 300, 100, 100),
       arrow('arrExisting', { x: 50, y: 50 }, { x: 350, y: 350 })
@@ -308,10 +373,9 @@ describe('Arrow handle dragging via SelectTool', () => {
     expect(newArrow.props.start.boundShapeId).toBe(sid('bxA'));
   });
 
-  it('uses editor.arrowRouteStyle for newly drawn arrows', () => {
+  it('uses ortho as the default route style for newly drawn arrows', () => {
     const ed = makeEditor();
-    ed.arrowRouteStyle = 'ortho';
-    ed.store.put([
+    getMutableStoreForTesting(ed).put([
       box('bxX', 0, 0, 100, 100),
     ]);
 
@@ -328,7 +392,7 @@ describe('Arrow handle dragging via SelectTool', () => {
 
   it('publishes and clears binding preview while drawing over shapes', () => {
     const ed = makeEditor();
-    ed.store.put([box('bxPreview', 300, 0, 100, 80)]);
+    getMutableStoreForTesting(ed).put([box('bxPreview', 300, 0, 100, 80)]);
     ed.setCurrentTool('arrow');
 
     ed.dispatchEvent({ type: 'pointerDown', point: { x: 50, y: 40 }, shiftKey: false, target: 'canvas' });
@@ -347,7 +411,7 @@ describe('Arrow handle dragging via SelectTool', () => {
 
   it('shows source binding preview immediately when starting from a shape', () => {
     const ed = makeEditor();
-    ed.store.put([
+    getMutableStoreForTesting(ed).put([
       box('bxSource', 0, 0, 100, 80),
       box('bxTarget2', 300, 0, 100, 80),
     ]);
@@ -376,7 +440,7 @@ describe('Arrow handle dragging via SelectTool', () => {
 
   it('snaps bound terminals to predefined edge center connection points of target shapes', () => {
     const ed = makeEditor();
-    ed.store.put([
+    getMutableStoreForTesting(ed).put([
       box('bxS', 0, 0, 100, 100),
       box('bxT', 300, 300, 100, 100),
     ]);
@@ -403,7 +467,7 @@ describe('Arrow handle dragging via SelectTool', () => {
 
   it('commits the previewed end anchor even if pointerUp drifts toward another edge', () => {
     const ed = makeEditor();
-    ed.store.put([
+    getMutableStoreForTesting(ed).put([
       box('bxSource3', 0, 0, 100, 100),
       box('bxTarget3', 300, 300, 100, 100),
     ]);
@@ -432,12 +496,12 @@ describe('Arrow handle dragging via SelectTool', () => {
     const bxT = box('bxT', 300, 0, 100, 100);
     const arr = arrow('arr1', { x: 100, y: 50 }, { x: 300, y: 50 });
     arr.props.routeStyle = 'ortho';
-    arr.props.start.boundShapeId = sid('bxS');
+    arr.props.start.boundShapeId = sid('bxS') as any;
     arr.props.start.normalizedAnchor = { x: 1.0, y: 0.5 };
-    arr.props.end.boundShapeId = sid('bxT');
+    arr.props.end.boundShapeId = sid('bxT') as any;
     arr.props.end.normalizedAnchor = { x: 0.0, y: 0.5 };
 
-    ed.store.put([
+    getMutableStoreForTesting(ed).put([
       bxS,
       bxT,
       arr,
@@ -473,7 +537,7 @@ describe('Arrow handle dragging via SelectTool', () => {
 
   it('publishes binding preview while dragging an arrow endpoint over a shape', () => {
     const ed = makeEditor();
-    ed.store.put([
+    getMutableStoreForTesting(ed).put([
       box('bxTarget', 200, 200, 100, 100),
       arrow('arrPreviewDrag', { x: 0, y: 0 }, { x: 100, y: 0 }),
     ]);
@@ -492,7 +556,7 @@ describe('Arrow handle dragging via SelectTool', () => {
 
   it('commits the previewed handle anchor even if pointerUp drifts toward another edge', () => {
     const ed = makeEditor();
-    ed.store.put([
+    getMutableStoreForTesting(ed).put([
       box('bxHandleTarget', 200, 200, 100, 100),
       arrow('arrHandlePreview', { x: 0, y: 0 }, { x: 100, y: 0 }),
     ]);

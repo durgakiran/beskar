@@ -1,14 +1,13 @@
-import type { GlideEditor } from './editor';
-import { bid, type AnyRecord, type ShapeId, sid, type Vec2 } from './types';
-import { getWorldBounds } from './smart-router';
+import type { GlideEditor } from './editor.js';
+import { type AnyRecord, type EdgeName, type PageId, type ShapeId, pid, sid, type Vec2 } from './types.js';
+import { RecordIdService } from './id.js';
 import {
   anchorToEdge,
-  getClosestConnectionPoint,
   type ArrowRouteStyle,
   type ArrowShape,
   type ArrowTerminal,
   type ArrowheadStyle,
-} from './shapes/ArrowUtil';
+} from './shapes/ArrowUtil.js';
 
 const DEFAULT_CURVE_BEND = 0.3;
 
@@ -26,9 +25,10 @@ export function buildArrowShapeRecord(args: {
   routeStyle?: ArrowRouteStyle;
   arrowheadStart?: ArrowheadStyle;
   arrowheadEnd?: ArrowheadStyle;
+  parentId?: PageId;
   index?: string;
 }): ArrowShape {
-  const routeStyle = args.routeStyle ?? 'curve';
+  const routeStyle = args.routeStyle ?? 'ortho';
   const arrowheadStart = args.arrowheadStart ?? 'none';
   const arrowheadEnd = args.arrowheadEnd ?? 'arrow';
 
@@ -39,6 +39,9 @@ export function buildArrowShapeRecord(args: {
     y: args.startWorld.y,
     index: args.index ?? 'a1',
     rotation: 0,
+    parentId: args.parentId ?? pid('page:default'),
+    isLocked: false,
+    isHidden: false,
     meta: {},
     props: {
       start: makeTerminal({ x: 0, y: 0 }),
@@ -54,6 +57,11 @@ export function buildArrowShapeRecord(args: {
       opacity: 1,
       strokeStyle: 'solid',
       strokeWidth: 'medium',
+      label: '',
+      labelPosition: 0.5,
+      labelColor: 'black',
+      font: 'sans',
+      fontSize: 'md',
     },
   };
 }
@@ -64,9 +72,10 @@ export function buildArrowBindingRecord(args: {
   toId: ShapeId;
   terminal: 'start' | 'end';
   normalizedAnchor: Vec2;
+  fromEdge?: EdgeName;
 }): AnyRecord {
   return {
-    id: bid(args.id ?? `${args.terminal}-${Date.now()}-${Math.random().toString(36).slice(2)}`),
+    ...(args.id ? { id: args.id } : {}),
     type: 'arrow',
     fromId: args.fromId,
     toId: args.toId,
@@ -74,7 +83,7 @@ export function buildArrowBindingRecord(args: {
     props: {
       terminal: args.terminal,
       normalizedAnchor: args.normalizedAnchor,
-      fromEdge: anchorToEdge(args.normalizedAnchor),
+      fromEdge: args.fromEdge ?? anchorToEdge(args.normalizedAnchor),
     },
   };
 }
@@ -87,19 +96,23 @@ export function resolveConnectionTerminal(
   const shape = editor.getShape(shapeId);
   if (!shape) return null;
 
-  const snapped = getClosestConnectionPoint(point, getWorldBounds(editor, shape));
+  const snapped = editor.transforms.getClosestConnectionAnchor(shapeId, point);
   return {
     shapeId,
     normalizedAnchor: snapped.normalizedAnchor,
     point: snapped.point,
-    fromEdge: anchorToEdge(snapped.normalizedAnchor),
+    fromEdge: editor.transforms.getAnchorPageEdge(shapeId, snapped.normalizedAnchor),
   };
 }
 
+const compatibilityIds = new RecordIdService();
+
+/** @deprecated Prefer editor.createShapeId() so collisions are checked against the board. */
 export function createCanvasShapeId(prefix: string): ShapeId {
-  return sid(`${prefix}-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+  return sid(compatibilityIds.create(`shape:${prefix}`));
 }
 
+/** @deprecated Shape indices are assigned by GlideEditor.createShape(). */
 export function createTopIndex(): string {
   return `z${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }

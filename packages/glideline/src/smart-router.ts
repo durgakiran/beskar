@@ -1,7 +1,7 @@
-import { makeBox, type Box2d, type EdgeName, type GlideShape, type ShapeId, type Vec2 } from './types';
-import type { GlideEditor } from './editor';
-import type { ArrowShape } from './shapes/ArrowUtil';
-import { computeElbowPath, parseElbowPoints } from './elbow-router';
+import { makeBox, type Box2d, type EdgeName, type GlideShape, type ShapeId, type Vec2 } from './types.js';
+import type { GlideEditor } from './editor.js';
+import type { ArrowShape } from './shapes/ArrowUtil.js';
+import { computeElbowPath, parseElbowPoints } from './elbow-router.js';
 
 const OBSTACLE_PADDING = 12;
 const DEFAULT_ROUTE_BUDGET_MS = 12;
@@ -228,6 +228,15 @@ export class SmartRouterCache {
     now: () => number,
   ): number {
     const group = [arrow.id as string];
+    const currentParallelKey = getParallelRouteKey({
+      arrow,
+      startWorld: { x: arrow.x + arrow.props.start.point.x, y: arrow.y + arrow.props.start.point.y },
+      endWorld: { x: arrow.x + arrow.props.end.point.x, y: arrow.y + arrow.props.end.point.y },
+      fromEdge: getArrowBindingEdge(editor, arrow.id as ShapeId, 'start', 'right'),
+      toEdge: getArrowBindingEdge(editor, arrow.id as ShapeId, 'end', 'left'),
+      fromShapeId: arrow.props.start.boundShapeId,
+      toShapeId: arrow.props.end.boundShapeId,
+    });
     const smartArrows = editor.getShapes(true).filter(shape =>
       shape.type === 'arrow' &&
       shape.id !== arrow.id &&
@@ -235,8 +244,7 @@ export class SmartRouterCache {
     ) as ArrowShape[];
 
     for (const other of smartArrows) {
-      if (now() > deadline) break;
-      const otherBase = this._getOrComputeBaseRoute({
+      const otherInput: BaseSmartRouteInput = {
         arrow: other,
         startWorld: {
           x: other.x + other.props.start.point.x,
@@ -252,7 +260,13 @@ export class SmartRouterCache {
         toShapeId: other.props.end.boundShapeId,
         deadline,
         now,
-      });
+      };
+      if (getParallelRouteKey(otherInput) === currentParallelKey) {
+        group.push(other.id as string);
+        continue;
+      }
+      if (now() > deadline) break;
+      const otherBase = this._getOrComputeBaseRoute(otherInput);
       if (!otherBase) continue;
       if (otherBase.baseSignature === current.baseSignature) {
         group.push(other.id as string);
@@ -352,16 +366,7 @@ export class SmartRouterCache {
 }
 
 export function getWorldBounds(editor: GlideEditor, shape: GlideShape): Box2d {
-  const localBounds = editor.getShapeUtil(shape.type).getGeometry(shape as any).getBounds();
-  return {
-    ...localBounds,
-    x: localBounds.minX + shape.x,
-    y: localBounds.minY + shape.y,
-    minX: localBounds.minX + shape.x,
-    minY: localBounds.minY + shape.y,
-    maxX: localBounds.maxX + shape.x,
-    maxY: localBounds.maxY + shape.y,
-  };
+  return editor.transforms.getWorldBounds(shape.id as ShapeId);
 }
 
 export function getArrowBindingEdge(
@@ -392,18 +397,13 @@ export function getFallbackElbowPoints(
 
   const fromBoundsWorld = getWorldBounds(editor, fromShape as any);
   const toBoundsWorld = getWorldBounds(editor, toShape as any);
-  const localPoints = computeFallbackLocalElbowPoints(
-    arrow,
+  return computeFallbackLocalElbowPoints(
+    { ...arrow, x: 0, y: 0 },
     fromBoundsWorld,
     toBoundsWorld,
     fromEdge,
     toEdge,
   );
-
-  return localPoints.map(point => ({
-    x: arrow.x + point.x,
-    y: arrow.y + point.y,
-  }));
 }
 
 export function computeFallbackLocalElbowPoints(
@@ -438,7 +438,10 @@ export function computeFallbackLocalElbowPoints(
 export function offsetOrthogonalPolyline(points: Vec2[], offset: number): Vec2[] {
   if (offset === 0 || points.length < 2) return points;
 
-  const segments = [];
+  const segments: Array<
+    | { axis: 'h'; y: number; x1: number; x2: number }
+    | { axis: 'v'; x: number; y1: number; y2: number }
+  > = [];
   for (let i = 0; i < points.length - 1; i++) {
     const a = points[i]!;
     const b = points[i + 1]!;
@@ -460,9 +463,11 @@ export function offsetOrthogonalPolyline(points: Vec2[], offset: number): Vec2[]
   for (let i = 1; i < segments.length; i++) {
     const prev = segments[i - 1]!;
     const next = segments[i]!;
-    result.push(prev.axis === 'h'
-      ? { x: next.x, y: prev.y }
-      : { x: prev.x, y: next.y });
+    if (prev.axis === 'h' && next.axis === 'v') {
+      result.push({ x: next.x, y: prev.y });
+    } else if (prev.axis === 'v' && next.axis === 'h') {
+      result.push({ x: prev.x, y: next.y });
+    }
   }
 
   const last = segments[segments.length - 1]!;
@@ -611,9 +616,9 @@ function computeOrthogonalRoute(args: {
       const neighborPoint = nodeToPoint(neighbor, xs, ys);
       const nextAxis = Math.abs(currentPoint.x - neighborPoint.x) < EPSILON ? 2 : 1;
       const bendPenalty = currentAxis !== 0 && currentAxis !== nextAxis ? 2 : 0;
-      const tentative = gScore[current.state] + manhattan(currentPoint, neighborPoint) + bendPenalty;
+      const tentative = (gScore[current.state] ?? Infinity) + manhattan(currentPoint, neighborPoint) + bendPenalty;
       const neighborState = encodeState(neighbor, nextAxis);
-      if (tentative >= gScore[neighborState]) continue;
+      if (tentative >= (gScore[neighborState] ?? Infinity)) continue;
 
       gScore[neighborState] = tentative;
       cameFrom[neighborState] = current.state;
@@ -725,5 +730,19 @@ function getRouteCacheKey(arrow: ArrowShape): string {
     start.point.y,
     end.point.x,
     end.point.y,
+  ].join('|');
+}
+
+function getParallelRouteKey(input: Omit<BaseSmartRouteInput, 'deadline' | 'now'>): string {
+  return [
+    input.startWorld.x,
+    input.startWorld.y,
+    input.endWorld.x,
+    input.endWorld.y,
+    input.fromEdge,
+    input.toEdge,
+    input.fromShapeId ?? '',
+    input.toShapeId ?? '',
+    input.arrow.props.bend,
   ].join('|');
 }

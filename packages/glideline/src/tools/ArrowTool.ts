@@ -21,46 +21,26 @@
  *   end.point   = { x: dx, y: dy } (local offset from start)
  */
 
-import { StateNode } from '../state-node';
-import type { PointerDownEvent, PointerMoveEvent, PointerUpEvent, KeyDownEvent } from '../state-node';
-import type { AnyRecord, ShapeId, Vec2 } from '../types';
-import { makeBox, sid } from '../types';
-import type { ArrowShape } from '../shapes/ArrowUtil';
-import { getClosestConnectionPoint, getConnectionPoints } from '../shapes/ArrowUtil';
-import type { BindingPreview, BindingPreviewCandidate } from '../editor';
-import { buildArrowBindingRecord, buildArrowShapeRecord } from '../arrow-records';
+import { StateNode } from '../state-node.js';
+import type { PointerDownEvent, PointerMoveEvent, PointerUpEvent, KeyDownEvent } from '../state-node.js';
+import type { AnyRecord, ShapeId, Vec2 } from '../types.js';
+import { makeBox, sid } from '../types.js';
+import type { ArrowShape } from '../shapes/ArrowUtil.js';
+import type { BindingPreview, BindingPreviewCandidate } from '../editor.js';
+import { buildArrowBindingRecord, buildArrowShapeRecord } from '../arrow-records.js';
 
 const PREVIEW_ID = sid('__arrow-preview__');
 const BINDING_SNAP_RADIUS = 12;
 
-/** Convert local bounds (from getGeometry) to world bounds by adding shape.x/y. */
-function toWorldBounds(
-  localBounds: { minX: number; minY: number; maxX: number; maxY: number; w: number; h: number; x?: number; y?: number },
-  shape: { x: number; y: number }
-) {
-  return {
-    ...localBounds,
-    x: localBounds.minX + shape.x,
-    y: localBounds.minY + shape.y,
-    minX: localBounds.minX + shape.x,
-    minY: localBounds.minY + shape.y,
-    maxX: localBounds.maxX + shape.x,
-    maxY: localBounds.maxY + shape.y,
-  };
-}
-
 function buildBindingPreviewCandidate(editor: StateNode['editor'], targetShape: { id: ShapeId; type: string; x: number; y: number }, point: Vec2): BindingPreviewCandidate {
-  const util = editor.getShapeUtil(targetShape.type);
-  const localBounds = util.getGeometry(targetShape as any).getBounds();
-  const worldBounds = toWorldBounds(localBounds, targetShape);
-  const snapped = getClosestConnectionPoint(point, worldBounds);
+  const snapped = editor.transforms.getClosestConnectionAnchor(targetShape.id, point);
 
   return {
     targetId: targetShape.id,
     targetType: targetShape.type,
     normalizedAnchor: snapped.normalizedAnchor,
     point: snapped.point,
-    candidateAnchors: getConnectionPoints(worldBounds),
+    candidateAnchors: editor.transforms.getConnectionAnchors(targetShape.id),
   };
 }
 
@@ -80,9 +60,10 @@ function findBindableShapeCandidate(
   excludeIds: ShapeId[] = [],
 ): { shape: { id: ShapeId; type: string; x: number; y: number }; preview: BindingPreviewCandidate } | null {
   const excluded = new Set(excludeIds.filter(Boolean));
-  const directHits = editor.getShapesAtPoint(point)
-    .filter(s => s.type !== 'arrow' && !excluded.has(s.id as ShapeId));
-  const directShape = directHits.length > 0 ? directHits[directHits.length - 1] : null;
+  const directShape = editor.getTopShapeAtPoint(
+    point,
+    shape => shape.type !== 'arrow' && !excluded.has(shape.id as ShapeId),
+  );
   if (directShape) {
     return {
       shape: directShape as any,
@@ -100,7 +81,7 @@ function findBindableShapeCandidate(
   let best: { shape: { id: ShapeId; type: string; x: number; y: number }; preview: BindingPreviewCandidate } | null = null;
   let bestDistance = Number.POSITIVE_INFINITY;
 
-  for (const shape of nearby) {
+  for (const shape of [...nearby].reverse()) {
     const preview = buildBindingPreviewCandidate(editor, shape as any, point);
     const distance = Math.hypot(preview.point.x - point.x, preview.point.y - point.y);
     if (distance <= BINDING_SNAP_RADIUS && distance < bestDistance) {
@@ -152,7 +133,7 @@ class Drawing extends StateNode {
     this._sourcePreview = null;
     this.editor.clearBindingPreview();
 
-    const routeStyle = (this.editor as any).arrowRouteStyle ?? 'curve';
+    const routeStyle = (this.editor as any).arrowRouteStyle ?? 'ortho';
     const arrowheadStart = (this.editor as any).arrowheadStart ?? 'none';
     const arrowheadEnd = (this.editor as any).arrowheadEnd ?? 'arrow';
     let startPt = info.origin;
@@ -172,16 +153,17 @@ class Drawing extends StateNode {
     }
 
     // Create preview arrow (not recorded in history)
-    this.editor.history.batch('Arrow Preview', () => {
+    this.editor.batch('Arrow Preview', () => {
       this.editor.createShape(buildArrowShapeRecord({
         id: PREVIEW_ID,
         startWorld: startPt,
         endWorld: startPt,
+        parentId: this.editor.getActivePageId(),
         routeStyle,
         arrowheadStart,
         arrowheadEnd,
       }) as unknown as AnyRecord);
-    }, { history: 'ignore' });
+    }, { history: 'ignore', scope: 'ephemeral' });
   }
 
   override onPointerMove(e: PointerMoveEvent): void {
@@ -219,7 +201,7 @@ class Drawing extends StateNode {
     const localEndX = endWorldPt.x - existing.x;
     const localEndY = endWorldPt.y - existing.y;
 
-    this.editor.history.batch('Arrow Preview Update', () => {
+    this.editor.batch('Arrow Preview Update', () => {
       this.editor.updateShape<ArrowShape>(PREVIEW_ID, {
         props: {
           ...existing.props,
@@ -230,7 +212,7 @@ class Drawing extends StateNode {
           },
         },
       });
-    }, { history: 'ignore' });
+    }, { history: 'ignore', scope: 'ephemeral' });
   }
 
   override onPointerUp(e: PointerUpEvent): void {
@@ -240,17 +222,17 @@ class Drawing extends StateNode {
     const toShapeId: ShapeId | null = hovered ? (hovered.shape.id as ShapeId) : null;
 
     // Remove preview
-    this.editor.history.batch('Arrow Preview Cleanup', () => {
+    this.editor.batch('Arrow Preview Cleanup', () => {
       this.editor.deleteShapes([PREVIEW_ID]);
-    }, { history: 'ignore' });
+    }, { history: 'ignore', scope: 'ephemeral' });
 
-    const routeStyle = (this.editor as any).arrowRouteStyle ?? 'curve';
+    const routeStyle = (this.editor as any).arrowRouteStyle ?? 'ortho';
     const arrowheadStart = (this.editor as any).arrowheadStart ?? 'none';
     const arrowheadEnd = (this.editor as any).arrowheadEnd ?? 'arrow';
 
     // Commit final arrow + bindings
-    const finalId = sid(`arrow-${Date.now()}`);
-    this.editor.history.batch('Create Arrow', () => {
+    const finalId = this.editor.createShapeId('arrow');
+    this.editor.batch('Create Arrow', () => {
       // Compute start world point
       let startAnchor = { x: 0.5, y: 0.5 };
       let startPt = this._origin;
@@ -260,10 +242,7 @@ class Drawing extends StateNode {
       } else if (this._fromShapeId) {
         const fromShape = this.editor.getShape(this._fromShapeId);
         if (fromShape) {
-          const util = this.editor.getShapeUtil(fromShape.type);
-          const localBounds = util.getGeometry(fromShape as any).getBounds();
-          const worldBounds = toWorldBounds(localBounds, fromShape);
-          const snapped = getClosestConnectionPoint(this._origin, worldBounds);
+          const snapped = this.editor.transforms.getClosestConnectionAnchor(this._fromShapeId, this._origin);
           startAnchor = snapped.normalizedAnchor;
           startPt = snapped.point;
         }
@@ -280,10 +259,7 @@ class Drawing extends StateNode {
         } else {
           const target = this.editor.getShape(toShapeId);
           if (target) {
-            const util = this.editor.getShapeUtil(target.type);
-            const localBounds = util.getGeometry(target as any).getBounds();
-            const worldBounds = toWorldBounds(localBounds, target);
-            const snapped = getClosestConnectionPoint(e.point, worldBounds);
+            const snapped = this.editor.transforms.getClosestConnectionAnchor(toShapeId, e.point);
             endAnchor = snapped.normalizedAnchor;
             endPt = snapped.point;
           }
@@ -295,6 +271,7 @@ class Drawing extends StateNode {
         id: finalId,
         startWorld: startPt,
         endWorld: endPt,
+        parentId: this.editor.getActivePageId(),
         routeStyle,
         arrowheadStart,
         arrowheadEnd,
@@ -319,22 +296,24 @@ class Drawing extends StateNode {
       // Create binding: start → fromShape
       if (this._fromShapeId) {
         this.editor.createBinding(buildArrowBindingRecord({
-          id: `bind-start-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+          id: this.editor.createBindingId('arrow'),
           fromId: finalId,
           toId: this._fromShapeId,
           terminal: 'start',
           normalizedAnchor: startAnchor,
+          fromEdge: this.editor.transforms.getAnchorPageEdge(this._fromShapeId, startAnchor),
         }));
       }
 
       // Create binding: end → toShape
       if (toShapeId) {
         this.editor.createBinding(buildArrowBindingRecord({
-          id: `bind-end-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+          id: this.editor.createBindingId('arrow'),
           fromId: finalId,
           toId: toShapeId,
           terminal: 'end',
           normalizedAnchor: endAnchor,
+          fromEdge: this.editor.transforms.getAnchorPageEdge(toShapeId, endAnchor),
         }));
       }
 
@@ -359,9 +338,9 @@ class Drawing extends StateNode {
   override onKeyDown(e: KeyDownEvent): void {
     if (e.key === 'Escape') {
       this.editor.clearBindingPreview();
-      this.editor.history.batch('Arrow Preview Cleanup', () => {
+      this.editor.batch('Arrow Preview Cleanup', () => {
         this.editor.deleteShapes([PREVIEW_ID]);
-      }, { history: 'ignore' });
+    }, { history: 'ignore', scope: 'ephemeral' });
       this.parent!.transition('idle');
     }
   }

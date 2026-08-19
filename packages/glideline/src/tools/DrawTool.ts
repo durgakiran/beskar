@@ -15,11 +15,11 @@
  * Pressure is taken from PointerEvent.pressure (0.5 for mouse / keyboard).
  */
 
-import { StateNode } from '../state-node';
-import type { PointerDownEvent, PointerMoveEvent, PointerUpEvent, KeyDownEvent } from '../state-node';
-import type { ShapeId, Vec2 } from '../types';
-import { sid } from '../types';
-import type { FreehandPoint } from '../shapes/FreehandUtil';
+import { StateNode } from '../state-node.js';
+import type { PointerDownEvent, PointerMoveEvent, PointerUpEvent, KeyDownEvent } from '../state-node.js';
+import type { Vec2 } from '../types.js';
+import { sid } from '../types.js';
+import type { FreehandPoint } from '../shapes/FreehandUtil.js';
 
 const PREVIEW_ID = sid('__draw-preview__');
 /** Minimum squared distance between successive points (de-duplicate near-idle). */
@@ -50,35 +50,40 @@ class Drawing extends StateNode {
 
   private _points: FreehandPoint[] = [];
   private _lastPt: Vec2 = { x: 0, y: 0 };
+  private _pressureSensitive = false;
+  private _simulatePressure = false;
 
   override onEnter(info: PointerDownEvent): void {
+    this._pressureSensitive = this.editor.activeStyles.value.pressureSensitive === true;
+    this._simulatePressure = this._pressureSensitive && info.pointerType !== 'pen';
     const firstPt: FreehandPoint = {
       x:        info.point.x,
       y:        info.point.y,
-      pressure: (info as any).pressure ?? 0.5,
+      pressure: info.pressure ?? 0.5,
     };
     this._points    = [firstPt];
     this._lastPt    = info.point;
 
-    this.editor.history.batch('Draw Preview', () => {
+    this.editor.batch('Draw Preview', () => {
       this.editor.createShape({
         id:       PREVIEW_ID,
         type:     'freehand',
         x:        info.point.x,
         y:        info.point.y,
-        index:    'a1',
         rotation: 0,
         meta:     {},
         props: {
           points:     [firstPt],
           strokeWidth: this.editor.activeStyles.value.strokeWidth ?? 'medium',
           strokeStyle: this.editor.activeStyles.value.strokeStyle ?? 'solid',
+          pressureSensitive: this._pressureSensitive,
+          simulatePressure: this._simulatePressure,
           opacity:    1,
           isClosed:   false,
           isComplete: false,
         },
       });
-    }, { history: 'ignore' });
+    }, { history: 'ignore', scope: 'ephemeral' });
   }
 
   override onPointerMove(e: PointerMoveEvent): void {
@@ -89,33 +94,35 @@ class Drawing extends StateNode {
     const newPt: FreehandPoint = {
       x:        e.point.x,
       y:        e.point.y,
-      pressure: (e as any).pressure ?? 0.5,
+      pressure: e.pressure ?? 0.5,
     };
     this._points = [...this._points, newPt];
 
-    this.editor.history.batch('Draw Preview Update', () => {
+    this.editor.batch('Draw Preview Update', () => {
       this.editor.updateShape(PREVIEW_ID, {
         props: {
           points:     this._points,
           strokeWidth: this.editor.activeStyles.value.strokeWidth ?? 'medium',
           strokeStyle: this.editor.activeStyles.value.strokeStyle ?? 'solid',
+          pressureSensitive: this._pressureSensitive,
+          simulatePressure: this._simulatePressure,
           opacity:    1,
           isClosed:   false,
           isComplete: false,
         },
       });
-    }, { history: 'ignore' });
+    }, { history: 'ignore', scope: 'ephemeral' });
   }
 
   override onPointerUp(_e: PointerUpEvent): void {
     // Remove preview always
-    this.editor.history.batch('Draw Preview Cleanup', () => {
+    this.editor.batch('Draw Preview Cleanup', () => {
       this.editor.deleteShapes([PREVIEW_ID]);
-    }, { history: 'ignore' });
+    }, { history: 'ignore', scope: 'ephemeral' });
 
     // Commit only if stroke has enough points to be meaningful
     if (this._points.length >= 2) {
-      const finalId = sid(`draw-${Date.now()}`);
+      const finalId = this.editor.createShapeId('freehand');
       const pts = this._points;
 
       // Compute AABB origin for shape.x/y
@@ -125,19 +132,20 @@ class Drawing extends StateNode {
         if (p.y < minY) minY = p.y;
       }
 
-      this.editor.history.batch('Draw Stroke', () => {
+      this.editor.batch('Draw Stroke', () => {
         this.editor.createShape({
           id:       finalId,
           type:     'freehand',
           x:        minX,
           y:        minY,
-          index:    'a1',
           rotation: 0,
           meta:     {},
           props: {
             points:     pts,
             strokeWidth: this.editor.activeStyles.value.strokeWidth ?? 'medium',
             strokeStyle: this.editor.activeStyles.value.strokeStyle ?? 'solid',
+            pressureSensitive: this._pressureSensitive,
+            simulatePressure: this._simulatePressure,
             opacity:    1,
             isClosed:   false,
             isComplete: true,
@@ -152,9 +160,9 @@ class Drawing extends StateNode {
 
   override onKeyDown(e: KeyDownEvent): void {
     if (e.key === 'Escape') {
-      this.editor.history.batch('Draw Preview Cleanup', () => {
+      this.editor.batch('Draw Preview Cleanup', () => {
         this.editor.deleteShapes([PREVIEW_ID]);
-      }, { history: 'ignore' });
+    }, { history: 'ignore', scope: 'ephemeral' });
       this.parent!.transition('idle');
     }
   }

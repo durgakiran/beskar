@@ -1,5 +1,5 @@
-import { Box2d, Vec2, makeBox } from '../types';
-import { Geometry2d } from './Geometry2d';
+import { Box2d, Vec2, makeBox } from '../types.js';
+import { Geometry2d } from './Geometry2d.js';
 
 interface Polyline2dOptions {
   boundsPadding?: number;
@@ -38,13 +38,14 @@ export class Polyline2d extends Geometry2d {
   hitTestPoint(p: Vec2): boolean {
     if (this.points.length === 0) return false;
     if (this.points.length === 1) {
-      const dist = Math.hypot(p.x - this.points[0].x, p.y - this.points[0].y);
+      const point = this.points[0]!;
+      const dist = Math.hypot(p.x - point.x, p.y - point.y);
       return dist <= this.hitThreshold;
     }
 
     for (let i = 0; i < this.points.length - 1; i++) {
-      const a = this.points[i];
-      const b = this.points[i + 1];
+      const a = this.points[i]!;
+      const b = this.points[i + 1]!;
       const dist = this.distToSegment(p, a, b);
       if (dist <= this.hitThreshold) return true;
     }
