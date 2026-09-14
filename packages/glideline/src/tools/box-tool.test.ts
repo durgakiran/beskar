@@ -31,6 +31,9 @@ function pu(editor: ReturnType<typeof makeEditor>, x: number, y: number) {
 function esc(editor: ReturnType<typeof makeEditor>) {
   editor.dispatchEvent({ type: 'keyDown', key: 'Escape' });
 }
+function cancel(editor: ReturnType<typeof makeEditor>) {
+  editor.dispatchEvent({ type: 'pointerCancel' });
+}
 
 // ─────────────────────────────────────────────────────────────
 // T3.3-01: No shape created on pointerDown only (no drag)
@@ -114,6 +117,27 @@ describe('T3.3-05: escape deletes preview', () => {
     pm(editor, 100, 80);
     esc(editor);
     expect(shapeCount(editor)).toBe(before);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────
+// pointerCancel: browser/OS-initiated abort commits the box as last staged
+// (distinct from Escape, which discards it)
+// ─────────────────────────────────────────────────────────────
+
+describe('pointerCancel commits the box as last staged', () => {
+  it('shape stays in store with the last-staged size, tool switches to select', () => {
+    const editor = makeEditor();
+    pd(editor, 0, 0);
+    pm(editor, 10, 0); // cross threshold
+    pm(editor, 80, 60);
+    cancel(editor);
+
+    expect(shapeCount(editor)).toBe(1);
+    const shape = editor.getShapesInBox({ minX: -1e6, minY: -1e6, maxX: 1e6, maxY: 1e6 })[0] as any;
+    expect(shape.props.w).toBe(80);
+    expect(shape.props.h).toBe(60);
+    expect(editor.currentToolId.value).toBe('select');
   });
 });
 

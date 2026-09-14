@@ -34,6 +34,35 @@ function createRecovery() {
 describe("YjsDurabilityCoordinator", () => {
     beforeEach(() => vi.useFakeTimers());
 
+    it("finishes an already captured local write before closing recovery on navigation", async () => {
+        const { recovery, writes } = createRecovery();
+        const coordinator = new YjsDurabilityCoordinator({ sessionKey: "session", draftId: "draft", clientId: "client", durableRevision: "0", persistence: { save: vi.fn() }, recovery });
+        const state = await projectedState(1, 1, 4);
+        const accepting = coordinator.acceptProjectedState(state);
+        await coordinator.dispose("cancel");
+        await accepting;
+        expect(writes).toHaveLength(1);
+        expect(recovery.dispose).toHaveBeenCalledOnce();
+        expect(vi.mocked(recovery.persist).mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(recovery.dispose).mock.invocationCallOrder[0]);
+    });
+
+    it("retries the identical retained request when the host restores access", async () => {
+        const { recovery } = createRecovery();
+        const save = vi.fn<YjsPersistenceAdapter["save"]>()
+            .mockRejectedValueOnce(Object.assign(new Error("space archived"), { retryable: false }))
+            .mockImplementation(async request => ({ draftId: request.draftId, durableRevision: "2", acknowledgedCheckpoint: request.target.yjs }));
+        const coordinator = new YjsDurabilityCoordinator({ sessionKey: "session", draftId: "draft", clientId: "client", durableRevision: "0", persistence: { save }, recovery, debounceMs: 20 });
+        await coordinator.acceptProjectedState(await projectedState(1, 1, 4));
+        await vi.advanceTimersByTimeAsync(10000);
+        expect(save).toHaveBeenCalledTimes(1);
+        expect(coordinator.getSnapshot().phase).toBe("error");
+        await coordinator.retryPending();
+        expect(save).toHaveBeenCalledTimes(2);
+        expect(save.mock.calls[1][0].requestId).toBe(save.mock.calls[0][0].requestId);
+        expect(coordinator.getSnapshot().phase).toBe("clean");
+        await coordinator.dispose("cancel");
+    });
+
     it("marks clean only after local and matching server acknowledgement", async () => {
         const { recovery } = createRecovery();
         const persistence: YjsPersistenceAdapter = {

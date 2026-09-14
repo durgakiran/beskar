@@ -1,3 +1,4 @@
+import "@durgakiran/glideboard/styles.css";
 
 import { useGet, Response } from "@http/hooks";
 import { useCallback, useEffect, useMemo, useState, useRef, type Ref } from "react";

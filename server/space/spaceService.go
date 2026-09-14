@@ -242,14 +242,18 @@ func hydrateSpaceList(spaces []SpaceListItem, spaceIndexByID map[uuid.UUID]int, 
 }
 
 func getDocumentList(spaceId uuid.UUID, userId uuid.UUID) ([]PageList, error) {
-	var pageList []PageList
-	pageIds, err := core.GetEntitiesWithPermission("page", "space", spaceId.String(), "space")
+	pageList := []PageList{}
+	pageIds, err := core.GetEntitiesWithPermission("page", "user", userId.String(), core.PAGE_VIEW)
 	if err != nil {
 		logger().Error(err.Error())
 		return pageList, errors.New(core.ErrorCode_name[core.ErrorCode_ERROR_CODE_PERMISSION_SERVER_ISSUE])
 	}
 	if len(pageIds) == 0 {
 		return pageList, nil
+	}
+	editablePageIDs, err := core.GetEntitiesWithPermission("page", "user", userId.String(), core.PAGE_EDIT)
+	if err != nil {
+		return pageList, errors.New(core.ErrorCode_name[core.ErrorCode_ERROR_CODE_PERMISSION_SERVER_ISSUE])
 	}
 	deleteablePageIDs, err := core.GetEntitiesWithPermission("page", "user", userId.String(), core.PAGE_DELETE)
 	if err != nil {
@@ -268,7 +272,7 @@ func getDocumentList(spaceId uuid.UUID, userId uuid.UUID) ([]PageList, error) {
 		return pageList, errors.New(core.ErrorCode_name[core.ErrorCode_ERROR_CODE_CONNECTION_ISSUE])
 	}
 	defer conn.Release()
-	rows, err := conn.Query(ctx, GET_PAGE_LIST_QUERY, spaceId, pageIds)
+	rows, err := conn.Query(ctx, GET_PAGE_LIST_QUERY, spaceId, pageIds, editablePageIDs)
 	if err != nil {
 		logger().Error(err.Error())
 		return pageList, errors.New(core.ErrorCode_name[core.ErrorCode_ERROR_WHILE_FETCHING_ROWS])
@@ -282,6 +286,7 @@ func getDocumentList(spaceId uuid.UUID, userId uuid.UUID) ([]PageList, error) {
 	for i := range pageList {
 		_, canDelete := deleteablePages[fmt.Sprintf("%d", pageList[i].PageId)]
 		pageList[i].CanDelete = canDelete
+		pageList[i].Whiteboard = core.BuildWhiteboardNavigation(spaceId, pageList[i].PageId, pageList[i].ContentAPIVersion, pageList[i].CanEdit, pageList[i].PublishedVersionID, pageList[i].HasPreview)
 	}
 	return pageList, nil
 }

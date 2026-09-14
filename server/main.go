@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/durgakiran/beskar/apidocs"
 	"github.com/durgakiran/beskar/assetcleanup"
 	attachment "github.com/durgakiran/beskar/attachment/controller"
 	auth "github.com/durgakiran/beskar/auth"
@@ -76,7 +77,7 @@ func addCorsMiddleWare(r *chi.Mux) {
 			AllowedOrigins: core.AllowedOriginsFromEnv(),
 			// AllowOriginFunc:  func(r *http.Request, origin string) bool { return true },
 			AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-			AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
+			AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token", "Idempotency-Key"},
 			ExposedHeaders:   []string{"Link"},
 			AllowCredentials: false,
 			MaxAge:           300, // Maximum value not ignored by any of major browsers
@@ -211,6 +212,7 @@ func main() {
 		})
 	})
 
+	apidocs.Register(r)
 	r.Mount("/auth/", core.ZitadelAuthRouter())
 	r.Mount("/api/v1", authChain(mw)(auth.Router()))
 	r.Mount("/api/v1/media", authChain(mw)(media.Router()))
@@ -218,6 +220,7 @@ func main() {
 	r.Mount("/api/v1/profile", authChain(mw)(profile.Router()))
 	r.Mount("/api/v1/quota", authChain(mw)(quota.Router()))
 	r.Mount("/api/v1/editor", authChain(mw)(editor.Router()))
+	r.Mount("/api/v2/editor", authChain(mw)(editor.RouterV2()))
 	r.Mount("/api/v1/space", authChain(mw)(space.Router()))
 	r.Mount("/api/v1/invite", authChain(mw)(invite.Router()))
 	r.Mount("/api/v1/page", authChain(mw)(page.Router()))

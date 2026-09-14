@@ -168,6 +168,49 @@ describe('T4.4-05: ArrowTool creates ArrowShape + 2 bindings', () => {
   });
 });
 
+// pointerCancel: browser/OS-initiated abort commits the arrow as last staged
+describe('pointerCancel commits the arrow as last staged, including bindings', () => {
+  it('click box A → drag onto box B → pointerCancel still creates arrow + 2 bindings', () => {
+    const ed = makeEditor();
+    getMutableStoreForTesting(ed).put([
+      box('cx1', 0, 0, 100, 80),
+      box('cx2', 300, 0, 100, 80),
+    ]);
+    ed.setCurrentTool('arrow');
+
+    ed.dispatchEvent({ type: 'pointerDown', point: { x: 50, y: 40 }, shiftKey: false, target: 'shape', shapeId: sid('cx1') });
+    ed.dispatchEvent({ type: 'pointerMove', point: { x: 200, y: 40 } });
+    // Hover resolves the end binding onto box cx2 before the browser cancels
+    // the gesture (e.g. trackpad gesture disambiguation) instead of ever
+    // delivering pointerUp.
+    ed.dispatchEvent({ type: 'pointerMove', point: { x: 350, y: 40 } });
+    ed.dispatchEvent({ type: 'pointerCancel' });
+
+    let arrowCount = 0;
+    let bindingCount = 0;
+    for (const sig of (ed.store as any)._signals.values()) {
+      const rec = sig.peek() as AnyRecord | null;
+      if (!rec) continue;
+      if (rec['type'] === 'arrow' && !rec['fromId']) arrowCount++;
+      if (rec['fromId'] && rec['toId']) bindingCount++;
+    }
+    expect(arrowCount).toBe(1);
+    expect(bindingCount).toBe(2);
+    expect(ed.currentToolId.value).toBe('select');
+  });
+
+  it('pointerCancel right after pointerDown (no move) still commits a floating arrow', () => {
+    const ed = makeEditor();
+    ed.setCurrentTool('arrow');
+
+    ed.dispatchEvent({ type: 'pointerDown', point: { x: 10, y: 10 }, shiftKey: false, target: 'canvas' });
+    ed.dispatchEvent({ type: 'pointerCancel' });
+
+    const arrows = ed.getShapes().filter(s => s.type === 'arrow');
+    expect(arrows).toHaveLength(1);
+  });
+});
+
 // T4.4-06: Route style switch changes rendered path key
 describe('T4.4-06: routeStyle switch', () => {
   it('updateShape routeStyle:ortho changes the prop', () => {

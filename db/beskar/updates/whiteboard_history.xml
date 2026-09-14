@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+    <changeSet id="whiteboard_history_1" author="Codex">
+        <addColumn schemaName="whiteboard" tableName="whiteboard_draft">
+            <column name="restore_generation" type="BIGINT" defaultValueNumeric="0"><constraints nullable="false"/></column>
+        </addColumn>
+        <createTable schemaName="whiteboard" tableName="whiteboard_restore_receipt">
+            <column name="page_id" type="BIGINT"><constraints nullable="false" primaryKey="true"/></column>
+            <column name="actor_id" type="UUID"><constraints nullable="false" primaryKey="true"/></column>
+            <column name="idempotency_key" type="UUID"><constraints nullable="false" primaryKey="true"/></column>
+            <column name="version_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="expected_head" type="BIGINT"><constraints nullable="false"/></column>
+            <column name="sequence" type="BIGINT"><constraints nullable="false"/></column>
+            <column name="restore_generation" type="BIGINT"><constraints nullable="false"/></column>
+            <column name="snapshot_id" type="UUID"><constraints nullable="false"/></column>
+        </createTable>
+        <addForeignKeyConstraint baseTableSchemaName="whiteboard" baseTableName="whiteboard_restore_receipt" baseColumnNames="page_id" referencedTableSchemaName="whiteboard" referencedTableName="whiteboard" referencedColumnNames="page_id" constraintName="whiteboard_restore_page_fk" onDelete="CASCADE"/>
+        <!-- Retain creation request identity after deletion without retaining board content. -->
+        <dropForeignKeyConstraint baseTableSchemaName="whiteboard" baseTableName="whiteboard_create_receipt" constraintName="whiteboard_create_receipt_page_fk"/>
+        <sql>GRANT SELECT, INSERT, UPDATE, DELETE ON whiteboard.whiteboard_restore_receipt TO ${app_user};</sql>
+        <rollback>
+            <sql>DELETE FROM whiteboard.whiteboard_create_receipt r WHERE NOT EXISTS (SELECT 1 FROM whiteboard.whiteboard w WHERE w.page_id=r.page_id);</sql>
+            <addForeignKeyConstraint baseTableSchemaName="whiteboard" baseTableName="whiteboard_create_receipt" baseColumnNames="page_id" referencedTableSchemaName="whiteboard" referencedTableName="whiteboard" referencedColumnNames="page_id" constraintName="whiteboard_create_receipt_page_fk"/>
+            <dropTable schemaName="whiteboard" tableName="whiteboard_restore_receipt"/>
+            <dropColumn schemaName="whiteboard" tableName="whiteboard_draft" columnName="restore_generation"/>
+        </rollback>
+    </changeSet>
+</databaseChangeLog>

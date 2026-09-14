@@ -1,8 +1,19 @@
+/**
+ * FrameTool — draw a frame container by drag.
+ *
+ * The in-progress frame is staged under its real, final shape id via
+ * beginHistoryPreview()/recordHistoryPreview() — the same InteractionManager
+ * preview lifecycle SelectTool uses for drag/resize/rotate — so there's no
+ * delete-then-recreate step between the live preview and the committed shape.
+ * pointerCancel (a browser/OS-initiated abort, e.g. trackpad gesture
+ * disambiguation on a fast short drag) commits the frame exactly as it was
+ * last staged rather than losing it; Escape still discards it.
+ */
+
 import { StateNode } from '../state-node.js';
 import type { KeyDownEvent, PointerDownEvent, PointerMoveEvent, PointerUpEvent } from '../state-node.js';
-import { sid, type ShapeId, type Vec2 } from '../types.js';
+import type { ShapeId, Vec2 } from '../types.js';
 
-const PREVIEW_ID = sid('__frame-preview__');
 const DRAG_THRESHOLD = 4;
 
 function frameRecord(id: ShapeId, origin: Vec2, point: Vec2) {
@@ -38,29 +49,57 @@ class Pointing extends StateNode {
 class Drawing extends StateNode {
   static override readonly id = 'drawing';
   private origin!: Vec2;
+  private id!: ShapeId;
+
   override onEnter(info: { origin: Vec2; current: Vec2 }): void {
     this.origin = info.origin;
-    this.editor.batch('Preview Frame', () => this.editor.createShape(frameRecord(PREVIEW_ID, info.origin, info.current)),
-      { history: 'ignore', scope: 'ephemeral' });
+    this.id = this.editor.createShapeId('frame');
+
+    this.editor.beginHistoryPreview();
+    this.editor.batch('Frame Preview', () => this.editor.createShape(frameRecord(this.id, info.origin, info.current)),
+      { history: 'ignore' });
   }
+
   override onPointerMove(event: PointerMoveEvent): void {
-    const next = frameRecord(PREVIEW_ID, this.origin, event.point);
-    this.editor.batch('Preview Frame', () => this.editor.updateShape(PREVIEW_ID, next as any),
-      { history: 'ignore', scope: 'ephemeral' });
+    this._updateFrame(event.point);
   }
+
   override onPointerUp(event: PointerUpEvent): void {
-    this.editor.batch('Clear Frame Preview', () => this.editor.deleteShapes([PREVIEW_ID]),
-      { history: 'ignore', scope: 'ephemeral' });
-    const id = this.editor.createShapeId('frame');
-    this.editor.createShape(frameRecord(id, this.origin, event.point));
-    this.editor.setCurrentTool('select');
-    this.editor.setSelectedShapeIds([id]);
+    this._updateFrame(event.point);
+    this._commit();
   }
+
+  override onPointerCancel(): void {
+    // No reliable point on a browser/OS-initiated cancel — commit the frame
+    // exactly as it was last staged rather than losing it.
+    this._commit();
+  }
+
   override onKeyDown(event: KeyDownEvent): void {
     if (event.key !== 'Escape') return;
-    this.editor.batch('Clear Frame Preview', () => this.editor.deleteShapes([PREVIEW_ID]),
-      { history: 'ignore', scope: 'ephemeral' });
+    this.editor.cancelHistoryPreview();
     this.parent!.transition('idle');
+  }
+
+  override onExit(): void {
+    // Safety net: if the tool is switched away mid-drag without a
+    // pointerUp/pointerCancel/Escape, make sure no staged preview lingers.
+    this.editor.cancelHistoryPreview();
+  }
+
+  private _updateFrame(point: Vec2): void {
+    const next = frameRecord(this.id, this.origin, point);
+    this.editor.batch('Frame Preview Update', () => this.editor.updateShape(this.id, next as any),
+      { history: 'ignore' });
+  }
+
+  private _commit(): void {
+    // Promote the staged record into the real store as a single atomic,
+    // history-recorded transaction under its original id.
+    this.editor.recordHistoryPreview('Create Frame', new Map([[this.id, null]]));
+
+    this.editor.setCurrentTool('select');
+    this.editor.setSelectedShapeIds([this.id]);
   }
 }
 

@@ -1,0 +1,4035 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Beskar API",
+    "version": "1.0.0",
+    "description": "Authentication and implemented whiteboarding v2 APIs.\n\n**Try it:** [Sign in](/auth/login?returnTo=%2Fapi%2Fdocs), then use the browser-session option, or select BearerToken and paste a valid Zitadel JWT (without the Bearer prefix). The server currently verifies bearer JWTs using its OIDC ID-token verifier; opaque access tokens are not supported. Calls run against this origin with your permissions and can create real data.\n\nReplace example space/parent IDs with your own. Generate an Idempotency-Key UUID for each new board or checkpoint batch and keep it with the same payload for retries. Login, registration and logout require browser navigation. Cookie sessions normally require HTTPS.",
+    "license": {
+      "name": "Apache 2.0",
+      "identifier": "Apache-2.0"
+    }
+  },
+  "servers": [
+    {
+      "url": "/",
+      "description": "This Beskar instance"
+    }
+  ],
+  "tags": [
+    {
+      "name": "Authentication",
+      "description": "Sign-in flows, provider discovery and identity checks."
+    },
+    {
+      "name": "Whiteboarding v2",
+      "description": "Implemented v2 whiteboard operations."
+    },
+    {
+      "name": "Page navigation",
+      "description": "Shared discovery APIs for legacy pages and v2 whiteboards."
+    }
+  ],
+  "security": [
+    {
+      "BrowserSession": []
+    },
+    {
+      "BearerToken": []
+    }
+  ],
+  "paths": {
+    "/auth/login": {
+      "get": {
+        "tags": [
+          "Authentication"
+        ],
+        "operationId": "login",
+        "summary": "Sign in with Zitadel",
+        "description": "Open [Sign in](/auth/login?returnTo=%2Fapi%2Fdocs) in the browser. This starts an OIDC authorization-code flow with PKCE and returns to the documentation after sign-in. Redirect-based login must run as browser navigation; the request console cannot display the identity provider login UI.",
+        "security": [],
+        "responses": {
+          "302": {
+            "description": "Browser redirect. Follow the Location header through the identity provider.",
+            "headers": {
+              "Location": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Redirect destination."
+              }
+            }
+          },
+          "default": {
+            "description": "Authentication provider error; response may be plain text."
+          }
+        },
+        "parameters": [
+          {
+            "name": "returnTo",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "default": "/"
+            },
+            "example": "/api/docs",
+            "description": "Local absolute path to return to. External URLs and /auth paths fall back to /."
+          }
+        ]
+      }
+    },
+    "/auth/register": {
+      "get": {
+        "tags": [
+          "Authentication"
+        ],
+        "operationId": "register",
+        "summary": "Register through Zitadel",
+        "description": "Open [Register](/auth/register) in the browser. Starts the configured identity provider registration flow using prompt=create. On completion return to /api/docs; this route does not accept returnTo.",
+        "security": [],
+        "responses": {
+          "302": {
+            "description": "Browser redirect. Follow the Location header through the identity provider.",
+            "headers": {
+              "Location": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Redirect destination."
+              }
+            }
+          },
+          "default": {
+            "description": "Authentication provider error; response may be plain text."
+          }
+        }
+      }
+    },
+    "/auth/callback": {
+      "get": {
+        "tags": [
+          "Authentication"
+        ],
+        "operationId": "authCallback",
+        "summary": "Complete the OIDC callback",
+        "description": "Called by Zitadel after sign-in/registration. Exchanges the authorization code, verifies state, sets the HttpOnly zitadel.session cookie and redirects. Provider-managed values must come from a real login flow; do not replay them manually.",
+        "security": [],
+        "responses": {
+          "302": {
+            "description": "Browser redirect. Follow the Location header through the identity provider.",
+            "headers": {
+              "Location": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Redirect destination."
+              }
+            }
+          },
+          "default": {
+            "description": "Authentication provider error; response may be plain text."
+          },
+          "403": {
+            "description": "Callback did not establish an authenticated identity.",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "code",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "One-time authorization code from the provider."
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Encrypted login state from the original browser flow."
+          },
+          {
+            "name": "error",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Provider error when authorization failed."
+          }
+        ]
+      }
+    },
+    "/auth/logout": {
+      "get": {
+        "tags": [
+          "Authentication"
+        ],
+        "operationId": "logout",
+        "summary": "End the browser session",
+        "description": "Open [Sign out](/auth/logout) in the browser. Ends the current cookie session and performs the provider logout redirect. This is not a bearer-token revocation endpoint.",
+        "security": [],
+        "responses": {
+          "302": {
+            "description": "Browser redirect. Follow the Location header through the identity provider.",
+            "headers": {
+              "Location": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Redirect destination."
+              }
+            }
+          },
+          "default": {
+            "description": "Authentication provider error; response may be plain text."
+          }
+        }
+      }
+    },
+    "/api/v1/authenticated": {
+      "get": {
+        "tags": [
+          "Authentication"
+        ],
+        "operationId": "checkAuthentication",
+        "summary": "Check authentication",
+        "description": "Returns success for a valid application identity. A supplied Bearer header takes precedence over the browser session. Without a bearer token the cookie middleware may redirect an unauthenticated browser to login.",
+        "responses": {
+          "200": {
+            "description": "Authenticated.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthenticatedResponse"
+                }
+              }
+            }
+          },
+          "302": {
+            "description": "Browser redirect. Follow the Location header through the identity provider.",
+            "headers": {
+              "Location": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Redirect destination."
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid bearer token or missing application identity.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthenticationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/.well-known/beskar": {
+      "get": {
+        "tags": [
+          "Authentication"
+        ],
+        "operationId": "discoverIdentityProvider",
+        "summary": "Discover the identity provider",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Configured Zitadel issuer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "zitadel_url"
+                  ],
+                  "properties": {
+                    "zitadel_url": {
+                      "type": "string",
+                      "format": "uri"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v2/editor/space/{spaceId}/whiteboard/create": {
+      "post": {
+        "tags": [
+          "Whiteboarding v2"
+        ],
+        "operationId": "createWhiteboardV2",
+        "summary": "Create a whiteboard",
+        "description": "Creates a board in the v2 schema. Requires space edit_page permission and parent edit permission when nested. Generate a fresh UUID Idempotency-Key per create action; reuse it and the same body on retries. Replays return 201 with the original IDs. Unknown fields, invalid UTF-8 and trailing JSON are rejected. Maximum body: 16 KiB. V2 incremental checkpoints are supported. V2 retrieval and publication are not implemented yet; v1 readers cannot load this board.",
+        "parameters": [
+          {
+            "name": "spaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Nonzero UUID."
+            },
+            "example": "c7022348-1bb3-4e52-8403-17786e15e035"
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Nonzero UUID."
+            },
+            "description": "Exactly one nonzero UUID. Generate with crypto.randomUUID(); retain for retries, replace for each new create action."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateWhiteboardRequest"
+              },
+              "examples": {
+                "topLevel": {
+                  "summary": "Top-level board",
+                  "value": {
+                    "title": "Architecture discussion"
+                  }
+                },
+                "nested": {
+                  "summary": "Under an existing parent",
+                  "value": {
+                    "title": "Architecture discussion",
+                    "parentId": 123
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created, or replayed successfully with the same page and space IDs.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateWhiteboardResponse"
+                }
+              }
+            }
+          },
+          "302": {
+            "description": "Browser redirect. Follow the Location header through the identity provider.",
+            "headers": {
+              "Location": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Redirect destination."
+              }
+            }
+          },
+          "401": {
+            "description": "UNAUTHENTICATED from the handler, or an authentication middleware error with a numeric code.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/WhiteboardError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/AuthenticationError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid space UUID, Idempotency-Key, or JSON body.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                },
+                "example": {
+                  "status": "FAILED",
+                  "error": {
+                    "code": "INVALID_REQUEST",
+                    "message": "Invalid space UUID, Idempotency-Key, or JSON body."
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Space edit_page or parent edit permission denied.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                },
+                "example": {
+                  "status": "FAILED",
+                  "error": {
+                    "code": "CREATE_WHITEBOARD_FORBIDDEN",
+                    "message": "Space edit_page or parent edit permission denied."
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Space or parent missing/deleted, or parent belongs to another space.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                },
+                "example": {
+                  "status": "FAILED",
+                  "error": {
+                    "code": "SPACE_OR_PARENT_NOT_FOUND",
+                    "message": "Space or parent missing/deleted, or parent belongs to another space."
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "IDEMPOTENCY_KEY_REUSED: changed content with an existing key. SPACE_ARCHIVED: space is archived.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                },
+                "example": {
+                  "status": "FAILED",
+                  "error": {
+                    "code": "IDEMPOTENCY_KEY_REUSED",
+                    "message": "IDEMPOTENCY_KEY_REUSED: changed content with an existing key. SPACE_ARCHIVED: space is archived."
+                  }
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "JSON body exceeds 16 KiB.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                },
+                "example": {
+                  "status": "FAILED",
+                  "error": {
+                    "code": "REQUEST_TOO_LARGE",
+                    "message": "JSON body exceeds 16 KiB."
+                  }
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Content-Type must be application/json.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                },
+                "example": {
+                  "status": "FAILED",
+                  "error": {
+                    "code": "UNSUPPORTED_MEDIA_TYPE",
+                    "message": "Content-Type must be application/json."
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Creation could not be confirmed. Retry the same request and key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                },
+                "example": {
+                  "status": "FAILED",
+                  "error": {
+                    "code": "WHITEBOARD_CREATE_FAILED",
+                    "message": "Creation could not be confirmed. Retry the same request and key."
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "WHITEBOARD_CREATE_BUSY: lock timeout. WHITEBOARD_PERMISSIONS_PENDING: creation recorded but permission setup pending. Retry the same request and key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                },
+                "example": {
+                  "status": "FAILED",
+                  "error": {
+                    "code": "WHITEBOARD_CREATE_BUSY",
+                    "message": "WHITEBOARD_CREATE_BUSY: lock timeout. WHITEBOARD_PERMISSIONS_PENDING: creation recorded but permission setup pending. Retry the same request and key."
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "1"
+                  ]
+                },
+                "description": "Retry after one second."
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v2/editor/space/{spaceId}/whiteboard/{pageId}/checkpoint": {
+      "post": {
+        "tags": [
+          "Whiteboarding v2"
+        ],
+        "operationId": "checkpointWhiteboardV2",
+        "summary": "Save an incremental whiteboard checkpoint",
+        "description": "Requires page edit permission and matching page/space membership. Appends one Yjs v1 batch and advances the existing draft atomically; the base snapshot remains unchanged. The draft row lock serializes sequence allocation. No expected-head or base-snapshot parameter is required.\n\nGenerate a UUID Idempotency-Key for each batch and retain it with the exact pending bytes until acknowledged. Matching retries return the original acknowledgement even if the head has advanced or the space was subsequently archived/soft-deleted, provided authorization and board membership still hold. Different actors may submit overlapping changes; Yjs handles their document effect. Acknowledgement confirms storage, not reception of other actors\u2019 edits.\n\nMaximum decoded update: 1 MiB (1048576 bytes). Maximum JSON body: 1.5 MiB (1572864 bytes). Client batching target: 256 KiB or two seconds of pending edits; that queue is not implemented by this endpoint. Images upload separately. Optional title metadata is saved atomically at this sequence. No snapshot compaction or permission provisioning occurs here. Unknown fields, extra JSON values and malformed Yjs v1 wire structures are rejected. Structural validation does not verify drawing schema or causal completeness. Deploy the whiteboard_updates and whiteboard_titles Liquibase changesets before using this operation. Title is authoritative checkpoint metadata; a title-only rename uses the empty Yjs update AAA=. Omitted title preserves the current value. Same key with another normalized title returns IDEMPOTENCY_KEY_REUSED.",
+        "parameters": [
+          {
+            "name": "spaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Nonzero UUID."
+            },
+            "example": "c7022348-1bb3-4e52-8403-17786e15e035"
+          },
+          {
+            "name": "pageId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "example": 42,
+            "description": "Existing v2 whiteboard page ID in the supplied space."
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Nonzero UUID."
+            },
+            "description": "Exactly one nonzero UUID per batch. Keep the same key and decoded bytes until acknowledged. Scoped by board and authenticated actor. Different content with the same scoped key returns 409."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "One incremental batch, not the whole board snapshot.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CheckpointWhiteboardRequest"
+              },
+              "examples": {
+                "emptyUpdate": {
+                  "summary": "Valid empty Yjs v1 update (still records a checkpoint)",
+                  "value": {
+                    "updateEncoding": "yjs-update-v1",
+                    "update": "AAA="
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Batch committed, or matching retry acknowledged with its original update ID and sequence.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CheckpointWhiteboardResponse"
+                },
+                "example": {
+                  "status": "success",
+                  "data": {
+                    "pageId": 42,
+                    "updateId": "0195ad23-831a-7000-8000-000000000100",
+                    "sequence": "17"
+                  }
+                }
+              }
+            }
+          },
+          "302": {
+            "description": "Browser redirect. Follow the Location header through the identity provider.",
+            "headers": {
+              "Location": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Redirect destination."
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid IDs, key, JSON, Base64, encoding, or Yjs v1 structure; nested lib0 values may not exceed 64 levels.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                },
+                "example": {
+                  "status": "FAILED",
+                  "error": {
+                    "code": "INVALID_REQUEST",
+                    "message": "Invalid Yjs v1 update or nesting exceeds 64 levels."
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UNAUTHENTICATED from the handler, or an authentication middleware error with a numeric code.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/WhiteboardError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/AuthenticationError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Page edit permission denied.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                },
+                "example": {
+                  "status": "FAILED",
+                  "error": {
+                    "code": "CHECKPOINT_FORBIDDEN",
+                    "message": "You cannot edit this whiteboard."
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Board or space missing, board belongs to another space, or a new batch targets a deleted space.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                },
+                "example": {
+                  "status": "FAILED",
+                  "error": {
+                    "code": "WHITEBOARD_NOT_FOUND",
+                    "message": "Whiteboard not found in this space."
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Same scoped key with different content, or a new batch targets an archived space.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                },
+                "examples": {
+                  "keyReused": {
+                    "value": {
+                      "status": "FAILED",
+                      "error": {
+                        "code": "IDEMPOTENCY_KEY_REUSED",
+                        "message": "idempotency key was reused with different content"
+                      }
+                    }
+                  },
+                  "spaceArchived": {
+                    "value": {
+                      "status": "FAILED",
+                      "error": {
+                        "code": "SPACE_ARCHIVED",
+                        "message": "space is archived"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "JSON body exceeds 1572864 bytes (1.5 MiB) or decoded update exceeds 1048576 bytes (1 MiB). Reduce the payload; do not retry unchanged.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                },
+                "examples": {
+                  "requestTooLarge": {
+                    "value": {
+                      "status": "FAILED",
+                      "error": {
+                        "code": "REQUEST_TOO_LARGE",
+                        "message": "Checkpoint request exceeds 1.5 MiB."
+                      }
+                    }
+                  },
+                  "updateTooLarge": {
+                    "value": {
+                      "status": "FAILED",
+                      "error": {
+                        "code": "REQUEST_TOO_LARGE",
+                        "message": "Decoded checkpoint exceeds 1 MiB."
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Content type must be application/json.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                },
+                "example": {
+                  "status": "FAILED",
+                  "error": {
+                    "code": "UNSUPPORTED_MEDIA_TYPE",
+                    "message": "Content-Type must be application/json."
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Save could not be confirmed, or draft integrity failed. Retry the same batch and key; persistent integrity failures need investigation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                },
+                "example": {
+                  "status": "FAILED",
+                  "error": {
+                    "code": "WHITEBOARD_CHECKPOINT_FAILED",
+                    "message": "Save could not be confirmed. Retry the same batch and Idempotency-Key."
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "A database lock wait exceeded three seconds. Retry the same batch and key after one second. This is a per-lock timeout, not a total request deadline.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                },
+                "example": {
+                  "status": "FAILED",
+                  "error": {
+                    "code": "WHITEBOARD_CHECKPOINT_BUSY",
+                    "message": "Checkpoint is busy. Retry the same batch and Idempotency-Key."
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "1"
+                  ]
+                },
+                "description": "Retry after one second."
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v2/editor/space/{spaceId}/whiteboard/{pageId}/draft": {
+      "get": {
+        "tags": [
+          "Whiteboarding v2"
+        ],
+        "operationId": "getWhiteboardDraftV2",
+        "summary": "Get a whiteboard draft manifest",
+        "description": "Requires page edit permission. Creates a one-hour actor-scoped replay lease pinning an immutable base snapshot and captured head. Archived spaces remain readable; deleted spaces do not. No body, query parameters or idempotency key. Sequence fields are decimal strings. Follow downloadUrl and updatesUrl with the same authenticated identity. New saves do not enter this replay. Repeating the manifest request creates another lease and can capture a newer head. Deploy whiteboard_draft_replay.xml first. Top-level title is captured at headSequence; baseSnapshot.title remains the base title. Deploy whiteboard_titles.xml.",
+        "parameters": [
+          {
+            "name": "spaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Nonzero UUID."
+            },
+            "example": "c7022348-1bb3-4e52-8403-17786e15e035"
+          },
+          {
+            "name": "pageId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "example": 42,
+            "description": "Existing v2 whiteboard page ID in the supplied space."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Small manifest; snapshot bytes and updates are downloaded separately.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardDraftManifestResponse"
+                }
+              }
+            }
+          },
+          "302": {
+            "description": "Browser redirect. Follow the Location header through the identity provider.",
+            "headers": {
+              "Location": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Redirect destination."
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid IDs, missing/duplicate/unknown query parameters, or invalid/tampered cursor.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                },
+                "example": {
+                  "status": "FAILED",
+                  "error": {
+                    "code": "INVALID_REQUEST",
+                    "message": "Invalid IDs, missing/duplicate/unknown query parameters, or invalid/tampered cursor."
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UNAUTHENTICATED from the handler, or an authentication middleware error with a numeric code.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/WhiteboardError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/AuthenticationError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Current page edit permission denied.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                },
+                "example": {
+                  "status": "FAILED",
+                  "error": {
+                    "code": "DRAFT_FORBIDDEN",
+                    "message": "Current page edit permission denied."
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Board missing, deleted, in another space, or snapshot does not match this replay.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                },
+                "example": {
+                  "status": "FAILED",
+                  "error": {
+                    "code": "WHITEBOARD_NOT_FOUND",
+                    "message": "Board missing, deleted, in another space, or snapshot does not match this replay."
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Database or stored-data integrity failure.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                },
+                "example": {
+                  "status": "FAILED",
+                  "error": {
+                    "code": "WHITEBOARD_DRAFT_READ_FAILED",
+                    "message": "Database or stored-data integrity failure."
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Manifest lock acquisition timed out; retry the request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                },
+                "example": {
+                  "status": "FAILED",
+                  "error": {
+                    "code": "WHITEBOARD_DRAFT_BUSY",
+                    "message": "Manifest lock acquisition timed out; retry the request."
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string",
+                  "const": "1"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v2/editor/space/{spaceId}/whiteboard/{pageId}/draft/updates": {
+      "get": {
+        "tags": [
+          "Whiteboarding v2"
+        ],
+        "operationId": "getWhiteboardDraftUpdatesV2",
+        "summary": "Get a bounded draft update page",
+        "description": "Use the opaque cursor from the manifest or previous nextCursor. Up to 64 whole updates and 4 MiB decoded bytes per page; Base64/JSON adds overhead. Sequences are contiguous and bounded by the original captured head. Follow nextCursor until complete=true and nextCursor=null. Retrying a cursor is stable while the lease is valid. A gap fails closed and may be detected on a subsequent page. Authentication and edit permission are checked on every request.",
+        "parameters": [
+          {
+            "name": "spaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Nonzero UUID."
+            },
+            "example": "c7022348-1bb3-4e52-8403-17786e15e035"
+          },
+          {
+            "name": "pageId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "example": 42,
+            "description": "Existing v2 whiteboard page ID in the supplied space."
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 128
+            },
+            "description": "Opaque signed cursor; do not construct or modify."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Ordered update page. An empty completed draft has updates=[] and nextCursor=null.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardDraftPageResponse"
+                }
+              }
+            }
+          },
+          "302": {
+            "description": "Browser redirect. Follow the Location header through the identity provider.",
+            "headers": {
+              "Location": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Redirect destination."
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid IDs, missing/duplicate/unknown query parameters, or invalid/tampered cursor.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                },
+                "example": {
+                  "status": "FAILED",
+                  "error": {
+                    "code": "INVALID_REQUEST",
+                    "message": "Invalid IDs, missing/duplicate/unknown query parameters, or invalid/tampered cursor."
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UNAUTHENTICATED from the handler, or an authentication middleware error with a numeric code.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/WhiteboardError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/AuthenticationError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Current page edit permission denied.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                },
+                "example": {
+                  "status": "FAILED",
+                  "error": {
+                    "code": "DRAFT_FORBIDDEN",
+                    "message": "Current page edit permission denied."
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Board missing, deleted, in another space, or snapshot does not match this replay.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                },
+                "example": {
+                  "status": "FAILED",
+                  "error": {
+                    "code": "WHITEBOARD_NOT_FOUND",
+                    "message": "Board missing, deleted, in another space, or snapshot does not match this replay."
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Database or stored-data integrity failure.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                },
+                "example": {
+                  "status": "FAILED",
+                  "error": {
+                    "code": "WHITEBOARD_DRAFT_READ_FAILED",
+                    "message": "Database or stored-data integrity failure."
+                  }
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Replay expired, removed, unknown, or belongs to another actor/board. Request a new manifest.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                },
+                "example": {
+                  "status": "FAILED",
+                  "error": {
+                    "code": "DRAFT_REPLAY_EXPIRED",
+                    "message": "Replay expired, removed, unknown, or belongs to another actor/board. Request a new manifest."
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v2/editor/space/{spaceId}/whiteboard/{pageId}/snapshots/{snapshotId}/content": {
+      "get": {
+        "tags": [
+          "Whiteboarding v2"
+        ],
+        "operationId": "getWhiteboardDraftSnapshotV2",
+        "summary": "Download a draft snapshot as binary",
+        "description": "Raw Yjs v1 snapshot bytes. The actor-scoped replay must be unexpired and identify this snapshot. Supports resumable single-range downloads and conditional requests. PostgreSQL bytes are fetched in chunks of at most 256 KiB; an MVCC transaction remains open for the transfer. Expiry during an in-flight transfer does not truncate it; later requests require a valid lease. Storage failures after headers abort the transport; verify byte length and SHA-256 before applying the assembled snapshot. Future object storage can replace this reader behind the same application URL.",
+        "parameters": [
+          {
+            "name": "spaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Nonzero UUID."
+            },
+            "example": "c7022348-1bb3-4e52-8403-17786e15e035"
+          },
+          {
+            "name": "pageId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "example": 42,
+            "description": "Existing v2 whiteboard page ID in the supplied space."
+          },
+          {
+            "name": "snapshotId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "replay",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Replay UUID from the manifest download URL."
+          },
+          {
+            "name": "Range",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            },
+            "description": "One byte range, e.g. bytes=0-65535, bytes=65536-, or bytes=-65536."
+          },
+          {
+            "name": "If-Range",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            },
+            "description": "ETag from the original snapshot download; a mismatch returns the full representation."
+          },
+          {
+            "name": "If-None-Match",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Matching ETag returns 304 after authorization and lease validation."
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            },
+            "description": "An ETag mismatch returns 412."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Full binary snapshot.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              },
+              "Content-Length": {
+                "schema": {
+                  "type": "integer",
+                  "format": "int64"
+                }
+              },
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Quoted immutable snapshot SHA-256 digest; use with If-Range."
+              },
+              "Accept-Ranges": {
+                "schema": {
+                  "type": "string",
+                  "const": "bytes"
+                }
+              },
+              "X-Accel-Buffering": {
+                "schema": {
+                  "type": "string",
+                  "const": "no"
+                }
+              }
+            },
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "302": {
+            "description": "Browser redirect. Follow the Location header through the identity provider.",
+            "headers": {
+              "Location": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Redirect destination."
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid IDs, missing/duplicate/unknown query parameters, or invalid/tampered cursor.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                },
+                "example": {
+                  "status": "FAILED",
+                  "error": {
+                    "code": "INVALID_REQUEST",
+                    "message": "Invalid IDs, missing/duplicate/unknown query parameters, or invalid/tampered cursor."
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UNAUTHENTICATED from the handler, or an authentication middleware error with a numeric code.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/WhiteboardError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/AuthenticationError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Current page edit permission denied.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                },
+                "example": {
+                  "status": "FAILED",
+                  "error": {
+                    "code": "DRAFT_FORBIDDEN",
+                    "message": "Current page edit permission denied."
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Board missing, deleted, in another space, or snapshot does not match this replay.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                },
+                "example": {
+                  "status": "FAILED",
+                  "error": {
+                    "code": "WHITEBOARD_NOT_FOUND",
+                    "message": "Board missing, deleted, in another space, or snapshot does not match this replay."
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Database or stored-data integrity failure.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                },
+                "example": {
+                  "status": "FAILED",
+                  "error": {
+                    "code": "WHITEBOARD_DRAFT_READ_FAILED",
+                    "message": "Database or stored-data integrity failure."
+                  }
+                }
+              }
+            }
+          },
+          "206": {
+            "description": "Requested byte range.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              },
+              "Content-Length": {
+                "schema": {
+                  "type": "integer",
+                  "format": "int64"
+                }
+              },
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Quoted immutable snapshot SHA-256 digest; use with If-Range."
+              },
+              "Accept-Ranges": {
+                "schema": {
+                  "type": "string",
+                  "const": "bytes"
+                }
+              },
+              "X-Accel-Buffering": {
+                "schema": {
+                  "type": "string",
+                  "const": "no"
+                }
+              },
+              "Content-Range": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "bytes 0-65535/25165824"
+              }
+            },
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "ETag matched; no body.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Replay expired, removed, unknown, or belongs to another actor/board. Request a new manifest.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                },
+                "example": {
+                  "status": "FAILED",
+                  "error": {
+                    "code": "DRAFT_REPLAY_EXPIRED",
+                    "message": "Replay expired, removed, unknown, or belongs to another actor/board. Request a new manifest."
+                  }
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "Snapshot ETag failed the If-Match precondition; no snapshot bytes."
+          },
+          "416": {
+            "description": "Malformed or unsatisfiable range (plain text), or multiple ranges (INVALID_RANGE JSON).",
+            "headers": {
+              "Content-Range": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "bytes */<length> when applicable."
+              }
+            },
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "head": {
+        "tags": [
+          "Whiteboarding v2"
+        ],
+        "operationId": "headWhiteboardDraftSnapshotV2",
+        "summary": "Get draft snapshot download headers",
+        "description": "Same authorization and replay checks as GET. Returns headers without reading snapshot bytes. Range is ignored for HEAD.",
+        "parameters": [
+          {
+            "name": "spaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Nonzero UUID."
+            },
+            "example": "c7022348-1bb3-4e52-8403-17786e15e035"
+          },
+          {
+            "name": "pageId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "example": 42,
+            "description": "Existing v2 whiteboard page ID in the supplied space."
+          },
+          {
+            "name": "snapshotId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "replay",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Replay UUID from the manifest download URL."
+          },
+          {
+            "name": "Range",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            },
+            "description": "One byte range, e.g. bytes=0-65535, bytes=65536-, or bytes=-65536."
+          },
+          {
+            "name": "If-Range",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            },
+            "description": "ETag from the original snapshot download; a mismatch returns the full representation."
+          },
+          {
+            "name": "If-None-Match",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Matching ETag returns 304 after authorization and lease validation."
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            },
+            "description": "An ETag mismatch returns 412."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Full binary snapshot.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              },
+              "Content-Length": {
+                "schema": {
+                  "type": "integer",
+                  "format": "int64"
+                }
+              },
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Quoted immutable snapshot SHA-256 digest; use with If-Range."
+              },
+              "Accept-Ranges": {
+                "schema": {
+                  "type": "string",
+                  "const": "bytes"
+                }
+              },
+              "X-Accel-Buffering": {
+                "schema": {
+                  "type": "string",
+                  "const": "no"
+                }
+              }
+            }
+          },
+          "302": {
+            "description": "Browser redirect. Follow the Location header through the identity provider.",
+            "headers": {
+              "Location": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Redirect destination."
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid IDs, missing/duplicate/unknown query parameters, or invalid/tampered cursor."
+          },
+          "401": {
+            "description": "UNAUTHENTICATED from the handler, or an authentication middleware error with a numeric code."
+          },
+          "403": {
+            "description": "Current page edit permission denied."
+          },
+          "404": {
+            "description": "Board missing, deleted, in another space, or snapshot does not match this replay."
+          },
+          "500": {
+            "description": "Database or stored-data integrity failure."
+          },
+          "304": {
+            "description": "ETag matched; no body.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Replay expired, removed, unknown, or belongs to another actor/board. Request a new manifest."
+          },
+          "412": {
+            "description": "Snapshot ETag failed the If-Match precondition; no snapshot bytes."
+          },
+          "416": {
+            "description": "Malformed or unsatisfiable range (plain text), or multiple ranges (INVALID_RANGE JSON).",
+            "headers": {
+              "Content-Range": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "bytes */<length> when applicable."
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v2/editor/space/{spaceId}/whiteboard/{pageId}/publish": {
+      "post": {
+        "tags": [
+          "Whiteboarding v2"
+        ],
+        "operationId": "publishWhiteboardV2",
+        "summary": "Publish a whiteboard at a durable sequence",
+        "description": "Requires edit permission. Reconstructs Yjs state through sequence and atomically creates its snapshot, version, and current publication pointer. Retries return the original version without moving the pointer. Keys are scoped to board and actor. Archived spaces reject new publications. Replay is bounded to 32 MiB and 10,000 updates. Requires whiteboard_publication.xml and the pinned Node/Yjs runtime. Title edits use optional checkpoint title metadata; the requested sequence determines the published title. Deploy whiteboard_titles.xml. Asset integration is deferred; asset records are preserved without validation or retention. Requires a client-generated PNG in preview.contentType/data. PNG is validated and stored atomically with publication; retries must keep the same sequence and image. 6 MiB JSON body limit. Deploy whiteboard_previews.xml. The server does not verify visual correspondence to the Yjs snapshot.",
+        "parameters": [
+          {
+            "name": "spaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Nonzero UUID."
+            },
+            "example": "c7022348-1bb3-4e52-8403-17786e15e035"
+          },
+          {
+            "name": "pageId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "example": 42,
+            "description": "Existing v2 whiteboard page ID in the supplied space."
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Nonzero UUID."
+            },
+            "description": "Exactly one nonzero UUID per batch. Keep the same key and decoded bytes until acknowledged. Scoped by board and authenticated actor. Different content with the same scoped key returns 409."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublishWhiteboardRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Immutable published manifest.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardPublishedResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "INVALID_REQUEST or INVALID_PREVIEW",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UNAUTHENTICATED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "WHITEBOARD_FORBIDDEN",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "WHITEBOARD_NOT_FOUND or WHITEBOARD_NOT_PUBLISHED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "WHITEBOARD_PUBLICATION_FAILED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "IDEMPOTENCY_KEY_REUSED, SPACE_ARCHIVED, PUBLISH_SEQUENCE_UNAVAILABLE, PUBLISH_STATE_INVALID",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "REQUEST_TOO_LARGE or PUBLISH_TOO_LARGE",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "UNSUPPORTED_MEDIA_TYPE",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "WHITEBOARD_PUBLISH_BUSY; Retry-After: 1",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v2/editor/space/{spaceId}/whiteboard/{pageId}/published": {
+      "get": {
+        "tags": [
+          "Whiteboarding v2"
+        ],
+        "operationId": "getPublishedWhiteboardV2",
+        "summary": "Get the current published whiteboard",
+        "description": "Requires view permission. Returns an immutable snapshot download URL. Archived spaces remain readable. No replay lease. preview=true returns only the stored PNG, with current view permission; preview=false returns the manifest. Returns WHITEBOARD_NOT_PUBLISHED before first publication.",
+        "parameters": [
+          {
+            "name": "spaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Nonzero UUID."
+            },
+            "example": "c7022348-1bb3-4e52-8403-17786e15e035"
+          },
+          {
+            "name": "pageId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "example": 42,
+            "description": "Existing v2 whiteboard page ID in the supplied space."
+          },
+          {
+            "name": "preview",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false
+            },
+            "description": "true returns raw PNG only; false or omitted returns the manifest."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Immutable published manifest.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardPublishedResponse"
+                }
+              },
+              "image/png": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "INVALID_REQUEST",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UNAUTHENTICATED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "WHITEBOARD_FORBIDDEN",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "WHITEBOARD_NOT_FOUND or WHITEBOARD_NOT_PUBLISHED or WHITEBOARD_PREVIEW_NOT_FOUND",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "WHITEBOARD_PUBLICATION_FAILED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "head": {
+        "tags": [
+          "Whiteboarding v2"
+        ],
+        "operationId": "headCurrentPublishedWhiteboardV2",
+        "summary": "Inspect the current published representation",
+        "description": "Requires view permission. Returns an immutable snapshot download URL. Archived spaces remain readable. No replay lease. preview=true returns only the stored PNG, with current view permission; preview=false returns the manifest. Returns WHITEBOARD_NOT_PUBLISHED before first publication.",
+        "parameters": [
+          {
+            "name": "spaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Nonzero UUID."
+            },
+            "example": "c7022348-1bb3-4e52-8403-17786e15e035"
+          },
+          {
+            "name": "pageId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "example": 42,
+            "description": "Existing v2 whiteboard page ID in the supplied space."
+          },
+          {
+            "name": "preview",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false
+            },
+            "description": "true returns raw PNG only; false or omitted returns the manifest."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Immutable published manifest.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardPublishedResponse"
+                }
+              },
+              "image/png": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "INVALID_REQUEST",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UNAUTHENTICATED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "WHITEBOARD_FORBIDDEN",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "WHITEBOARD_NOT_FOUND or WHITEBOARD_NOT_PUBLISHED or WHITEBOARD_PREVIEW_NOT_FOUND",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "WHITEBOARD_PUBLICATION_FAILED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v2/editor/space/{spaceId}/whiteboard/{pageId}/published/{versionId}/content": {
+      "get": {
+        "tags": [
+          "Whiteboarding v2"
+        ],
+        "operationId": "downloadPublishedWhiteboardV2",
+        "summary": "Download an immutable published snapshot",
+        "description": "Requires current view permission and matching board/space/version. Historical published versions remain accessible. No query parameters. Supports one byte range, ETag and If-Range; HEAD ignores Range. Cache-Control: no-store.",
+        "parameters": [
+          {
+            "name": "spaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Nonzero UUID."
+            },
+            "example": "c7022348-1bb3-4e52-8403-17786e15e035"
+          },
+          {
+            "name": "pageId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "example": 42,
+            "description": "Existing v2 whiteboard page ID in the supplied space."
+          },
+          {
+            "name": "versionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Yjs update-v1 full snapshot.",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "206": {
+            "description": "Requested byte range."
+          },
+          "304": {
+            "description": "ETag matched."
+          },
+          "416": {
+            "description": "Invalid or multiple ranges."
+          },
+          "400": {
+            "description": "INVALID_REQUEST",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UNAUTHENTICATED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "WHITEBOARD_FORBIDDEN",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "WHITEBOARD_NOT_FOUND or WHITEBOARD_NOT_PUBLISHED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "WHITEBOARD_PUBLICATION_FAILED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "head": {
+        "tags": [
+          "Whiteboarding v2"
+        ],
+        "operationId": "headPublishedWhiteboardV2",
+        "summary": "Inspect an immutable published snapshot",
+        "description": "Requires current view permission and matching board/space/version. Historical published versions remain accessible. No query parameters. Supports one byte range, ETag and If-Range; HEAD ignores Range. Cache-Control: no-store.",
+        "parameters": [
+          {
+            "name": "spaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Nonzero UUID."
+            },
+            "example": "c7022348-1bb3-4e52-8403-17786e15e035"
+          },
+          {
+            "name": "pageId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "example": 42,
+            "description": "Existing v2 whiteboard page ID in the supplied space."
+          },
+          {
+            "name": "versionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Yjs update-v1 full snapshot.",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "206": {
+            "description": "Requested byte range."
+          },
+          "304": {
+            "description": "ETag matched."
+          },
+          "416": {
+            "description": "Invalid or multiple ranges."
+          },
+          "400": {
+            "description": "INVALID_REQUEST",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UNAUTHENTICATED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "WHITEBOARD_FORBIDDEN",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "WHITEBOARD_NOT_FOUND or WHITEBOARD_NOT_PUBLISHED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "WHITEBOARD_PUBLICATION_FAILED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v2/editor/space/{spaceId}/whiteboard/{pageId}/published/{versionId}/preview": {
+      "get": {
+        "tags": [
+          "Whiteboarding v2"
+        ],
+        "operationId": "downloadWhiteboardPreviewV2",
+        "summary": "Read an immutable published PNG preview",
+        "description": "Returns raw PNG with current view permission, no-store cache policy, ETag, HEAD and single-range support. Older versions without previews return WHITEBOARD_PREVIEW_NOT_FOUND.",
+        "parameters": [
+          {
+            "name": "spaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Nonzero UUID."
+            },
+            "example": "c7022348-1bb3-4e52-8403-17786e15e035"
+          },
+          {
+            "name": "pageId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "example": 42,
+            "description": "Existing v2 whiteboard page ID in the supplied space."
+          },
+          {
+            "name": "versionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "PNG preview bytes.",
+            "content": {
+              "image/png": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "206": {
+            "description": "Requested byte range."
+          },
+          "304": {
+            "description": "ETag matched."
+          },
+          "416": {
+            "description": "Invalid or multiple ranges."
+          },
+          "400": {
+            "description": "INVALID_REQUEST",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UNAUTHENTICATED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "WHITEBOARD_FORBIDDEN",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "WHITEBOARD_NOT_FOUND or WHITEBOARD_NOT_PUBLISHED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "WHITEBOARD_PUBLICATION_FAILED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "head": {
+        "tags": [
+          "Whiteboarding v2"
+        ],
+        "operationId": "headWhiteboardPreviewV2",
+        "summary": "Read an immutable published PNG preview",
+        "description": "Returns raw PNG with current view permission, no-store cache policy, ETag, HEAD and single-range support. Older versions without previews return WHITEBOARD_PREVIEW_NOT_FOUND.",
+        "parameters": [
+          {
+            "name": "spaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Nonzero UUID."
+            },
+            "example": "c7022348-1bb3-4e52-8403-17786e15e035"
+          },
+          {
+            "name": "pageId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "example": 42,
+            "description": "Existing v2 whiteboard page ID in the supplied space."
+          },
+          {
+            "name": "versionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "PNG preview bytes.",
+            "content": {
+              "image/png": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "206": {
+            "description": "Requested byte range."
+          },
+          "304": {
+            "description": "ETag matched."
+          },
+          "416": {
+            "description": "Invalid or multiple ranges."
+          },
+          "400": {
+            "description": "INVALID_REQUEST",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UNAUTHENTICATED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "WHITEBOARD_FORBIDDEN",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "WHITEBOARD_NOT_FOUND or WHITEBOARD_NOT_PUBLISHED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "WHITEBOARD_PUBLICATION_FAILED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/space/{spaceId}/page/list": {
+      "get": {
+        "tags": [
+          "Page navigation"
+        ],
+        "operationId": "listSpacePages",
+        "summary": "List accessible pages and whiteboards",
+        "description": "Requires page view permission. Unpublished v2 boards are visible only to editors. Editors see current draft titles; other viewers see published titles. Deleted spaces are excluded. Archived spaces remain readable under existing page permissions. These shared endpoints remain v1; use contentApiVersion and whiteboard URLs to select v2 content APIs.",
+        "parameters": [
+          {
+            "name": "spaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Page discovery result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "status",
+                    "data"
+                  ],
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "const": "success"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/SharedPageListItem"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authentication or permission denied."
+          },
+          "404": {
+            "description": "Page not found or unavailable to this viewer."
+          },
+          "500": {
+            "description": "Permission service or database error."
+          }
+        }
+      }
+    },
+    "/api/v1/editor/space/{spaceId}/page/{pageId}/metadata": {
+      "get": {
+        "tags": [
+          "Page navigation"
+        ],
+        "operationId": "getSharedPageMetadata",
+        "summary": "Resolve page content API navigation",
+        "description": "Requires page view permission. Unpublished v2 boards are visible only to editors. Editors see current draft titles; other viewers see published titles. Deleted spaces are excluded. Archived spaces remain readable under existing page permissions. These shared endpoints remain v1; use contentApiVersion and whiteboard URLs to select v2 content APIs.",
+        "parameters": [
+          {
+            "name": "spaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "pageId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Page discovery result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "status",
+                    "data"
+                  ],
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "const": "success"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/SharedPageMetadata"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authentication or permission denied."
+          },
+          "404": {
+            "description": "Page not found or unavailable to this viewer."
+          },
+          "500": {
+            "description": "Permission service or database error."
+          }
+        }
+      }
+    },
+    "/api/v1/editor/space/{spaceId}/page/{pageId}/inline-link": {
+      "get": {
+        "tags": [
+          "Page navigation"
+        ],
+        "operationId": "getSharedPageInlineLinkMetadata",
+        "summary": "Get page inline-link metadata",
+        "description": "Requires page view permission. Unpublished v2 boards are visible only to editors. Editors see current draft titles; other viewers see published titles. Deleted spaces are excluded. Archived spaces remain readable under existing page permissions. These shared endpoints remain v1; use contentApiVersion and whiteboard URLs to select v2 content APIs.",
+        "parameters": [
+          {
+            "name": "spaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "pageId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Page discovery result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "status",
+                    "data"
+                  ],
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "const": "success"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/SharedPageInlineLinkMetadata"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authentication or permission denied."
+          },
+          "404": {
+            "description": "Page not found or unavailable to this viewer."
+          },
+          "500": {
+            "description": "Permission service or database error."
+          }
+        }
+      }
+    },
+    "/api/v2/editor/space/{spaceId}/whiteboard/{pageId}/versions/{versionId}": {
+      "get": {
+        "tags": [
+          "Whiteboarding v2"
+        ],
+        "operationId": "getWhiteboardVersionV2",
+        "summary": "Get published version metadata",
+        "description": "Requires view permission. Returns immutable version metadata, snapshot and PNG URLs; never changes the current publication.",
+        "parameters": [
+          {
+            "name": "spaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Nonzero UUID."
+            },
+            "example": "c7022348-1bb3-4e52-8403-17786e15e035"
+          },
+          {
+            "name": "pageId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "example": 42,
+            "description": "Existing v2 whiteboard page ID in the supplied space."
+          },
+          {
+            "name": "versionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardPublishedResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Request rejected",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Request rejected",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Request rejected",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Request rejected",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Request rejected",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Request rejected",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Request rejected",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v2/editor/space/{spaceId}/whiteboard/{pageId}/versions": {
+      "get": {
+        "tags": [
+          "Whiteboarding v2"
+        ],
+        "operationId": "listWhiteboardVersionsV2",
+        "summary": "List published versions",
+        "description": "Requires view permission. Newest first, keyset pagination by version number. Archived spaces remain readable.",
+        "parameters": [
+          {
+            "name": "spaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Nonzero UUID."
+            },
+            "example": "c7022348-1bb3-4e52-8403-17786e15e035"
+          },
+          {
+            "name": "pageId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "example": 42,
+            "description": "Existing v2 whiteboard page ID in the supplied space."
+          },
+          {
+            "name": "before",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "pattern": "^(0|[1-9][0-9]*)$",
+              "description": "Exclusive positive version number returned as nextBefore."
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "versions": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/WhiteboardPublishedManifest"
+                          }
+                        },
+                        "nextBefore": {
+                          "type": "string",
+                          "pattern": "^(0|[1-9][0-9]*)$",
+                          "description": "Canonical nonnegative int64 decimal string."
+                        }
+                      },
+                      "required": [
+                        "versions"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Request rejected",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Request rejected",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Request rejected",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Request rejected",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Request rejected",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Request rejected",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Request rejected",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v2/editor/space/{spaceId}/whiteboard/{pageId}/versions/{versionId}/restore": {
+      "post": {
+        "tags": [
+          "Whiteboarding v2"
+        ],
+        "operationId": "restoreWhiteboardVersionV2",
+        "summary": "Restore a published version to draft",
+        "description": "Requires edit permission and an active space. Replaces the draft at expectedHeadSequence+1, increments restoreGeneration, and preserves the current publication. Concurrent changes return DRAFT_HEAD_CHANGED. Retry identical body/version/key for the original result. Old-generation checkpoints are rejected, including old checkpoint retries.",
+        "parameters": [
+          {
+            "name": "spaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Nonzero UUID."
+            },
+            "example": "c7022348-1bb3-4e52-8403-17786e15e035"
+          },
+          {
+            "name": "pageId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "example": 42,
+            "description": "Existing v2 whiteboard page ID in the supplied space."
+          },
+          {
+            "name": "versionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "pageId": {
+                          "type": "integer"
+                        },
+                        "versionId": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "snapshotId": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "sequence": {
+                          "type": "string",
+                          "pattern": "^(0|[1-9][0-9]*)$",
+                          "description": "Canonical nonnegative int64 decimal string."
+                        },
+                        "restoreGeneration": {
+                          "type": "string",
+                          "pattern": "^(0|[1-9][0-9]*)$",
+                          "description": "Canonical nonnegative int64 decimal string."
+                        }
+                      }
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Request rejected",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Request rejected",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Request rejected",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Request rejected",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Request rejected",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Request rejected",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Request rejected",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "expectedHeadSequence"
+                ],
+                "properties": {
+                  "expectedHeadSequence": {
+                    "type": "string",
+                    "pattern": "^(0|[1-9][0-9]*)$",
+                    "description": "Canonical nonnegative int64 decimal string."
+                  }
+                }
+              },
+              "example": {
+                "expectedHeadSequence": "12"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v2/editor/space/{spaceId}/whiteboard/{pageId}": {
+      "delete": {
+        "tags": [
+          "Whiteboarding v2"
+        ],
+        "operationId": "deleteWhiteboardV2",
+        "summary": "Delete a v2 whiteboard",
+        "description": "Requires delete permission and an active space. Rejects boards with child pages. Atomically removes board content and core page; retains creation receipt identity to prevent resurrection by old retries. Missing boards return 204 after authorization. Does not recursively delete children.",
+        "parameters": [
+          {
+            "name": "spaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Nonzero UUID."
+            },
+            "example": "c7022348-1bb3-4e52-8403-17786e15e035"
+          },
+          {
+            "name": "pageId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "example": 42,
+            "description": "Existing v2 whiteboard page ID in the supplied space."
+          }
+        ],
+        "responses": {
+          "400": {
+            "description": "Request rejected",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Request rejected",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Request rejected",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Request rejected",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Request rejected",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Request rejected",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Request rejected",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "204": {
+            "description": "Deleted or already absent."
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "BearerToken": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "Valid Zitadel JWT accepted by the server OIDC verifier. Paste only the token."
+      },
+      "BrowserSession": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "zitadel.session",
+        "description": "Sign in using the link above. The browser sends the HttpOnly session cookie automatically; do not paste a cookie value."
+      }
+    },
+    "schemas": {
+      "CreateWhiteboardRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "title"
+        ],
+        "properties": {
+          "title": {
+            "type": "string",
+            "description": "Trimmed before validation; 1\u2013255 Unicode characters after trimming. NUL characters are rejected.",
+            "example": "Architecture discussion"
+          },
+          "parentId": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "maximum": 9007199254740991,
+            "description": "Parent page in this space. Omit or use null for a top-level board."
+          }
+        }
+      },
+      "CreateWhiteboardResponse": {
+        "type": "object",
+        "required": [
+          "status",
+          "data"
+        ],
+        "properties": {
+          "status": {
+            "const": "success"
+          },
+          "data": {
+            "type": "object",
+            "required": [
+              "pageId",
+              "spaceId"
+            ],
+            "properties": {
+              "pageId": {
+                "type": "integer",
+                "format": "int64",
+                "example": 42
+              },
+              "spaceId": {
+                "type": "string",
+                "format": "uuid",
+                "description": "Nonzero UUID.",
+                "example": "c7022348-1bb3-4e52-8403-17786e15e035"
+              }
+            }
+          }
+        }
+      },
+      "WhiteboardError": {
+        "type": "object",
+        "required": [
+          "status",
+          "error"
+        ],
+        "properties": {
+          "status": {
+            "const": "FAILED"
+          },
+          "error": {
+            "type": "object",
+            "required": [
+              "code",
+              "message"
+            ],
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "AuthenticationError": {
+        "type": "object",
+        "required": [
+          "status",
+          "error"
+        ],
+        "properties": {
+          "status": {
+            "const": "FAILED"
+          },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "integer",
+                "example": 401
+              },
+              "message": {
+                "type": "string"
+              },
+              "detail": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "AuthenticatedResponse": {
+        "type": "object",
+        "required": [
+          "status",
+          "data"
+        ],
+        "properties": {
+          "status": {
+            "const": "success"
+          },
+          "data": {
+            "type": "null"
+          }
+        }
+      },
+      "CheckpointWhiteboardRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "updateEncoding",
+          "update"
+        ],
+        "properties": {
+          "updateEncoding": {
+            "type": "string",
+            "enum": [
+              "yjs-update-v1"
+            ],
+            "description": "Yjs binary update format; maps to update_encoding. Independent of the API version."
+          },
+          "update": {
+            "type": "string",
+            "contentEncoding": "base64",
+            "minLength": 1,
+            "description": "Standard Base64 encoding of a structurally valid Yjs v1 update. Decoded bytes must be nonempty and at most 1048576 bytes. The entire JSON body must fit within 1572864 bytes. Do not split binary updates at arbitrary byte offsets.",
+            "example": "AAA="
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255,
+            "description": "Optional rename at this checkpoint sequence. Trimmed; null/blank/NUL rejected. Use update AAA= for a title-only rename. Omit to preserve title."
+          },
+          "restoreGeneration": {
+            "type": "string",
+            "pattern": "^(0|[1-9][0-9]*)$",
+            "description": "Draft restore generation from the manifest. Omission means 0; stale generations receive 409 WHITEBOARD_RESTORED.",
+            "default": "0"
+          }
+        }
+      },
+      "CheckpointWhiteboardResponse": {
+        "type": "object",
+        "required": [
+          "status",
+          "data"
+        ],
+        "properties": {
+          "status": {
+            "const": "success"
+          },
+          "data": {
+            "type": "object",
+            "required": [
+              "pageId",
+              "updateId",
+              "sequence"
+            ],
+            "properties": {
+              "pageId": {
+                "type": "integer",
+                "format": "int64",
+                "minimum": 1,
+                "maximum": 9007199254740991,
+                "example": 42
+              },
+              "updateId": {
+                "type": "string",
+                "format": "uuid",
+                "description": "Server-generated batch identity; stable across matching retries."
+              },
+              "sequence": {
+                "type": "string",
+                "pattern": "^[1-9][0-9]{0,18}$",
+                "description": "This batch\u2019s committed position, from 1 to 9223372036854775807. Decimal string preserves BIGINT precision. Replays return the original position, not the current draft head.",
+                "example": "17"
+              }
+            }
+          }
+        }
+      },
+      "WhiteboardDraftSnapshot": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "throughSequence",
+          "title",
+          "updateEncoding",
+          "downloadUrl",
+          "byteLength",
+          "stateDigest"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "throughSequence": {
+            "type": "string",
+            "pattern": "^(0|[1-9][0-9]*)$",
+            "description": "Nonnegative BIGINT sequence as a decimal string."
+          },
+          "title": {
+            "type": "string"
+          },
+          "updateEncoding": {
+            "type": "string",
+            "const": "yjs-update-v1"
+          },
+          "downloadUrl": {
+            "type": "string",
+            "format": "uri-reference"
+          },
+          "byteLength": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "stateDigest": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          }
+        }
+      },
+      "WhiteboardDraftManifest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "pageId",
+          "spaceId",
+          "headSequence",
+          "baseSnapshot",
+          "updatesUrl",
+          "expiresAt",
+          "updatedBy",
+          "updatedAt",
+          "title",
+          "restoreGeneration"
+        ],
+        "properties": {
+          "pageId": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "spaceId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "headSequence": {
+            "type": "string",
+            "pattern": "^(0|[1-9][0-9]*)$",
+            "description": "Nonnegative BIGINT sequence as a decimal string."
+          },
+          "baseSnapshot": {
+            "$ref": "#/components/schemas/WhiteboardDraftSnapshot"
+          },
+          "updatesUrl": {
+            "type": "string",
+            "format": "uri-reference"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedBy": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "title": {
+            "type": "string",
+            "description": "Title at the captured head sequence."
+          },
+          "restoreGeneration": {
+            "type": "string",
+            "pattern": "^(0|[1-9][0-9]*)$",
+            "description": "Canonical nonnegative int64 decimal string."
+          }
+        }
+      },
+      "WhiteboardDraftManifestResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "status",
+          "data"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "const": "success"
+          },
+          "data": {
+            "$ref": "#/components/schemas/WhiteboardDraftManifest"
+          }
+        }
+      },
+      "WhiteboardDraftUpdate": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "sequence",
+          "updateEncoding",
+          "update"
+        ],
+        "properties": {
+          "sequence": {
+            "type": "string",
+            "pattern": "^(0|[1-9][0-9]*)$",
+            "description": "Nonnegative BIGINT sequence as a decimal string."
+          },
+          "updateEncoding": {
+            "type": "string",
+            "const": "yjs-update-v1"
+          },
+          "update": {
+            "type": "string",
+            "contentEncoding": "base64",
+            "description": "One whole Yjs v1 update, at most 1 MiB decoded."
+          },
+          "title": {
+            "type": "string",
+            "description": "Present only when this checkpoint renames the board."
+          }
+        }
+      },
+      "WhiteboardDraftPage": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "headSequence",
+          "updates",
+          "nextCursor",
+          "complete"
+        ],
+        "properties": {
+          "headSequence": {
+            "type": "string",
+            "pattern": "^(0|[1-9][0-9]*)$",
+            "description": "Nonnegative BIGINT sequence as a decimal string."
+          },
+          "updates": {
+            "type": "array",
+            "maxItems": 64,
+            "items": {
+              "$ref": "#/components/schemas/WhiteboardDraftUpdate"
+            }
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Opaque continuation. Null on the final page."
+          },
+          "complete": {
+            "type": "boolean"
+          }
+        }
+      },
+      "WhiteboardDraftPageResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "status",
+          "data"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "const": "success"
+          },
+          "data": {
+            "$ref": "#/components/schemas/WhiteboardDraftPage"
+          }
+        }
+      },
+      "WhiteboardPublishedManifest": {
+        "type": "object",
+        "required": [
+          "pageId",
+          "spaceId",
+          "versionId",
+          "versionNumber",
+          "publishedBy",
+          "publishedAt",
+          "snapshot",
+          "preview"
+        ],
+        "properties": {
+          "pageId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "spaceId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "versionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "versionNumber": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]*$"
+          },
+          "publishedBy": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "publishedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "snapshot": {
+            "$ref": "#/components/schemas/WhiteboardDraftSnapshot"
+          },
+          "preview": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WhiteboardPreviewMetadata"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "WhiteboardPublishedResponse": {
+        "type": "object",
+        "required": [
+          "status",
+          "data"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "success"
+            ]
+          },
+          "data": {
+            "$ref": "#/components/schemas/WhiteboardPublishedManifest"
+          }
+        }
+      },
+      "PublishWhiteboardRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "sequence",
+          "preview"
+        ],
+        "properties": {
+          "sequence": {
+            "type": "string",
+            "pattern": "^(0|[1-9][0-9]*)$",
+            "description": "Requested durable boundary; at most 9223372036854775807.",
+            "example": "103"
+          },
+          "preview": {
+            "$ref": "#/components/schemas/WhiteboardPublishPreview"
+          }
+        }
+      },
+      "WhiteboardPublishPreview": {
+        "type": "object",
+        "required": [
+          "contentType",
+          "data"
+        ],
+        "properties": {
+          "contentType": {
+            "type": "string",
+            "enum": [
+              "image/png"
+            ]
+          },
+          "data": {
+            "type": "string",
+            "contentEncoding": "base64",
+            "description": "PNG bytes without data URL prefix; max 4 MiB, 4096 pixels per dimension, 8 million pixels total."
+          }
+        }
+      },
+      "WhiteboardPreviewMetadata": {
+        "type": "object",
+        "required": [
+          "url",
+          "contentType",
+          "byteLength",
+          "digest",
+          "width",
+          "height"
+        ],
+        "properties": {
+          "url": {
+            "type": "string"
+          },
+          "contentType": {
+            "type": "string",
+            "enum": [
+              "image/png"
+            ]
+          },
+          "byteLength": {
+            "type": "integer"
+          },
+          "digest": {
+            "type": "string"
+          },
+          "width": {
+            "type": "integer"
+          },
+          "height": {
+            "type": "integer"
+          }
+        }
+      },
+      "WhiteboardNavigation": {
+        "type": "object",
+        "description": "Content API URLs, present only for v2 whiteboards. Draft requires edit access; published URLs require a published version. Preview is omitted when unavailable.",
+        "properties": {
+          "draftUrl": {
+            "type": "string",
+            "format": "uri-reference"
+          },
+          "publishedUrl": {
+            "type": "string",
+            "format": "uri-reference"
+          },
+          "previewUrl": {
+            "type": "string",
+            "format": "uri-reference"
+          }
+        }
+      },
+      "SharedPageListItem": {
+        "type": "object",
+        "required": [
+          "contentApiVersion",
+          "canEdit",
+          "type",
+          "pageId",
+          "ownerId",
+          "title",
+          "parentId",
+          "draft",
+          "canDelete"
+        ],
+        "properties": {
+          "contentApiVersion": {
+            "type": "integer",
+            "enum": [
+              1,
+              2
+            ],
+            "description": "1 for legacy content, 2 for v2 whiteboards."
+          },
+          "canEdit": {
+            "type": "boolean"
+          },
+          "publishedVersionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "whiteboard": {
+            "$ref": "#/components/schemas/WhiteboardNavigation"
+          },
+          "type": {
+            "type": "string"
+          },
+          "pageId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "ownerId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "title": {
+            "type": "string"
+          },
+          "parentId": {
+            "type": "integer",
+            "format": "int64",
+            "description": "0 for a root page."
+          },
+          "draft": {
+            "type": "integer",
+            "enum": [
+              0,
+              1
+            ]
+          },
+          "canDelete": {
+            "type": "boolean"
+          }
+        }
+      },
+      "SharedPageMetadata": {
+        "type": "object",
+        "required": [
+          "contentApiVersion",
+          "canEdit",
+          "type",
+          "id",
+          "spaceId"
+        ],
+        "properties": {
+          "contentApiVersion": {
+            "type": "integer",
+            "enum": [
+              1,
+              2
+            ],
+            "description": "1 for legacy content, 2 for v2 whiteboards."
+          },
+          "canEdit": {
+            "type": "boolean"
+          },
+          "publishedVersionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "whiteboard": {
+            "$ref": "#/components/schemas/WhiteboardNavigation"
+          },
+          "type": {
+            "type": "string"
+          },
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "spaceId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "SharedPageInlineLinkMetadata": {
+        "type": "object",
+        "required": [
+          "contentApiVersion",
+          "canEdit",
+          "type",
+          "pageId",
+          "spaceId",
+          "title",
+          "previewAssetName"
+        ],
+        "properties": {
+          "contentApiVersion": {
+            "type": "integer",
+            "enum": [
+              1,
+              2
+            ],
+            "description": "1 for legacy content, 2 for v2 whiteboards."
+          },
+          "canEdit": {
+            "type": "boolean"
+          },
+          "publishedVersionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "whiteboard": {
+            "$ref": "#/components/schemas/WhiteboardNavigation"
+          },
+          "type": {
+            "type": "string"
+          },
+          "pageId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "spaceId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "title": {
+            "type": "string"
+          },
+          "previewAssetName": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

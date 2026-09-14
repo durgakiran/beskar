@@ -25,6 +25,7 @@ export class IndexedDbYjsRecoveryAdapter implements YjsRecoveryAdapter {
     private sessionDraft: string;
     private readonly database: Promise<IDBDatabase>;
     private disposed = false;
+    private generationOffset = 0;
 
     constructor(
         private sessionKey: string,
@@ -45,10 +46,13 @@ export class IndexedDbYjsRecoveryAdapter implements YjsRecoveryAdapter {
             .getAll(IDBKeyRange.only(this.sessionDraft));
         const records = await requestResult<StoredCheckpoint[]>(request);
         await transactionComplete(transaction);
+        // Coordinator generations restart on mount. Keep storage generations monotonic
+        // and merge every retained CRDT state, including records from older clients.
+        this.generationOffset = Math.max(0, ...records.map(record => record.generation));
+        for (const record of records) Y.applyUpdate(doc, new Uint8Array(record.encodedState), INDEXED_DB_RECOVERY_ORIGIN);
         const latest = records.sort((a, b) => b.generation - a.generation)[0];
         if (!latest) return null;
         const encodedState = new Uint8Array(latest.encodedState.slice(0));
-        Y.applyUpdate(doc, encodedState, INDEXED_DB_RECOVERY_ORIGIN);
         return toRecoveryWrite(latest, encodedState);
     }
 
@@ -57,7 +61,7 @@ export class IndexedDbYjsRecoveryAdapter implements YjsRecoveryAdapter {
         const sessionDraft = this.sessionDraft;
         const db = await this.database;
         const transaction = db.transaction(STORE_NAME, "readwrite");
-        transaction.objectStore(STORE_NAME).put(toStoredCheckpoint(write, sessionDraft));
+        transaction.objectStore(STORE_NAME).put(toStoredCheckpoint({ ...write, generation: write.generation + this.generationOffset }, sessionDraft));
         await transactionComplete(transaction);
     }
 
@@ -77,7 +81,7 @@ export class IndexedDbYjsRecoveryAdapter implements YjsRecoveryAdapter {
                     return;
                 }
                 const checkpoint = cursor.value as StoredCheckpoint;
-                if (checkpoint.generation <= write.generation) cursor.delete();
+                if (checkpoint.generation <= write.generation + this.generationOffset) cursor.delete();
                 cursor.continue();
             };
         });
@@ -86,6 +90,7 @@ export class IndexedDbYjsRecoveryAdapter implements YjsRecoveryAdapter {
 
     advanceDraft(sessionKey: string, draftId: string): void {
         this.assertActive();
+        this.generationOffset = 0;
         this.sessionKey = sessionKey;
         this.draftId = draftId;
         this.sessionDraft = `${sessionKey}\u0000${draftId}`;

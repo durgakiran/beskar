@@ -150,8 +150,13 @@ func GetEntitiesWithPermission(entity string, subject string, subjectId string, 
 }
 
 func CreateSubjectPermissions(entity string, entityId string, subject string, subjectId string, permission string) (string, error) {
+	return CreateSubjectPermissionsContext(context.Background(), entity, entityId, subject, subjectId, permission)
+}
+
+// CreateSubjectPermissionsContext permits callers to bound provisioning latency.
+func CreateSubjectPermissionsContext(ctx context.Context, entity string, entityId string, subject string, subjectId string, permission string) (string, error) {
 	rr, err := GetPermifyInstance().Data.Write(
-		context.Background(),
+		ctx,
 		&permify_payload.DataWriteRequest{
 			TenantId: "t1",
 			Metadata: &permify_payload.DataWriteRequestMetadata{

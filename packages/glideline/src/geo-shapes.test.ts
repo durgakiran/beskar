@@ -71,6 +71,27 @@ describe('TriangleTool', () => {
   });
 });
 
+describe('GeoShapeTools pointerCancel', () => {
+  it('commits the shape as last staged instead of losing it, and switches to select', () => {
+    const editor = createEditor({
+      plugins: [GeoShapePlugin],
+      tools: [SelectTool, TriangleTool],
+    });
+
+    editor.setCurrentTool('triangle');
+    editor.dispatchEvent({ type: 'pointerDown', point: { x: 10, y: 20 }, shiftKey: false, target: 'canvas' });
+    editor.dispatchEvent({ type: 'pointerMove', point: { x: 90, y: 100 } });
+    editor.dispatchEvent({ type: 'pointerCancel' });
+
+    const shapes = editor.getShapes();
+    expect(shapes).toHaveLength(1);
+    expect(shapes[0]?.type).toBe('triangle');
+    expect((shapes[0]?.props as any).w).toBe(80);
+    expect((shapes[0]?.props as any).h).toBe(80);
+    expect(editor.currentToolId.value).toBe('select');
+  });
+});
+
 function makeTestShape<P extends Record<string, unknown>>(
   util: { new(): { getDefaultProps(): P } },
   type: string,
@@ -159,5 +180,25 @@ describe('createSvgPathShape factory', () => {
     editor.dispatchEvent({ type: 'pointerMove', point: { x: 105, y: 70 } });
     editor.dispatchEvent({ type: 'pointerUp', point: { x: 105, y: 70 } });
     expect(editor.getShapes()[0]?.type).toBe('test-custom');
+  });
+
+  it('commits the shape as last staged on pointerCancel instead of losing it', () => {
+    const { plugin } = createSvgPathShape({
+      type: 'test-custom-cancel',
+      getPathD: (w, h) => `M 0 0 L ${w} 0 L ${w} ${h} L 0 ${h} Z`,
+    });
+
+    const editor = createEditor({ plugins: [plugin], tools: [SelectTool] });
+    editor.setCurrentTool('test-custom-cancel');
+    editor.dispatchEvent({ type: 'pointerDown', point: { x: 5, y: 10 }, shiftKey: false, target: 'canvas' });
+    editor.dispatchEvent({ type: 'pointerMove', point: { x: 85, y: 90 } });
+    editor.dispatchEvent({ type: 'pointerCancel' });
+
+    const shapes = editor.getShapes();
+    expect(shapes).toHaveLength(1);
+    expect(shapes[0]?.type).toBe('test-custom-cancel');
+    expect((shapes[0]?.props as any).w).toBe(80);
+    expect((shapes[0]?.props as any).h).toBe(80);
+    expect(editor.currentToolId.value).toBe('select');
   });
 });

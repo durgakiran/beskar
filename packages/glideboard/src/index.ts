@@ -63,3 +63,5 @@ export type {
   RetainedAssetDependencyHandle,
   RetainedAssetProvenance,
 } from './asset-library.js';
+export { createPublishPreview } from './publish-preview.js';
+export type { WhiteboardPublishPreview } from './publish-preview.js';

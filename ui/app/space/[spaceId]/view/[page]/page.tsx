@@ -1,7 +1,12 @@
+import WhiteboardHistoryV2 from '@components/WhiteboardHistoryV2';
+import WhiteboardDeleteV2 from '@components/WhiteboardDeleteV2';
 
 import ReadOnlyContentMain, { type ReadOnlyBreadcrumb, type ReadOnlyCapabilities, type ReadOnlyMeta } from "@components/ReadOnlyContentMain";
 import ToastComponent from "@components/ui/ToastComponent";
-import WhiteboardEditor from "@components/WhiteboardEditor";
+import { lazy, Suspense } from "react";
+import WhiteboardPreviewV2 from "@components/WhiteboardPreviewV2";
+import type { PageNavigation } from "app/core/whiteboard/v2/api";
+const WhiteboardEditor = lazy(() => import("@components/WhiteboardEditor"));
 import { TipTap, AttachmentPanel } from "@editor";
 import type { AttachmentRef } from "@durgakiran/editor";
 import { useGet, useDelete } from "@http/hooks";
@@ -28,7 +33,7 @@ interface ViewResponseData {
 }
 
 interface PageMetadataResponse {
-    data: { type: string };
+    data: PageNavigation;
     status: string;
 }
 
@@ -38,6 +43,7 @@ export default function Page() {
     const [workerInitiated, setWorkerInitiated] = useState(false);
     const [workerError, setWorkerError] = useState<string | null>(null);
     const [content, setContent] = useState();
+    const [publishedTitle, setPublishedTitle] = useState("");
     const [isSidePanelOpen, setIsSidePanelOpen] = useState(false);
     const [showDeleteDialog, setShowDeleteDialog] = useState(false);
     const [isMobileViewport, setIsMobileViewport] = useState(false);
@@ -50,7 +56,7 @@ export default function Page() {
 
     const pageType = metadata?.data?.type;
     const viewData = documentData?.data ?? null;
-    const title = viewData?.title || viewData?.document?.title || "";
+    const title = publishedTitle || viewData?.title || viewData?.document?.title || "";
     const attachments = viewData?.attachments ?? [];
     const commentPresentation = isMobileViewport || isTabletViewport ? "bottom-sheet" : "docked";
     const shellCapabilities = useMemo<ReadOnlyCapabilities | null>(() => {
@@ -108,6 +114,7 @@ export default function Page() {
     }, [pageType]);
 
     useEffect(() => {
+        setPublishedTitle("");
         getMetadata();
     }, [getMetadata]);
 
@@ -240,12 +247,13 @@ export default function Page() {
                     onEdit={onEdit}
                     onDelete={onDelete}
                 >
+                    {metadata?.data.contentApiVersion === 2 && <Flex justify="end" mb="3"><WhiteboardHistoryV2 key={`${spaceId}:${page}`} spaceId={spaceId} pageId={page} canRestore={Boolean(shellCapabilities?.canEdit && !viewData.space?.archivedAt)} onRestored={onEdit} /></Flex>}
                     {pageType === "whiteboard" ? (
                         <Box
                             className="overflow-hidden rounded-[18px] border border-[#d4d1da] bg-white shadow-[0_10px_30px_rgba(11,10,42,0.04)]"
                             style={{ height: "72vh", minHeight: "540px" }}
                         >
-                            <WhiteboardEditor key={page} slug={[spaceId, page]} readOnly fillParent />
+                            {metadata?.data.contentApiVersion === 2 ? <WhiteboardPreviewV2 key={`${spaceId}:${page}`} spaceId={spaceId} pageId={page} onTitle={setPublishedTitle} /> : <Suspense fallback={<Spinner />}><WhiteboardEditor key={page} slug={[spaceId, page]} readOnly fillParent /></Suspense>}
                         </Box>
                     ) : readOnlyContent ?? (
                         <Box className="rounded-[18px] border border-[#d4d1da] bg-white px-5 py-6 text-[#605c67] shadow-[0_10px_30px_rgba(11,10,42,0.04)] md:px-8">
@@ -260,7 +268,8 @@ export default function Page() {
             {(deleteErrors) && !loadingDelete && <ToastComponent icon="AlertTriangle" type="warning" toggle={true} message="Unable to delete page" />}
             {deleteData && !loadingDelete && <ToastComponent icon="Check" type="success" toggle={true} message="Page deleted successfully" />}
 
-            <Dialog.Root open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+            {metadata?.data.contentApiVersion === 2 && <WhiteboardDeleteV2 key={`${spaceId}:${page}`} spaceId={spaceId} pageId={page} open={showDeleteDialog} onOpenChange={setShowDeleteDialog} onDeleted={() => navigate(`/space/${spaceId}`)} />}
+            <Dialog.Root open={showDeleteDialog && metadata?.data.contentApiVersion !== 2} onOpenChange={setShowDeleteDialog}>
                 <Dialog.Content size="2" maxWidth="450px">
                     <Dialog.Title>Delete Page</Dialog.Title>
                     <Flex direction="column" gap="4">

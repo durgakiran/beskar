@@ -1,6 +1,6 @@
 {
   "name": "@durgakiran/canvas-text-editor",
-  "version": "0.1.4",
+  "version": "0.1.5-alpha.0",
   "description": "Lightweight rich-text editor for canvas text shapes",
   "type": "module",
   "main": "./dist/index.js",

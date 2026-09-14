@@ -666,6 +666,17 @@ func GetDocumentView(pageId int64, spaceId uuid.UUID, ownerId uuid.UUID) (Output
 		}
 	}
 
+	if pageType == "whiteboard" {
+		var title string
+		var publishedAt *time.Time
+		err := tx.QueryRow(ctx, getV2WhiteboardViewMeta, pageId, capabilities.CanEdit).Scan(&title, &publishedAt)
+		if err == nil {
+			output.Title = title
+			output.Meta.PublishedAt = publishedAt
+		} else if !errors.Is(err, pgx.ErrNoRows) {
+			return output, err
+		}
+	}
 	tx.Commit(ctx)
 	return output, nil
 }

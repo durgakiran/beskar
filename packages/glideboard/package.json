@@ -32,6 +32,7 @@
     "publish:github": "npm run build && npm publish",
     "test": "vitest run",
     "test:phase3:coverage": "node ../../docker/scripts/produce-phase-3-coverage.mjs glideboard",
+    "experiment:yjs-snapshot-replay": "node scripts/yjs-snapshot-replay.mjs",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "test:e2e:phase3-security": "playwright test --config playwright.phase3-security.config.ts",

@@ -919,15 +919,21 @@ export function Canvas() {
   const onPointerUp = useCallback((event: React.PointerEvent) => {
     isPointerDownRef.current = false;
     controller.activePointerIdRef.current = null;
-    if (containerRef.current?.hasPointerCapture?.(event.pointerId)) {
-      containerRef.current.releasePointerCapture(event.pointerId);
-    }
+
+    // Commit the gesture before releasing pointer capture. Releasing capture
+    // fires 'lostpointercapture' synchronously (in Chromium), which is wired
+    // to cancelPointerInteraction — if that ran first, it would see the
+    // interaction as still active (this pointerUp hasn't committed it yet)
+    // and cancel the just-finished stroke via a synthetic Escape.
     const { screen, page } = getPagePoint(event);
     editor.dispatchEvent({
       type: 'pointerUp', point: page, screenPoint: screen,
       shiftKey: event.shiftKey, altKey: event.altKey,
       pressure: event.pressure, pointerType: event.pointerType,
     } as any);
+    if (containerRef.current?.hasPointerCapture?.(event.pointerId)) {
+      containerRef.current.releasePointerCapture(event.pointerId);
+    }
 
     controller.isCanvasDraggingRef.current = false;
 
@@ -956,7 +962,15 @@ export function Canvas() {
     if (pointerId !== undefined && containerRef.current?.hasPointerCapture?.(pointerId)) {
       containerRef.current.releasePointerCapture(pointerId);
     }
-    editor.dispatchEvent({ type: 'keyDown', key: 'Escape' } as any);
+    // Give the active tool a chance to salvage in-progress work on a
+    // browser/OS-initiated cancel (distinct from the user pressing Escape).
+    // Only fall back to the hard-abort Escape path if nothing handled it —
+    // this keeps every tool that hasn't opted into pointerCancel behaving
+    // exactly as before.
+    const handled = editor.dispatchEvent({ type: 'pointerCancel' } as any);
+    if (!handled) {
+      editor.dispatchEvent({ type: 'keyDown', key: 'Escape' } as any);
+    }
     if (editor.interactions.active) editor.interactions.cancel();
     isMiddleDraggingRef.current = false;
     originalToolBeforeMiddleDragRef.current = null;

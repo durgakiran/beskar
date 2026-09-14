@@ -244,6 +244,13 @@ export class YjsDurabilityCoordinator {
         return operation;
     }
 
+    /** Retry retained changes after the host verifies that write access was restored. */
+    async retryPending(): Promise<void> {
+        this.assertActive();
+        await this.processing;
+        if (this.latestRecord && this.status.phase === "error") await this.flush(this.latestRecord.target);
+    }
+
     async flush(target: ProjectionTarget): Promise<DurabilityCheckpoint> {
         this.assertActive();
         if (this.projectionQuarantined) {
@@ -401,6 +408,10 @@ export class YjsDurabilityCoordinator {
             this.abortController?.abort();
         }
         this.disposed = true;
+        // Captured projections may still be hashing. Finish their local writes before
+        // closing IndexedDB, even when navigation cancels the network request.
+        await this.processing;
+        await Promise.all([...this.records.values()].map(record => record.localPromise));
         await this.recovery.dispose();
         this.statusListeners.clear();
     }
@@ -543,7 +554,7 @@ export class YjsDurabilityCoordinator {
     }
 
     private scheduleRetry(): void {
-        if (this.status.phase === "conflict" || this.status.phase === "quarantined") return;
+        if (this.status.phase === "conflict" || this.status.phase === "quarantined" || (this.status.error as Error & { retryable?: boolean } | undefined)?.retryable === false) return;
         this.retryAttempt += 1;
         const exponential = Math.min(this.retryMaxMs, this.retryBaseMs * (2 ** (this.retryAttempt - 1)));
         const jitter = 0.75 + (this.random() * 0.5);

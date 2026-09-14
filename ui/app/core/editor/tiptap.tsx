@@ -1,3 +1,4 @@
+import { contentUrl } from 'app/core/whiteboard/v2/api';
 import React, { useCallback } from "react";
 import type { Editor, JSONContent } from "@tiptap/core";
 import { useDebounce } from "../hooks/debounce";
@@ -277,6 +278,7 @@ export function TipTap({
                         type: string;
                         title: string;
                         previewAssetName?: string;
+                        whiteboard?: { previewUrl?: string };
                     };
                 }>(`editor/space/${spaceId}/page/${resourceId}/inline-link`);
                 const metadata = response.data;
@@ -288,7 +290,7 @@ export function TipTap({
                     resourceType: metadata.type as InternalResourceType,
                     title: metadata.title || "Untitled",
                     icon: metadata.type === "whiteboard" ? "▧" : "📄",
-                    thumbnailUrl: metadata.previewAssetName ? `${baseUrl}/media/image/${metadata.previewAssetName}` : undefined,
+                    thumbnailUrl: metadata.whiteboard?.previewUrl ? contentUrl(metadata.whiteboard.previewUrl) : metadata.previewAssetName ? `${baseUrl}/media/image/${metadata.previewAssetName}` : undefined,
                 };
             },
             navigateToResource(resourceId: string, _resourceType: InternalResourceType) {

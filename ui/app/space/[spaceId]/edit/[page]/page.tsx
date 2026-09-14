@@ -1,14 +1,17 @@
 import { useParams } from "react-router-dom";
 "use client";
 import { useGet } from "@http/hooks";
-import WhiteboardEditor from "@components/WhiteboardEditor";
+import { lazy, Suspense } from "react";
+import type { PageNavigation } from "app/core/whiteboard/v2/api";
+const WhiteboardEditor = lazy(() => import("@components/WhiteboardEditor"));
+const WhiteboardEditorV2 = lazy(() => import("@components/WhiteboardEditorV2"));
 import DocumentEditor from "@components/DocumentEditor";
 import { useEffect } from "react";
 import { Flex, Spinner, Text } from "@radix-ui/themes";
 
 export default function Page() {
     const { page, spaceId } = useParams() as any;
-    const [{ isLoading: loadingMeta, data: metaData, errors: metaErrors }, fetchMeta] = useGet<{ data: { type: string }; status: string }>(`editor/space/${spaceId}/page/${page}/metadata`);
+    const [{ isLoading: loadingMeta, data: metaData, errors: metaErrors }, fetchMeta] = useGet<{ data: PageNavigation; status: string }>(`editor/space/${spaceId}/page/${page}/metadata`);
 
     useEffect(() => {
         fetchMeta();
@@ -33,7 +36,7 @@ export default function Page() {
     }
 
     if (metaData.data.type === "whiteboard") {
-        return <WhiteboardEditor key={page} slug={[spaceId, page]} />;
+        return <Suspense fallback={<Spinner />} >{metaData.data.contentApiVersion === 2 ? <WhiteboardEditorV2 key={`${spaceId}:${page}`} slug={[spaceId, page]} /> : <WhiteboardEditor key={page} slug={[spaceId, page]} />}</Suspense>;
     }
 
     return <DocumentEditor key={page} slug={[spaceId, page]} />;

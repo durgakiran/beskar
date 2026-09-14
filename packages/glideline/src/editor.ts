@@ -2618,8 +2618,9 @@ export class GlideEditor {
   }
 
   /** Route an event through the active tool's FSM. */
-  dispatchEvent(event: GlideEvent): void {
-    this._currentToolSignal.peek()?.handleEvent(event);
+  /** Returns whether some tool state handled the event (has a matching handler). */
+  dispatchEvent(event: GlideEvent): boolean {
+    return this._currentToolSignal.peek()?.handleEvent(event) ?? false;
   }
 
   // ── Camera delegates ───────────────────────────────────────

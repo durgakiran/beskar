@@ -1,6 +1,7 @@
 package editor
 
 import (
+	"github.com/durgakiran/beskar/core"
 	"time"
 
 	"github.com/durgakiran/beskar/assetref"
@@ -253,12 +254,22 @@ type WhiteboardVersion struct {
 }
 
 type PageMetadata struct {
+	ContentAPIVersion  int                        `json:"contentApiVersion"`
+	PublishedVersionID *uuid.UUID                 `json:"publishedVersionId,omitempty"`
+	Whiteboard         *core.WhiteboardNavigation `json:"whiteboard,omitempty"`
+	CanEdit            bool                       `json:"canEdit"`
+
 	Id      int64     `json:"id" db:"id"`
 	Type    string    `json:"type" db:"type"`
 	SpaceId uuid.UUID `json:"spaceId" db:"spaceId"`
 }
 
 type PageInlineLinkMetadata struct {
+	ContentAPIVersion  int                        `json:"contentApiVersion"`
+	PublishedVersionID *uuid.UUID                 `json:"publishedVersionId,omitempty"`
+	Whiteboard         *core.WhiteboardNavigation `json:"whiteboard,omitempty"`
+	CanEdit            bool                       `json:"canEdit"`
+
 	PageId           int64     `json:"pageId" db:"id"`
 	Type             string    `json:"type" db:"type"`
 	SpaceId          uuid.UUID `json:"spaceId" db:"spaceId"`

@@ -365,7 +365,9 @@ func getPageMetadataHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var metadata PageMetadata
-	err = core.GetPool().QueryRow(ctx, getPageMetadata, pageId, spaceId).Scan(&metadata.Id, &metadata.Type, &metadata.SpaceId)
+	metadata.CanEdit = core.ValidateUserPagePermission(pageIdStr, ownerId, "edit")
+	var hasPreview bool
+	err = core.GetPool().QueryRow(ctx, getPageMetadata, pageId, spaceId, metadata.CanEdit).Scan(&metadata.Id, &metadata.Type, &metadata.SpaceId, &metadata.ContentAPIVersion, &metadata.PublishedVersionID, &hasPreview)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			core.SendFailedReponse(w, r, http.StatusNotFound, "Page not found")
@@ -376,6 +378,7 @@ func getPageMetadataHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	metadata.Whiteboard = core.BuildWhiteboardNavigation(spaceId, metadata.Id, metadata.ContentAPIVersion, metadata.CanEdit, metadata.PublishedVersionID, hasPreview)
 	core.SendSuccessResponse(w, r, http.StatusOK, metadata)
 }
 
@@ -403,12 +406,15 @@ func getPageInlineLinkMetadataHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var metadata PageInlineLinkMetadata
-	err = core.GetPool().QueryRow(ctx, getPageInlineLinkMetadata, pageId, spaceId).Scan(
+	metadata.CanEdit = core.ValidateUserPagePermission(pageIdStr, ownerId, "edit")
+	var hasPreview bool
+	err = core.GetPool().QueryRow(ctx, getPageInlineLinkMetadata, pageId, spaceId, metadata.CanEdit).Scan(
 		&metadata.PageId,
 		&metadata.Type,
 		&metadata.SpaceId,
 		&metadata.Title,
 		&metadata.PreviewAssetName,
+		&metadata.ContentAPIVersion, &metadata.PublishedVersionID, &hasPreview,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -428,6 +434,7 @@ func getPageInlineLinkMetadataHandler(w http.ResponseWriter, r *http.Request) {
 		metadata.Title = "Untitled"
 	}
 
+	metadata.Whiteboard = core.BuildWhiteboardNavigation(spaceId, metadata.PageId, metadata.ContentAPIVersion, metadata.CanEdit, metadata.PublishedVersionID, hasPreview)
 	core.SendSuccessResponse(w, r, http.StatusOK, metadata)
 }
 

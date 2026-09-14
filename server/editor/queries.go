@@ -1,5 +1,7 @@
 package editor
 
+import "github.com/durgakiran/beskar/core"
+
 const (
 	newPage        = "INSERT INTO core.page (space_id, owner_id, parent_id, date_created, status) VALUES ($1, $2, $3, $4, $5) RETURNING id"
 	newDoc         = "INSERT INTO core.page_doc_map (page_id, title, version, owner_id, draft) VALUES ($1, $2, $3, $4, $5) RETURNING doc_id"
@@ -198,13 +200,22 @@ const (
 		LIMIT 1`
 
 	// Page metadata (type lookup)
-	getPageMetadata           = `SELECT p.id, p.type, p.space_id AS spaceId FROM core.page p WHERE p.id = $1 AND p.space_id = $2`
+	getPageMetadata = `SELECT p.id, CASE WHEN wb.page_id IS NOT NULL THEN 'whiteboard' ELSE p.type END, p.space_id,
+ CASE WHEN wb.page_id IS NOT NULL THEN 2 ELSE 1 END, wb.published_version_id,
+ EXISTS(SELECT 1 FROM whiteboard.whiteboard_version_preview WHERE version_id=wb.published_version_id)
+ FROM core.page p LEFT JOIN whiteboard.whiteboard wb ON wb.page_id=p.id
+ JOIN core.space s ON s.id=p.space_id
+ WHERE p.id=$1 AND p.space_id=$2 AND s.deleted_at IS NULL
+ AND (wb.page_id IS NULL OR $3::boolean OR wb.published_version_id IS NOT NULL)`
+
 	getPageInlineLinkMetadata = `SELECT
 									p.id,
-									CASE WHEN wd.doc_id IS NOT NULL THEN 'whiteboard' ELSE COALESCE(p.type, 'document') END AS type,
+									CASE WHEN wb.page_id IS NOT NULL OR wd.doc_id IS NOT NULL THEN 'whiteboard' ELSE COALESCE(p.type, 'document') END AS type,
 									p.space_id AS spaceId,
-									COALESCE(d.title, 'Untitled') AS title,
-									COALESCE(wd.preview_asset_name, '') AS previewAssetName
+									CASE WHEN wb.page_id IS NOT NULL THEN CASE WHEN $3::boolean THEN COALESCE(wbt.title,wbs.title,'Untitled') ELSE COALESCE(wbp.title,'Untitled') END ELSE COALESCE(d.title, 'Untitled') END AS title,
+									COALESCE(wd.preview_asset_name, '') AS previewAssetName,
+ CASE WHEN wb.page_id IS NOT NULL THEN 2 ELSE 1 END, wb.published_version_id,
+ EXISTS(SELECT 1 FROM whiteboard.whiteboard_version_preview WHERE version_id=wb.published_version_id)
 								FROM core.page p
 								LEFT JOIN LATERAL (
 									SELECT doc_id, title
@@ -213,8 +224,18 @@ const (
 									ORDER BY version DESC LIMIT 1
 								) d ON TRUE
 								LEFT JOIN core.whiteboard_data wd ON d.doc_id = wd.doc_id
+` + core.WhiteboardTitleJoins + `
 								WHERE p.id = $1 AND p.space_id = $2
+ AND EXISTS(SELECT 1 FROM core.space s WHERE s.id=p.space_id AND s.deleted_at IS NULL)
+ AND (wb.page_id IS NULL OR $3::boolean OR wb.published_version_id IS NOT NULL)
 								LIMIT 1`
+
+	getV2WhiteboardViewMeta = `SELECT
+ CASE WHEN wb.published_version_id IS NOT NULL THEN COALESCE(wbp.title,'Untitled')
+      WHEN $2::boolean THEN COALESCE(wbt.title,wbs.title,'Untitled') ELSE 'Untitled' END,
+ wbv.published_at
+ FROM core.page p ` + core.WhiteboardTitleJoins + `
+ WHERE p.id=$1 AND wb.page_id IS NOT NULL`
 
 	getViewSpaceSummary = `SELECT s.name, s.archived_at
 FROM core.space s

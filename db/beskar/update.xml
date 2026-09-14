@@ -25,5 +25,12 @@
     <include file="updates/whiteboard_versioning.xml" />
     <include file="updates/whiteboard_durability.xml" />
     <include file="updates/whiteboard_assets.xml" />
+    <include file="updates/whiteboard_creation.xml" />
+    <include file="updates/whiteboard_updates.xml" />
+    <include file="updates/whiteboard_draft_replay.xml" />
+    <include file="updates/whiteboard_publication.xml" />
+    <include file="updates/whiteboard_previews.xml" />
+    <include file="updates/whiteboard_titles.xml" />
 
+    <include file="updates/whiteboard_history.xml" relativeToChangelogFile="true"/>
 </databaseChangeLog>
