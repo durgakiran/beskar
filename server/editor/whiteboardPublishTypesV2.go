@@ -31,6 +31,16 @@ type whiteboardPublisherV2 interface {
 	OpenPublishedSnapshot(context.Context, whiteboardDraftInput, uuid.UUID) (whiteboardSnapshotStream, error)
 }
 type whiteboardMaterialized struct {
-	State []byte `json:"state"`
-	Title string `json:"title"`
+	State                 []byte                    `json:"state"`
+	Title                 string                    `json:"title"`
+	Assets                []whiteboardSnapshotAsset `json:"assets"`
+	AssetExtractorVersion string                    `json:"assetExtractorVersion"`
+}
+
+type whiteboardSnapshotAsset struct {
+	ContentHash string `json:"contentHash"`
+	MimeType    string `json:"mimeType"`
+	ByteLength  int64  `json:"byteLength"`
+	Width       int    `json:"width"`
+	Height      int    `json:"height"`
 }

@@ -147,6 +147,9 @@ func (service *whiteboardServiceV2) PublishWhiteboard(ctx context.Context, in wh
 			return result, err
 		}
 	}
+	if err = associateWhiteboardSnapshotAssets(ctx, tx, in.PageID, snapshot, digest, full); err != nil {
+		return result, err
+	}
 	version = uuid.New()
 	if _, err = tx.Exec(ctx, whiteboardV2PublishVersion, version, in.PageID, snapshot, in.ActorID, in.IdempotencyKey); err != nil {
 		return result, err

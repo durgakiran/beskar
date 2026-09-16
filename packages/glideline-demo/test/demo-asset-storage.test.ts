@@ -29,7 +29,7 @@ afterEach(() => {
 });
 
 describe('createDemoAssetStorage', () => {
-  it('removes staged bytes when a late failure rolls back after commit', async () => {
+  it('retains durable bytes and their URL when a late failure requests rollback after commit', async () => {
     const revokeObjectURL = vi.fn();
     vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:demo-asset');
     vi.spyOn(URL, 'revokeObjectURL').mockImplementation(revokeObjectURL);
@@ -39,14 +39,86 @@ describe('createDemoAssetStorage', () => {
     });
 
     const persistence = await stage(storage, asset, new Uint8Array([1, 2, 3]));
+    expect(storage.commitOrder).toBe('before-document');
     expect(storage.resolve(asset)).toBeNull();
 
     await persistence.commit(new AbortController().signal);
     expect(storage.resolve(asset)).toBe('blob:demo-asset');
     await persistence.rollback();
 
+    expect(storage.resolve(asset)).toBe('blob:demo-asset');
+    expect(storage.usageBytes()).toBe(3);
+    expect(revokeObjectURL).not.toHaveBeenCalled();
+    await expect(storage.download!(asset, new AbortController().signal)).resolves.toMatchObject({
+      bytes: new Uint8Array([1, 2, 3]),
+    });
+  });
+
+  it('holds durable persistence until storage confirmation completes', async () => {
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:held-commit');
+    let release!: () => void;
+    const confirmation = new Promise<void>(resolve => { release = resolve; });
+    const storage = createDemoAssetStorage({
+      isSlowUpload: () => false,
+      consumeUploadFailure: () => false,
+      beforeCommit: () => confirmation,
+    });
+    const persistence = await stage(storage, asset, new Uint8Array([1, 2, 3]));
+    const commit = persistence.commit(new AbortController().signal);
+    await Promise.resolve();
+
     expect(storage.resolve(asset)).toBeNull();
-    expect(revokeObjectURL).toHaveBeenCalledWith('blob:demo-asset');
+    expect(storage.usageBytes()).toBe(0);
+    expect(window.localStorage.getItem('glideline-whiteboard-demo-raster-bytes-v1')).toBeNull();
+
+    release();
+    await commit;
+    expect(storage.resolve(asset)).toBe('blob:held-commit');
+    expect(storage.usageBytes()).toBe(3);
+    expect(window.localStorage.getItem('glideline-whiteboard-demo-raster-bytes-v1')).not.toBeNull();
+  });
+
+  it('rechecks cancellation after storage confirmation and discards only staging', async () => {
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:cancelled-commit');
+    const revoke = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined);
+    let release!: () => void;
+    const confirmation = new Promise<void>(resolve => { release = resolve; });
+    const storage = createDemoAssetStorage({
+      isSlowUpload: () => false,
+      consumeUploadFailure: () => false,
+      beforeCommit: () => confirmation,
+    });
+    const persistence = await stage(storage, asset, new Uint8Array([1, 2, 3]));
+    const controller = new AbortController();
+    const commit = persistence.commit(controller.signal);
+    controller.abort();
+    release();
+
+    await expect(commit).rejects.toMatchObject({ name: 'AbortError' });
+    await persistence.rollback();
+    expect(storage.resolve(asset)).toBeNull();
+    expect(storage.usageBytes()).toBe(0);
+    expect(window.localStorage.getItem('glideline-whiteboard-demo-raster-bytes-v1')).toBeNull();
+    expect(revoke).toHaveBeenCalledWith('blob:cancelled-commit');
+  });
+
+  it('does not persist a staging operation rolled back while confirmation is held', async () => {
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:rolled-back-commit');
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined);
+    let release!: () => void;
+    const confirmation = new Promise<void>(resolve => { release = resolve; });
+    const storage = createDemoAssetStorage({
+      isSlowUpload: () => false,
+      consumeUploadFailure: () => false,
+      beforeCommit: () => confirmation,
+    });
+    const persistence = await stage(storage, asset, new Uint8Array([1]));
+    const commit = persistence.commit(new AbortController().signal);
+    await persistence.rollback();
+    release();
+
+    await expect(commit).rejects.toThrow(/already rolled back/);
+    expect(storage.usageBytes()).toBe(0);
   });
 
   it('restores raster bytes by immutable hash after storage is recreated', async () => {

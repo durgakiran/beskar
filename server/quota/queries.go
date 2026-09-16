@@ -75,6 +75,14 @@ WHERE s.id = $1 AND s.deleted_at IS NULL`
         JOIN core.page p ON p.id = w.page_id
         JOIN core.space s ON s.id = p.space_id
         WHERE s.account_id = $1 AND s.deleted_at IS NULL
+    ), 0)
+    +
+    COALESCE((
+        SELECT SUM(w.file_size)
+        FROM whiteboard.whiteboard_asset w
+        JOIN core.page p ON p.id = w.page_id
+        JOIN core.space s ON s.id = p.space_id
+        WHERE s.account_id = $1 AND s.deleted_at IS NULL
     ), 0)`
 
 	getSpaceReconciledStorageQuery = `SELECT
@@ -95,6 +103,13 @@ WHERE s.id = $1 AND s.deleted_at IS NULL`
     COALESCE((
         SELECT SUM(w.file_size)
         FROM core.whiteboard_asset w
+        JOIN core.page p ON p.id = w.page_id
+        WHERE p.space_id = $1
+    ), 0)
+    +
+    COALESCE((
+        SELECT SUM(w.file_size)
+        FROM whiteboard.whiteboard_asset w
         JOIN core.page p ON p.id = w.page_id
         WHERE p.space_id = $1
     ), 0)`
@@ -186,6 +201,12 @@ WHERE entity = 'space' AND entity_id = $1 AND status IS NULL`
     COALESCE((
         SELECT SUM(file_size)
         FROM core.whiteboard_asset
+        WHERE page_id = $1
+    ), 0)
+    +
+    COALESCE((
+        SELECT SUM(file_size)
+        FROM whiteboard.whiteboard_asset
         WHERE page_id = $1
     ), 0)`
 

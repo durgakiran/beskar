@@ -24,6 +24,9 @@ func SaveWhiteboardCheckpoint(ctx context.Context, input WhiteboardCheckpointInp
 		return WhiteboardCheckpointResult{}, nil, err
 	}
 	defer tx.Rollback(ctx)
+	if err := lockLegacyWhiteboardPage(ctx, tx, input.PageId); err != nil {
+		return WhiteboardCheckpointResult{}, nil, err
+	}
 
 	requestHash := hashWhiteboardCheckpointRequest(input)
 	var storedHash string

@@ -67,7 +67,13 @@ func (s *FilesystemStore) Put(ctx context.Context, key string, body io.Reader, s
 	if written != size {
 		return fmt.Errorf("storage: expected %d bytes, received %d", size, written)
 	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	if err := os.Chmod(temporaryName, 0o600); err != nil {
+		return err
+	}
+	if err := ctx.Err(); err != nil {
 		return err
 	}
 	return os.Rename(temporaryName, objectPath)

@@ -4,7 +4,15 @@ import { boardUrl, contentUrl, jsonRequest, post, WhiteboardApiError, type Draft
 
 type Version = PublishedBoard & { versionId: string; versionNumber: string; publishedAt: string };
 type History = { versions: Version[]; nextBefore?: string };
-export default function WhiteboardHistoryV2({ spaceId, pageId, canRestore, onRestored }: { spaceId: string; pageId: string; canRestore: boolean; onRestored: () => void }) {
+type HistorySession = { base: string; parentSignal?: AbortSignal; abort: AbortController };
+function requestScope(parent: AbortSignal) {
+    const abort = new AbortController();
+    const cancel = () => abort.abort();
+    parent.addEventListener('abort', cancel, { once: true });
+    if (parent.aborted) cancel();
+    return { signal: abort.signal, dispose: () => { parent.removeEventListener('abort', cancel); cancel(); } };
+}
+export default function WhiteboardHistoryV2({ spaceId, pageId, canRestore, onRestored, signal }: { spaceId: string; pageId: string; canRestore: boolean; onRestored: () => void; signal?: AbortSignal }) {
     const base = boardUrl(spaceId, pageId);
     const [open, setOpen] = useState(false);
     const [versions, setVersions] = useState<Version[]>([]);
@@ -19,49 +27,89 @@ export default function WhiteboardHistoryV2({ spaceId, pageId, canRestore, onRes
     const [retry, setRetry] = useState(0);
     const pending = useRef<{ versionId: string; key: string; sent?: boolean; body: { expectedHeadSequence: string } } | null>(null);
     const inFlight = useRef(false);
+    const activeSession = useRef<HistorySession | null>(null);
+    const currentContext = useRef({ base, signal });
+    currentContext.current = { base, signal };
+    const isCurrent = (session: HistorySession | null): session is HistorySession => Boolean(session
+        && activeSession.current === session && !session.abort.signal.aborted
+        && currentContext.current.base === session.base && currentContext.current.signal === session.parentSignal);
+    const renderedSession = activeSession.current;
     useEffect(() => {
-        if (!open) return;
-        const abort = new AbortController();
+        const session: HistorySession = { base, parentSignal: signal, abort: new AbortController() };
+        const cancel = () => session.abort.abort();
+        activeSession.current = session;
+        signal?.addEventListener('abort', cancel, { once: true });
+        if (signal?.aborted) cancel();
+        // Retry receipts belong to one board session. Closing the dialog keeps them;
+        // replacing the board/session or unmounting abandons its local UI state.
+        pending.current = null; inFlight.current = false;
+        setOpen(false); setVersions([]); setCursor(undefined); setSelected(''); setVersion(undefined);
+        setLoading(false); setBusy(false); setError(''); setDetailError(''); setConfirmation(false);
+        return () => {
+            signal?.removeEventListener('abort', cancel);
+            cancel();
+            if (activeSession.current === session) activeSession.current = null;
+        };
+    }, [base, signal]);
+    useEffect(() => {
+        const session = renderedSession;
+        if (!open || !isCurrent(session)) return;
+        const request = requestScope(session.abort.signal);
         setLoading(true); setError('');
-        void jsonRequest<History>(`${base}/versions`, { signal: abort.signal }).then(data => {
-            if (abort.signal.aborted) return;
+        void jsonRequest<History>(`${base}/versions`, { signal: request.signal }).then(data => {
+            if (request.signal.aborted || !isCurrent(session)) return;
             setVersions(data.versions); setCursor(data.nextBefore);
             setSelected(pending.current?.versionId ?? data.versions[0]?.versionId ?? '');
-        }).catch(e => { if (!abort.signal.aborted) setError(e.message); }).finally(() => { if (!abort.signal.aborted) setLoading(false); });
-        return () => abort.abort();
-    }, [open, base, retry]);
+        }).catch(e => { if (!request.signal.aborted && isCurrent(session)) setError(e.message); }).finally(() => { if (!request.signal.aborted && isCurrent(session)) setLoading(false); });
+        return request.dispose;
+    }, [open, base, retry, signal]);
     useEffect(() => {
-        if (!open || !selected) return;
-        const abort = new AbortController(); setVersion(undefined); setDetailError('');
-        void jsonRequest<Version>(`${base}/versions/${selected}`, { signal: abort.signal }).then(data => { if (!abort.signal.aborted) setVersion(data); })
-            .catch(e => { if (!abort.signal.aborted) setDetailError(e.message); });
-        return () => abort.abort();
-    }, [open, base, selected, retry]);
+        const session = renderedSession;
+        if (!open || !selected || !isCurrent(session)) return;
+        const request = requestScope(session.abort.signal); setVersion(undefined); setDetailError('');
+        void jsonRequest<Version>(`${base}/versions/${selected}`, { signal: request.signal }).then(data => { if (!request.signal.aborted && isCurrent(session)) setVersion(data); })
+            .catch(e => { if (!request.signal.aborted && isCurrent(session)) setDetailError(e.message); });
+        return request.dispose;
+    }, [open, base, selected, retry, signal]);
     const more = async () => {
-        if (!cursor || inFlight.current) return;
+        const session = activeSession.current;
+        if (!cursor || inFlight.current || !isCurrent(session)) return;
         inFlight.current = true; setLoading(true); setError('');
-        try { const data = await jsonRequest<History>(`${base}/versions?before=${encodeURIComponent(cursor)}`); setVersions(current => [...current, ...data.versions.filter(v => !current.some(c => c.versionId === v.versionId))]); setCursor(data.nextBefore); }
-        catch (e) { setError((e as Error).message); } finally { inFlight.current = false; setLoading(false); }
+        try {
+            const data = await jsonRequest<History>(`${base}/versions?before=${encodeURIComponent(cursor)}`, { signal: session.abort.signal });
+            if (!isCurrent(session)) return;
+            setVersions(current => [...current, ...data.versions.filter(v => !current.some(c => c.versionId === v.versionId))]); setCursor(data.nextBefore);
+        } catch (e) { if (isCurrent(session)) setError((e as Error).message); }
+        finally { if (isCurrent(session)) { inFlight.current = false; setLoading(false); } }
     };
     const prepare = async () => {
-        if (inFlight.current) return;
+        const session = activeSession.current;
+        if (inFlight.current || !isCurrent(session)) return;
         inFlight.current = true; setBusy(true); setError('');
         try {
-            if (!pending.current) { const draft = await jsonRequest<DraftManifest>(`${base}/draft`); pending.current = { versionId: selected, key: crypto.randomUUID(), body: { expectedHeadSequence: draft.headSequence } }; }
+            if (!pending.current) {
+                const draft = await jsonRequest<DraftManifest>(`${base}/draft`, { signal: session.abort.signal });
+                if (!isCurrent(session)) return;
+                pending.current = { versionId: selected, key: crypto.randomUUID(), body: { expectedHeadSequence: draft.headSequence } };
+            }
             setConfirmation(true);
-        } catch (e) { setError((e as Error).message); } finally { inFlight.current = false; setBusy(false); }
+        } catch (e) { if (isCurrent(session)) setError((e as Error).message); }
+        finally { if (isCurrent(session)) { inFlight.current = false; setBusy(false); } }
     };
     const restore = async () => {
-        if (!pending.current || inFlight.current) return;
+        const session = activeSession.current;
+        if (!pending.current || inFlight.current || !isCurrent(session)) return;
         inFlight.current = true; setBusy(true); setError('');
         try {
             const attempt = pending.current; attempt.sent = true;
-            await post(`${base}/versions/${attempt.versionId}/restore`, attempt.body, attempt.key);
+            await post(`${base}/versions/${attempt.versionId}/restore`, attempt.body, attempt.key, session.abort.signal);
+            if (!isCurrent(session)) return;
             pending.current = null; setConfirmation(false); setOpen(false); onRestored();
         } catch (e) {
+            if (!isCurrent(session)) return;
             if (e instanceof WhiteboardApiError && !e.retryable) { pending.current = null; setConfirmation(false); }
             setError(e instanceof WhiteboardApiError && e.code === 'DRAFT_HEAD_CHANGED' ? 'The draft changed. Review the version and choose Restore to draft again.' : (e as Error).message);
-        } finally { inFlight.current = false; setBusy(false); }
+        } finally { if (isCurrent(session)) { inFlight.current = false; setBusy(false); } }
     };
     return <Dialog.Root open={open} onOpenChange={next => { if (!busy && !loading) setOpen(next); }}>
         <Dialog.Trigger><Button variant="soft">Version history</Button></Dialog.Trigger>

@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="whiteboard_assets_v2_legacy_cleanup_1" author="Codex" dbms="postgresql">
+        <comment>
+            Migrated boards retain original raster objects alongside their independent
+            v2 copies. Queue both sets before board deletion removes the owner rows.
+            Legacy cleanup keys must identify this exact page and a canonical hash;
+            workers only delete them after the page is gone, protecting live legacy
+            catalogs and upload receipts. Physical cleanup never releases quota again.
+            Rollback requires legacy cleanup jobs to have been drained and removed first.
+        </comment>
+        <sql>
+            ALTER TABLE whiteboard.whiteboard_asset_cleanup
+                DROP CONSTRAINT whiteboard_asset_cleanup_storage_key_ck;
+            ALTER TABLE whiteboard.whiteboard_asset_cleanup
+                ADD CONSTRAINT whiteboard_asset_cleanup_storage_key_ck CHECK (
+                    length(storage_key) &lt;= 512 AND (
+                        storage_key LIKE 'whiteboard-v2-assets/%'
+                        OR (reason = 'board_deleted' AND storage_key ~ ('^whiteboard-assets/' || page_id::text || '/sha256/[0-9a-f]{64}$'))
+                    )
+                );
+        </sql>
+        <rollback>
+            <sql>
+                ALTER TABLE whiteboard.whiteboard_asset_cleanup
+                    DROP CONSTRAINT whiteboard_asset_cleanup_storage_key_ck;
+                ALTER TABLE whiteboard.whiteboard_asset_cleanup
+                    ADD CONSTRAINT whiteboard_asset_cleanup_storage_key_ck CHECK (
+                        storage_key LIKE 'whiteboard-v2-assets/%' AND length(storage_key) &lt;= 512
+                    );
+            </sql>
+        </rollback>
+    </changeSet>
+</databaseChangeLog>

@@ -33,4 +33,7 @@
     <include file="updates/whiteboard_titles.xml" />
 
     <include file="updates/whiteboard_history.xml" relativeToChangelogFile="true"/>
+    <include file="updates/whiteboard_migration.xml" relativeToChangelogFile="true"/>
+    <include file="updates/whiteboard_assets_v2.xml" relativeToChangelogFile="true"/>
+    <include file="updates/whiteboard_assets_v2_legacy_cleanup.xml" relativeToChangelogFile="true"/>
 </databaseChangeLog>

@@ -34,7 +34,7 @@ interface GlideboardControllerOptions {
 
 ### Method groups
 
-Everything on `GlideboardHandle` ([Overview § GlideboardHandle](./overview-and-lifecycle.md#glideboardhandle-imperative-ref-api)) is implemented directly on the controller (`serialize`, page management, `exportSvgAtTarget`, `createPortableFragment`/`pastePortableFragment`, `importSvg`/`importRaster`, `replaceAsset`/`downloadAsset`, `setCurrentTool`, `setReadOnly`, `settleActiveEdit`, `acquireMutationFence`, `captureProjectionTarget`), plus controller-only surface not exposed through the React handle:
+Everything on `GlideboardHandle` ([Overview § GlideboardHandle](./overview-and-lifecycle.md#glideboardhandle-imperative-ref-api)) is implemented directly on the controller (`serialize`, page management, `exportSvgAtTarget`, `createPortableFragment`/`pastePortableFragment`, `importSvg`/`importRaster`, `replaceAsset`/`downloadAsset`, `getPendingAssetCount`, `prepareForCapture`, `setCurrentTool`, `setReadOnly`, `settleActiveEdit`, `acquireMutationFence`, `captureProjectionTarget`), plus controller-only surface not exposed through the React handle:
 
 ```ts
 // Asset placement (drag-and-drop / paste-to-place flow)

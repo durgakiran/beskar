@@ -521,7 +521,7 @@
         ],
         "operationId": "checkpointWhiteboardV2",
         "summary": "Save an incremental whiteboard checkpoint",
-        "description": "Requires page edit permission and matching page/space membership. Appends one Yjs v1 batch and advances the existing draft atomically; the base snapshot remains unchanged. The draft row lock serializes sequence allocation. No expected-head or base-snapshot parameter is required.\n\nGenerate a UUID Idempotency-Key for each batch and retain it with the exact pending bytes until acknowledged. Matching retries return the original acknowledgement even if the head has advanced or the space was subsequently archived/soft-deleted, provided authorization and board membership still hold. Different actors may submit overlapping changes; Yjs handles their document effect. Acknowledgement confirms storage, not reception of other actors\u2019 edits.\n\nMaximum decoded update: 1 MiB (1048576 bytes). Maximum JSON body: 1.5 MiB (1572864 bytes). Client batching target: 256 KiB or two seconds of pending edits; that queue is not implemented by this endpoint. Images upload separately. Optional title metadata is saved atomically at this sequence. No snapshot compaction or permission provisioning occurs here. Unknown fields, extra JSON values and malformed Yjs v1 wire structures are rejected. Structural validation does not verify drawing schema or causal completeness. Deploy the whiteboard_updates and whiteboard_titles Liquibase changesets before using this operation. Title is authoritative checkpoint metadata; a title-only rename uses the empty Yjs update AAA=. Omitted title preserves the current value. Same key with another normalized title returns IDEMPOTENCY_KEY_REUSED.",
+        "description": "Requires page edit permission and matching page/space membership. Appends one Yjs v1 batch and advances the existing draft atomically; the base snapshot remains unchanged. The draft row lock serializes sequence allocation. No expected-head or base-snapshot parameter is required.\n\nGenerate a UUID Idempotency-Key for each batch and retain it with the exact pending bytes until acknowledged. Matching retries return the original acknowledgement even if the head has advanced or the space was subsequently archived/soft-deleted, provided authorization and board membership still hold. Different actors may submit overlapping changes; Yjs handles their document effect. Acknowledgement confirms storage, not reception of other actors’ edits.\n\nMaximum decoded update: 1 MiB (1048576 bytes). Maximum JSON body: 1.5 MiB (1572864 bytes). Client batching target: 256 KiB or two seconds of pending edits; that queue is not implemented by this endpoint. Images upload separately. Optional title metadata is saved atomically at this sequence. No snapshot compaction or permission provisioning occurs here. Unknown fields, extra JSON values and malformed Yjs v1 wire structures are rejected. Structural validation does not verify drawing schema or causal completeness. Deploy the whiteboard_updates and whiteboard_titles Liquibase changesets before using this operation. Title is authoritative checkpoint metadata; a title-only rename uses the empty Yjs update AAA=. Omitted title preserves the current value. Same key with another normalized title returns IDEMPOTENCY_KEY_REUSED.",
         "parameters": [
           {
             "name": "spaceId",
@@ -1672,7 +1672,7 @@
         ],
         "operationId": "publishWhiteboardV2",
         "summary": "Publish a whiteboard at a durable sequence",
-        "description": "Requires edit permission. Reconstructs Yjs state through sequence and atomically creates its snapshot, version, and current publication pointer. Retries return the original version without moving the pointer. Keys are scoped to board and actor. Archived spaces reject new publications. Replay is bounded to 32 MiB and 10,000 updates. Requires whiteboard_publication.xml and the pinned Node/Yjs runtime. Title edits use optional checkpoint title metadata; the requested sequence determines the published title. Deploy whiteboard_titles.xml. Asset integration is deferred; asset records are preserved without validation or retention. Requires a client-generated PNG in preview.contentType/data. PNG is validated and stored atomically with publication; retries must keep the same sequence and image. 6 MiB JSON body limit. Deploy whiteboard_previews.xml. The server does not verify visual correspondence to the Yjs snapshot.",
+        "description": "Requires edit permission. Reconstructs Yjs state through sequence and atomically creates its snapshot, version, and current publication pointer. Retries return the original version without moving the pointer. Keys are scoped to board and actor. Archived spaces reject new publications. Replay is bounded to 32 MiB and 10,000 updates. Requires whiteboard_publication.xml and the pinned Node/Yjs runtime. Title edits use optional checkpoint title metadata; the requested sequence determines the published title. Deploy whiteboard_titles.xml. External raster references are extracted from the reconstructed state, checked against this board's committed asset catalog, and retained in the immutable snapshot manifest. Invalid or uncommitted references reject publication. Deploy whiteboard_assets_v2.xml. Requires a client-generated PNG in preview.contentType/data. PNG is validated and stored atomically with publication; retries must keep the same sequence and image. 6 MiB JSON body limit. Deploy whiteboard_previews.xml. The server does not verify visual correspondence to the Yjs snapshot.",
         "parameters": [
           {
             "name": "spaceId",
@@ -1782,7 +1782,7 @@
             }
           },
           "409": {
-            "description": "IDEMPOTENCY_KEY_REUSED, SPACE_ARCHIVED, PUBLISH_SEQUENCE_UNAVAILABLE, PUBLISH_STATE_INVALID",
+            "description": "IDEMPOTENCY_KEY_REUSED, SPACE_ARCHIVED, PUBLISH_SEQUENCE_UNAVAILABLE, PUBLISH_STATE_INVALID, ASSET_INVALID_REFERENCE, ASSET_NOT_READY",
             "content": {
               "application/json": {
                 "schema": {
@@ -2999,7 +2999,7 @@
         ],
         "operationId": "restoreWhiteboardVersionV2",
         "summary": "Restore a published version to draft",
-        "description": "Requires edit permission and an active space. Replaces the draft at expectedHeadSequence+1, increments restoreGeneration, and preserves the current publication. Concurrent changes return DRAFT_HEAD_CHANGED. Retry identical body/version/key for the original result. Old-generation checkpoints are rejected, including old checkpoint retries.",
+        "description": "Requires edit permission and an active space. Replaces the draft at expectedHeadSequence+1, increments restoreGeneration, and preserves the current publication. Concurrent changes return DRAFT_HEAD_CHANGED. Retry identical body/version/key for the original result. Old-generation checkpoints are rejected, including old checkpoint retries. Reinspects the source snapshot digest and validates committed same-board raster dependencies, then copies their associations and completed manifest atomically with the restored snapshot.",
         "parameters": [
           {
             "name": "spaceId",
@@ -3131,7 +3131,7 @@
             }
           },
           "409": {
-            "description": "Request rejected",
+            "description": "DRAFT_HEAD_CHANGED, IDEMPOTENCY_KEY_REUSED, SPACE_ARCHIVED, ASSET_INVALID_REFERENCE, or ASSET_NOT_READY",
             "content": {
               "application/json": {
                 "schema": {
@@ -3194,7 +3194,7 @@
         ],
         "operationId": "deleteWhiteboardV2",
         "summary": "Delete a v2 whiteboard",
-        "description": "Requires delete permission and an active space. Rejects boards with child pages. Atomically removes board content and core page; retains creation receipt identity to prevent resurrection by old retries. Missing boards return 204 after authorization. Does not recursively delete children.",
+        "description": "Requires delete permission and an active space. Rejects boards with child pages. Atomically removes board content and core page; retains creation receipt identity to prevent resurrection by old retries. Missing boards return 204 after authorization. Does not recursively delete children. Records durable asset object cleanup jobs and releases board storage accounting before deleting catalog/upload rows; these jobs survive the board and never release quota twice.",
         "parameters": [
           {
             "name": "spaceId",
@@ -3297,6 +3297,1908 @@
           }
         }
       }
+    },
+    "/api/v2/editor/space/{spaceId}/whiteboard/{pageId}/migration-source": {
+      "get": {
+        "tags": [
+          "Whiteboarding v2"
+        ],
+        "operationId": "getWhiteboardMigrationSource",
+        "summary": "Read the latest v1 state for migration",
+        "description": "Requires page edit permission and current space membership. Read-only: selects the current legacy draft, otherwise the latest publication, and returns its state, title, source document ID, and server-computed fingerprint. Supports canonical Glideboard raster assets and validated self-contained SVG assets. Unknown formats and invalid or unresolved references fail closed. Already migrated pages return contentApiVersion 2 and sourceDocId 0. No v2 board is created. Requires the migration and asset changesets and the Node/Yjs runtime.",
+        "parameters": [
+          {
+            "name": "spaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Nonzero UUID."
+            },
+            "example": "c7022348-1bb3-4e52-8403-17786e15e035"
+          },
+          {
+            "name": "pageId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "example": 42,
+            "description": "Existing whiteboard page ID. Migration preserves this identity."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Migration result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardMigrationSourceResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "INVALID_REQUEST or INVALID_PREVIEW",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UNAUTHENTICATED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "WHITEBOARD_FORBIDDEN",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "WHITEBOARD_NOT_FOUND",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "MIGRATION_ASSETS_UNSUPPORTED, SOURCE_CHANGED, WHITEBOARD_MIGRATED, SPACE_ARCHIVED or IDEMPOTENCY_KEY_REUSED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "REQUEST_TOO_LARGE or PUBLISH_TOO_LARGE",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "UNSUPPORTED_MEDIA_TYPE",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "MIGRATION_FORMAT_UNSUPPORTED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "WHITEBOARD_PUBLICATION_FAILED; retry an uncertain POST with the same payload and key",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "WHITEBOARD_PUBLISH_BUSY; retry with the same key",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v2/editor/space/{spaceId}/whiteboard/{pageId}/migrate": {
+      "post": {
+        "tags": [
+          "Whiteboarding v2"
+        ],
+        "operationId": "migrateWhiteboardV1ToV2",
+        "summary": "Migrate the latest legacy board and publish it",
+        "description": "Requires page edit permission and current space membership. Publishes the selected latest legacy state as version 1 while preserving page identity, permissions, and legacy history. Independently inspects source and submitted states and requires identical raster descriptors and all asset identities. Copies fully verified original files from the same-page v1 catalog into independent v2 storage keys; validated SVG assets stay inline. Durable cleanup intents cover interrupted copies. Rechecks source and catalog under locks, then atomically commits asset ownership, quota usage, snapshot asset associations, draft, version, PNG, publication pointer, and receipt at sequence 0. Legacy files remain retained and the additional copies consume storage quota. Legacy writes are rejected after cutover. Completed retries reuse the receipt without copying or charging again. Same actor/key with changed request bytes returns 409. Source conflicts require fresh preparation and a new key. JSON body limit 49 MiB, decoded snapshot 32 MiB, PNG 4 MiB; raster limits match v2 asset uploads. Archived spaces reject new migration; completed receipts remain replayable. The client verifies snapshot/preview correspondence.",
+        "parameters": [
+          {
+            "name": "spaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Nonzero UUID."
+            },
+            "example": "c7022348-1bb3-4e52-8403-17786e15e035"
+          },
+          {
+            "name": "pageId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "example": 42,
+            "description": "Existing whiteboard page ID. Migration preserves this identity."
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Nonzero UUID."
+            },
+            "description": "Exactly one nonzero UUID per batch. Keep the same key and decoded bytes until acknowledged. Scoped by board and authenticated actor. Different content with the same scoped key returns 409."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WhiteboardMigrationRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Migration result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardMigrationResultResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "INVALID_REQUEST or INVALID_PREVIEW",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UNAUTHENTICATED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "WHITEBOARD_FORBIDDEN",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "WHITEBOARD_NOT_FOUND",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "MIGRATION_ASSETS_UNSUPPORTED, SOURCE_CHANGED, WHITEBOARD_MIGRATED, SPACE_ARCHIVED or IDEMPOTENCY_KEY_REUSED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "REQUEST_TOO_LARGE or PUBLISH_TOO_LARGE",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "UNSUPPORTED_MEDIA_TYPE",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "MIGRATION_FORMAT_UNSUPPORTED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "WHITEBOARD_PUBLICATION_FAILED; retry an uncertain POST with the same payload and key",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "WHITEBOARD_PUBLISH_BUSY; retry with the same key",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v2/editor/space/{spaceId}/whiteboard/{pageId}/assets/uploads": {
+      "post": {
+        "tags": [
+          "Whiteboarding v2"
+        ],
+        "operationId": "prepareWhiteboardAssetV2",
+        "summary": "Prepare an independent asset upload",
+        "description": "Requires edit permission and an active space. Creates or replays an actor-owned upload session and quota reservation. Does not checkpoint, publish, or advance the board sequence. Strict 16 KiB JSON body; unknown, duplicate, or incorrectly cased fields are rejected. PNG/JPEG/WebP only, at most 20 MiB. No query parameters. Apply whiteboard_assets_v2.xml before deployment.",
+        "parameters": [
+          {
+            "name": "spaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Nonzero UUID."
+            },
+            "example": "c7022348-1bb3-4e52-8403-17786e15e035"
+          },
+          {
+            "name": "pageId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "example": 42,
+            "description": "Existing v2 whiteboard page ID in the supplied space."
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Nonzero UUID."
+            },
+            "description": "Exactly one nonzero UUID for this upload. Retain it with the same contentHash, contentType and byteLength for retries. Scoped to board and authenticated actor; changed metadata returns 409 IDEMPOTENCY_KEY_REUSED."
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Durable upload state and committed descriptor when available.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardAssetUploadResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "INVALID_REQUEST",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UNAUTHENTICATED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "WHITEBOARD_FORBIDDEN",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "WHITEBOARD_NOT_FOUND or ASSET_NOT_FOUND",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ASSET_NOT_READY, ASSET_UPLOAD_CONFLICT, SPACE_ARCHIVED, ASSET_QUOTA_EXCEEDED, or IDEMPOTENCY_KEY_REUSED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "ASSET_UPLOAD_EXPIRED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "REQUEST_TOO_LARGE or ASSET_TOO_LARGE",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "UNSUPPORTED_MEDIA_TYPE",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "ASSET_OPERATION_FAILED; inspect session status before retrying",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "ASSET_CONTENT_UNAVAILABLE or ASSET_UPLOAD_BUSY; Retry-After: 1",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PrepareWhiteboardAssetRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v2/editor/space/{spaceId}/whiteboard/{pageId}/assets/uploads/{uploadId}/content": {
+      "put": {
+        "tags": [
+          "Whiteboarding v2"
+        ],
+        "operationId": "stageWhiteboardAssetV2",
+        "summary": "Upload and verify original image bytes",
+        "description": "Requires edit permission and session ownership in the requested board/space. Upload raw original bytes with their exact image Content-Type; no multipart wrapper, Content-Encoding, or media-type parameters. Enforces the prepared hash, MIME and size, full image decoding, maximum 16,384 pixels per dimension and 64 million pixels. The 20 MiB body limit also applies without Content-Length. Returns staged only after confirmed storage. Exact PUT retries are safe. Does not create a canvas record. No query parameters.",
+        "parameters": [
+          {
+            "name": "spaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Nonzero UUID."
+            },
+            "example": "c7022348-1bb3-4e52-8403-17786e15e035"
+          },
+          {
+            "name": "pageId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "example": 42,
+            "description": "Existing v2 whiteboard page ID in the supplied space."
+          },
+          {
+            "name": "uploadId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Nonzero upload UUID. Current authenticated actor must own this session in the supplied board and space."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Durable upload state and committed descriptor when available.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardAssetUploadResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "INVALID_REQUEST",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UNAUTHENTICATED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "WHITEBOARD_FORBIDDEN",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "WHITEBOARD_NOT_FOUND or ASSET_NOT_FOUND",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ASSET_NOT_READY, ASSET_UPLOAD_CONFLICT, SPACE_ARCHIVED, ASSET_QUOTA_EXCEEDED, or IDEMPOTENCY_KEY_REUSED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "ASSET_UPLOAD_EXPIRED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "REQUEST_TOO_LARGE or ASSET_TOO_LARGE",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "UNSUPPORTED_MEDIA_TYPE",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "ASSET_OPERATION_FAILED; inspect session status before retrying",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "ASSET_CONTENT_UNAVAILABLE or ASSET_UPLOAD_BUSY; Retry-After: 1",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "image/png": {
+              "schema": {
+                "type": "string",
+                "format": "binary",
+                "maxLength": 20971520
+              }
+            },
+            "image/jpeg": {
+              "schema": {
+                "type": "string",
+                "format": "binary",
+                "maxLength": 20971520
+              }
+            },
+            "image/webp": {
+              "schema": {
+                "type": "string",
+                "format": "binary",
+                "maxLength": 20971520
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v2/editor/space/{spaceId}/whiteboard/{pageId}/assets/uploads/{uploadId}/commit": {
+      "post": {
+        "tags": [
+          "Whiteboarding v2"
+        ],
+        "operationId": "commitWhiteboardAssetV2",
+        "summary": "Commit a staged asset to its whiteboard",
+        "description": "Requires edit permission and session ownership. Finalizes validated storage, atomically inserts or reuses the board-owned catalog record, settles quota once and returns the committed descriptor. The caller may insert the shared asset/shape only after this confirms committed. Replay a lost response using the same upload ID or inspect status; committed content is retained even if the local edit later fails. No body or query parameters.",
+        "parameters": [
+          {
+            "name": "spaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Nonzero UUID."
+            },
+            "example": "c7022348-1bb3-4e52-8403-17786e15e035"
+          },
+          {
+            "name": "pageId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "example": 42,
+            "description": "Existing v2 whiteboard page ID in the supplied space."
+          },
+          {
+            "name": "uploadId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Nonzero upload UUID. Current authenticated actor must own this session in the supplied board and space."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Durable upload state and committed descriptor when available.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardAssetUploadResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "INVALID_REQUEST",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UNAUTHENTICATED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "WHITEBOARD_FORBIDDEN",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "WHITEBOARD_NOT_FOUND or ASSET_NOT_FOUND",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ASSET_NOT_READY, ASSET_UPLOAD_CONFLICT, SPACE_ARCHIVED, ASSET_QUOTA_EXCEEDED, or IDEMPOTENCY_KEY_REUSED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "ASSET_UPLOAD_EXPIRED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "REQUEST_TOO_LARGE or ASSET_TOO_LARGE",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "UNSUPPORTED_MEDIA_TYPE",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "ASSET_OPERATION_FAILED; inspect session status before retrying",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "ASSET_CONTENT_UNAVAILABLE or ASSET_UPLOAD_BUSY; Retry-After: 1",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v2/editor/space/{spaceId}/whiteboard/{pageId}/assets/uploads/{uploadId}": {
+      "get": {
+        "tags": [
+          "Whiteboarding v2"
+        ],
+        "operationId": "getWhiteboardAssetUploadV2",
+        "summary": "Inspect an upload session or terminal receipt",
+        "description": "Requires edit permission and current session ownership in this board/space. Resolve ambiguous stage/commit/cancel outcomes using the stable upload ID. Receipts remain while the board exists. No request body or query parameters.",
+        "parameters": [
+          {
+            "name": "spaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Nonzero UUID."
+            },
+            "example": "c7022348-1bb3-4e52-8403-17786e15e035"
+          },
+          {
+            "name": "pageId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "example": 42,
+            "description": "Existing v2 whiteboard page ID in the supplied space."
+          },
+          {
+            "name": "uploadId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Nonzero upload UUID. Current authenticated actor must own this session in the supplied board and space."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Durable upload state and committed descriptor when available.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardAssetUploadResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "INVALID_REQUEST",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UNAUTHENTICATED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "WHITEBOARD_FORBIDDEN",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "WHITEBOARD_NOT_FOUND or ASSET_NOT_FOUND",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ASSET_NOT_READY, ASSET_UPLOAD_CONFLICT, SPACE_ARCHIVED, ASSET_QUOTA_EXCEEDED, or IDEMPOTENCY_KEY_REUSED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "ASSET_UPLOAD_EXPIRED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "REQUEST_TOO_LARGE or ASSET_TOO_LARGE",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "UNSUPPORTED_MEDIA_TYPE",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "ASSET_OPERATION_FAILED; inspect session status before retrying",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "ASSET_CONTENT_UNAVAILABLE or ASSET_UPLOAD_BUSY; Retry-After: 1",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Whiteboarding v2"
+        ],
+        "operationId": "cancelWhiteboardAssetUploadV2",
+        "summary": "Cancel an uncommitted upload",
+        "description": "Requires edit permission and current session ownership. Serializes with commit. If commit already won, returns state committed with retained true and does not delete the asset. Uncommitted physical cleanup may continue asynchronously (202 and cleanupPending true). Cancellation is permitted in archived spaces. No request body or query parameters.",
+        "parameters": [
+          {
+            "name": "spaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Nonzero UUID."
+            },
+            "example": "c7022348-1bb3-4e52-8403-17786e15e035"
+          },
+          {
+            "name": "pageId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "example": 42,
+            "description": "Existing v2 whiteboard page ID in the supplied space."
+          },
+          {
+            "name": "uploadId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Nonzero upload UUID. Current authenticated actor must own this session in the supplied board and space."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Durable upload state and committed descriptor when available.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardAssetUploadResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "INVALID_REQUEST",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UNAUTHENTICATED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "WHITEBOARD_FORBIDDEN",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "WHITEBOARD_NOT_FOUND or ASSET_NOT_FOUND",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ASSET_NOT_READY, ASSET_UPLOAD_CONFLICT, SPACE_ARCHIVED, ASSET_QUOTA_EXCEEDED, or IDEMPOTENCY_KEY_REUSED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "ASSET_UPLOAD_EXPIRED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "REQUEST_TOO_LARGE or ASSET_TOO_LARGE",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "UNSUPPORTED_MEDIA_TYPE",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "ASSET_OPERATION_FAILED; inspect session status before retrying",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "ASSET_CONTENT_UNAVAILABLE or ASSET_UPLOAD_BUSY; Retry-After: 1",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "Cancellation recorded; durable cleanup remains pending.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardAssetUploadResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v2/editor/space/{spaceId}/whiteboard/{pageId}/assets/{contentHash}/content": {
+      "get": {
+        "tags": [
+          "Whiteboarding v2"
+        ],
+        "operationId": "downloadWhiteboardAssetV2",
+        "summary": "Download a committed whiteboard asset",
+        "description": "Requires current edit permission and a committed catalog record owned by this exact board in the supplied space. Archived boards remain readable. Authenticated on every request; no query parameters. Uses verified MIME, digest ETag, Cache-Control: no-store and X-Content-Type-Options: nosniff. GET supports one byte range, If-Range and If-None-Match; HEAD ignores Range and describes the complete representation. Missing stored content is a 503 storage error, never an empty replacement image.",
+        "parameters": [
+          {
+            "name": "spaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Nonzero UUID."
+            },
+            "example": "c7022348-1bb3-4e52-8403-17786e15e035"
+          },
+          {
+            "name": "pageId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "example": 42,
+            "description": "Existing v2 whiteboard page ID in the supplied space."
+          },
+          {
+            "name": "contentHash",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "description": "Lowercase SHA-256 hash of the original image bytes."
+          },
+          {
+            "name": "Range",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            },
+            "description": "One byte range, for example bytes=0-1023."
+          },
+          {
+            "name": "If-Range",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "If-None-Match",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Original verified image bytes.",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Content-Type": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Content-Length": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Accept-Ranges": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "image/png": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "image/jpeg": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "image/webp": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "206": {
+            "description": "Requested single byte range.",
+            "headers": {
+              "Content-Range": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "416": {
+            "description": "Invalid, unsatisfiable, or multiple byte ranges. Cache-Control remains no-store."
+          },
+          "304": {
+            "description": "Digest ETag matched."
+          },
+          "400": {
+            "description": "INVALID_REQUEST",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UNAUTHENTICATED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "WHITEBOARD_FORBIDDEN",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "WHITEBOARD_NOT_FOUND or ASSET_NOT_FOUND",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ASSET_NOT_READY, ASSET_UPLOAD_CONFLICT, SPACE_ARCHIVED, ASSET_QUOTA_EXCEEDED, or IDEMPOTENCY_KEY_REUSED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "ASSET_OPERATION_FAILED; inspect session status before retrying",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "ASSET_CONTENT_UNAVAILABLE or ASSET_UPLOAD_BUSY; Retry-After: 1",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "head": {
+        "tags": [
+          "Whiteboarding v2"
+        ],
+        "operationId": "headWhiteboardAssetV2",
+        "summary": "Inspect a committed whiteboard asset",
+        "description": "Requires current edit permission and a committed catalog record owned by this exact board in the supplied space. Archived boards remain readable. Authenticated on every request; no query parameters. Uses verified MIME, digest ETag, Cache-Control: no-store and X-Content-Type-Options: nosniff. GET supports one byte range, If-Range and If-None-Match; HEAD ignores Range and describes the complete representation. Missing stored content is a 503 storage error, never an empty replacement image.",
+        "parameters": [
+          {
+            "name": "spaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Nonzero UUID."
+            },
+            "example": "c7022348-1bb3-4e52-8403-17786e15e035"
+          },
+          {
+            "name": "pageId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "example": 42,
+            "description": "Existing v2 whiteboard page ID in the supplied space."
+          },
+          {
+            "name": "contentHash",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "description": "Lowercase SHA-256 hash of the original image bytes."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Verified image metadata headers; no response body.",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Content-Type": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Content-Length": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Accept-Ranges": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Digest ETag matched."
+          },
+          "400": {
+            "description": "INVALID_REQUEST",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UNAUTHENTICATED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "WHITEBOARD_FORBIDDEN",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "WHITEBOARD_NOT_FOUND or ASSET_NOT_FOUND",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ASSET_NOT_READY, ASSET_UPLOAD_CONFLICT, SPACE_ARCHIVED, ASSET_QUOTA_EXCEEDED, or IDEMPOTENCY_KEY_REUSED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "ASSET_OPERATION_FAILED; inspect session status before retrying",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "ASSET_CONTENT_UNAVAILABLE or ASSET_UPLOAD_BUSY; Retry-After: 1",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v2/editor/space/{spaceId}/whiteboard/{pageId}/published/{versionId}/assets/{contentHash}/content": {
+      "get": {
+        "tags": [
+          "Whiteboarding v2"
+        ],
+        "operationId": "downloadPublishedWhiteboardAssetV2",
+        "summary": "Download a published snapshot asset",
+        "description": "Requires current view permission, matching board/space/version, membership in that immutable snapshot asset manifest, and a completed manifest bound to the snapshot digest. Archived boards remain readable. Authenticated on every request; no query parameters. Uses verified MIME, digest ETag, Cache-Control: no-store and X-Content-Type-Options: nosniff. GET supports one byte range, If-Range and If-None-Match; HEAD ignores Range and describes the complete representation. Missing stored content is a 503 storage error, never an empty replacement image.",
+        "parameters": [
+          {
+            "name": "spaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Nonzero UUID."
+            },
+            "example": "c7022348-1bb3-4e52-8403-17786e15e035"
+          },
+          {
+            "name": "pageId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "example": 42,
+            "description": "Existing v2 whiteboard page ID in the supplied space."
+          },
+          {
+            "name": "versionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Immutable published version belonging to this board."
+          },
+          {
+            "name": "contentHash",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "description": "Lowercase SHA-256 hash of the original image bytes."
+          },
+          {
+            "name": "Range",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            },
+            "description": "One byte range, for example bytes=0-1023."
+          },
+          {
+            "name": "If-Range",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "If-None-Match",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Original verified image bytes.",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Content-Type": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Content-Length": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Accept-Ranges": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "image/png": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "image/jpeg": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "image/webp": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "206": {
+            "description": "Requested single byte range.",
+            "headers": {
+              "Content-Range": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "416": {
+            "description": "Invalid, unsatisfiable, or multiple byte ranges. Cache-Control remains no-store."
+          },
+          "304": {
+            "description": "Digest ETag matched."
+          },
+          "400": {
+            "description": "INVALID_REQUEST",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UNAUTHENTICATED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "WHITEBOARD_FORBIDDEN",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "WHITEBOARD_NOT_FOUND or ASSET_NOT_FOUND",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ASSET_NOT_READY, ASSET_UPLOAD_CONFLICT, SPACE_ARCHIVED, ASSET_QUOTA_EXCEEDED, or IDEMPOTENCY_KEY_REUSED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "ASSET_OPERATION_FAILED; inspect session status before retrying",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "ASSET_CONTENT_UNAVAILABLE or ASSET_UPLOAD_BUSY; Retry-After: 1",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "head": {
+        "tags": [
+          "Whiteboarding v2"
+        ],
+        "operationId": "headPublishedWhiteboardAssetV2",
+        "summary": "Inspect a published snapshot asset",
+        "description": "Requires current view permission, matching board/space/version, membership in that immutable snapshot asset manifest, and a completed manifest bound to the snapshot digest. Archived boards remain readable. Authenticated on every request; no query parameters. Uses verified MIME, digest ETag, Cache-Control: no-store and X-Content-Type-Options: nosniff. GET supports one byte range, If-Range and If-None-Match; HEAD ignores Range and describes the complete representation. Missing stored content is a 503 storage error, never an empty replacement image.",
+        "parameters": [
+          {
+            "name": "spaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Nonzero UUID."
+            },
+            "example": "c7022348-1bb3-4e52-8403-17786e15e035"
+          },
+          {
+            "name": "pageId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "example": 42,
+            "description": "Existing v2 whiteboard page ID in the supplied space."
+          },
+          {
+            "name": "versionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Immutable published version belonging to this board."
+          },
+          {
+            "name": "contentHash",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "description": "Lowercase SHA-256 hash of the original image bytes."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Verified image metadata headers; no response body.",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Content-Type": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Content-Length": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Accept-Ranges": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Digest ETag matched."
+          },
+          "400": {
+            "description": "INVALID_REQUEST",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UNAUTHENTICATED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "WHITEBOARD_FORBIDDEN",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "WHITEBOARD_NOT_FOUND or ASSET_NOT_FOUND",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ASSET_NOT_READY, ASSET_UPLOAD_CONFLICT, SPACE_ARCHIVED, ASSET_QUOTA_EXCEEDED, or IDEMPOTENCY_KEY_REUSED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "ASSET_OPERATION_FAILED; inspect session status before retrying",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "ASSET_CONTENT_UNAVAILABLE or ASSET_UPLOAD_BUSY; Retry-After: 1",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WhiteboardError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -3324,7 +5226,7 @@
         "properties": {
           "title": {
             "type": "string",
-            "description": "Trimmed before validation; 1\u2013255 Unicode characters after trimming. NUL characters are rejected.",
+            "description": "Trimmed before validation; 1–255 Unicode characters after trimming. NUL characters are rejected.",
             "example": "Architecture discussion"
           },
           "parentId": {
@@ -3508,7 +5410,7 @@
               "sequence": {
                 "type": "string",
                 "pattern": "^[1-9][0-9]{0,18}$",
-                "description": "This batch\u2019s committed position, from 1 to 9223372036854775807. Decimal string preserves BIGINT precision. Replays return the original position, not the current draft head.",
+                "description": "This batch’s committed position, from 1 to 9223372036854775807. Decimal string preserves BIGINT precision. Replays return the original position, not the current draft head.",
                 "example": "17"
               }
             }
@@ -4027,6 +5929,309 @@
           },
           "previewAssetName": {
             "type": "string"
+          }
+        }
+      },
+      "WhiteboardMigrationSource": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "contentApiVersion",
+          "sourceDocId"
+        ],
+        "properties": {
+          "contentApiVersion": {
+            "type": "integer",
+            "enum": [
+              1,
+              2
+            ]
+          },
+          "sourceDocId": {
+            "type": "string",
+            "pattern": "^[0-9]+$"
+          },
+          "title": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string",
+            "contentEncoding": "base64"
+          },
+          "stateDigest": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "sourceFingerprint": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "updateEncoding": {
+            "type": "string",
+            "const": "yjs-update-v1"
+          }
+        }
+      },
+      "WhiteboardMigrationRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "sourceDocId",
+          "sourceFingerprint",
+          "state",
+          "title",
+          "updateEncoding",
+          "preview"
+        ],
+        "properties": {
+          "sourceDocId": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]*$",
+            "description": "Positive int64 encoded as a decimal string."
+          },
+          "sourceFingerprint": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "state": {
+            "type": "string",
+            "contentEncoding": "base64",
+            "description": "Complete Yjs update-v1 state, at most 32 MiB decoded, preserving the selected source assets. boardIdentity must be v2:{spaceId}:{pageId}. Raster bytes are copied server-side from the legacy catalog; do not embed them in this request."
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255,
+            "description": "Trimmed legacy source title."
+          },
+          "updateEncoding": {
+            "type": "string",
+            "const": "yjs-update-v1"
+          },
+          "preview": {
+            "$ref": "#/components/schemas/WhiteboardPublishPreview"
+          }
+        }
+      },
+      "WhiteboardMigrationResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "pageId",
+          "contentApiVersion",
+          "snapshotId",
+          "versionId",
+          "sequence"
+        ],
+        "properties": {
+          "pageId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "contentApiVersion": {
+            "type": "integer",
+            "const": 2
+          },
+          "snapshotId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "versionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sequence": {
+            "type": "string",
+            "const": "0"
+          }
+        }
+      },
+      "WhiteboardMigrationSourceResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "status",
+          "data"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "const": "success"
+          },
+          "data": {
+            "$ref": "#/components/schemas/WhiteboardMigrationSource"
+          }
+        }
+      },
+      "WhiteboardMigrationResultResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "status",
+          "data"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "const": "success"
+          },
+          "data": {
+            "$ref": "#/components/schemas/WhiteboardMigrationResult"
+          }
+        }
+      },
+      "PrepareWhiteboardAssetRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "contentHash",
+          "contentType",
+          "byteLength"
+        ],
+        "properties": {
+          "contentHash": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "contentType": {
+            "type": "string",
+            "enum": [
+              "image/png",
+              "image/jpeg",
+              "image/webp"
+            ]
+          },
+          "byteLength": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 20971520
+          }
+        },
+        "example": {
+          "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "contentType": "image/png",
+          "byteLength": 183204
+        }
+      },
+      "WhiteboardAssetDescriptor": {
+        "type": "object",
+        "required": [
+          "id",
+          "pageId",
+          "contentHash",
+          "contentType",
+          "byteLength",
+          "width",
+          "height",
+          "downloadUrl"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^asset:sha256:[0-9a-f]{64}$"
+          },
+          "pageId": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "contentHash": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "contentType": {
+            "type": "string",
+            "enum": [
+              "image/png",
+              "image/jpeg",
+              "image/webp"
+            ]
+          },
+          "byteLength": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 20971520
+          },
+          "width": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 16384
+          },
+          "height": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 16384
+          },
+          "downloadUrl": {
+            "type": "string",
+            "description": "Same-origin editor download route. Build version-specific resolver URLs for published readers; persist the asset ID rather than download URLs in canvas state."
+          }
+        }
+      },
+      "WhiteboardAssetUpload": {
+        "type": "object",
+        "required": [
+          "uploadId",
+          "state",
+          "expiresAt",
+          "uploadUrl",
+          "statusUrl",
+          "commitUrl"
+        ],
+        "properties": {
+          "uploadId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "prepared",
+              "staging",
+              "staged",
+              "committed",
+              "cancelled",
+              "expired"
+            ]
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "uploadUrl": {
+            "type": "string"
+          },
+          "statusUrl": {
+            "type": "string"
+          },
+          "commitUrl": {
+            "type": "string"
+          },
+          "asset": {
+            "$ref": "#/components/schemas/WhiteboardAssetDescriptor"
+          },
+          "retained": {
+            "type": "boolean",
+            "description": "Commit won; the committed asset is retained."
+          },
+          "cleanupPending": {
+            "type": "boolean",
+            "description": "Recorded cancellation still has asynchronous cleanup work."
+          }
+        }
+      },
+      "WhiteboardAssetUploadResponse": {
+        "type": "object",
+        "required": [
+          "status",
+          "data"
+        ],
+        "properties": {
+          "status": {
+            "const": "success"
+          },
+          "data": {
+            "$ref": "#/components/schemas/WhiteboardAssetUpload"
           }
         }
       }

@@ -84,6 +84,8 @@ export type InitialDocumentDisposition =
   | { kind: 'new-unsaved-seed' };
 
 export interface GlideboardAssetStorage {
+  /** Default: after-document for existing hosts. Before-document hosts retain committed assets on cancellation. */
+  readonly commitOrder?: 'before-document' | 'after-document';
   /**
    * Obtain a server-owned staging transaction before any bytes are uploaded.
    * This ordering makes cancellation possible even when the byte-upload
@@ -121,9 +123,13 @@ export interface GlideboardAssetPersistence {
     signal: AbortSignal,
     reportProgress?: (progress: number) => void,
   ): Promise<void>;
-  /** Make staged bytes durable after the editor transaction succeeds. */
+  /** Resolve only after durable storage is confirmed; ordering is selected by the host storage adapter. */
   commit(signal: AbortSignal): Promise<void>;
-  /** Idempotently cancel this transaction and retry pending cleanup. */
+  /**
+   * Idempotently cancel this transaction and retry pending cleanup. Before-document
+   * hosts must retain any asset whose server commit already won, including when
+   * the commit response was lost. A confirmed commit is never rolled back by Glideboard.
+   */
   rollback(): Promise<void>;
 }
 
@@ -157,6 +163,7 @@ export const GLIDEBOARD_ASSET_LIMITS: GlideboardAssetLimits = Object.freeze({
 export type GlideboardAssetImportStatus =
   | 'queued'
   | 'uploading'
+  | 'finalizing'
   | 'complete'
   | 'error'
   | 'cancelled';
@@ -317,7 +324,10 @@ export interface GlideboardHandle {
 	setCurrentTool(toolId: string): void;
 	setReadOnly(readOnly: boolean): void;
   settleActiveEdit(policy: 'commit' | 'cancel'): Promise<void>;
-  acquireMutationFence(reason: 'close' | 'publish'): MutationFence;
+  acquireMutationFence(reason: 'close' | 'publish' | 'export'): MutationFence;
+  /** Stop new asset ingress, await existing operations, then fence mutations for a stable capture. Always release. */
+  prepareForCapture(reason: 'close' | 'publish' | 'export', options?: { signal?: AbortSignal }): Promise<MutationFence>;
+  getPendingAssetCount(): number;
   captureProjectionTarget(): Promise<ProjectionTarget>;
   /** @deprecated Observational callback flush only; not a durability acknowledgement. */
   flush(): Promise<void>;

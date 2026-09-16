@@ -49,6 +49,12 @@ function materialized(hash = HASH): AssetMaterialization {
   return { asset: asset(hash), contentHash: hash, rollback: vi.fn() };
 }
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>(complete => { resolve = complete; });
+  return { promise, resolve };
+}
+
 function makeEditor() {
   const plugins: GlidePlugin[] = [SanitizedAssetPlugin as GlidePlugin, AssetPlacementPlugin as GlidePlugin];
   const editor = createEditor({ plugins });
@@ -179,6 +185,84 @@ describe('AssetPlacementTool', () => {
     first.editor.dispatchEvent({ type: 'keyDown', key: 'Escape' });
     expect(first.editor.currentToolId.peek()).toBe('select');
     expect(() => first.tool.getSelection()).toThrow('not configured');
+  });
+
+  it('reports the full insertion operation and retains its initial destination page', async () => {
+    const { editor, tool } = makeEditor();
+    const initialPage = editor.getActivePageId();
+    const materialization = deferred<AssetMaterialization>();
+    const onOperation = vi.fn();
+    const onPlaced = vi.fn();
+    tool.configure(selection, () => materialization.promise, { onOperation, onPlaced });
+
+    const placement = tool.place({ x: 20, y: 30, w: 100, h: 50 });
+    expect(onOperation).toHaveBeenCalledOnce();
+    const [operation, cancel] = onOperation.mock.calls[0]!;
+    expect(cancel).toBeTypeOf('function');
+    expect(editor.serialize().records.filter(record => record.kind === 'shape')).toHaveLength(0);
+
+    const newPage = editor.createPage('Another page');
+    materialization.resolve(materialized());
+    const shapeId = await operation;
+
+    expect(shapeId).not.toBeNull();
+    expect(await placement).toBe(shapeId);
+    expect(editor.getShape(shapeId)?.parentId).toBe(initialPage);
+    expect(editor.getActivePageId()).toBe(newPage);
+    expect(editor.getSelectedShapeIds()).toEqual([]);
+    expect(onPlaced).toHaveBeenCalledWith(shapeId);
+  });
+
+  it('lets the operation callback cancel resolved materialization and waits for compensation', async () => {
+    const { editor, tool } = makeEditor();
+    const materialization = deferred<AssetMaterialization>();
+    const compensation = deferred<void>();
+    const rollback = vi.fn(() => compensation.promise);
+    const onOperation = vi.fn();
+    const onError = vi.fn();
+    let signal: AbortSignal | undefined;
+    tool.configure(selection, request => {
+      signal = request.signal;
+      return materialization.promise;
+    }, { onOperation, onError });
+
+    const placement = tool.place({ x: 0, y: 0, w: 100, h: 50 });
+    const [operation, cancel] = onOperation.mock.calls[0]!;
+    let settled = false;
+    void operation.then(() => { settled = true; });
+    materialization.resolve({ ...materialized(), rollback });
+    cancel();
+    await settle();
+
+    expect(signal?.aborted).toBe(true);
+    expect(rollback).toHaveBeenCalledExactlyOnceWith('cancelled');
+    expect(settled).toBe(false);
+    expect(editor.serialize().records.filter(record => record.kind === 'asset' || record.kind === 'shape')).toHaveLength(0);
+
+    compensation.resolve();
+    await expect(operation).resolves.toBeNull();
+    await expect(placement).resolves.toBeNull();
+    expect(settled).toBe(true);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it('preserves a newer selection while materializing in the same asset tool', async () => {
+    const { editor, tool } = makeEditor();
+    tool.configure(selection, async () => materialized());
+    const existingId = (await tool.place({ x: 0, y: 0, w: 100, h: 50 }))!;
+    editor.setCurrentTool('asset');
+    editor.setSelectedShapeIds([]);
+    const materialization = deferred<AssetMaterialization>();
+    tool.configure(selection, () => materialization.promise);
+    const pending = tool.place({ x: 120, y: 0, w: 100, h: 50 });
+
+    editor.setSelectedShapeIds([existingId]);
+    expect(editor.currentToolId.peek()).toBe('asset');
+    materialization.resolve(materialized());
+    const importedId = await pending;
+
+    expect(editor.getShape(importedId!)).toBeDefined();
+    expect(editor.getSelectedShapeIds()).toEqual([existingId]);
   });
 
   it('deduplicates retained content and commits placement as one undo entry', async () => {

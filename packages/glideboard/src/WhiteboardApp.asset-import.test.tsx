@@ -318,6 +318,7 @@ describe('WhiteboardApp unified asset ingress', () => {
     controller.assetImportJobsSignal.value = [
       { id: 'queued', kind: 'svg', status: 'queued', progress: 0, attempt: 1 },
       { id: 'uploading', kind: 'raster', status: 'uploading', progress: 0.5, attempt: 1 },
+      { id: 'finalizing', kind: 'raster', status: 'finalizing', progress: 1, attempt: 1 },
       { id: 'complete', kind: 'svg', status: 'complete', progress: 1, attempt: 1 },
     ];
     const view = setup();
@@ -354,6 +355,7 @@ describe('WhiteboardApp unified asset ingress', () => {
     act(() => controller.setReadOnly(true));
     expect(cancel).toHaveBeenCalledWith('queued');
     expect(cancel).toHaveBeenCalledWith('uploading');
+    expect(cancel).toHaveBeenCalledWith('finalizing');
     expect(cancel).not.toHaveBeenCalledWith('complete');
     fireEvent.contextMenu(app, { clientX: 1, clientY: 2 });
     fireEvent.paste(app, {

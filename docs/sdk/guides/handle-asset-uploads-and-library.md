@@ -10,12 +10,14 @@
 import type { GlideboardAssetStorage, GlideboardAssetPersistence } from '@durgakiran/glideboard';
 
 const assetStorage: GlideboardAssetStorage = {
+  commitOrder: 'before-document',
   async prepare(asset, signal) {
     const res = await fetch('/api/assets/stage', {
       method: 'POST',
       body: JSON.stringify({ assetId: asset.id, mimeType: asset.props.mimeType }),
       signal,
     });
+    if (!res.ok) throw new Error('Could not prepare image upload');
     const { token } = await res.json();
 
     const persistence: GlideboardAssetPersistence = {
@@ -24,10 +26,13 @@ const assetStorage: GlideboardAssetStorage = {
         await uploadWithProgress(`/api/assets/${token}/bytes`, bytes, { signal, onProgress: reportProgress });
       },
       async commit(signal) {
-        await fetch(`/api/assets/${token}/commit`, { method: 'POST', signal });
+        const res = await fetch(`/api/assets/${token}/commit`, { method: 'POST', signal });
+        if (!res.ok) throw new Error('Could not finalize image upload');
+        // This endpoint must confirm durable storage before returning success.
       },
       async rollback() {
-        await fetch(`/api/assets/${token}/rollback`, { method: 'POST' }).catch(() => {});   // best-effort; must be safe to call twice
+        // The endpoint must leave committed files intact, even after a lost commit response.
+        await fetch(`/api/assets/${token}/rollback`, { method: 'POST' }).catch(() => {});
       },
     };
     return persistence;
@@ -50,9 +55,37 @@ const assetStorage: GlideboardAssetStorage = {
 <Glideboard sessionKey={boardId} assetStorage={assetStorage} />
 ```
 
-The ordering matters and is enforced by the contract, not just a style preference: `prepare()` gets you a `token` **before any bytes move**, so a client that goes offline mid-upload has something to retry against rather than an orphaned partial upload the server doesn't know about. `commit()` is only called after the corresponding shape-creation edit itself succeeds in the editor — so you never end up with a durably-committed asset for an edit that didn't actually land (e.g. the user hit Escape mid-drag). Make `rollback()` idempotent; it can be called more than once (an abort path and a cleanup path both calling it is expected, not a bug to guard against with a thrown "already rolled back" error).
+With `commitOrder: 'before-document'`, Glideboard prepares the upload, sends the bytes, waits for `commit()` to confirm durable storage, and then inserts the asset reference and shape. Collaborators receive the image only after its file is ready. Other drawing, synchronization, and autosaving continue throughout the upload. Existing adapters that omit `commitOrder` retain the legacy order: document insertion followed by storage commit.
+
+`prepare()` obtains a token **before any bytes move**, so interrupted uploads have a server-owned session for retry or cancellation. `commit()` must be idempotent and resolve only when the asset is known to be durable. If a response is lost, retry or query its status before reporting success. Make `rollback()` idempotent and restrict it to uncommitted staging: the server may have committed a file even when the client saw an error. A cancelled or obsolete insertion can leave an unused committed file retained according to your backend's policy.
+
+The Assets panel displays upload progress and a finalizing phase, with cancellation and retry. A local on-canvas preview is optional additional UI; keep its loading state and object URL outside Yjs. Replacement retains the old image until the new asset is ready.
 
 `resolve()` must be synchronous and side-effect-free — it's called during render. If your real asset URL requires an async fetch (e.g. a signed URL with rotation), resolve it eagerly (on `prepare`/`commit`, or via `retainReferences`) and cache the result for `resolve()` to read synchronously.
+
+### Capture after pending imports finish
+
+For publish or close, wait for pending asset work before capturing and saving:
+
+```ts
+// Pass the editor session's AbortSignal so leaving the session cancels the wait.
+const fence = await board.prepareForCapture('publish', { signal });
+try {
+  await board.settleActiveEdit('commit');
+  const target = await board.captureProjectionTarget();
+  await durability.flush(target);
+  const preview = await createPublishPreview(board, { target });
+  await publishTarget(target, preview);
+} finally {
+  fence.release();
+}
+```
+
+`prepareForCapture()` immediately blocks new asset imports, paste, library placements, and retries. It allows existing operations to insert their results, then applies a mutation fence. Drawing stays available while uploads finish. Use `'close'` when leaving after saving or `'export'` for a custom export flow; direct SVG export without a supplied target already performs this preparation. Selected clipboard capture through `createPortableFragment()` starts immediately without waiting for unrelated uploads, preserving copy/cut behavior.
+
+Use `board.getPendingAssetCount()` in navigation/unload checks to detect uploads that have not yet changed the saved document. It reports a synchronous count of current operations; it does not wait or subscribe to changes.
+
+Catch preparation errors in the host so users can retry failed imports before publishing. Aborting preparation releases the import block and rejects the wait; it does not cancel the underlying uploads. Always release a returned fence in `finally`. Acquiring a mutation fence before waiting would block the very insertions capture is waiting for. If retrying an already-prepared immutable publish request, replay that request instead of preparing a new capture.
 
 ## Library: implement the provider backend
 

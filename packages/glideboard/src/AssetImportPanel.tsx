@@ -112,7 +112,12 @@ function formatBytes(bytes: number): string {
 
 function statusLabel(status: GlideboardAssetImportStatus, progress: number): string {
   if (status === 'uploading') return `Uploading ${Math.round(progress * 100)}%`;
+  if (status === 'finalizing') return 'Finalizing image…';
   return status[0]!.toUpperCase() + status.slice(1);
+}
+
+function isPendingImport(status: GlideboardAssetImportStatus): boolean {
+  return status === 'queued' || status === 'uploading' || status === 'finalizing';
 }
 
 function sentence(message: string): string {
@@ -184,7 +189,7 @@ export function AssetImportPanel({
       id={controller.domId('asset-import-panel')}
       data-glideboard-role="asset-import-panel"
       aria-label="Image imports"
-      aria-busy={jobs.some(job => job.status === 'queued' || job.status === 'uploading')}
+      aria-busy={jobs.some(job => isPendingImport(job.status))}
       style={{
         position: 'absolute', right: 12, bottom: 54, zIndex: 110,
         width: 340, maxWidth: 'calc(100% - 24px)', maxHeight: 'min(320px, calc(100% - 78px))',
@@ -213,7 +218,7 @@ export function AssetImportPanel({
                   {statusLabel(job.status, job.progress)}
                 </div>
               </div>
-              {(job.status === 'queued' || job.status === 'uploading') ? (
+              {isPendingImport(job.status) ? (
                 <ActionButton label="Cancel import" onClick={() => controller.cancelAssetImport(job.id)}><FiX size={14} /></ActionButton>
               ) : null}
               {((job.status === 'error' && job.error?.retryable) || job.status === 'cancelled') ? (
@@ -223,8 +228,14 @@ export function AssetImportPanel({
                 <ActionButton label="Dismiss import" onClick={() => controller.dismissAssetImport(job.id)}><FiX size={14} /></ActionButton>
               ) : null}
             </div>
-            {(job.status === 'queued' || job.status === 'uploading') ? (
-              <progress aria-label={`Progress for ${job.name ?? 'image'}`} value={job.progress} max={1} style={{ width: '100%', height: 4, marginTop: 7, display: 'block' }} />
+            {isPendingImport(job.status) ? (
+              <progress
+                aria-label={`Progress for ${job.name ?? 'image'}`}
+                aria-valuetext={statusLabel(job.status, job.progress)}
+                value={job.status === 'finalizing' ? undefined : job.progress}
+                max={1}
+                style={{ width: '100%', height: 4, marginTop: 7, display: 'block' }}
+              />
             ) : null}
             {job.error ? (
               <div style={{ marginTop: 6, fontSize: 10, lineHeight: 1.4, color: wbTheme.textMuted }}>

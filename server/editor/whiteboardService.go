@@ -109,6 +109,9 @@ func UpdateWhiteboard(d WhiteboardInput) error {
 		return err
 	}
 	defer tx.Rollback(ctx)
+	if err := lockLegacyWhiteboardPage(ctx, tx, d.Id); err != nil {
+		return err
+	}
 
 	// Try to find existing draft=1 row.
 	var dId int64
@@ -166,6 +169,9 @@ func PublishWhiteboard(ctx context.Context, d WhiteboardPublishInput) (Whiteboar
 		return WhiteboardPublishResult{}, nil, err
 	}
 	defer tx.Rollback(ctx)
+	if err := lockLegacyWhiteboardPage(ctx, tx, d.Id); err != nil {
+		return WhiteboardPublishResult{}, nil, err
+	}
 
 	requestHash := hashWhiteboardPublishRequest(d)
 	replay := func() (WhiteboardPublishResult, error) {
@@ -283,6 +289,9 @@ func DeleteWhiteboard(d WhiteboardInput) error {
 		return err
 	}
 	defer tx.Rollback(ctx)
+	if err := lockLegacyWhiteboardPage(ctx, tx, d.Id); err != nil {
+		return err
+	}
 	if err := quota.ReleasePageStorageUsageTx(ctx, tx, d.SpaceId, d.Id, "whiteboard_delete"); err != nil {
 		logger().Error(fmt.Sprintf("DeleteWhiteboard release quota err: %s", err.Error()))
 		return err

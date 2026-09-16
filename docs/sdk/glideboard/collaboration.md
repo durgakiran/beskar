@@ -82,7 +82,7 @@ interface ProjectedYjsState {
 }
 
 interface MutationFence {
-  readonly reason: 'close' | 'publish';
+  readonly reason: 'close' | 'publish' | 'export';
   release(): void;
 }
 ```
@@ -95,18 +95,21 @@ checkpoints.status.value;                                 // read current health
 const unsubscribe = checkpoints.subscribe((state) => sendToBackend(state.encodedState, state.target));
 ```
 
-**Publish/close pattern** — capture a consistent snapshot while briefly pausing new mutations:
+**Publish/close pattern** — wait for pending assets, then capture a consistent snapshot while briefly pausing new mutations:
 
 ```ts
-const fence = boardRef.current!.acquireMutationFence('publish');
+const board = boardRef.current!;
+const fence = await board.prepareForCapture('publish', { signal: sessionAbortSignal });
 try {
-  await boardRef.current!.settleActiveEdit('commit');   // flush any in-progress text edit first
-  const target = await boardRef.current!.captureProjectionTarget();
-  // ... persist boardRef.current!.serialize() / the Yjs state, tagged with `target` ...
+  await board.settleActiveEdit('commit');   // flush any in-progress text edit first
+  const target = await board.captureProjectionTarget();
+  // ... persist board.serialize() / the Yjs state, tagged with `target` ...
 } finally {
   fence.release();
 }
 ```
+
+`prepareForCapture()` blocks new asset ingress immediately, lets existing asset operations finish their document insertion, and then acquires the mutation fence. Catch a rejected preparation in the host and allow users to review or retry failed imports. The optional signal aborts the wait without cancelling uploads. Do not acquire a mutation fence before waiting: it would block pending insertions. `getPendingAssetCount()` can detect unsaved uploads for navigation/unload prompts even when the current document is clean. See [Assets](./assets.md#wait-for-assets-before-publishing-closing-or-exporting) for the full contract.
 
 `ProjectionStatus` values: `'healthy'` (projection is current), `'catching-up'` (behind but recovering), `'quarantined'`/`'incompatible'`/`'failed'` (the projection has detected a problem it can't resolve on its own — treat these as "do not trust this document's collaborative state for a publish/export" signals).
 

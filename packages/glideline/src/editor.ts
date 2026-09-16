@@ -230,6 +230,12 @@ export interface CreatePortableBoardFragmentOptions {
 export interface PastePortableBoardFragmentOptions {
   readonly materializeRasterAsset: PortableAssetMaterializer;
   readonly point?: Vec2;
+  readonly signal?: AbortSignal;
+  /** Capture the destination before asynchronous materialization starts. */
+  readonly targetPageId?: PageId;
+  readonly select?: boolean;
+  /** Revalidate the host session immediately before the synchronous record transaction. */
+  readonly beforeCommit?: () => void;
 }
 
 export interface PortableSvgExportOptions {
@@ -1913,6 +1919,7 @@ export class GlideEditor {
     options: PastePortableBoardFragmentOptions,
   ): Promise<ShapeId[]> {
     validatePortableBoardFragmentStructure(fragment);
+    const targetPageId = options.targetPageId ?? this.getActivePageId();
     const records = fragment.records.map(record => cloneRecord(record));
     this._preflightPortableBoardFragment(fragment, records);
     const rasterAssets = new Map<string, GlideAsset>();
@@ -1943,6 +1950,7 @@ export class GlideEditor {
     const completed: PortableAssetMaterialization[] = [];
     try {
       for (const assetId of [...rasterAssets.keys()].sort()) {
+        options.signal?.throwIfAborted();
         const asset = rasterAssets.get(assetId)!;
         const result = await options.materializeRasterAsset(
           cloneRecord(payloads.get(assetId)!),
@@ -1954,6 +1962,9 @@ export class GlideEditor {
         }
         completed.push(result);
       }
+      options.signal?.throwIfAborted();
+      options.beforeCommit?.();
+      if (!this.getPage(targetPageId)) throw new Error('Portable paste destination page no longer exists');
       const offset = options.point
         ? { x: options.point.x - fragment.sourceBounds.minX, y: options.point.y - fragment.sourceBounds.minY }
         : { x: 20, y: 20 };
@@ -1963,8 +1974,8 @@ export class GlideEditor {
         records,
         assetRefs: fragment.assetRefs,
         sourceBounds: fragment.sourceBounds,
-      }, offset, 'Paste');
-      this.setSelectedShapeIds(ids);
+      }, offset, 'Paste', targetPageId);
+      if (options.select !== false) this.setSelectedShapeIds(ids);
       return ids;
     } catch (error) {
       const rollbackResults = await Promise.allSettled(completed.reverse().map(result => result.rollback()));
@@ -2131,7 +2142,7 @@ export class GlideEditor {
     });
   }
 
-  private _pasteClipboardPayload(payload: ClipboardPayload, offset: Vec2, label: string): ShapeId[] {
+  private _pasteClipboardPayload(payload: ClipboardPayload, offset: Vec2, label: string, targetPageId = this.getActivePageId()): ShapeId[] {
     if (payload.schema.clipboardVersion !== 1 || payload.schema.storeVersion > CURRENT_STORE_VERSION) {
       throw new Error(`Unsupported clipboard schema version ${payload.schema.clipboardVersion}`);
     }
@@ -2139,7 +2150,7 @@ export class GlideEditor {
     const recordById = new Map(records.map(record => [record['id'] as string, record]));
     for (const rootId of payload.rootIds) {
       const root = recordById.get(rootId);
-      if (root?.['kind'] === 'shape') root['parentId'] = this.getActivePageId();
+      if (root?.['kind'] === 'shape') root['parentId'] = targetPageId;
     }
     const orderedRootIds = [...payload.rootIds].sort((left, right) => {
       const leftRecord = recordById.get(left);

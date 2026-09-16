@@ -197,6 +197,9 @@ func publishDoc(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	pageId, publishedDocId, err := inputDoc.Publish()
+	if legacyMigrationHTTPError(w, r, err) {
+		return
+	}
 	if err != nil && err.Error() == "nothing new to update" {
 		render.Status(r, http.StatusConflict)
 		render.Render(w, r, core.NewFailedResponse(http.StatusConflict, core.FAILURE, core.FAILURE, "There is nothing new to update"))
@@ -263,6 +266,9 @@ func updateDraftDoc(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	pageId, draftGen, err := inputDoc.Update()
+	if legacyMigrationHTTPError(w, r, err) {
+		return
+	}
 	if err != nil {
 		if errors.Is(err, ErrDraftPayloadTooSmall) {
 			render.Status(r, http.StatusConflict)
@@ -329,6 +335,9 @@ func deleteDocument(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	rowsAffected, err := DeleteDocument(page, spaceId, ownerId)
+	if legacyMigrationHTTPError(w, r, err) {
+		return
+	}
 	if err != nil {
 		core.SendFailedReponse(w, r, http.StatusInternalServerError, "Unable to delete document")
 		return

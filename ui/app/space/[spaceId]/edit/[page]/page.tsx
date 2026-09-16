@@ -3,7 +3,7 @@ import { useParams } from "react-router-dom";
 import { useGet } from "@http/hooks";
 import { lazy, Suspense } from "react";
 import type { PageNavigation } from "app/core/whiteboard/v2/api";
-const WhiteboardEditor = lazy(() => import("@components/WhiteboardEditor"));
+const WhiteboardEditor = lazy(() => import("@components/WhiteboardMigration"));
 const WhiteboardEditorV2 = lazy(() => import("@components/WhiteboardEditorV2"));
 import DocumentEditor from "@components/DocumentEditor";
 import { useEffect } from "react";
@@ -36,7 +36,7 @@ export default function Page() {
     }
 
     if (metaData.data.type === "whiteboard") {
-        return <Suspense fallback={<Spinner />} >{metaData.data.contentApiVersion === 2 ? <WhiteboardEditorV2 key={`${spaceId}:${page}`} slug={[spaceId, page]} /> : <WhiteboardEditor key={page} slug={[spaceId, page]} />}</Suspense>;
+        return <Suspense fallback={<Spinner />} >{metaData.data.contentApiVersion === 2 ? <WhiteboardEditorV2 key={`${spaceId}:${page}`} slug={[spaceId, page]} /> : <WhiteboardEditor key={`${spaceId}:${page}`} slug={[spaceId, page]} />}</Suspense>;
     }
 
     return <DocumentEditor key={page} slug={[spaceId, page]} />;

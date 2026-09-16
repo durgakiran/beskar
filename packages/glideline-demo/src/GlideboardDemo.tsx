@@ -286,14 +286,14 @@ function createPlacementGate() {
       if (!held) for (const waiter of [...waiters]) settle(waiter);
     },
     wait(signal: AbortSignal): Promise<void> {
-      if (signal.aborted) return Promise.reject(new DOMException('Asset placement cancelled', 'AbortError'));
+      if (signal.aborted) return Promise.reject(new DOMException('Asset operation cancelled', 'AbortError'));
       if (!held) return Promise.resolve();
       return new Promise<void>((resolve, reject) => {
         const waiter = {} as Waiter;
         waiter.signal = signal;
         waiter.resolve = resolve;
         waiter.reject = reject;
-        waiter.onAbort = () => settle(waiter, new DOMException('Asset placement cancelled', 'AbortError'));
+        waiter.onAbort = () => settle(waiter, new DOMException('Asset operation cancelled', 'AbortError'));
         waiters.add(waiter);
         signal.addEventListener('abort', waiter.onAbort, { once: true });
       });
@@ -358,6 +358,7 @@ export default function GlideboardDemo() {
   const lastCrossBoardAcceptance = React.useRef<CrossBoardAcceptanceResult | null>(null);
   const initialDocument = React.useMemo(() => loadInitialDocument(), []);
   const [slowUpload, setSlowUpload] = React.useState(false);
+  const [holdStorageCommit, setHoldStorageCommit] = React.useState(false);
   const [failNextUpload, setFailNextUpload] = React.useState(false);
   const [failNextDownload, setFailNextDownload] = React.useState(false);
   const [catalogLoading, setCatalogLoading] = React.useState(false);
@@ -376,11 +377,13 @@ export default function GlideboardDemo() {
   const portableRequestEvidence = React.useRef<PortableRequestEvidence[]>([]);
   const failNextPlacementRef = React.useRef(failNextPlacement);
   const placementGate = React.useMemo(() => createPlacementGate(), []);
+  const storageCommitGate = React.useMemo(() => createPlacementGate(), []);
   slowUploadRef.current = slowUpload;
   failNextUploadRef.current = failNextUpload;
   failNextDownloadRef.current = failNextDownload;
   failNextPlacementRef.current = failNextPlacement;
   const assetStorage = React.useMemo(() => createDemoAssetStorage({
+    beforeCommit: signal => storageCommitGate.wait(signal),
     isSlowUpload: () => slowUploadRef.current,
     consumeUploadFailure: () => {
       if (!failNextUploadRef.current) return false;
@@ -395,7 +398,7 @@ export default function GlideboardDemo() {
       return true;
     },
     onUsageChange: setRasterUsage,
-  }), []);
+  }), [storageCommitGate]);
   const acceptanceSourceStorage = React.useMemo(() => createDemoAssetStorage({
     isSlowUpload: () => false,
     consumeUploadFailure: () => false,
@@ -583,6 +586,8 @@ export default function GlideboardDemo() {
     delete window.__GLIDELINE_PORTABLE_EXPORT__;
     portableRequestEvidence.current = [];
     setSlowUpload(false);
+    storageCommitGate.setHeld(false);
+    setHoldStorageCommit(false);
     setFailNextUpload(false);
     setFailNextDownload(false);
     setCatalogLoading(false);
@@ -621,6 +626,11 @@ export default function GlideboardDemo() {
           alignItems: 'center', overflowX: 'auto', background: '#fff', borderBottom: '1px solid #d8dee8' }}
       >
         <DemoToggle pressed={slowUpload} onClick={() => setSlowUpload(value => !value)}>Slow upload</DemoToggle>
+        <DemoToggle pressed={holdStorageCommit} onClick={() => {
+          const next = !holdStorageCommit;
+          storageCommitGate.setHeld(next);
+          setHoldStorageCommit(next);
+        }}>Hold storage commit</DemoToggle>
         <DemoToggle pressed={failNextUpload} onClick={() => setFailNextUpload(value => !value)}>Fail next upload</DemoToggle>
         <DemoToggle pressed={failNextDownload} onClick={() => setFailNextDownload(value => !value)}>Fail next download</DemoToggle>
         <DemoToggle pressed={catalogLoading} onClick={() => setCatalogLoading(value => !value)}>Catalog loading</DemoToggle>

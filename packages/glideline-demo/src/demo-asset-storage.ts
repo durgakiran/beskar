@@ -9,6 +9,7 @@ interface DemoAssetStorageOptions {
   isSlowUpload(): boolean;
   consumeUploadFailure(): boolean;
   consumeDownloadFailure?(): boolean;
+  beforeCommit?(signal: AbortSignal): Promise<void>;
   onUsageChange?(usageBytes: number): void;
   quotaBytes?: number;
   persistenceKey?: string;
@@ -108,6 +109,7 @@ export function createDemoAssetStorage(
     window.localStorage.removeItem(persistenceKey);
   }
   const storage: DemoAssetStorage = {
+    commitOrder: 'before-document',
     activate() {
       if (disposed) throw new Error('Demo asset storage was already disposed.');
       lifecycleGeneration += 1;
@@ -150,6 +152,10 @@ export function createDemoAssetStorage(
           if (commitSignal.aborted) throw new DOMException('Import cancelled', 'AbortError');
           if (rolledBack) throw new Error('Demo asset persistence was already rolled back.');
           if (!entry) throw new Error('Demo asset persistence has not been staged.');
+          if (committed) return;
+          await options.beforeCommit?.(commitSignal);
+          if (commitSignal.aborted) throw new DOMException('Import cancelled', 'AbortError');
+          if (rolledBack) throw new Error('Demo asset persistence was already rolled back.');
           const existing = entries.get(hash);
           if (existing) {
             if (entry.url) URL.revokeObjectURL(entry.url);
@@ -163,18 +169,16 @@ export function createDemoAssetStorage(
               if (error instanceof DOMException && error.name === 'QuotaExceededError') throw demoQuotaError();
               throw error;
             }
+            committed = true;
             options.onUsageChange?.(usageBytes());
           }
           committed = true;
         },
         rollback: async () => {
-          if (rolledBack) return;
+          // A confirmed file may already be referenced by another document operation.
+          // Rollback only discards staging; Reset demo owns deletion of durable bytes.
+          if (rolledBack || committed) return;
           rolledBack = true;
-          if (entry && committed && entries.get(hash) === entry) {
-            entries.delete(hash);
-            persistEntries();
-            options.onUsageChange?.(usageBytes());
-          }
           if (entry?.url) URL.revokeObjectURL(entry.url);
         },
       };

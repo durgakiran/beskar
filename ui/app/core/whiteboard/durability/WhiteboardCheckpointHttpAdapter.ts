@@ -41,7 +41,11 @@ export class WhiteboardCheckpointHttpAdapter implements YjsPersistenceAdapter {
             const body = await response.json() as ApiEnvelope<{
                 revision: string;
                 data?: string;
-            }>;
+            }> & { error?: { code?: string; message?: string } };
+            if (body.error?.code === 'WHITEBOARD_MIGRATED') {
+                throw Object.assign(new Error(body.error.message), { code: 'WHITEBOARD_MIGRATED' });
+            }
+            if (!body.data?.revision) throw new Error('The whiteboard draft is no longer active. Reload the page; local recovery is retained.');
             throw new DurabilityConflictError(
                 body.data.revision,
                 body.data.data ? decodeBase64(body.data.data) : undefined,

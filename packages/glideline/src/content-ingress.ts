@@ -346,6 +346,70 @@ export function normalizeClipboardText(input: { html?: string; text?: string }):
   return output.join('').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
 }
 
+/** Inspect container/frame headers only; the storage host must fully decode before committing. */
+function readWebpMetadata(bytes: Uint8Array, view: DataView): RasterMetadata {
+  if (view.getUint32(4, true) + 8 !== bytes.length) {
+    throw new ContentIngressError('WebP RIFF length is invalid or truncated');
+  }
+  let canvas: { width: number; height: number } | undefined;
+  let frame: RasterMetadata | undefined;
+  for (let offset = 12; offset < bytes.length;) {
+    if (offset + 8 > bytes.length) throw new ContentIngressError('WebP chunk header is truncated');
+    const type = String.fromCharCode(...bytes.subarray(offset, offset + 4));
+    const length = view.getUint32(offset + 4, true);
+    const start = offset + 8;
+    const end = start + length;
+    const next = end + (length & 1);
+    if (next > bytes.length) throw new ContentIngressError('WebP chunk is truncated');
+    if ((length & 1) && bytes[end] !== 0) throw new ContentIngressError('WebP chunk padding is invalid');
+
+    if (type === 'VP8X') {
+      if (offset !== 12 || canvas || length !== 10) {
+        throw new ContentIngressError('WebP extended header is invalid');
+      }
+      const flags = bytes[start]!;
+      if (flags & 0x02) throw new ContentIngressError('Animated WebP images are not supported');
+      if ((flags & 0xc1) || bytes[start + 1] || bytes[start + 2] || bytes[start + 3]) {
+        throw new ContentIngressError('WebP extended header contains unsupported flags');
+      }
+      canvas = {
+        width: 1 + bytes[start + 4]! + (bytes[start + 5]! << 8) + (bytes[start + 6]! << 16),
+        height: 1 + bytes[start + 7]! + (bytes[start + 8]! << 8) + (bytes[start + 9]! << 16),
+      };
+    } else if (type === 'VP8 ' || type === 'VP8L') {
+      if (frame) throw new ContentIngressError('WebP contains multiple image frames');
+      let width: number;
+      let height: number;
+      if (type === 'VP8 ') {
+        if (length < 10) throw new ContentIngressError('WebP lossy frame header is truncated');
+        if ((bytes[start]! & 1) || bytes[start + 3] !== 0x9d
+          || bytes[start + 4] !== 0x01 || bytes[start + 5] !== 0x2a) {
+          throw new ContentIngressError('WebP lossy frame header is invalid');
+        }
+        width = view.getUint16(start + 6, true) & 0x3fff;
+        height = view.getUint16(start + 8, true) & 0x3fff;
+      } else {
+        if (length < 5) throw new ContentIngressError('WebP lossless frame header is truncated');
+        const header = view.getUint32(start + 1, true);
+        if (bytes[start] !== 0x2f || header >>> 29 !== 0) {
+          throw new ContentIngressError('WebP lossless frame header is invalid');
+        }
+        width = 1 + (header & 0x3fff);
+        height = 1 + ((header >>> 14) & 0x3fff);
+      }
+      frame = { mimeType: 'image/webp', width, height };
+    } else if (type === 'ANIM' || type === 'ANMF') {
+      throw new ContentIngressError('Animated WebP images are not supported');
+    }
+    offset = next;
+  }
+  if (!frame) throw new ContentIngressError('WebP image frame is missing');
+  if (canvas && (canvas.width !== frame.width || canvas.height !== frame.height)) {
+    throw new ContentIngressError('WebP canvas and frame dimensions do not match');
+  }
+  return frame;
+}
+
 function readRasterMetadata(bytes: Uint8Array): RasterMetadata {
   if (bytes.length < 24) throw new ContentIngressError('Raster image is truncated');
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
@@ -370,15 +434,10 @@ function readRasterMetadata(bytes: Uint8Array): RasterMetadata {
     }
   }
   if (
-    bytes.length >= 30
-    &&
     String.fromCharCode(...bytes.slice(0, 4)) === 'RIFF'
     && String.fromCharCode(...bytes.slice(8, 12)) === 'WEBP'
-    && String.fromCharCode(...bytes.slice(12, 16)) === 'VP8X'
   ) {
-    const width = 1 + bytes[24]! + (bytes[25]! << 8) + (bytes[26]! << 16);
-    const height = 1 + bytes[27]! + (bytes[28]! << 8) + (bytes[29]! << 16);
-    return { mimeType: 'image/webp', width, height };
+    return readWebpMetadata(bytes, view);
   }
   throw new ContentIngressError('Unsupported or mismatched raster image format');
 }

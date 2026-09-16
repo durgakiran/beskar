@@ -28,6 +28,6 @@ export interface CollaborationCheckpointSource {
 }
 
 export interface MutationFence {
-  readonly reason: 'close' | 'publish';
+  readonly reason: 'close' | 'publish' | 'export';
   release(): void;
 }

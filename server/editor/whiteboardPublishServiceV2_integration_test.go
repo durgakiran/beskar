@@ -1,6 +1,7 @@
 package editor
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
@@ -19,12 +20,15 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 )
 
 func TestPublishV2Postgres(t *testing.T) {
+	// Quota accounting has its own real-schema integration suite.
+	t.Setenv("QUOTA_SYSTEM_ENABLED", "false")
 	dsn := os.Getenv("WHITEBOARD_PUBLISH_TEST_DSN")
 	if dsn == "" {
 		t.Skip("set WHITEBOARD_PUBLISH_TEST_DSN to disposable whiteboard_publish_test database")
@@ -51,8 +55,9 @@ func TestPublishV2Postgres(t *testing.T) {
 	}
 	sql(`DROP TABLE IF EXISTS public.databasechangeloglock,public.databasechangelog; DROP SCHEMA IF EXISTS whiteboard CASCADE; DROP SCHEMA IF EXISTS core CASCADE;
  CREATE SCHEMA core;
- CREATE TABLE core.space(id uuid PRIMARY KEY,archived_at timestamptz,deleted_at timestamptz);
+ CREATE TABLE core.space(id uuid PRIMARY KEY,account_id uuid,archived_at timestamptz,deleted_at timestamptz);
  CREATE TABLE core.page(id bigint PRIMARY KEY,space_id uuid NOT NULL REFERENCES core.space(id),owner_id uuid,parent_id bigint,type text DEFAULT 'whiteboard');
+ CREATE TABLE core.asset_reference(asset_type text);
  CREATE TABLE core.page_doc_map(doc_id bigint,page_id bigint,title text,draft integer,version timestamptz);
  CREATE TABLE core.whiteboard_data(doc_id bigint,preview_asset_name text);
  CREATE SCHEMA IF NOT EXISTS project;
@@ -62,7 +67,7 @@ func TestPublishV2Postgres(t *testing.T) {
 		t.Fatal(err)
 	}
 	dir := t.TempDir()
-	changelog := `<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd"><include file="updates/whiteboard_creation.xml"/><include file="updates/whiteboard_updates.xml"/><include file="updates/whiteboard_publication.xml"/><include file="updates/whiteboard_previews.xml"/><include file="updates/whiteboard_titles.xml"/><include file="updates/whiteboard_draft_replay.xml"/><include file="updates/whiteboard_history.xml"/></databaseChangeLog>`
+	changelog := `<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd"><include file="updates/whiteboard_creation.xml"/><include file="updates/whiteboard_updates.xml"/><include file="updates/whiteboard_publication.xml"/><include file="updates/whiteboard_previews.xml"/><include file="updates/whiteboard_titles.xml"/><include file="updates/whiteboard_draft_replay.xml"/><include file="updates/whiteboard_history.xml"/><include file="updates/whiteboard_assets.xml"/><include file="updates/whiteboard_assets_v2.xml"/><include file="updates/whiteboard_assets_v2_legacy_cleanup.xml"/></databaseChangeLog>`
 	if err = os.WriteFile(filepath.Join(dir, "test.xml"), []byte(changelog), 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -78,7 +83,7 @@ func TestPublishV2Postgres(t *testing.T) {
 	}
 	t.Setenv("WHITEBOARD_YJS_RUNTIME_DIR", runtime)
 	// Generate actual ordered Yjs updates, including a future missing asset.
-	generate := exec.CommandContext(ctx, "node", "--input-type=module", "-e", `import * as Y from 'yjs'; const d=new Y.Doc(),u=[];d.on('update',b=>u.push(Buffer.from(b).toString('base64')));d.getMap('glideboard-meta').set('title','First');d.getMap('glideboard-meta').set('title','Second');d.getMap('glideboard-records-v2').set('asset:a',new Y.Map(Object.entries({kind:'asset',type:'raster-image',props:{hash:'a'.repeat(64)}})));process.stdout.write(JSON.stringify(u));`)
+	generate := exec.CommandContext(ctx, "node", "--input-type=module", "-e", `import * as Y from 'yjs'; const d=new Y.Doc(),u=[];d.on('update',b=>u.push(Buffer.from(b).toString('base64')));d.getMap('glideboard-meta').set('title','First');d.getMap('glideboard-meta').set('title','Second');d.getMap('glideboard-records-v2').set('asset:sha256:'+ 'a'.repeat(64),new Y.Map(Object.entries({id:'asset:sha256:'+ 'a'.repeat(64),kind:'asset',type:'raster-image',schemaVersion:1,props:{hash:'a'.repeat(64),mimeType:'image/png',byteLength:100,width:20,height:10},meta:{}})));process.stdout.write(JSON.stringify(u));`)
 	generate.Dir = runtime
 	output, err := generate.Output()
 	if err != nil {
@@ -165,9 +170,32 @@ func TestPublishV2Postgres(t *testing.T) {
 		t.Fatalf("future: %v", err)
 	}
 	bad.Sequence = 3
-	// Asset records must publish without any asset catalog or snapshot asset table.
-	// Concurrent identical requests still create exactly one version.
+	// Only committed, same-board catalog content with exact immutable metadata may publish.
 	var count int
+	if _, err = service.PublishWhiteboard(ctx, bad); !errors.Is(err, errWhiteboardSnapshotAssetNotReady) {
+		t.Fatalf("uncommitted asset published: %v", err)
+	}
+	assetHash := strings.Repeat("a", 64)
+	sql(`INSERT INTO core.page(id,space_id,owner_id) VALUES(900,$1,$2)`, in.SpaceID, in.ActorID)
+	sql(whiteboardV2InsertBoard, int64(900), in.ActorID)
+	insertAsset := `INSERT INTO whiteboard.whiteboard_asset(page_id,content_hash,storage_key,file_size,mime_type,width,height,created_by,inspector_version) VALUES($1,$2,$3,$4,'image/png',20,10,$5,2)`
+	sql(insertAsset, int64(900), assetHash, "whiteboard-v2-assets/900/test", int64(100), in.ActorID)
+	if _, err = service.PublishWhiteboard(ctx, bad); !errors.Is(err, errWhiteboardSnapshotAssetNotReady) {
+		t.Fatalf("cross-board asset published: %v", err)
+	}
+	sql(insertAsset, in.PageID, assetHash, "whiteboard-v2-assets/42/test", int64(99), in.ActorID)
+	if _, err = service.PublishWhiteboard(ctx, bad); !errors.Is(err, errWhiteboardSnapshotAssetInvalid) {
+		t.Fatalf("metadata mismatch published: %v", err)
+	}
+	sql(`DELETE FROM whiteboard.whiteboard_asset WHERE page_id=$1`, in.PageID)
+	if err = pool.QueryRow(ctx, `SELECT count(*) FROM whiteboard.whiteboard_version WHERE page_id=$1`, in.PageID).Scan(&count); err != nil || count != 2 {
+		t.Fatalf("asset failure changed publications: %d %v", count, err)
+	}
+	if err = pool.QueryRow(ctx, `SELECT count(*) FROM whiteboard.whiteboard_snapshot_asset_manifest WHERE page_id=$1`, in.PageID).Scan(&count); err != nil || count != 2 {
+		t.Fatalf("asset failure leaked snapshot manifest: %d %v", count, err)
+	}
+	sql(insertAsset, in.PageID, assetHash, "whiteboard-v2-assets/42/test", int64(100), in.ActorID)
+	// Concurrent identical requests still create exactly one version.
 	var wg sync.WaitGroup
 	results := make(chan whiteboardPublishedManifest, 2)
 	failures := make(chan error, 2)
@@ -197,6 +225,12 @@ func TestPublishV2Postgres(t *testing.T) {
 		if result.VersionNumber != 3 {
 			t.Fatalf("wrong version: %+v", result)
 		}
+	}
+	if err = pool.QueryRow(ctx, `SELECT count(*) FROM whiteboard.whiteboard_snapshot_asset WHERE page_id=$1`, in.PageID).Scan(&count); err != nil || count != 1 {
+		t.Fatalf("missing snapshot membership: %d %v", count, err)
+	}
+	if err = pool.QueryRow(ctx, `SELECT count(*) FROM whiteboard.whiteboard_snapshot_asset_manifest m JOIN whiteboard.whiteboard_snapshot s ON s.page_id=m.page_id AND s.id=m.snapshot_id WHERE m.page_id=$1 AND m.state_digest=s.state_digest AND m.extractor_version=$2`, in.PageID, whiteboardAssetExtractorVersion).Scan(&count); err != nil || count != 3 {
+		t.Fatalf("missing complete manifests: %d %v", count, err)
 	}
 	stream, err := service.OpenPublishedSnapshot(ctx, in, first.VersionID)
 	if err != nil {
@@ -412,6 +446,8 @@ func TestPublishV2Postgres(t *testing.T) {
 	if _, err = service.GetWhiteboardVersion(ctx, wrong, first.VersionID); !errors.Is(err, errWhiteboardV2BoardNotFound) {
 		t.Fatalf("cross-space history: %v", err)
 	}
+	// Existing snapshots are inspected again before restore, even without a manifest.
+	sql(`DELETE FROM whiteboard.whiteboard_snapshot_asset_manifest WHERE snapshot_id=$1`, first.Snapshot.ID)
 	restore := whiteboardRestoreInput{whiteboardDraftInput: in, VersionID: first.VersionID, ExpectedHead: 4, IdempotencyKey: uuid.New()}
 
 	invalidRestore := restore
@@ -435,6 +471,9 @@ func TestPublishV2Postgres(t *testing.T) {
 	restored, err := service.RestoreWhiteboardVersion(ctx, restore)
 	if err != nil || restored.Sequence != 5 || restored.RestoreGeneration != 1 {
 		t.Fatalf("restore: %+v %v", restored, err)
+	}
+	if err = pool.QueryRow(ctx, `SELECT count(*) FROM whiteboard.whiteboard_snapshot_asset_manifest WHERE snapshot_id=ANY($1::uuid[])`, []uuid.UUID{first.Snapshot.ID, restored.SnapshotID}).Scan(&count); err != nil || count != 2 {
+		t.Fatalf("restore did not inspect source and copy manifest: %d %v", count, err)
 	}
 	retryRestore, err := service.RestoreWhiteboardVersion(ctx, restore)
 	if err != nil || retryRestore != restored {
@@ -511,7 +550,7 @@ func TestPublishV2Postgres(t *testing.T) {
 	if _, err = service.GetDraft(ctx, in); !errors.Is(err, errWhiteboardV2BoardNotFound) {
 		t.Fatalf("deleted draft visible: %v", err)
 	}
-	for _, table := range []string{"whiteboard", "whiteboard_draft", "whiteboard_snapshot", "whiteboard_update", "whiteboard_version", "whiteboard_title_update", "whiteboard_draft_replay", "whiteboard_restore_receipt"} {
+	for _, table := range []string{"whiteboard", "whiteboard_draft", "whiteboard_snapshot", "whiteboard_update", "whiteboard_version", "whiteboard_title_update", "whiteboard_draft_replay", "whiteboard_restore_receipt", "whiteboard_asset", "whiteboard_asset_upload", "whiteboard_snapshot_asset", "whiteboard_snapshot_asset_manifest"} {
 		var remaining int
 		if err = pool.QueryRow(ctx, `SELECT count(*) FROM whiteboard.`+table+` WHERE page_id=$1`, in.PageID).Scan(&remaining); err != nil || remaining != 0 {
 			t.Fatalf("delete retained %s: %d %v", table, remaining, err)
@@ -522,5 +561,91 @@ func TestPublishV2Postgres(t *testing.T) {
 	if err = pool.QueryRow(ctx, whiteboardV2GetReceipt, in.ActorID, in.SpaceID, createKey).Scan(&tombstoneHash, &tombstone); err != nil || tombstone != 0 {
 		t.Fatalf("create tombstone: %d %v", tombstone, err)
 	}
-
+	t.Run("reused snapshots and raster restore are inspected atomically", func(t *testing.T) {
+		other := in
+		other.PageID = 900
+		var updates [][]byte
+		for _, value := range encoded {
+			bytes, err := base64.StdEncoding.DecodeString(value)
+			if err != nil {
+				t.Fatal(err)
+			}
+			updates = append(updates, bytes)
+		}
+		full, err := materializeWhiteboard(ctx, updates, "Existing raster snapshot")
+		if err != nil {
+			t.Fatal(err)
+		}
+		source := uuid.New()
+		digest := fmt.Sprintf("sha256:%x", sha256.Sum256(full.State))
+		sql(whiteboardV2InsertSnapshot, source, other.PageID, full.State, digest, full.Title, other.ActorID)
+		sql(whiteboardV2InsertDraft, other.PageID, source, other.ActorID)
+		publish := whiteboardPublishInput{whiteboardDraftInput: other, Sequence: 0, IdempotencyKey: uuid.New(), PreviewPNG: previewPNG(t, 0)}
+		first, err := service.PublishWhiteboard(ctx, publish)
+		if err != nil || first.Snapshot.ID != source {
+			t.Fatalf("reused snapshot publication: %+v %v", first, err)
+		}
+		sql(`DELETE FROM whiteboard.whiteboard_snapshot_asset_manifest WHERE snapshot_id=$1`, source)
+		if _, err = service.PublishWhiteboard(ctx, publish); err != nil {
+			t.Fatalf("committed publication retry: %v", err)
+		}
+		if err = pool.QueryRow(ctx, `SELECT count(*) FROM whiteboard.whiteboard_snapshot_asset_manifest WHERE snapshot_id=$1`, source).Scan(&count); err != nil || count != 0 {
+			t.Fatalf("committed retry unexpectedly inspected snapshot: %d %v", count, err)
+		}
+		publish.IdempotencyKey = uuid.New()
+		second, err := service.PublishWhiteboard(ctx, publish)
+		if err != nil || second.Snapshot.ID != source || second.VersionNumber != 2 {
+			t.Fatalf("new publication failed to inspect reused snapshot: %+v %v", second, err)
+		}
+		// Model a historical snapshot lacking verified associations and a catalog
+		// entry. New publication and restore must fail before moving any pointer.
+		sql(`DELETE FROM whiteboard.whiteboard_snapshot_asset WHERE snapshot_id=$1`, source)
+		sql(`DELETE FROM whiteboard.whiteboard_snapshot_asset_manifest WHERE snapshot_id=$1`, source)
+		sql(`DELETE FROM whiteboard.whiteboard_asset WHERE page_id=$1`, other.PageID)
+		publish.IdempotencyKey = uuid.New()
+		if _, err = service.PublishWhiteboard(ctx, publish); !errors.Is(err, errWhiteboardSnapshotAssetNotReady) {
+			t.Fatalf("missing reused snapshot asset published: %v", err)
+		}
+		restore := whiteboardRestoreInput{whiteboardDraftInput: other, VersionID: first.VersionID, ExpectedHead: 0, IdempotencyKey: uuid.New()}
+		if _, err = service.RestoreWhiteboardVersion(ctx, restore); !errors.Is(err, errWhiteboardSnapshotAssetNotReady) {
+			t.Fatalf("missing historical asset restored: %v", err)
+		}
+		current, err := service.GetPublishedWhiteboard(ctx, other)
+		if err != nil || current.VersionID != second.VersionID {
+			t.Fatalf("asset failures moved publication: %+v %v", current, err)
+		}
+		draft, err := service.GetDraft(ctx, other)
+		if err != nil || draft.HeadSequence != 0 || draft.RestoreGeneration != 0 {
+			t.Fatalf("asset failures moved draft: %+v %v", draft, err)
+		}
+		sql(insertAsset, other.PageID, assetHash, "whiteboard-v2-assets/900/test", int64(100), other.ActorID)
+		// A late transaction error must roll back inspection of the old snapshot
+		// together with the newly copied bytes, references and completion manifest.
+		sql(`CREATE FUNCTION whiteboard.reject_restore() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'restore rollback test'; END $$; CREATE TRIGGER reject_restore BEFORE UPDATE ON whiteboard.whiteboard_draft FOR EACH ROW EXECUTE FUNCTION whiteboard.reject_restore()`)
+		if _, err = service.RestoreWhiteboardVersion(ctx, restore); err == nil {
+			t.Fatal("expected restore pointer failure")
+		}
+		for _, table := range []string{"whiteboard_snapshot_asset", "whiteboard_snapshot_asset_manifest"} {
+			if err = pool.QueryRow(ctx, `SELECT count(*) FROM whiteboard.`+table+` WHERE page_id=$1`, other.PageID).Scan(&count); err != nil || count != 0 {
+				t.Fatalf("restore failure leaked %s: %d %v", table, count, err)
+			}
+		}
+		sql(`DROP TRIGGER reject_restore ON whiteboard.whiteboard_draft; DROP FUNCTION whiteboard.reject_restore()`)
+		restored, err := service.RestoreWhiteboardVersion(ctx, restore)
+		if err != nil || restored.Sequence != 1 || restored.RestoreGeneration != 1 {
+			t.Fatalf("raster restore: %+v %v", restored, err)
+		}
+		for _, table := range []string{"whiteboard_snapshot_asset", "whiteboard_snapshot_asset_manifest"} {
+			if err = pool.QueryRow(ctx, `SELECT count(*) FROM whiteboard.`+table+` WHERE page_id=$1`, other.PageID).Scan(&count); err != nil || count != 2 {
+				t.Fatalf("restore did not copy %s: %d %v", table, count, err)
+			}
+		}
+		var restoredBytes []byte
+		if err = pool.QueryRow(ctx, `SELECT state_bytes FROM whiteboard.whiteboard_snapshot WHERE page_id=$1 AND id=$2`, other.PageID, restored.SnapshotID).Scan(&restoredBytes); err != nil || !bytes.Equal(restoredBytes, full.State) {
+			t.Fatalf("restore changed immutable source bytes: %v", err)
+		}
+		if replay, err := service.RestoreWhiteboardVersion(ctx, restore); err != nil || replay != restored {
+			t.Fatalf("raster restore retry: %+v %v", replay, err)
+		}
+	})
 }

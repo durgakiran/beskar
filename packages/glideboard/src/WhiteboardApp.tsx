@@ -158,7 +158,9 @@ export function WhiteboardApp({
     dragDepthRef.current = 0;
     setIsFileDragActive(false);
     for (const job of controller.assetImportJobsSignal.peek()) {
-      if (job.status === 'queued' || job.status === 'uploading') controller.cancelAssetImport(job.id);
+      if (job.status === 'queued' || job.status === 'uploading' || job.status === 'finalizing') {
+        controller.cancelAssetImport(job.id);
+      }
     }
   }, [controller, readOnly]);
 

@@ -34,11 +34,19 @@ function jpeg(width = 7, height = 5): Uint8Array {
 }
 
 function webp(width = 9, height = 6): Uint8Array {
-  const bytes = new Uint8Array(30);
+  const bytes = new Uint8Array(48);
+  const view = new DataView(bytes.buffer);
   bytes.set(new TextEncoder().encode('RIFF'), 0);
+  view.setUint32(4, bytes.length - 8, true);
   bytes.set(new TextEncoder().encode('WEBPVP8X'), 8);
+  view.setUint32(16, 10, true);
   bytes[24] = width - 1;
   bytes[27] = height - 1;
+  bytes.set(new TextEncoder().encode('VP8 '), 30);
+  view.setUint32(34, 10, true);
+  bytes.set([0x9d, 0x01, 0x2a], 41);
+  view.setUint16(44, width, true);
+  view.setUint16(46, height, true);
   return bytes;
 }
 

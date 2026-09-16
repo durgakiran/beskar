@@ -40,6 +40,8 @@ export interface AssetPlacementCallbacks {
   onPlaced?(shapeId: ShapeId): void;
   onError?(error: unknown): void;
   onPendingChange?(pending: boolean): void;
+  /** Observe the entire placement, including document insertion and compensation. */
+  onOperation?(result: Promise<ShapeId | null>, cancel: () => void): void;
 }
 
 interface PlacementBounds { x: number; y: number; w: number; h: number }
@@ -213,6 +215,27 @@ export class AssetPlacementTool extends StateNode {
     this.operation?.abort();
     this.operation = operation;
     const callbacks = this.callbacks;
+    const result = this.placeMaterialized(bounds, selection, materializer, operation, callbacks);
+    runPostCommit(callbacks, () => callbacks.onOperation?.(result, () => operation.abort()));
+    return result;
+  }
+
+  private async placeMaterialized(
+    bounds: PlacementBounds,
+    selection: AssetPlacementSelection,
+    materializer: AssetMaterializer,
+    operation: AbortController,
+    callbacks: AssetPlacementCallbacks,
+  ): Promise<ShapeId | null> {
+    const pageId = this.editor.getActivePageId();
+    const storeRevision = this.editor.store.revision;
+    let selectionChanged = false;
+    let selectionSubscribed = false;
+    const stopSelectionTracking = this.editor.getSelectionSignal().subscribe(() => {
+      if (selectionSubscribed) selectionChanged = true;
+      selectionSubscribed = true;
+    });
+    let selectPlaced = false;
     runPostCommit(callbacks, () => callbacks.onPendingChange?.(true));
     let materialized: AssetMaterialization | undefined;
     let committed = false;
@@ -229,6 +252,7 @@ export class AssetPlacementTool extends StateNode {
       }
 
       const asset = materialized.asset;
+      if (!this.editor.getPage(pageId)) throw new Error('Asset placement destination page no longer exists');
       const expectedType = selection.mediaType === 'svg' ? 'sanitized-svg' : 'raster-image';
       if (asset.kind !== 'asset' || asset.type !== expectedType) {
         throw new Error(`Materialized asset type must be "${expectedType}"`);
@@ -250,15 +274,18 @@ export class AssetPlacementTool extends StateNode {
         type: expectedType,
         x: bounds.x,
         y: bounds.y,
-        index: this.editor.generateIndexAbove(this.editor.getActivePageId()),
+        index: this.editor.generateIndexAbove(pageId),
         rotation: 0,
-        parentId: this.editor.getActivePageId(),
+        parentId: pageId,
         isLocked: false,
         isHidden: false,
         props: { w: bounds.w, h: bounds.h, assetId: asset.id },
         meta: { assetLibrary: retained },
       };
 
+      selectPlaced = !selectionChanged && this.editor.store.revision === storeRevision
+        && this.editor.getActivePageId() === pageId && this.editor.currentToolId.peek() === 'asset'
+        && !this.editor.interactions.active && !this.editor.editingShapeId.peek();
       this.editor.executeCommand({
         id: 'asset.place',
         label: 'Place Asset',
@@ -286,14 +313,17 @@ export class AssetPlacementTool extends StateNode {
       if (!operation.signal.aborted) reportPlacementError(callbacks, error);
       return null;
     } finally {
+      stopSelectionTracking();
       if (this.operation === operation) {
         this.operation = undefined;
         runPostCommit(callbacks, () => callbacks.onPendingChange?.(false));
       }
     }
 
-    runPostCommit(callbacks, () => this.editor.setCurrentTool('select'));
-    runPostCommit(callbacks, () => this.editor.setSelectedShapeIds([shapeId!]));
+    if (selectPlaced) {
+      runPostCommit(callbacks, () => this.editor.setCurrentTool('select'));
+      runPostCommit(callbacks, () => this.editor.setSelectedShapeIds([shapeId!]));
+    }
     runPostCommit(callbacks, () => callbacks.onPlaced?.(shapeId!));
     return shapeId!;
   }

@@ -19,6 +19,7 @@ import {
   type AssetResolutionContext,
   type PortableBoardFragment,
   type ShapeId,
+  type PageId,
   type Vec2,
 } from '@durgakiran/glideline';
 import { bindGlideboardCollaboration } from './collaboration.js';
@@ -82,6 +83,21 @@ interface AssetImportEntry {
   request?: GlideboardAssetImportRequest;
   replaceShapeId?: ShapeId;
   controller?: AbortController;
+  destination: AssetDestination;
+  expectedAssetId?: unknown;
+}
+
+interface AssetDestination {
+  generation: number;
+  pageId: PageId;
+  viewport: { x: number; y: number; w: number; h: number };
+  interactionRevision: number;
+  storeRevision: number;
+}
+
+interface PendingAssetOperation {
+  result: Promise<unknown>;
+  cancel: () => void;
 }
 
 let nextControllerId = 0;
@@ -260,7 +276,10 @@ export class GlideboardController {
   private readonly assetStorage?: GlideboardAssetStorage;
   private readonly assetResolutionContext?: AssetResolutionContext;
   private readonly assetImportEntries = new Map<string, AssetImportEntry>();
-  private readonly assetImportPromises = new Set<Promise<ShapeId>>();
+  private readonly pendingAssetOperations = new Set<PendingAssetOperation>();
+  private assetCaptureDepth = 0;
+  private assetDocumentGeneration = 0;
+  private assetInteractionRevision = 0;
   private nextAssetImportId = 0;
   private assetPlacementConfig: GlideboardAssetPlacementConfig | null = null;
   private assetPlacementTool: AssetPlacementTool | null = null;
@@ -285,6 +304,10 @@ export class GlideboardController {
       options.assetResolutionContext,
     );
     this.toolServer = createCanvasToolServer(this.editor);
+    for (const source of [this.editor.currentToolId, this.editor.getSelectionSignal(),
+      this.editor.activePageId, this.editor.editingShapeId, this.editor.interactions.getVersionSignal()]) {
+      this.debugCleanups.add(source.subscribe(() => { this.assetInteractionRevision += 1; }));
+    }
 
     this.arrowRouteStyleSignal = signal<ArrowRouteStyle>(this.editor.arrowRouteStyle);
     this.arrowPresetSignal = signal<ConnectorPreset>(
@@ -317,6 +340,7 @@ export class GlideboardController {
   }
 
   configureAssetPlacement(config: GlideboardAssetPlacementConfig): void {
+    this.assertAssetIngress();
     if (this.readOnlySignal.peek()) {
       throw new MutationPermissionError(Object.freeze({
         origin: 'local-user',
@@ -335,8 +359,29 @@ export class GlideboardController {
     this.assetPlacementTool = placementTool;
     placementTool.configure(
       config.selection,
-      config.materializer,
+      async request => {
+        this.assertAssetIngress();
+        const destination = this.captureAssetDestination();
+        const materialized = await config.materializer(request);
+        try {
+          this.assertAssetDestination(destination, request.signal);
+        } catch (error) {
+          try { await materialized.rollback('cancelled'); }
+          catch (cleanupError) { throw assetCompensationError('Asset placement cleanup failed.', [error, cleanupError]); }
+          throw error;
+        }
+        return materialized;
+      },
       {
+        onOperation: (result, cancel) => {
+          if (this.assetCaptureDepth === 0) {
+            this.trackAssetOperation(result.then(id => {
+              if (!id) throw new Error('Asset placement did not complete. Retry or cancel it before capturing the board.');
+              return id;
+            }), cancel);
+          }
+          config.callbacks?.onOperation?.(result, cancel);
+        },
         onPendingChange: pending => {
           const current = this.assetPlacementSignal.peek();
           if (current && (pending || current.status !== 'error')) {
@@ -402,13 +447,14 @@ export class GlideboardController {
 
   cancelAssetImport(jobId: string): boolean {
     const entry = this.assetImportEntries.get(jobId);
-    if (!entry || !['queued', 'uploading'].includes(entry.job.status)) return false;
+    if (!entry || !['queued', 'uploading', 'finalizing'].includes(entry.job.status)) return false;
     entry.controller?.abort();
     this.updateAssetImportJob(entry, { status: 'cancelled', progress: entry.job.progress });
     return true;
   }
 
   retryAssetImport(jobId: string): GlideboardAssetImportTask {
+    this.assertAssetIngress();
     if (this.disposalStarted) throw new Error('Glideboard: controller is disposing.');
     const entry = this.assetImportEntries.get(jobId);
     if (!entry) throw new Error(`Asset import job "${jobId}" is unavailable.`);
@@ -425,7 +471,7 @@ export class GlideboardController {
 
   dismissAssetImport(jobId: string): boolean {
     const entry = this.assetImportEntries.get(jobId);
-    if (!entry || ['queued', 'uploading'].includes(entry.job.status)) return false;
+    if (!entry || ['queued', 'uploading', 'finalizing'].includes(entry.job.status)) return false;
     this.assetImportEntries.delete(jobId);
     this.publishAssetImportJobs();
     return true;
@@ -522,11 +568,11 @@ export class GlideboardController {
     request: GlideboardAssetImportRequest,
     replaceShapeId?: ShapeId,
   ): GlideboardAssetImportTask {
-    if (this.disposalStarted) throw new Error('Glideboard: controller is disposing.');
+    this.assertAssetIngress();
     const id = `asset-import:${++this.nextAssetImportId}`;
     const retainedRequest: GlideboardAssetImportRequest = request.kind === 'raster'
-      ? { ...request, bytes: new Uint8Array(request.bytes) }
-      : { ...request };
+      ? { ...request, bytes: new Uint8Array(request.bytes), ...(request.point ? { point: { ...request.point } } : {}) }
+      : { ...request, ...(request.point ? { point: { ...request.point } } : {}) };
     const entry: AssetImportEntry = {
       job: Object.freeze({
         id,
@@ -538,6 +584,8 @@ export class GlideboardController {
         attempt: 1,
       }),
       request: retainedRequest,
+      destination: this.captureAssetDestination(),
+      expectedAssetId: replaceShapeId ? this.editor.getShape(replaceShapeId)?.props['assetId'] : undefined,
       ...(replaceShapeId ? { replaceShapeId } : {}),
     };
     this.assetImportEntries.set(id, entry);
@@ -547,12 +595,111 @@ export class GlideboardController {
 
   private trackAssetImport(entry: AssetImportEntry, attempt: number): Promise<ShapeId> {
     const result = Promise.resolve().then(() => this.runAssetImport(entry, attempt));
-    this.assetImportPromises.add(result);
+    this.trackAssetOperation(result, () => {
+      if (entry.job.attempt === attempt) this.cancelAssetImport(entry.job.id);
+    });
+    return result;
+  }
+
+  private assertAssetIngress(): void {
+    if (this.disposalStarted) throw new Error('Glideboard: controller is disposing.');
+    if (this.assetCaptureDepth > 0 || this.mutationFenceDepthSignal.peek() > 0) {
+      throw Object.assign(new Error('Image imports are paused while the board is being captured.'), {
+        category: 'conflict', retryable: true,
+      });
+    }
+    if (this.readOnlySignal.peek()) {
+      throw new MutationPermissionError(Object.freeze({ origin: 'local-user', command: 'asset.import', affectedIds: Object.freeze([]) }));
+    }
+  }
+
+  private captureAssetDestination(): AssetDestination {
+    return {
+      generation: this.assetDocumentGeneration,
+      pageId: this.editor.getActivePageId(),
+      viewport: { ...this.editor.camera.getViewportBounds() },
+      interactionRevision: this.assetInteractionRevision,
+      storeRevision: this.editor.store.revision,
+    };
+  }
+
+  private assertAssetDestination(destination: AssetDestination, signal: AbortSignal): void {
+    signal.throwIfAborted();
+    if (this.disposalStarted || destination.generation !== this.assetDocumentGeneration) throw createAbortError();
+    if (!this.editor.getPage(destination.pageId)) {
+      throw Object.assign(new Error('The image destination page no longer exists.'), { category: 'not-found', retryable: false });
+    }
+    if (this.readOnlySignal.peek()) {
+      throw new MutationPermissionError(Object.freeze({ origin: 'local-user', command: 'asset.import', affectedIds: Object.freeze([]) }));
+    }
+  }
+
+  private canSelectImportedAsset(destination: AssetDestination): boolean {
+    return destination.interactionRevision === this.assetInteractionRevision
+      && destination.storeRevision === this.editor.store.revision
+      && destination.pageId === this.editor.getActivePageId()
+      && !this.editor.interactions.active
+      && !this.editor.editingShapeId.peek()
+      && this.activePointerIdRef.current === null;
+  }
+
+  private trackAssetOperation<T>(result: Promise<T>, cancel: () => void): Promise<T> {
+    const operation: PendingAssetOperation = { result, cancel };
+    this.pendingAssetOperations.add(operation);
     void result.then(
-      () => this.assetImportPromises.delete(result),
-      () => this.assetImportPromises.delete(result),
+      () => this.pendingAssetOperations.delete(operation),
+      () => this.pendingAssetOperations.delete(operation),
     );
     return result;
+  }
+
+  private cancelPendingAssets(): void {
+    for (const operation of this.pendingAssetOperations) operation.cancel();
+    this.cancelAssetPlacement();
+  }
+
+  getPendingAssetCount(): number { return this.pendingAssetOperations.size; }
+
+  async prepareForCapture(
+    reason: 'close' | 'publish' | 'export',
+    options: { signal?: AbortSignal } = {},
+  ): Promise<MutationFence> {
+    options.signal?.throwIfAborted();
+    if (this.disposalStarted) throw new Error('Glideboard: controller is disposing.');
+    if (this.mutationFenceDepthSignal.peek() > 0 && this.pendingAssetOperations.size > 0) {
+      throw new Error('Wait for image imports before acquiring a mutation fence.');
+    }
+    const generation = this.assetDocumentGeneration;
+    this.assetCaptureDepth += 1;
+    let released = false;
+    const releaseIngress = () => {
+      if (released) return;
+      released = true;
+      this.assetCaptureDepth -= 1;
+    };
+    let removeAbort = () => {};
+    try {
+      const pending = Promise.allSettled([...this.pendingAssetOperations].map(operation => operation.result));
+      const aborted = new Promise<never>((_resolve, reject) => {
+        if (!options.signal) return;
+        const onAbort = () => reject(options.signal!.reason ?? createAbortError());
+        options.signal.addEventListener('abort', onAbort, { once: true });
+        removeAbort = () => options.signal!.removeEventListener('abort', onAbort);
+        if (options.signal.aborted) onAbort();
+      });
+      const results = await Promise.race([pending, aborted]);
+      options.signal?.throwIfAborted();
+      if (this.disposalStarted || generation !== this.assetDocumentGeneration) throw createAbortError();
+      const failed = results.find((result): result is PromiseRejectedResult => result.status === 'rejected');
+      if (failed) throw Object.assign(new Error('An image import did not complete. Review its result before capturing the board.'), { cause: failed.reason });
+      const fence = this.acquireMutationFence(reason);
+      return Object.freeze({ reason, release: () => { fence.release(); releaseIngress(); } });
+    } catch (error) {
+      releaseIngress();
+      throw error;
+    } finally {
+      removeAbort();
+    }
   }
 
   private async runAssetImport(entry: AssetImportEntry, attempt: number): Promise<ShapeId> {
@@ -570,6 +717,9 @@ export class GlideboardController {
     try {
       let asset: GlideAsset;
       let persistence: GlideboardAssetPersistence | undefined;
+      const commitBeforeDocument = this.assetStorage?.commitOrder === 'before-document';
+      let storageCommitted = false;
+      this.assertAssetImportActive(entry, attempt, controller);
       if (request.kind === 'svg') {
         const prepared = await createSanitizedSvgAsset(request.source);
         this.assertAssetImportActive(entry, attempt, controller);
@@ -591,14 +741,14 @@ export class GlideboardController {
         );
         try {
           this.assertAssetImportActive(entry, attempt, controller);
-          if (entry.replaceShapeId) this.validateAssetReplacement(entry.replaceShapeId, asset);
+          if (entry.replaceShapeId) this.validateAssetReplacement(entry.replaceShapeId, asset, entry.expectedAssetId);
           await persistence.stage(
             prepared.bytes,
             controller.signal,
             progress => this.reportAssetImportProgress(entry, progress, attempt),
           );
           this.assertAssetImportActive(entry, attempt, controller);
-          if (entry.replaceShapeId) this.validateAssetReplacement(entry.replaceShapeId, asset);
+          if (entry.replaceShapeId) this.validateAssetReplacement(entry.replaceShapeId, asset, entry.expectedAssetId);
         } catch (error) {
           try {
             await persistence.rollback();
@@ -608,6 +758,25 @@ export class GlideboardController {
           throw error;
         }
         this.reportAssetImportProgress(entry, 1, attempt);
+        if (commitBeforeDocument) {
+          this.updateAssetImportJob(entry, { status: 'finalizing' });
+          try {
+            await persistence.commit(controller.signal);
+            storageCommitted = true;
+            this.assertAssetImportActive(entry, attempt, controller);
+          } catch (error) {
+            // A confirmed durable asset is retained even if insertion is cancelled.
+            // On an ambiguous commit, the host reconciles/cancels its session and
+            // must retain any server commit that already won.
+            if (!storageCommitted) {
+              try { await persistence.rollback(); }
+              catch (cleanupError) {
+                throw assetCompensationError('Asset commit outcome could not be reconciled.', [error, cleanupError]);
+              }
+            }
+            throw error;
+          }
+        }
       }
 
       this.assertAssetImportActive(entry, attempt, controller);
@@ -618,21 +787,28 @@ export class GlideboardController {
       const assetPreviouslyExisted = this.editor.store.get(asset.id) !== undefined;
       try {
         shapeId = entry.replaceShapeId
-          ? this.commitAssetReplacement(entry.replaceShapeId, asset)
-          : this.commitAssetImport(asset, request.point);
-        if (persistence) {
+          ? this.commitAssetReplacement(entry.replaceShapeId, asset, entry.expectedAssetId)
+          : this.commitAssetImport(asset, request.point, entry.destination);
+        if (persistence && !commitBeforeDocument) {
           try {
+            this.updateAssetImportJob(entry, { status: 'finalizing' });
             await persistence.commit(controller.signal);
             this.assertAssetImportActive(entry, attempt, controller);
           } catch (error) {
             let mutationRollbackError: unknown;
             try {
-              this.rollbackAssetMutation(shapeId, asset, previousShape, assetPreviouslyExisted);
+              if (entry.destination.generation === this.assetDocumentGeneration) {
+                this.rollbackAssetMutation(shapeId, asset, previousShape, assetPreviouslyExisted);
+              }
             } catch (rollbackError) {
               mutationRollbackError = rollbackError;
             }
             try {
-              await persistence.rollback();
+              // A loaded replacement may retain this asset. Old-session
+              // compensation must not delete storage now owned by that document.
+              if (entry.destination.generation === this.assetDocumentGeneration || !this.editor.store.get(asset.id)) {
+                await persistence.rollback();
+              }
             } catch (storageRollbackError) {
               throw assetCompensationError(
                 'Asset commit and compensation failed.',
@@ -649,7 +825,7 @@ export class GlideboardController {
           }
         }
       } catch (error) {
-        if (!shapeId && persistence) {
+        if (!shapeId && persistence && !storageCommitted) {
           try {
             await persistence.rollback();
           } catch (rollbackError) {
@@ -704,13 +880,15 @@ export class GlideboardController {
     if (
       this.disposalStarted
       || controller.signal.aborted
-      || entry.job.status !== 'uploading'
+      || !['uploading', 'finalizing'].includes(entry.job.status)
       || entry.job.attempt !== attempt
     ) throw createAbortError();
+    this.assertAssetDestination(entry.destination, controller.signal);
   }
 
-  private commitAssetImport(asset: GlideAsset, point?: Vec2): ShapeId {
-    const viewport = this.editor.camera.getViewportBounds();
+  private commitAssetImport(asset: GlideAsset, point: Vec2 | undefined, destination: AssetDestination): ShapeId {
+    const viewport = destination.viewport;
+    const selectImported = this.canSelectImportedAsset(destination);
     const sourceWidth = asset.props['width'] as number;
     const sourceHeight = asset.props['height'] as number;
     const maximumWidth = Math.min(asset.type === 'raster-image' ? 480 : 320, Math.max(1, viewport.w - 48));
@@ -731,10 +909,10 @@ export class GlideboardController {
       x: origin.x,
       y: origin.y,
       rotation: 0,
-      parentId: this.editor.getActivePageId(),
+      parentId: destination.pageId,
       isLocked: false,
       isHidden: false,
-      index: this.editor.generateIndexAbove(this.editor.getActivePageId()),
+      index: this.editor.generateIndexAbove(destination.pageId),
       props: { w: width, h: height, assetId: asset.id },
       meta: {},
     };
@@ -745,15 +923,18 @@ export class GlideboardController {
       label: asset.type === 'raster-image' ? 'Import Raster Image' : 'Import Sanitized SVG',
       idPolicy: 'reject',
       relationshipPolicy: assetExists ? 'preserve' : 'detach-external',
+      preserveExternalKinds: ['page'],
     });
     const importedShapeId = report.idMap[sourceShapeId] as ShapeId;
-    this.editor.setSelectedShapeIds([importedShapeId]);
-    this.editor.setCurrentTool('select', { preserveSelection: true });
+    if (selectImported) {
+      this.editor.setSelectedShapeIds([importedShapeId]);
+      this.editor.setCurrentTool('select', { preserveSelection: true });
+    }
     return importedShapeId;
   }
 
-  private commitAssetReplacement(shapeId: ShapeId, asset: GlideAsset): ShapeId {
-    this.validateAssetReplacement(shapeId, asset);
+  private commitAssetReplacement(shapeId: ShapeId, asset: GlideAsset, expectedAssetId?: unknown): ShapeId {
+    this.validateAssetReplacement(shapeId, asset, expectedAssetId);
     const assetExists = this.editor.store.get(asset.id) !== undefined;
     this.editor.executeCommand({
       id: 'asset.replace',
@@ -791,7 +972,7 @@ export class GlideboardController {
     });
   }
 
-  private validateAssetReplacement(shapeId: ShapeId, asset: GlideAsset): void {
+  private validateAssetReplacement(shapeId: ShapeId, asset: GlideAsset, expectedAssetId?: unknown): void {
     const shape = this.editor.getShape(shapeId);
     if (!shape) {
       throw Object.assign(new Error(`Glideboard: shape "${shapeId}" was not found.`), {
@@ -811,7 +992,11 @@ export class GlideboardController {
         retryable: false,
       });
     }
-
+    if (expectedAssetId !== undefined && shape.props['assetId'] !== expectedAssetId) {
+      throw Object.assign(new Error('The image was replaced while this upload was pending.'), {
+        category: 'conflict' satisfies GlideboardAssetErrorCategory, retryable: false,
+      });
+    }
   }
 
   private reportAssetImportProgress(
@@ -847,6 +1032,8 @@ export class GlideboardController {
     options: { resetSessionState?: boolean } = {},
   ): LoadReport {
     const report = this.editor.replaceDocument(document);
+    this.assetDocumentGeneration += 1;
+    this.cancelPendingAssets();
     if (options.resetSessionState ?? true) {
       this.editor.resetSessionState();
       this.textStyleTargetIdSignal.value = null;
@@ -895,6 +1082,7 @@ export class GlideboardController {
     this.readOnlySignal.value = readOnly;
 
     if (readOnly) {
+      this.cancelPendingAssets();
       // Edit → View
       this.editor.interactions.cancel();
       this.editor.clearBindingPreview();
@@ -1062,7 +1250,7 @@ export class GlideboardController {
     return this.getCollaborationCheckpoints().captureTarget();
   }
 
-  acquireMutationFence(reason: 'close' | 'publish'): MutationFence {
+  acquireMutationFence(reason: 'close' | 'publish' | 'export'): MutationFence {
     this.mutationFenceDepthSignal.value += 1;
     let active = true;
     return Object.freeze({
@@ -1096,6 +1284,15 @@ export class GlideboardController {
   }
 
   async exportSvgAtTarget(options: import('./types.js').GlideboardExportSvgOptions = {}): Promise<string> {
+    if (!options.target) {
+      const fence = await this.prepareForCapture('export');
+      try { return await this.exportSvgContent(options); }
+      finally { fence.release(); }
+    }
+    return this.exportSvgContent(options);
+  }
+
+  private async exportSvgContent(options: import('./types.js').GlideboardExportSvgOptions): Promise<string> {
     const expected = options.target;
     if (expected) this.assertProjectionTarget(await this.captureProjectionTarget(), expected);
     const shapeIds = options.shapeIds
@@ -1116,6 +1313,8 @@ export class GlideboardController {
   async createPortableFragment(
     options: import('./types.js').GlideboardCreatePortableFragmentOptions,
   ): Promise<PortableBoardFragment | null> {
+    // Clipboard capture must read the selected records synchronously. Cut removes
+    // them immediately after this call, while byte downloads finish asynchronously.
     if (!this.assetStorage?.download || !this.assetStorage.retainReferences) {
       throw new Error('Glideboard: portable export requires asset download and retention storage hooks.');
     }
@@ -1135,16 +1334,30 @@ export class GlideboardController {
     fragment: PortableBoardFragment,
     options: import('./types.js').GlideboardPastePortableFragmentOptions = {},
   ): Promise<ShapeId[]> {
+    this.assertAssetIngress();
     if (!this.assetStorage?.materializePortableAsset) {
       throw new Error('Glideboard: portable paste requires a compensating asset materialization hook.');
     }
     const controller = new AbortController();
-    return this.editor.pastePortableBoardFragment(fragment, {
+    const destination = this.captureAssetDestination();
+    let selectImported = false;
+    const result = this.editor.pastePortableBoardFragment(fragment, {
       point: options.point,
+      signal: controller.signal,
+      targetPageId: destination.pageId,
+      select: false,
+      beforeCommit: () => {
+        this.assertAssetDestination(destination, controller.signal);
+        selectImported = this.canSelectImportedAsset(destination);
+      },
       materializeRasterAsset: (payload, asset, context) => this.assetStorage!.materializePortableAsset!(
         payload, asset, context, controller.signal,
       ),
+    }).then(ids => {
+      if (selectImported) this.editor.setSelectedShapeIds(ids);
+      return ids;
     });
+    return this.trackAssetOperation(result, () => controller.abort());
   }
 
   private assertProjectionTarget(actual: ProjectionTarget, expected: ProjectionTarget): void {
@@ -1408,6 +1621,7 @@ export class GlideboardController {
   dispose(options: GlideboardDisposeOptions = {}): Promise<void> {
     if (this.disposalPromise) return this.disposalPromise;
     this.disposalStarted = true;
+    this.cancelPendingAssets();
     for (const entry of this.assetImportEntries.values()) entry.controller?.abort();
     if (options.pendingSave !== 'flush') this.documentSaveAbortController?.abort();
     this.detachCollaboration();
@@ -1427,7 +1641,7 @@ export class GlideboardController {
     };
 
     this.disposalPromise = (async () => {
-      await Promise.allSettled([...this.assetImportPromises]);
+      await Promise.allSettled([...this.pendingAssetOperations].map(operation => operation.result));
       this.stopDocumentChangeTracking();
       this.cancelPendingDocumentChange();
       if (options.pendingSave === 'flush') await this.flush();

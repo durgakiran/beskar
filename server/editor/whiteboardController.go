@@ -239,6 +239,9 @@ func updateWhiteboard(w http.ResponseWriter, r *http.Request) {
 	}
 
 	err = UpdateWhiteboard(inputDoc)
+	if legacyMigrationHTTPError(w, r, err) {
+		return
+	}
 	if err != nil {
 		logger().Error(fmt.Sprintf("updateWhiteboard: %s", err.Error()))
 		core.SendFailedReponse(w, r, http.StatusInternalServerError, "Could not update Whiteboard")
@@ -295,6 +298,9 @@ func saveWhiteboardCheckpoint(w http.ResponseWriter, r *http.Request) {
 	input.SpaceId = spaceId
 
 	result, conflict, err := SaveWhiteboardCheckpoint(ctx, input)
+	if legacyMigrationHTTPError(w, r, err) {
+		return
+	}
 	if errors.Is(err, ErrWhiteboardRequestIDMisuse) {
 		core.SendFailedReponse(w, r, http.StatusUnprocessableEntity, err.Error())
 		return
@@ -359,6 +365,9 @@ func deleteWhiteboard(w http.ResponseWriter, r *http.Request) {
 	}
 
 	err = DeleteWhiteboard(inputDoc)
+	if legacyMigrationHTTPError(w, r, err) {
+		return
+	}
 	if err != nil {
 		logger().Error(fmt.Sprintf("deleteWhiteboard: %s", err.Error()))
 		core.SendFailedReponse(w, r, http.StatusInternalServerError, "Could not delete Whiteboard")
@@ -422,6 +431,9 @@ func publishWhiteboard(w http.ResponseWriter, r *http.Request) {
 	inputDoc.SpaceId = spaceId
 	inputDoc.OwnerId = userId
 	result, conflict, err := PublishWhiteboard(ctx, inputDoc)
+	if legacyMigrationHTTPError(w, r, err) {
+		return
+	}
 	if errors.Is(err, ErrWhiteboardRequestIDMisuse) {
 		core.SendFailedReponse(w, r, http.StatusUnprocessableEntity, err.Error())
 		return

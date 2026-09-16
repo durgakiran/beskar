@@ -130,6 +130,7 @@ describe('GlideboardDemo portable export verification', () => {
     window.__GLIDELINE_PORTABLE_EXPORT__ = portableFragment;
     render(<GlideboardDemo />);
     fireEvent.click(screen.getByRole('button', { name: 'Slow upload' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Hold storage commit' }));
     fireEvent.click(screen.getByRole('button', { name: 'Fail next upload' }));
     fireEvent.click(screen.getByRole('button', { name: 'Hold placement' }));
     fireEvent.click(screen.getByRole('button', { name: 'Read-only' }));
@@ -144,6 +145,7 @@ describe('GlideboardDemo portable export verification', () => {
     expect(window.localStorage.getItem('glideline-whiteboard-demo-asset-recents')).toBeNull();
     expect(window.__GLIDELINE_PORTABLE_EXPORT__).toBeUndefined();
     expect(screen.getByRole('button', { name: 'Slow upload' }).getAttribute('aria-pressed')).toBe('false');
+    expect(screen.getByRole('button', { name: 'Hold storage commit' }).getAttribute('aria-pressed')).toBe('false');
     expect(screen.getByRole('button', { name: 'Fail next upload' }).getAttribute('aria-pressed')).toBe('false');
     expect(screen.getByRole('button', { name: 'Hold placement' }).getAttribute('aria-pressed')).toBe('false');
     expect(screen.getByRole('button', { name: 'Read-only' }).getAttribute('aria-pressed')).toBe('false');

@@ -74,13 +74,14 @@ Real-time sync answers "what does everyone see right now" — it does **not** by
 
 ```tsx
 async function handlePublish() {
-  const fence = boardRef.current!.acquireMutationFence('publish');
+  const board = boardRef.current!;
+  const fence = await board.prepareForCapture('publish', { signal: sessionAbortSignal });
   try {
-    await boardRef.current!.settleActiveEdit('commit');       // flush any in-progress text edit
-    const target = await boardRef.current!.captureProjectionTarget();
+    await board.settleActiveEdit('commit');       // flush any in-progress text edit
+    const target = await board.captureProjectionTarget();
     await fetch(`/api/boards/${boardId}/publish`, {
       method: 'POST',
-      body: JSON.stringify({ target, document: boardRef.current!.serialize() }),
+      body: JSON.stringify({ target, document: board.serialize() }),
     });
   } finally {
     fence.release();
@@ -88,7 +89,9 @@ async function handlePublish() {
 }
 ```
 
-`acquireMutationFence('publish')` briefly discourages new local mutations while you capture a consistent snapshot — release it in a `finally` so a failed publish doesn't leave the board permanently fenced. `captureProjectionTarget()` gives you a `{ storeRevision, yjs: { transactionSequence, stateDigest } }` you can send alongside the document so your backend can verify what state it's actually acknowledging, rather than trusting "whatever arrived in this request."
+`prepareForCapture('publish')` immediately blocks new imports, waits for pending uploads/paste/library placements to insert their records, then acquires a mutation fence. Drawing remains available during the wait. Catch a preparation failure in the host so users can review failed imports; abort the optional signal when the editor session ends. Release the returned fence in `finally` so a failed publish doesn't leave the board fenced. Acquiring a fence before waiting would block pending insertions. `getPendingAssetCount()` provides a synchronous count for navigation/unload prompts.
+
+`captureProjectionTarget()` gives you a `{ storeRevision, yjs: { transactionSequence, stateDigest } }` you can send alongside the document so your backend can verify what state it's actually acknowledging, rather than trusting "whatever arrived in this request."
 
 For a lighter-weight "show a save indicator" without a full publish flow, subscribe to `boardRef.current!.checkpoints.status` (`'healthy' | 'catching-up' | 'quarantined' | 'incompatible' | 'failed'`) and render accordingly — `'catching-up'` is a normal transient state (just reconnected), `'quarantined'`/`'incompatible'`/`'failed'` mean something is actually wrong and a save/publish action should probably be disabled until it resolves.
 

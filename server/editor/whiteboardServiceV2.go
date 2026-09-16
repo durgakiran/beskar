@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/durgakiran/beskar/core"
+	"github.com/durgakiran/beskar/storage"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -26,9 +27,11 @@ var (
 // whiteboardServiceV2 owns v2 creation, checkpoints, draft retrieval and publication.
 // Dependencies are configured once, rather than passed through the router per call.
 type whiteboardServiceV2 struct {
-	materialize func(context.Context, [][]byte, string) (whiteboardMaterialized, error)
-	begin       func(context.Context) (pgx.Tx, error)
-	provision   func(context.Context, whiteboardCreateV2Result) error
+	migrationStore   func(context.Context) (storage.Store, error)
+	inspectMigration func(context.Context, []byte, string) (whiteboardMigrationInspection, error)
+	materialize      func(context.Context, [][]byte, string) (whiteboardMaterialized, error)
+	begin            func(context.Context) (pgx.Tx, error)
+	provision        func(context.Context, whiteboardCreateV2Result) error
 }
 
 func newWhiteboardServiceV2() *whiteboardServiceV2 {

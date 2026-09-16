@@ -24,6 +24,7 @@ require (
 	github.com/zitadel/zitadel-go/v3 v3.3.0
 	go.uber.org/zap v1.27.0
 	golang.org/x/exp v0.0.0-20240719175910-8a7402abbf56
+	golang.org/x/image v0.24.0
 	golang.org/x/net v0.29.0
 	google.golang.org/grpc v1.68.0
 )

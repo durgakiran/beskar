@@ -51,7 +51,9 @@ interface GlideboardHandle {
   setCurrentTool(toolId: string): void;
   setReadOnly(readOnly: boolean): void;
   settleActiveEdit(policy: 'commit' | 'cancel'): Promise<void>;
-  acquireMutationFence(reason: 'close' | 'publish'): MutationFence;
+  getPendingAssetCount(): number;
+  prepareForCapture(reason: 'close' | 'publish' | 'export', options?: { signal?: AbortSignal }): Promise<MutationFence>;
+  acquireMutationFence(reason: 'close' | 'publish' | 'export'): MutationFence;
   captureProjectionTarget(): Promise<ProjectionTarget>;
   flush(): void;
 }
@@ -59,7 +61,7 @@ interface GlideboardHandle {
 
 This is a thin pass-through to the underlying `GlideboardController` — see [Controller & Theming](./controller-and-theming.md) for the class that actually implements each of these.
 
-`checkpoints`, `acquireMutationFence`, `captureProjectionTarget` are the durability/publish-flow primitives — see [Collaboration § Durability & publish flow](./collaboration.md#durability--publish-flow); they matter once you need to know "did the server actually persist what's on screen" rather than just rendering live collaborative state.
+`checkpoints`, `prepareForCapture`, `acquireMutationFence`, `captureProjectionTarget` are the durability/publish-flow primitives — see [Collaboration § Durability & publish flow](./collaboration.md#durability--publish-flow); they matter once you need to know "did the server actually persist what's on screen" rather than just rendering live collaborative state. `prepareForCapture()` waits for pending asset work before acquiring a mutation fence; `getPendingAssetCount()` provides a synchronous count for navigation/unload checks.
 
 ## Session lifecycle
 
@@ -89,6 +91,6 @@ A `Glideboard` mount goes through:
 
 ## Page index
 
-- [Collaboration](./collaboration.md) — real-time Yjs wiring, presence, the durability/publish-flow (`checkpoints`, `acquireMutationFence`).
+- [Collaboration](./collaboration.md) — real-time Yjs wiring, presence, the durability/publish-flow (`checkpoints`, `prepareForCapture`, `acquireMutationFence`).
 - [Assets](./assets.md) — `assetStorage` (uploads) vs. `assetLibraryProvider` (browsable catalog).
 - [Controller & Theming](./controller-and-theming.md) — driving `GlideboardController` headlessly, and the current (unofficial) CSS-variable theming mechanism.

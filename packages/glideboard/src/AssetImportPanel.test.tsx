@@ -110,6 +110,45 @@ describe('AssetImportPanel', () => {
     expect(screen.getByText('new.svg: Queued')).toBeTruthy();
   });
 
+  it('keeps finalizing images pending and cancellable after all bytes are uploaded', () => {
+    vi.useFakeTimers();
+    try {
+      const job: GlideboardAssetImportJob = {
+        id: 'job:finalizing', kind: 'raster', name: 'photo.png', status: 'uploading', progress: 1, attempt: 1,
+      };
+      const actions = setup([job]);
+
+      act(() => {
+        actions.jobsSignal.value = [{ ...job, status: 'finalizing' }];
+      });
+
+      expect(screen.getByText('Finalizing image…')).toBeTruthy();
+      expect(screen.getByText('photo.png: Finalizing image…')).toBeTruthy();
+      expect(screen.getByLabelText('Image imports').getAttribute('aria-busy')).toBe('true');
+      const progress = screen.getByRole('progressbar', { name: 'Progress for photo.png' });
+      expect(progress.hasAttribute('value')).toBe(false);
+      expect(progress.getAttribute('aria-valuetext')).toBe('Finalizing image…');
+      expect(screen.queryByText('Complete')).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Dismiss import' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Retry import' })).toBeNull();
+      act(() => vi.advanceTimersByTime(ASSET_IMPORT_FAILURE_DISMISS_MS));
+      expect(actions.dismissAssetImport).not.toHaveBeenCalled();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Cancel import' }));
+      expect(actions.cancelAssetImport).toHaveBeenCalledWith(job.id);
+
+      act(() => {
+        actions.jobsSignal.value = [{ ...job, status: 'complete' }];
+      });
+      expect(screen.getByLabelText('Image imports').getAttribute('aria-busy')).toBe('false');
+      expect(screen.queryByRole('progressbar')).toBeNull();
+      act(() => vi.advanceTimersByTime(ASSET_IMPORT_SUCCESS_DISMISS_MS));
+      expect(actions.dismissAssetImport).toHaveBeenCalledWith(job.id);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('gives conflict failures an actionable recovery message', () => {
     setup([], [{
       id: 'notice:conflict',

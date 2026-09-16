@@ -77,10 +77,11 @@ Historical published URLs remain accessible with current view permission; they
 cannot retrieve unpublished snapshots. Responses use `Cache-Control: no-store`.
 No draft replay lease is required. Snapshot download routes reject query parameters. The published manifest accepts only a single `preview=true` or `preview=false` query parameter.
 
-Asset integration is deferred until after initial whiteboard v2 integration.
-Publishing preserves asset records inside the Yjs state but does not inspect,
-validate, associate, or retain external assets. Responses omit `assetHashes`.
-Asset upload, retrieval, and retention will be revisited end to end.
+Publication validates live raster asset records against this board's committed
+asset catalog and atomically records a complete snapshot asset manifest. Invalid
+or uncommitted references reject publication. Published image reads require
+membership in that exact manifest. Responses continue to omit `assetHashes`;
+the server derives dependencies from Yjs state. See [asset APIs](whiteboard-assets-v2.md).
 
 ## Preview generation and image-only reads
 
@@ -147,6 +148,7 @@ fetch the image with the Authorization header and use a local Blob URL.
 | 409 | `SPACE_ARCHIVED` | New publication in an archived space |
 | 409 | `PUBLISH_SEQUENCE_UNAVAILABLE` | Future boundary or unavailable history |
 | 409 | `PUBLISH_STATE_INVALID` | Causal gaps, corrupt replay, invalid title, unsupported subdocuments |
+| 409 | `ASSET_INVALID_REFERENCE` / `ASSET_NOT_READY` | Invalid asset reference or missing committed board-owned raster |
 | 413 | `REQUEST_TOO_LARGE` / `PUBLISH_TOO_LARGE` | Request/replay limit exceeded |
 | 415 | `UNSUPPORTED_MEDIA_TYPE` | JSON required |
 | 503 | `WHITEBOARD_PUBLISH_BUSY` | Lock timeout; retry the same key after one second |
@@ -154,7 +156,7 @@ fetch the image with the Authorization header and use a local Blob URL.
 
 ## Runtime and deployment
 
-Apply `whiteboard_publication.xml` and `whiteboard_previews.xml` via the normal Liquibase changelog before
+Apply `whiteboard_publication.xml`, `whiteboard_previews.xml`, and `whiteboard_assets_v2.xml` via the normal Liquibase changelog before
 starting the updated server. The migrations add versions, PNG previews, and
 same-board foreign keys. No existing v1 data is migrated.
 
@@ -191,5 +193,6 @@ and an explicitly disposable database named `whiteboard_publish_test`. It drops
 and recreates the `core` and `whiteboard` schemas in that database, applies the
 actual creation/update/publication/preview migrations, and tests historical boundaries,
 concurrent retries, transaction rollback, immutable downloads, and archived reads.
-It also verifies publication of asset records without asset database tables,
-preview reads, and rejection of preview changes on an idempotent retry.
+It also verifies asset reference validation, committed catalog ownership and
+snapshot manifests, preview reads, and rejection of preview changes on an
+idempotent retry.

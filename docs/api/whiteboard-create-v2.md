@@ -2,7 +2,7 @@
 
 `POST /api/v2/editor/space/{spaceId}/whiteboard/create`
 
-Creates a whiteboard in the new `whiteboard` schema. Apply `db/beskar/updates/whiteboard_creation.xml` through the main Liquibase changelog before enabling this endpoint. New whiteboards created by the UI use v2. Existing legacy boards continue using the v1 editor. Draft retrieval, incremental saves, publication and title changes are documented separately. See [UI integration decisions](whiteboard-ui-v2-decisions.md).
+Creates a whiteboard in the new `whiteboard` schema. Apply `db/beskar/updates/whiteboard_creation.xml` through the main Liquibase changelog before enabling this endpoint. New whiteboards created by the UI use v2. Eligible legacy boards [migrate when opened for editing](whiteboard-migration-v1-to-v2.md); supported raster and inline vector assets are preserved; unsupported formats or unavailable files leave the board on v1. Draft retrieval, incremental saves, publication and title changes are documented separately. See [UI integration decisions](whiteboard-ui-v2-decisions.md).
 
 ## Request
 

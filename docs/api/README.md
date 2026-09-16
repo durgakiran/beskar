@@ -15,7 +15,12 @@ Whiteboard creation, incremental checkpoints, and draft retrieval are implemente
 
 See [version history, restore, and deletion](whiteboard-history-v2.md) for the remaining lifecycle APIs.
 
+See [independent asset uploads and authenticated downloads](whiteboard-assets-v2.md)
+for whiteboard-owned raster storage, commit/status/cancel, and published asset access.
+
 See [UI integration decisions and alternatives](whiteboard-ui-v2-decisions.md) for v2 editor adoption.
+
+See [v1 → v2 migration on editor open](whiteboard-migration-v1-to-v2.md) for the implemented flow, verified asset copying, deployment, and verification.
 
 ## Maintain the docs
 

@@ -23,6 +23,11 @@ Required header: `Idempotency-Key: <UUID>`.
 
 Read the head from the draft manifest. Restore takes the board/draft locks, verifies that head, copies the immutable version snapshot to a new snapshot at head+1, increments the draft's `restoreGeneration`, and records a retry receipt in one transaction. State bytes are copied within PostgreSQL. The existing published pointer and historical versions remain unchanged; publish explicitly when ready.
 
+Restore reinspects the source state and digest, validates its same-board committed
+raster dependencies, and copies their associations and completed manifest into
+the new snapshot. Invalid or uncommitted references return `409
+ASSET_INVALID_REFERENCE` or `409 ASSET_NOT_READY` without changing the draft.
+
 Example response `data`:
 
 ```json
@@ -51,7 +56,12 @@ Selected behavior: replace the current draft with an explicit head precondition.
 
 Deletion rejects child pages with `409 WHITEBOARD_HAS_CHILDREN`; move/delete them first. The transaction removes the published pointer, previews, versions, replay leases, draft, title updates, snapshots, update log, restore receipts, board, and core page. It does not recursively delete a page tree. Read transactions already holding an MVCC snapshot may finish; later reads fail.
 
-Creation receipts retain their original identity and page number as tombstones. Replaying an old create request returns 404 instead of recreating deleted content. Existing permission relationships are not removed from the external permission service in this transaction; content APIs require the board to exist, IDs are not reused, and permission revocation is not used as the deletion mechanism. Asset management remains deferred; this endpoint does not implement object-store garbage collection.
+Creation receipts retain their original identity and page number as tombstones. Replaying an old create request returns 404 instead of recreating deleted content. Existing permission relationships are not removed from the external permission service in this transaction; content APIs require the board to exist, IDs are not reused, and permission revocation is not used as the deletion mechanism.
+
+Deletion records durable cleanup work for committed and staged v2 asset objects
+and releases the board's storage accounting before removing owner rows. The jobs
+survive board deletion; physical deletion does not release quota a second time.
+See [asset lifecycle](whiteboard-assets-v2.md).
 
 Selected behavior: atomic permanent deletion of a leaf board. Alternatives: soft-delete/trash and recursive tree deletion; both require broader product and retention contracts.
 

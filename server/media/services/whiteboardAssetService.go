@@ -216,6 +216,21 @@ func SaveWhiteboardAsset(
 		Provenance:       map[string]string{"source": "whiteboard-upload"},
 		InspectorVersion: WhiteboardAssetInspectorVersion,
 	}
+	// Keep page deletion behind this transfer and its catalog insert. Without a
+	// page lock a request authorized before deletion could write an untracked
+	// object after the deleting transaction had already captured every key.
+	tx, err := core.GetPool().Begin(ctx)
+	if err != nil {
+		return nil, false, err
+	}
+	defer tx.Rollback(ctx)
+	var lockedPageID int64
+	if err := tx.QueryRow(ctx, `SELECT id FROM core.page WHERE id=$1 FOR KEY SHARE`, pageID).Scan(&lockedPageID); err != nil {
+		return nil, false, err
+	}
+	if err := lockWhiteboardAssetObject(ctx, tx, pageID, inspected.ContentHash); err != nil {
+		return nil, false, err
+	}
 	store, err := blobstorage.RuntimeStore(ctx)
 	if err != nil {
 		return nil, false, err
@@ -231,11 +246,6 @@ func SaveWhiteboardAsset(
 	}
 
 	provenance, _ := json.Marshal(record.Provenance)
-	tx, err := core.GetPool().Begin(ctx)
-	if err != nil {
-		return nil, false, err
-	}
-	defer tx.Rollback(ctx)
 	const insert = `INSERT INTO core.whiteboard_asset
 (page_id, content_hash, storage_key, file_size, mime_type, width, height, created_by, provenance, inspector_version)
 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)

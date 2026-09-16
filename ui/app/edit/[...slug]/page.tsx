@@ -10,7 +10,7 @@ import { Spinner, Flex } from "@radix-ui/themes";
 import DocumentEditor from "@components/DocumentEditor";
 import { lazy, Suspense } from "react";
 import type { PageNavigation } from "app/core/whiteboard/v2/api";
-const WhiteboardEditor = lazy(() => import("@components/WhiteboardEditor"));
+const WhiteboardEditor = lazy(() => import("@components/WhiteboardMigration"));
 const WhiteboardEditorV2 = lazy(() => import("@components/WhiteboardEditorV2"));
 import { useEffect } from "react";
 
@@ -38,7 +38,7 @@ export default function Page() {
     const slug = [spaceId, page];
 
     if (metaData.data.type === "whiteboard") {
-        return <Suspense fallback={<Spinner />} >{metaData.data.contentApiVersion === 2 ? <WhiteboardEditorV2 key={`${spaceId}:${page}`} slug={slug} /> : <WhiteboardEditor key={page} slug={slug} />}</Suspense>;
+        return <Suspense fallback={<Spinner />} >{metaData.data.contentApiVersion === 2 ? <WhiteboardEditorV2 key={`${spaceId}:${page}`} slug={slug} /> : <WhiteboardEditor key={`${spaceId}:${page}`} slug={slug} />}</Suspense>;
     }
 
     return (

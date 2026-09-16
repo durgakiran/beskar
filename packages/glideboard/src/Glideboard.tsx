@@ -53,6 +53,8 @@ function MountedGlideboardSession({
 		setReadOnly: (value) => controller.setReadOnly(value),
     settleActiveEdit: (policy) => controller.settleActiveEdit(policy),
     acquireMutationFence: (reason) => controller.acquireMutationFence(reason),
+    prepareForCapture: (reason, options) => controller.prepareForCapture(reason, options),
+    getPendingAssetCount: () => controller.getPendingAssetCount(),
     captureProjectionTarget: () => controller.captureProjectionTarget(),
     flush: () => controller.flush(),
   }), [controller]);

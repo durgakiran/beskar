@@ -234,6 +234,7 @@ export default function WhiteboardEditor({
     const activeDraftIdRef = useRef<string | null>(null);
     const draftTransitionInFlightRef = useRef<string | null>(null);
     const [durabilityStatus, setDurabilityStatus] = useState<DurabilityStatus | null>(null);
+    const [migrationDetected, setMigrationDetected] = useState(false);
     const whiteboardClientId = useMemo(getOrCreateWhiteboardClientId, []);
     const getProfileRef = useRef(getProfile);
     getProfileRef.current = getProfile;
@@ -250,6 +251,12 @@ export default function WhiteboardEditor({
     const provider = !readOnly && providerSession?.sessionKey === documentSessionKey
         ? providerSession.provider
         : null;
+
+    useEffect(() => {
+        if ((durabilityStatus?.error as { code?: string } | undefined)?.code === 'WHITEBOARD_MIGRATED') setMigrationDetected(true);
+    }, [durabilityStatus]);
+    useEffect(() => { if (migrationDetected) provider?.disconnect(); }, [migrationDetected, provider]);
+    useEffect(() => { setMigrationDetected(false); }, [documentSessionKey]);
 
     const collaborationUser = useMemo(() => {
         if (!profileData?.data) return null;
@@ -954,7 +961,7 @@ export default function WhiteboardEditor({
                                 variant="solid" 
                                 color="blue" 
                                 onClick={handlePublish}
-                                disabled={isPublishing}
+                                disabled={isPublishing || migrationDetected}
                                 loading={isPublishing}
                             >
                                 Publish
@@ -966,9 +973,19 @@ export default function WhiteboardEditor({
                     </Flex>
                 </Flex>
 
+                {migrationDetected && <Flex gap="3" align="center" p="3">
+                    <Text role="alert">This whiteboard has migrated to v2. Your unsaved changes are retained in this browser.</Text>
+                    <Button onClick={() => {
+                        const url = URL.createObjectURL(new Blob([Uint8Array.from(Y.encodeStateAsUpdate(yDoc))], { type: 'application/octet-stream' }));
+                        const link = document.createElement('a'); link.href = url; link.download = `whiteboard-${pageId}-recovery.yjs`; link.click();
+                        setTimeout(() => URL.revokeObjectURL(url), 1000);
+                    }}>Download unsaved copy</Button>
+                    <Button onClick={() => window.location.reload()}>Open v2</Button>
+                </Flex>}
+
                 {/* Canvas */}
                 <div style={{ flex: 1, position: 'relative', minWidth: 0 }}>
-                    <WhiteboardCanvas boardRef={handleBoardRef} sessionKey={documentSessionKey} yDoc={yDoc} provider={provider} fetchErr={fetchErr} readOnly={readOnly} collaborationUser={collaborationUser} bootstrapRevision={boardData?.durableRevision ?? "0"} documentId={String(boardData?.docId ?? "")} assetStorage={whiteboardAssetStorage} />
+                    <WhiteboardCanvas boardRef={handleBoardRef} sessionKey={documentSessionKey} yDoc={yDoc} provider={provider} fetchErr={fetchErr} readOnly={readOnly || migrationDetected} collaborationUser={collaborationUser} bootstrapRevision={boardData?.durableRevision ?? "0"} documentId={String(boardData?.docId ?? "")} assetStorage={whiteboardAssetStorage} />
                 </div>
             </div>
         );

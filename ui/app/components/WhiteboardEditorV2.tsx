@@ -13,15 +13,19 @@ import { YjsDurabilityCoordinator } from 'app/core/whiteboard/durability/YjsDura
 import { IndexedDbYjsRecoveryAdapter } from 'app/core/whiteboard/durability/IndexedDbYjsRecoveryAdapter';
 import type { DurabilityStatus } from 'app/core/whiteboard/durability/types';
 import { CheckpointAdapter } from 'app/core/whiteboard/v2/CheckpointAdapter';
+import { WhiteboardAssetHttpAdapterV2 } from 'app/core/whiteboard/v2/WhiteboardAssetHttpAdapterV2';
 import { boardUrl, digest, jsonRequest, post, sequence, WhiteboardApiError, type PublishedBoard } from 'app/core/whiteboard/v2/api';
 
 type Rename = { title: string; key: string };
 interface Session {
     doc: Y.Doc;
+    signal: AbortSignal;
     provider: WebrtcProvider;
     durability: YjsDurabilityCoordinator;
     user: { id: string; name: string; color: string };
     collaboration: GlideboardCollaborationConfig;
+    assetStorage: WhiteboardAssetHttpAdapterV2;
+    assetResolutionContext: { documentId: string };
     sync: () => ReturnType<typeof loadDraft>;
     saveTitle: () => Promise<void>;
 }
@@ -31,6 +35,7 @@ export default function WhiteboardEditorV2({ slug }: { slug: string[] }) {
     const base = boardUrl(space, page);
     const navigate = useNavigate();
     const [session, setSession] = useState<Session | null>(null);
+    const activeSession = useRef<Session | null>(null);
     const [board, setBoard] = useState<GlideboardHandle | null>(null);
     const [status, setStatus] = useState<DurabilityStatus | null>(null);
     const [title, setTitle] = useState('');
@@ -58,7 +63,8 @@ export default function WhiteboardEditorV2({ slug }: { slug: string[] }) {
         let doc: Y.Doc | null = null;
         let timer: ReturnType<typeof setInterval> | undefined;
         let unsubscribe: (() => void) | undefined;
-        setSession(null); setBoard(null); setError(''); setSyncError(''); setAccessDenied(false);
+        activeSession.current = null; pendingPublish.current = null; busyRef.current = false;
+        setSession(null); setBoard(null); setBusy(false); setError(''); setSyncError(''); setAccessDenied(false);
         const start = async () => {
             const user = await jsonRequest<{ id: string; name: string }>(`${getApiV1Base()}/profile/details`, { signal: abort.signal });
             const spaceUrl = `${getApiV1Base()}/space/${encodeURIComponent(space)}/details`;
@@ -85,8 +91,10 @@ export default function WhiteboardEditorV2({ slug }: { slug: string[] }) {
             recovery = new IndexedDbYjsRecoveryAdapter(sessionKey, page);
             await recovery.hydrate(doc);
             if (!active) return;
+            const acknowledgedStateDigest = await digest(loaded.state);
+            if (!active || abort.signal.aborted) return;
             const durability = new YjsDurabilityCoordinator({ sessionKey, draftId: page, clientId: tabId,
-                durableRevision: loaded.manifest.headSequence, acknowledgedStateDigest: await digest(loaded.state),
+                durableRevision: loaded.manifest.headSequence, acknowledgedStateDigest,
                 persistence: new CheckpointAdapter(base, loaded.state, generation), recovery });
             const provider = new WebrtcProvider(room, doc, { signaling: [getSignalingUrl()], filterBcConns: false });
             let archived = Boolean(spaceDetails.archivedAt);
@@ -164,8 +172,11 @@ export default function WhiteboardEditorV2({ slug }: { slug: string[] }) {
                 },
             };
             const collaborationUser = { ...user, color: '#7c6ee6' };
-            owned = { doc, provider, durability, user: collaborationUser, sync, saveTitle,
-                collaboration: { doc, provider: boardProvider, user: collaborationUser, boardIdentity: `v2:${space}:${page}`, bootstrapRevision: loaded.manifest.headSequence } };
+            const boardIdentity = `v2:${space}:${page}`;
+            const assetStorage = new WhiteboardAssetHttpAdapterV2({ spaceId: space, pageId: page, signal: abort.signal });
+            owned = { doc, signal: abort.signal, provider, durability, user: collaborationUser, sync, saveTitle,
+                assetStorage, assetResolutionContext: { documentId: boardIdentity },
+                collaboration: { doc, provider: boardProvider, user: collaborationUser, boardIdentity, bootstrapRevision: loaded.manifest.headSequence } };
             unsubscribe = durability.subscribeStatus(() => {
                 if (!active) return;
                 const next = durability.getSnapshot();
@@ -191,11 +202,13 @@ export default function WhiteboardEditorV2({ slug }: { slug: string[] }) {
                     }
                 });
             }, 10000);
-            if (active) { setSession(owned); setStatus(durability.getSnapshot()); }
+            if (active) { activeSession.current = owned; setSession(owned); setStatus(durability.getSnapshot()); }
         };
         void start().catch(e => { if (active) setError(e.message); });
         return () => {
             active = false; abort.abort(); clearInterval(timer); unsubscribe?.();
+            if (activeSession.current === owned) activeSession.current = null;
+            void owned?.assetStorage.dispose();
             owned?.provider.destroy();
             void (owned ? owned.durability.dispose('cancel') : recovery?.dispose());
             doc?.destroy();
@@ -203,19 +216,19 @@ export default function WhiteboardEditorV2({ slug }: { slug: string[] }) {
     }, [base, page, space, loadAttempt]);
 
     useEffect(() => {
-        if (!session || !board) return;
+        if (!session || !board || session.signal.aborted || activeSession.current !== session) return;
         return session.durability.attach(board.checkpoints);
     }, [session, board]);
     useEffect(() => {
         const unload = (event: BeforeUnloadEvent) => {
-            if (status?.phase !== 'clean' || pendingTitle.current) { event.preventDefault(); event.returnValue = ''; }
+            if (status?.phase !== 'clean' || pendingTitle.current || (board?.getPendingAssetCount() ?? 0) > 0) { event.preventDefault(); event.returnValue = ''; }
         };
         const reconnect = () => { if (session && !busyRef.current) void Promise.all([session.saveTitle(), session.sync()]).catch(e => setSyncError(e.message)); };
         window.addEventListener('beforeunload', unload);
         window.addEventListener('online', reconnect);
         window.addEventListener('focus', reconnect);
         return () => { window.removeEventListener('beforeunload', unload); window.removeEventListener('online', reconnect); window.removeEventListener('focus', reconnect); };
-    }, [status, session]);
+    }, [status, session, board]);
 
     const rename = (value: string) => {
         setTitle(value); titleRef.current = value;
@@ -227,39 +240,53 @@ export default function WhiteboardEditorV2({ slug }: { slug: string[] }) {
     const run = async (publish: boolean) => {
         if (!session || !board || busyRef.current) return;
         if (accessDenied) { if (!publish) navigate(`/space/${space}/view/${page}`); return; }
+        const isCurrentSession = () => activeSession.current === session && !session.signal.aborted;
+        const requireCurrentSession = () => {
+            if (!isCurrentSession()) throw new DOMException('Whiteboard session closed', 'AbortError');
+        };
         busyRef.current = true; setBusy(true); setError(''); setNotice('');
-        const fence = board.acquireMutationFence(publish ? 'publish' : 'close');
+        let fence: Awaited<ReturnType<GlideboardHandle['prepareForCapture']>> | undefined;
         try {
             if (publish && pendingPublish.current) {
-                await post(`${base}/publish`, pendingPublish.current.body, pendingPublish.current.key);
+                // Replay the original immutable snapshot, regardless of newer edits or uploads.
+                await post(`${base}/publish`, pendingPublish.current.body, pendingPublish.current.key, session.signal);
+                requireCurrentSession();
                 pendingPublish.current = null;
                 setNotice('Published successfully.');
                 return;
             }
+            // Upload completion needs to insert records before the mutation fence is acquired.
+            fence = await board.prepareForCapture(publish ? 'publish' : 'close', { signal: session.signal });
+            requireCurrentSession();
             await board.settleActiveEdit('commit');
+            requireCurrentSession();
             await session.saveTitle();
             await session.durability.flush(await board.captureProjectionTarget());
+            requireCurrentSession();
             if (!publish) { navigate(`/space/${space}/view/${page}`); return; }
             // Other editors may have saved changes this tab has not seen yet. Preview a verified server boundary.
             for (let attempt = 0; attempt < 3; attempt++) {
                 const server = await session.sync();
                 const target = await board.captureProjectionTarget();
+                requireCurrentSession();
                 if (target.yjs.stateDigest !== await digest(server.state)) {
                     await session.durability.flush(target);
                     continue;
                 }
                 const preview = await createPublishPreview(board, { target });
                 const after = await board.captureProjectionTarget();
+                requireCurrentSession();
                 if (after.yjs.stateDigest !== target.yjs.stateDigest) continue;
                 pendingPublish.current = { key: crypto.randomUUID(), body: { sequence: server.manifest.headSequence, preview } };
-                await post<PublishedBoard>(`${base}/publish`, pendingPublish.current.body, pendingPublish.current.key);
+                await post<PublishedBoard>(`${base}/publish`, pendingPublish.current.body, pendingPublish.current.key, session.signal);
+                requireCurrentSession();
                 pendingPublish.current = null;
                 setNotice('Published successfully.');
                 return;
             }
             throw new Error('The board changed while preparing the preview. Please publish again once edits settle.');
-        } catch (e) { setError(e instanceof Error ? e.message : 'Unable to save whiteboard'); }
-        finally { fence.release(); busyRef.current = false; setBusy(false); }
+        } catch (e) { if (isCurrentSession()) setError(e instanceof Error ? e.message : 'Unable to save whiteboard'); }
+        finally { fence?.release(); if (isCurrentSession()) { busyRef.current = false; setBusy(false); } }
     };
 
     if (!session) return <Flex direction="column" align="center" gap="3" p="5">{error ? <><Text role="alert">{error}</Text><Button onClick={() => setLoadAttempt(n => n + 1)}>Retry</Button></> : <Spinner />}</Flex>;
@@ -270,14 +297,19 @@ export default function WhiteboardEditorV2({ slug }: { slug: string[] }) {
                 onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }} style={{ flex: 1, minWidth: 100, padding: 6 }} />
             <Text size="1" role="status">{titlePending ? 'Title unsaved' : status?.phase === 'clean' ? 'Saved' : status?.phase === 'saving' ? 'Saving…' : status?.phase === 'offline' ? 'Saved locally' : status?.phase === 'dirty' ? 'Unsaved' : 'Save error'}</Text>
             <Text size="1" title={peers.join(', ')}>{Math.max(1, peers.length)} editing</Text>
-            <WhiteboardHistoryV2 key={`${space}:${page}`} spaceId={space} pageId={page} canRestore={!accessDenied && !busy} onRestored={() => { pendingPublish.current = null; setLoadAttempt(n => n + 1); }} />
+            <WhiteboardHistoryV2 key={session.doc.guid} spaceId={space} pageId={page} signal={session.signal} canRestore={!accessDenied && !busy}
+                onRestored={() => {
+                    if (activeSession.current !== session || session.signal.aborted) return;
+                    pendingPublish.current = null; setLoadAttempt(n => n + 1);
+                }} />
             <Button onClick={() => void run(true)} disabled={busy || !board || accessDenied}>{pendingPublish.current ? 'Retry publish' : 'Publish'}</Button>
             <Button variant="soft" onClick={() => void run(false)} disabled={busy || !board}>Close</Button>
         </Flex>
         {error || syncError || status?.error ? <Text role="alert" color="red" size="2" mx="4">{error || syncError || status?.error?.message}</Text> : null}
         {notice ? <Text role="status" color="green" size="2" mx="4">{notice}</Text> : null}
         <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
-            <Glideboard ref={boardRef} key={session.doc.guid} sessionKey={session.doc.guid} collaboration={session.collaboration} readOnly={accessDenied} />
+            <Glideboard ref={boardRef} key={session.doc.guid} sessionKey={session.doc.guid} collaboration={session.collaboration}
+                assetStorage={session.assetStorage} assetResolutionContext={session.assetResolutionContext} readOnly={accessDenied} />
         </div>
     </div>;
 }

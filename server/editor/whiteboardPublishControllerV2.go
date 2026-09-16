@@ -185,6 +185,10 @@ func (d whiteboardPublishControllerV2) handleContent(w http.ResponseWriter, r *h
 func publishHTTPError(w http.ResponseWriter, r *http.Request, err error) {
 	var pgErr *pgconn.PgError
 	switch {
+	case errors.Is(err, errWhiteboardSnapshotAssetInvalid):
+		whiteboardV2Error(w, r, 409, "ASSET_INVALID_REFERENCE", "The snapshot contains an invalid asset reference.")
+	case errors.Is(err, errWhiteboardSnapshotAssetNotReady):
+		whiteboardV2Error(w, r, 409, "ASSET_NOT_READY", "The snapshot references an asset that is not committed to this whiteboard.")
 	case errors.Is(err, errWhiteboardPreviewInvalid):
 		whiteboardV2Error(w, r, 400, "INVALID_PREVIEW", errWhiteboardPreviewInvalid.Error())
 	case errors.Is(err, errWhiteboardPreviewMissing):

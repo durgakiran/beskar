@@ -165,6 +165,7 @@ func main() {
 		go documentVersionCleanupWorker.Start(context.Background())
 	}
 	whiteboardStagingCleanupDone := startWhiteboardStagingCleanup(appContext, whiteboardStagingCleanupConfig)
+	whiteboardAssetV2CleanupDone := editor.StartWhiteboardAssetCleanupV2(appContext)
 
 	r := chi.NewRouter()
 	addCorsMiddleWare(r)
@@ -259,4 +260,5 @@ func main() {
 	}
 	stopApplication()
 	<-whiteboardStagingCleanupDone
+	<-whiteboardAssetV2CleanupDone
 }

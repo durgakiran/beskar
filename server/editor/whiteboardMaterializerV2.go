@@ -36,8 +36,13 @@ func materializeWhiteboard(ctx context.Context, updates [][]byte, title string) 
 	cmd.Stdout = output
 	if err = cmd.Run(); err != nil {
 		var exit *exec.ExitError
-		if errors.As(err, &exit) && exit.ExitCode() == 2 {
-			return result, errWhiteboardPublishState
+		if errors.As(err, &exit) {
+			if exit.ExitCode() == 2 {
+				return result, errWhiteboardPublishState
+			}
+			if exit.ExitCode() == 3 {
+				return result, errWhiteboardSnapshotAssetInvalid
+			}
 		}
 		return result, err
 	}
@@ -49,6 +54,9 @@ func materializeWhiteboard(ctx context.Context, updates [][]byte, title string) 
 	}
 	if validateYjsUpdateV1(result.State) != nil {
 		return result, errWhiteboardPublishState
+	}
+	if err = validateWhiteboardSnapshotAssets(result); err != nil {
+		return result, err
 	}
 	return result, nil
 }

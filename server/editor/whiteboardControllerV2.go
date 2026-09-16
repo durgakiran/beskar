@@ -44,8 +44,12 @@ func RouterV2() *chi.Mux {
 	draft.register(r)
 	publication := whiteboardPublishControllerV2{user: core.GetUserInfo, permission: core.ValidateUserPagePermission, service: service}
 	publication.register(r)
+	migration := whiteboardMigrationControllerV2{identity: publication, service: service}
+	migration.register(r)
 	history := whiteboardHistoryControllerV2{identity: publication, service: service}
 	history.register(r)
+	assets := whiteboardAssetControllerV2{identity: publication, service: newWhiteboardAssetServiceV2()}
+	assets.register(r)
 	return r
 }
 

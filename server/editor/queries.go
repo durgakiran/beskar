@@ -200,7 +200,9 @@ const (
 		LIMIT 1`
 
 	// Page metadata (type lookup)
-	getPageMetadata = `SELECT p.id, CASE WHEN wb.page_id IS NOT NULL THEN 'whiteboard' ELSE p.type END, p.space_id,
+	getPageMetadata = `SELECT p.id, CASE WHEN wb.page_id IS NOT NULL OR EXISTS(
+ SELECT 1 FROM core.page_doc_map legacy JOIN core.whiteboard_data wd ON wd.doc_id=legacy.doc_id WHERE legacy.page_id=p.id
+ ) THEN 'whiteboard' ELSE p.type END, p.space_id,
  CASE WHEN wb.page_id IS NOT NULL THEN 2 ELSE 1 END, wb.published_version_id,
  EXISTS(SELECT 1 FROM whiteboard.whiteboard_version_preview WHERE version_id=wb.published_version_id)
  FROM core.page p LEFT JOIN whiteboard.whiteboard wb ON wb.page_id=p.id

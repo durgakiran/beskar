@@ -2,7 +2,9 @@ package editor
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
+	"fmt"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"math"
@@ -129,6 +131,34 @@ func (s *whiteboardServiceV2) RestoreWhiteboardVersion(ctx context.Context, in w
 	if head == math.MaxInt64 || generation == math.MaxInt64 {
 		return out, errWhiteboardPublishSequence
 	}
+	var sourceSnapshot uuid.UUID
+	var sourceState []byte
+	var sourceTitle, sourceDigest string
+	err = tx.QueryRow(ctx, `SELECT s.id,s.state_bytes,s.title,s.state_digest FROM whiteboard.whiteboard_version v
+ JOIN whiteboard.whiteboard_snapshot s ON s.page_id=v.page_id AND s.id=v.snapshot_id WHERE v.page_id=$1 AND v.id=$2`, in.PageID, in.VersionID).Scan(&sourceSnapshot, &sourceState, &sourceTitle, &sourceDigest)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return out, errWhiteboardV2BoardNotFound
+	}
+	if err != nil {
+		return out, err
+	}
+	if len(sourceState) > whiteboardPublishMaxBytes {
+		return out, errWhiteboardPublishLimit
+	}
+	if fmt.Sprintf("sha256:%x", sha256.Sum256(sourceState)) != sourceDigest {
+		return out, errWhiteboardPublishState
+	}
+	materialize := s.materialize
+	if materialize == nil {
+		materialize = materializeWhiteboard
+	}
+	full, err := materialize(ctx, [][]byte{sourceState}, sourceTitle)
+	if err != nil {
+		return out, err
+	}
+	if err = associateWhiteboardSnapshotAssets(ctx, tx, in.PageID, sourceSnapshot, sourceDigest, full); err != nil {
+		return out, err
+	}
 	out.Sequence = head + 1
 	out.RestoreGeneration = generation + 1
 	out.SnapshotID = uuid.New()
@@ -139,6 +169,14 @@ func (s *whiteboardServiceV2) RestoreWhiteboardVersion(ctx context.Context, in w
 	}
 	if tag.RowsAffected() != 1 {
 		return out, errWhiteboardV2BoardNotFound
+	}
+	if _, err = tx.Exec(ctx, `INSERT INTO whiteboard.whiteboard_snapshot_asset(snapshot_id,page_id,content_hash)
+ SELECT $3,page_id,content_hash FROM whiteboard.whiteboard_snapshot_asset WHERE page_id=$1 AND snapshot_id=$2`, in.PageID, sourceSnapshot, out.SnapshotID); err != nil {
+		return out, err
+	}
+	if _, err = tx.Exec(ctx, `INSERT INTO whiteboard.whiteboard_snapshot_asset_manifest(snapshot_id,page_id,state_digest,extractor_version,completed_at)
+ SELECT $3,page_id,state_digest,extractor_version,now() FROM whiteboard.whiteboard_snapshot_asset_manifest WHERE page_id=$1 AND snapshot_id=$2`, in.PageID, sourceSnapshot, out.SnapshotID); err != nil {
+		return out, err
 	}
 	if _, err = tx.Exec(ctx, `UPDATE whiteboard.whiteboard_draft SET base_snapshot_id=$2,head_sequence=$3,restore_generation=$4,updated_by=$5,updated_at=now() WHERE page_id=$1`, in.PageID, out.SnapshotID, out.Sequence, out.RestoreGeneration, in.ActorID); err != nil {
 		return out, err
@@ -163,6 +201,9 @@ func (s *whiteboardServiceV2) DeleteWhiteboardV2(ctx context.Context, in whitebo
 	}
 	if children {
 		return errWhiteboardHasChildren
+	}
+	if err = queueWhiteboardAssetDeletionV2(ctx, tx, in); err != nil {
+		return err
 	}
 	statements := []string{
 		`UPDATE whiteboard.whiteboard SET published_version_id=NULL WHERE page_id=$1`,
