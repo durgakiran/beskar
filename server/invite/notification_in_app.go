@@ -135,3 +135,13 @@ func emitSpaceInviteDecisionInApp(ctx context.Context, details InviteDetailsResp
 		logger().Warn("failed to emit invite decision notification", zap.Error(err))
 	}
 }
+
+func resolveSpaceInviteNotification(ctx context.Context, token, userID string) {
+	recipient, err := uuid.Parse(userID)
+	if err != nil {
+		return
+	}
+	if err := notification.NewService().ResolveByEventKey(ctx, spaceInviteCreatedEventKey(strings.TrimSpace(token)), &recipient); err != nil {
+		logger().Warn("failed to resolve terminal invite notification", zap.Error(err))
+	}
+}

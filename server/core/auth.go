@@ -84,14 +84,13 @@ func (t *tokenType) authenticate() error {
 
 func AuthMiddleWare(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		token := r.Header.Get("Authorization")
-		Logger.Info(fmt.Sprintf("======> AuthMiddleWare HIT! Token length: %d", len(token)))
-		if len(token) == 0 {
+		parts := strings.Fields(r.Header.Get("Authorization"))
+		if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
 			render.Status(r, http.StatusUnauthorized)
-			render.Render(w, r, NewFailedResponse(401, FAILURE, "Authorization token not provided", ""))
+			render.Render(w, r, NewFailedResponse(401, FAILURE, "A valid Bearer authorization header is required", ""))
 			return
 		}
-		Itoken := tokenType{value: strings.Split(token, " ")[1]}
+		Itoken := tokenType{value: parts[1]}
 		err := Itoken.authenticate()
 		if err != nil {
 			Logger.Error(fmt.Sprintf("======> AuthMiddleWare auth failed: %v", err))
@@ -102,6 +101,27 @@ func AuthMiddleWare(next http.Handler) http.Handler {
 		Logger.Info("======> AuthMiddleWare auth SUCCESS!")
 		ctx := context.WithValue(r.Context(), "claims", Itoken.Claims)
 		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
+// SelectAuthentication keeps application tokens (such as invitation tokens)
+// separate from authentication credentials. Query credentials are an explicit
+// compatibility option for legacy media GET/HEAD requests only.
+func SelectAuthentication(cookiePath, bearerPath http.Handler, allowQueryToken bool) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "" {
+			bearerPath.ServeHTTP(w, r)
+			return
+		}
+		if allowQueryToken && (r.Method == http.MethodGet || r.Method == http.MethodHead) {
+			if token := r.URL.Query().Get("token"); token != "" {
+				request := r.Clone(r.Context())
+				request.Header.Set("Authorization", "Bearer "+token)
+				bearerPath.ServeHTTP(w, request)
+				return
+			}
+		}
+		cookiePath.ServeHTTP(w, r)
 	})
 }
 

@@ -1,4 +1,5 @@
 
+import { inviteDecisionNotice } from "../../components/invite/formatters";
 import ToastComponent from "@components/ui/ToastComponent";
 import { Response, useGet } from "@http/hooks";
 import { Avatar, Box, Button, Dialog, Flex, Heading, Spinner, Text } from "@radix-ui/themes";
@@ -142,11 +143,8 @@ function NotificationItem({
         }
         setPendingAction(decision);
         try {
-            await apiPost("invite/user/decision", { token, decision });
-            onToast({
-                type: "success",
-                message: decision === "accept" ? "Invitation accepted." : "Invitation declined.",
-            });
+            const result = await apiPost("invite/user/decision", { token, decision });
+            onToast(inviteDecisionNotice(result?.data?.status));
             setDeclineOpen(false);
             window.dispatchEvent(new CustomEvent("beskar:notifications-changed"));
             onChanged();

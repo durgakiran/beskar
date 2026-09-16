@@ -1,6 +1,6 @@
 
 import { Icon } from "@components/ui/Icon";
-import { Response, useGet } from "@http/hooks";
+import { useInviteDetails } from "./useInviteDetails";
 import { Spinner } from "@radix-ui/themes";
 import { Link } from "react-router-dom";
 import { useSearchParams } from "react-router-dom";
@@ -11,6 +11,7 @@ import { formatInviteRole, formatInviteTime, normalizeInviteStatus } from "./for
 import type { InviteDecision, InviteDetails } from "./types";
 import { useInviteDecision } from "./useInviteDecision";
 import { useDesktopLogout } from "../../core/auth/useKeycloak";
+import { rememberInviteReturn } from "./inviteReturn";
 
 function BrandMark() {
     return (
@@ -52,7 +53,7 @@ function ActionButton({
     children: React.ReactNode;
     tone?: "primary" | "secondary" | "danger" | "disabled";
     disabled?: boolean;
-    onClick?: () => void;
+    onClick?: React.MouseEventHandler<HTMLButtonElement | HTMLAnchorElement>;
     href?: string;
 }) {
     const className = [
@@ -68,7 +69,7 @@ function ActionButton({
 
     if (href && !disabled) {
         return (
-            <Link to={href} className={className}>
+            <Link to={href} reloadDocument={href.startsWith("/auth/")} onClick={onClick} className={className}>
                 {children}
             </Link>
         );
@@ -154,7 +155,7 @@ function PendingInvite({ invite, onAccept, onDecline, loadingDecision }: { invit
                     <h1 className="mt-3 text-[26px] font-bold leading-tight text-neutral-900 sm:text-[30px]">
                         {invite.senderName || "Someone"} invited you to join {invite.name || "this space"}
                     </h1>
-                    <p className="mt-3 text-[15px] leading-6 text-neutral-800">Review the invite details before choosing. Opening this page does not change invite status.</p>
+                    <p className="mt-3 text-[15px] leading-6 text-neutral-800">Review the invite details before choosing. Opening this page does not change invite status. This invitation expires seven days after it was sent.</p>
                 </div>
                 <div className="space-y-5 px-5 py-6 sm:px-[30px]">
                     <div className="flex gap-3 rounded-md border border-primary-600 bg-primary-100 px-[18px] py-4">
@@ -245,10 +246,14 @@ function LoadingState() {
 }
 
 export default function InviteActionPage() {
-    const searchParams = useSearchParams();
+    const [searchParams] = useSearchParams();
+    return <InviteAction key={searchParams.toString()} searchParams={searchParams} />;
+}
+
+function InviteAction({ searchParams }: { searchParams: URLSearchParams }) {
     const token = searchParams.get("token") || "";
     const initialDecision = searchParams.get("decision") === "reject" ? "reject" : searchParams.get("decision") === "accept" ? "accept" : null;
-    const [{ data, errors, isLoading, response }, fetchInvite] = useGet<Response<InviteDetails>>("invite/user/details");
+    const { data, errors, isLoading, response, retry } = useInviteDetails(token);
     const { data: decisionData, errors: decisionErrors, isLoading: isDeciding, response: decisionResponse, pendingDecision, submitDecision } = useInviteDecision();
     const [selectedDecision, setSelectedDecision] = useState<InviteDecision | null>(initialDecision);
     const [localError, setLocalError] = useState<string | null>(null);
@@ -258,7 +263,9 @@ export default function InviteActionPage() {
         // @ts-ignore
         if (window.wails) {
             e.preventDefault();
-            desktopLogout();
+            void desktopLogout();
+        } else {
+            rememberInviteReturn(`/invite/action?${searchParams.toString()}`);
         }
     };
 
@@ -266,11 +273,6 @@ export default function InviteActionPage() {
         setSelectedDecision(initialDecision);
     }, [initialDecision]);
 
-    useEffect(() => {
-        if (token) {
-            fetchInvite({ token });
-        }
-    }, [fetchInvite, token]);
 
     useEffect(() => {
         if (decisionErrors || (decisionResponse && decisionResponse >= 400)) {
@@ -348,6 +350,12 @@ export default function InviteActionPage() {
             return <LoadingState />;
         }
 
+        if (response === 401) {
+            return <StateCard icon="UserX" eyebrow="Sign in required" title="Sign in to review this invitation"
+                copy="Your session has expired. Sign in again to continue."
+                actions={<ActionButton href={`/auth/login?returnTo=${encodeURIComponent(`/invite/action?${searchParams.toString()}`)}`}>Sign in</ActionButton>} />;
+        }
+
         if (response === 403) {
             return (
                 <StateCard
@@ -369,7 +377,13 @@ export default function InviteActionPage() {
             );
         }
 
-        if (errors || (response && response >= 400 && response !== 403) || !invite) {
+        if (errors || (response && response >= 500) || response === 429) {
+            return <StateCard icon="TriangleAlert" iconTone="danger" eyebrow="Connection problem"
+                title="Could not load invitation" copy="Please try again. Your invitation has not been changed."
+                actions={<ActionButton onClick={retry}>Try again</ActionButton>} />;
+        }
+
+        if ((response && response >= 400) || !invite) {
             return (
                 <StateCard
                     icon="Link2Off"
@@ -428,7 +442,14 @@ export default function InviteActionPage() {
             );
         }
 
-        if (resolvedStatus === "rejected" || resolvedStatus === "removed") {
+        if (resolvedStatus === "expired" || resolvedStatus === "removed") {
+            return <StateCard icon="Link2Off" iconTone="danger" eyebrow="Invitation unavailable"
+                title={resolvedStatus === "expired" ? "This invitation has expired" : "This invitation was revoked"}
+                copy="Ask the sender for a new invitation. Invitation links are valid for seven days."
+                actions={<ActionButton href="/user/notifications">Back to notifications</ActionButton>} />;
+        }
+
+        if (resolvedStatus === "rejected") {
             const already = !decisionStatus;
             return (
                 <StateCard
@@ -484,7 +505,7 @@ export default function InviteActionPage() {
         }
 
         return <PendingInvite invite={invite} loadingDecision={loadingDecision} onAccept={() => submit("accept")} onDecline={() => setSelectedDecision("reject")} />;
-    }, [decisionStatus, errors, invite, inviteStatus, isDeciding, isLoading, loadingDecision, localError, pendingDecision, response, resultActions, selectedDecision, submit, token]);
+    }, [decisionStatus, errors, invite, inviteStatus, isDeciding, isLoading, loadingDecision, localError, pendingDecision, response, resultActions, selectedDecision, submit, token, retry, handleLogout]);
 
     return (
         <div className="min-h-screen bg-[#fbfafc] text-neutral-900">

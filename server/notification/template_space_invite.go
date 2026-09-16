@@ -36,6 +36,8 @@ func (t SpaceInviteCreatedTemplate) Render(data map[string]any) (RenderedEmail, 
 	subject := fmt.Sprintf("%s invited you to %s", senderName, spaceName)
 	text := fmt.Sprintf(`%s invited you to join %s as %s.
 
+This invitation expires seven days after it was sent.
+
 Accept the invitation:
 %s
 
@@ -50,6 +52,7 @@ Open Teddox:
 <html>
   <body>
     <p>%s invited you to join <strong>%s</strong> as <strong>%s</strong>.</p>
+    <p>This invitation expires seven days after it was sent.</p>
     <p><a href="%s">Accept invitation</a></p>
     <p><a href="%s">Reject invitation</a></p>
     <p><a href="%s">Open Teddox</a></p>

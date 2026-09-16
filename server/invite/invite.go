@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"net/url"
 
 	"github.com/durgakiran/beskar/core"
 	"github.com/durgakiran/beskar/quota"
@@ -49,37 +50,6 @@ func sendInviteActionError(w http.ResponseWriter, r *http.Request, err error) {
 	}
 }
 
-func acceptInvitation(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	user, err := core.GetUserInfo(ctx)
-	if err != nil {
-		core.SendFailedReponse(w, r, http.StatusForbidden, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNAUTHORIZED])
-		return
-	}
-	if user.Id == "" {
-		core.SendFailedReponse(w, r, http.StatusForbidden, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNAUTHORIZED])
-		return
-	}
-	userId := user.AId
-	emailId := user.Email
-	token := r.URL.Query().Get("token")
-	if token == "" {
-		sendFailedReponse(w, r, http.StatusBadRequest, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNAUTHORIZED])
-		return
-	}
-	// process token
-	err = processInvitation(userId, emailId, token, STATUS_ACCEPTED)
-	if err != nil {
-		if errors.Is(err, quota.ErrCollaboratorLimitExceeded) {
-			sendFailedReponse(w, r, http.StatusForbidden, err.Error())
-			return
-		}
-		sendFailedReponse(w, r, http.StatusForbidden, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNAUTHORIZED])
-		return
-	}
-	sendSuccessResponse(w, r, http.StatusOK, "")
-}
-
 func createInvitation(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	user, err := core.GetUserInfo(ctx)
@@ -118,7 +88,11 @@ func createInvitation(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	// validate sender permissions
-	isAllowed := core.ValidateUserEntityPermission(invite.Entity, invite.EntityId, invite.SenderId, core.SPACE_INVITE_MEMBER)
+	permission := core.SPACE_INVITE_MEMBER
+	if invite.Role == "admin" {
+		permission = core.SPACE_INVITE_ADMIN
+	}
+	isAllowed := core.ValidateUserEntityPermission(invite.Entity, invite.EntityId, invite.SenderId, permission)
 	if !isAllowed {
 		sendFailedReponse(w, r, http.StatusForbidden, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNAUTHORIZED])
 		return
@@ -148,32 +122,6 @@ func createInvitation(w http.ResponseWriter, r *http.Request) {
 		)
 	}
 	sendSuccessResponse(w, r, http.StatusOK, token)
-}
-
-func rejectInvitation(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	user, err := core.GetUserInfo(ctx)
-	if err != nil {
-		core.SendFailedReponse(w, r, http.StatusForbidden, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNAUTHORIZED])
-		return
-	}
-	if user.Id == "" {
-		core.SendFailedReponse(w, r, http.StatusForbidden, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNAUTHORIZED])
-		return
-	}
-	userId := user.AId
-	token := r.URL.Query().Get("token")
-	if token == "" {
-		sendFailedReponse(w, r, http.StatusBadRequest, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNAUTHORIZED])
-		return
-	}
-	// process token
-	err = processInvitation(userId, user.Email, token, STATUS_REJECTED)
-	if err != nil {
-		sendFailedReponse(w, r, http.StatusForbidden, err.Error())
-		return
-	}
-	sendSuccessResponse(w, r, http.StatusOK, "")
 }
 
 func inviteDetails(w http.ResponseWriter, r *http.Request) {
@@ -326,12 +274,20 @@ func Router() *chi.Mux {
 	r := chi.NewRouter()
 	r.Use(core.Authenticated)
 	r.Post("/user/create", createInvitation)
-	r.Get("/user/accept", acceptInvitation)
-	r.Get("/user/reject", rejectInvitation)
+	r.Get("/user/accept", legacyInviteLink("accept"))
+	r.Get("/user/reject", legacyInviteLink("reject"))
 	r.Get("/user/details", inviteDetails)
 	r.Post("/user/decision", decideInvitation)
 	r.Delete("/user/remove", removeInvitation)
 	r.Get("/space/{spaceId}/list", listSpaceInvites)
 	r.Get("/user/invites", listUserInvites)
 	return r
+}
+
+// Old email links must display a confirmation page, never mutate state on GET.
+func legacyInviteLink(decision string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		query := url.Values{"token": {r.URL.Query().Get("token")}, "decision": {decision}}
+		http.Redirect(w, r, "/invite/action?"+query.Encode(), http.StatusSeeOther)
+	}
 }

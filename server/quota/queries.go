@@ -183,7 +183,8 @@ VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now())`
 
 	getPendingInviteCountQuery = `SELECT COUNT(*)
 FROM notifications.invites
-WHERE entity = 'space' AND entity_id = $1 AND status IS NULL`
+WHERE entity = 'space' AND entity_id = $1 AND status IS NULL
+AND created_at > now() - interval '7 days'`
 
 	getPageStorageBytesQuery = `SELECT
     COALESCE((

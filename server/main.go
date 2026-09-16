@@ -36,9 +36,6 @@ import (
 	"github.com/go-chi/cors"
 	"github.com/go-chi/render"
 	"github.com/joho/godotenv"
-	zoidc "github.com/zitadel/oidc/v3/pkg/oidc"
-	"github.com/zitadel/zitadel-go/v3/pkg/authentication"
-	openid "github.com/zitadel/zitadel-go/v3/pkg/authentication/oidc"
 	"go.uber.org/zap"
 )
 
@@ -171,30 +168,11 @@ func main() {
 	addCorsMiddleWare(r)
 	mw := core.ZitadelMiddleware()
 
-	// authChain attempts to authenticate via Bearer token if present, otherwise falls back to Cookie session
-	authChain := func(mw *authentication.Interceptor[*openid.UserInfoContext[*zoidc.IDTokenClaims, *zoidc.UserInfo]]) func(http.Handler) http.Handler {
+	// Query credentials are opt-in for legacy media only. Invitation tokens
+	// are application data and must never override the browser session.
+	authChain := func(allowQueryToken bool) func(http.Handler) http.Handler {
 		return func(next http.Handler) http.Handler {
-			cookiePath := mw.CheckAuthentication()(next)
-			bearerPath := core.AuthMiddleWare(next)
-			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				token := r.Header.Get("Authorization")
-				if token == "" {
-					// Fallback to query parameter for assets like images
-					queryToken := r.URL.Query().Get("token")
-					if queryToken != "" {
-						token = "Bearer " + queryToken
-						r.Header.Set("Authorization", token)
-						logger().Info(fmt.Sprintf("authChain: Extracted token from query param for %s", r.URL.Path))
-					}
-				}
-				if strings.HasPrefix(strings.ToLower(token), "bearer ") {
-					logger().Info(fmt.Sprintf("authChain: Using Bearer path for %s", r.URL.Path))
-					bearerPath.ServeHTTP(w, r)
-					return
-				}
-				logger().Info(fmt.Sprintf("authChain: Using Cookie path for %s", r.URL.Path))
-				cookiePath.ServeHTTP(w, r)
-			})
+			return core.SelectAuthentication(mw.CheckAuthentication()(next), core.AuthMiddleWare(next), allowQueryToken)
 		}
 	}
 
@@ -215,30 +193,30 @@ func main() {
 
 	apidocs.Register(r)
 	r.Mount("/auth/", core.ZitadelAuthRouter())
-	r.Mount("/api/v1", authChain(mw)(auth.Router()))
-	r.Mount("/api/v1/media", authChain(mw)(media.Router()))
-	r.Mount("/api/v1/attachments", authChain(mw)(attachment.Router()))
-	r.Mount("/api/v1/profile", authChain(mw)(profile.Router()))
-	r.Mount("/api/v1/quota", authChain(mw)(quota.Router()))
-	r.Mount("/api/v1/editor", authChain(mw)(editor.Router()))
-	r.Mount("/api/v2/editor", authChain(mw)(editor.RouterV2()))
-	r.Mount("/api/v1/space", authChain(mw)(space.Router()))
-	r.Mount("/api/v1/invite", authChain(mw)(invite.Router()))
-	r.Mount("/api/v1/page", authChain(mw)(page.Router()))
-	r.Mount("/api/v1/comment", authChain(mw)(comment.Router()))
-	r.Mount("/api/v1/notifications", authChain(mw)(notification.NewController().Router()))
+	r.Mount("/api/v1", authChain(false)(auth.Router()))
+	r.Mount("/api/v1/media", authChain(true)(media.Router()))
+	r.Mount("/api/v1/attachments", authChain(true)(attachment.Router()))
+	r.Mount("/api/v1/profile", authChain(false)(profile.Router()))
+	r.Mount("/api/v1/quota", authChain(false)(quota.Router()))
+	r.Mount("/api/v1/editor", authChain(false)(editor.Router()))
+	r.Mount("/api/v2/editor", authChain(false)(editor.RouterV2()))
+	r.Mount("/api/v1/space", authChain(false)(space.Router()))
+	r.Mount("/api/v1/invite", authChain(false)(invite.Router()))
+	r.Mount("/api/v1/page", authChain(false)(page.Router()))
+	r.Mount("/api/v1/comment", authChain(false)(comment.Router()))
+	r.Mount("/api/v1/notifications", authChain(false)(notification.NewController().Router()))
 	r.Mount("/api/v1/user", user.Router())
 	if notificationConfig.AdminEnabled && notificationConfig.AdminToken != "" {
-		r.Mount("/api/v1/admin/email", authChain(mw)(notification.NewAdminController(notificationConfig).Router()))
+		r.Mount("/api/v1/admin/email", authChain(false)(notification.NewAdminController(notificationConfig).Router()))
 	}
 	if quotaConfig.AdminEnabled && quotaConfig.AdminToken != "" {
-		r.Mount("/api/v1/admin/quota", authChain(mw)(quota.NewAdminController(quotaConfig).Router()))
+		r.Mount("/api/v1/admin/quota", authChain(false)(quota.NewAdminController(quotaConfig).Router()))
 	}
 	if assetCleanupConfig.AdminEnabled && assetCleanupConfig.AdminToken != "" {
-		r.Mount("/api/v1/admin/asset-cleanup", authChain(mw)(assetcleanup.NewAdminController(assetCleanupConfig, assetCleanupWorker).Router()))
+		r.Mount("/api/v1/admin/asset-cleanup", authChain(false)(assetcleanup.NewAdminController(assetCleanupConfig, assetCleanupWorker).Router()))
 	}
 	if documentVersionCleanupConfig.AdminEnabled && documentVersionCleanupConfig.AdminToken != "" {
-		r.Mount("/api/v1/admin/document-versions/cleanup", authChain(mw)(docversioncleanup.NewAdminController(documentVersionCleanupConfig, documentVersionCleanupWorker).Router()))
+		r.Mount("/api/v1/admin/document-versions/cleanup", authChain(false)(docversioncleanup.NewAdminController(documentVersionCleanupConfig, documentVersionCleanupWorker).Router()))
 	}
 
 	logger().Info(fmt.Sprintf("Serving on port: %s", port))
