@@ -11,7 +11,7 @@ export function uploadImageData(data: File, pageId: number): Promise<[string, nu
             // upload image
             uploadImage(data, pageId)
                 .then((value) => {
-                    resolve([value.data.data.Name, image.width, image.height]);
+                    resolve([value.data.data.name, image.width, image.height]);
                 })
                 .catch((err) => {
                     reject(err);
