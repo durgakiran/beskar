@@ -1,0 +1,13 @@
+import React from 'react';
+import { createRoot } from 'react-dom/client';
+import { Theme } from '@radix-ui/themes';
+import '@radix-ui/themes/styles.css';
+import '../dist/styles.css';
+import '../dist/index.css';
+import { Editor } from '../dist/index.mjs';
+const src = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="600" height="300"><rect width="600" height="300" fill="steelblue"/><text x="40" y="150" fill="white" font-size="40">Image resize fixture</text></svg>');
+const image = () => ({ type: 'imageBlock', attrs: { src, width: 300, height: 150, caption: 'Preserve this caption', align: 'center' } });
+const p = { type: 'paragraph' };
+const inline = { type: 'paragraph', content: [{ type: 'text', text: 'Before ' }, { type: 'imageInline', attrs: { src, width: 48, height: 24, caption: 'Inline caption example', alt: 'Blue illustration' } }, { type: 'text', text: ' after' }] };
+const content = { type: 'doc', content: [image(), inline, p, { type: 'table', content: [{ type: 'tableRow', content: [{ type: 'tableCell', content: [image(), p] }, { type: 'tableCell', content: [p] }] }] }, p] };
+createRoot(document.getElementById('root')!).render(<Theme><main style={{ maxWidth: 850, margin: '40px auto', padding: 30 }}><section data-fixture="edit"><Editor initialContent={content} onReady={e => { (window as any).imageEditor = e; }} /></section><section data-fixture="view"><Editor editable={false} initialContent={{ type: 'doc', content: [image(), inline] }} onReady={e => { (window as any).imageReader = e; }} /></section></main></Theme>);

@@ -18,7 +18,11 @@
         "test:phase3:coverage": "node ../docker/scripts/produce-phase-3-coverage.mjs ui",
         "test:watch": "vitest",
         "build:workers": "tsc -p tsconfig.worker.json && node -e \"require('fs').copyFileSync('workers/wasm_exec.js', 'public/workers/wasm_exec.js')\"",
-        "watch:workers": "tsc -p tsconfig.worker.json --watch"
+        "watch:workers": "tsc -p tsconfig.worker.json --watch",
+        "predev": "npm --prefix ../packages/editor run build:pdf",
+        "prebuild": "npm --prefix ../packages/editor run build:pdf",
+        "prebuild:desktop": "npm --prefix ../packages/editor run build:pdf",
+        "predev:desktop": "npm --prefix ../packages/editor run build:pdf"
     },
     "keywords": [],
     "author": "",

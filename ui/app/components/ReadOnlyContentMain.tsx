@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { Box, Flex, IconButton, Text } from "@radix-ui/themes";
-import { FiCheck, FiEdit3, FiFileText, FiMessageSquare, FiMoreHorizontal, FiMoreVertical, FiShare2, FiTrash2 } from "react-icons/fi";
+import { FiCheck, FiDownload, FiEdit3, FiFileText, FiMessageSquare, FiMoreHorizontal, FiMoreVertical, FiShare2, FiTrash2 } from "react-icons/fi";
 import { copyTextToClipboard } from "../lib/clipboard";
 
 export interface ReadOnlyBreadcrumb {
@@ -41,6 +41,8 @@ interface ReadOnlyContentMainProps {
     onDelete: () => void;
     children: ReactNode;
     attachments?: ReactNode;
+    onExportPdf?: () => void;
+    exportDisabled?: boolean;
 }
 
 function formatUpdatedAt(timestamp?: string | null): string | null {
@@ -56,11 +58,15 @@ function KebabMenu({
     isCommentsOpen,
     onComments,
     onDelete,
+    onExportPdf,
+    exportDisabled,
 }: {
     canComment: boolean;
     canDelete: boolean;
     isCommentsOpen: boolean;
     onComments: () => void;
+    onExportPdf?: () => void;
+    exportDisabled?: boolean;
     onDelete: () => void;
 }) {
     const [open, setOpen] = useState(false);
@@ -105,6 +111,13 @@ function KebabMenu({
                             {isCommentsOpen ? "Hide comments" : "Comments"}
                         </button>
                     ) : null}
+                    {onExportPdf ? (
+                        <button type="button" disabled={exportDisabled}
+                            className="flex w-full items-center gap-2 rounded-[8px] px-3 py-2 text-left text-[13px] font-medium text-[#605c67] transition-colors hover:bg-[#f5f4f6] disabled:opacity-50"
+                            onClick={() => { setOpen(false); onExportPdf(); }}>
+                            <FiDownload size={14} /> Export PDF
+                        </button>
+                    ) : null}
                     {canDelete ? (
                         <button
                             type="button"
@@ -132,6 +145,8 @@ function MobileActionDock({
     onDelete,
     onOpenComments,
     onShare,
+    onExportPdf,
+    exportDisabled,
 }: {
     capabilities: ReadOnlyCapabilities;
     linkCopied: boolean;
@@ -140,6 +155,8 @@ function MobileActionDock({
     onDelete: () => void;
     onOpenComments: () => void;
     onShare: () => void;
+    onExportPdf?: () => void;
+    exportDisabled?: boolean;
 }) {
     const [actionsOpen, setActionsOpen] = useState(false);
     const ref = useRef<HTMLDivElement>(null);
@@ -182,6 +199,11 @@ function MobileActionDock({
                         <button type="button" className="readonly-action-menu-item" onClick={() => selectAction(onOpenComments)}>
                             <FiMessageSquare size={15} />
                             {isCommentsOpen ? "Hide comments" : "Comments"}
+                        </button>
+                    ) : null}
+                    {onExportPdf ? (
+                        <button type="button" disabled={exportDisabled} className="readonly-action-menu-item disabled:opacity-50" onClick={() => selectAction(onExportPdf)}>
+                            <FiDownload size={15} /> Export PDF
                         </button>
                     ) : null}
                     {capabilities.canDelete ? (
@@ -247,6 +269,8 @@ export default function ReadOnlyContentMain({
     onDelete,
     children,
     attachments,
+    onExportPdf,
+    exportDisabled,
 }: ReadOnlyContentMainProps) {
     const [linkCopied, setLinkCopied] = useState(false);
     const resetCopiedTimer = useRef<number | null>(null);
@@ -342,13 +366,15 @@ export default function ReadOnlyContentMain({
                                             Edit
                                         </button>
                                     ) : null}
-                                    {(capabilities.canDelete || capabilities.canComment) ? (
+                                    {(capabilities.canDelete || capabilities.canComment || onExportPdf) ? (
                                         <KebabMenu
                                             canComment={capabilities.canComment}
                                             canDelete={capabilities.canDelete}
                                             isCommentsOpen={isCommentsOpen}
                                             onComments={onOpenComments}
                                             onDelete={onDelete}
+                                            onExportPdf={onExportPdf}
+                                            exportDisabled={exportDisabled}
                                         />
                                     ) : null}
                                 </Flex>
@@ -402,52 +428,11 @@ export default function ReadOnlyContentMain({
                 onDelete={onDelete}
                 onOpenComments={onOpenComments}
                 onShare={copyPageLink}
+                onExportPdf={onExportPdf}
+                exportDisabled={exportDisabled}
             />
 
             <style>{`
-                .readonly-content-page .beskar-editor {
-                    background: transparent;
-                }
-
-                .readonly-content-page .beskar-editor .editor-content,
-                .readonly-content-page .beskar-editor .ProseMirror {
-                    height: auto;
-                    min-height: 0;
-                }
-
-                .readonly-content-page .beskar-editor .ProseMirror {
-                    margin-top: 0;
-                    font-family: Geist, Inter, system-ui, sans-serif;
-                    color: #221f26;
-                }
-
-                .readonly-content-page .beskar-editor .ProseMirror h1 {
-                    font-size: 2rem;
-                    line-height: 1.2;
-                    margin-top: 0;
-                }
-
-                .readonly-content-page .beskar-editor .ProseMirror h2 {
-                    font-size: 1.25rem;
-                    line-height: 1.25;
-                    margin-top: 1.75rem;
-                }
-
-                .readonly-content-page .beskar-editor .ProseMirror p,
-                .readonly-content-page .beskar-editor .ProseMirror li {
-                    color: #221f26;
-                    font-size: 16px;
-                    line-height: 1.7;
-                }
-
-                .readonly-content-page .beskar-editor .ProseMirror pre {
-                    border: 1px solid #d4d1da;
-                    border-radius: 14px;
-                    background: #f5f4f6;
-                    padding: 16px;
-                    box-shadow: none;
-                }
-
                 .readonly-action-dock {
                     position: fixed;
                     right: 14px;

@@ -1,8 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import PdfExportButton from "../PdfExportButton";
+import { EditorContext } from "../context/editorContext";
+import { useContext, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import FixedMenu from "@editor/fixedMenu/FixedMenu";
-import { Avatar, Box, Button, Flex, HoverCard, IconButton, Text } from "@radix-ui/themes";
-import { FiCheck, FiFileText, FiShare2, FiStar } from "react-icons/fi";
+import { Avatar, Box, Button, DropdownMenu, Flex, HoverCard, IconButton, Text } from "@radix-ui/themes";
+import { FiCheck, FiFileText, FiMoreHorizontal, FiDownload, FiShare2, FiStar } from "react-icons/fi";
 import { copyTextToClipboard } from "../../../lib/clipboard";
 
 interface Collaborator {
@@ -52,6 +54,8 @@ export function Editorheader({
     leaderUserId,
     presenceNotice,
 }: EditorHeaderProps) {
+    const editor = useContext(EditorContext);
+    const [pdfOpen, setPdfOpen] = useState(false);
     const visibleCollaborators = collaborators.slice(0, 3);
 
     const showLeaderStar = (collaboratorId: string) => {
@@ -226,6 +230,14 @@ export function Editorheader({
                     >
                         {linkCopied ? <FiCheck size={15} /> : <FiShare2 size={15} />}
                     </IconButton>
+
+                    <DropdownMenu.Root>
+                        <DropdownMenu.Trigger><IconButton variant="soft" color="gray" radius="full" aria-label="More actions"><FiMoreHorizontal size={16} /></IconButton></DropdownMenu.Trigger>
+                        <DropdownMenu.Content>
+                            <DropdownMenu.Item disabled={!isEditorReady || !editor} onSelect={() => setPdfOpen(true)}><FiDownload size={14} /> Export PDF</DropdownMenu.Item>
+                        </DropdownMenu.Content>
+                    </DropdownMenu.Root>
+                    <PdfExportButton editor={editor} title={pageTitle} spaceId={spaceId} disabled={!isEditorReady} open={pdfOpen} onOpenChange={setPdfOpen} hideTrigger />
 
                     <Button
                         size="2"

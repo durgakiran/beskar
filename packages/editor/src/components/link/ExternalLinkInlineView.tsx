@@ -1,10 +1,11 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as Toolbar from '@radix-ui/react-toolbar';
 import * as Separator from '@radix-ui/react-separator';
 import { NodeViewWrapper } from '@tiptap/react';
 import type { NodeViewProps } from '@tiptap/react';
 import { useFloating, flip, shift, offset, autoUpdate } from '@floating-ui/react';
-import { FiExternalLink, FiGlobe, FiTrash2 } from 'react-icons/fi';
+import { FiExternalLink, FiGlobe, FiTrash2, FiRefreshCw } from 'react-icons/fi';
+import { resolveLinkMetadata } from '../../utils/linkMetadata';
 import type { ExternalLinkHandler } from '../../types';
 
 function getHandler(editor: NodeViewProps['editor']): ExternalLinkHandler | undefined {
@@ -23,7 +24,7 @@ export function ExternalLinkInlineView({ node, editor, updateAttributes, getPos,
   const href = String(node.attrs.href ?? '');
   const title = String(node.attrs.title ?? '');
   const siteName = String(node.attrs.siteName ?? '');
-  const error = String(node.attrs.error ?? '');
+  const [error, setError] = useState('');
   const handler = getHandler(editor);
 
   const [resolvedTitle, setResolvedTitle] = useState(title || '');
@@ -36,53 +37,64 @@ export function ExternalLinkInlineView({ node, editor, updateAttributes, getPos,
     whileElementsMounted: autoUpdate,
   });
 
-  useEffect(() => {
-    if (!handler || !href || title) {
-      setResolvedTitle(title || '');
-      setResolvedSiteName(siteName || '');
-      setIsLoading(false);
-      return;
-    }
+  const current = useRef({ node, updateAttributes });
+  current.current = { node, updateAttributes };
+  const generation = useRef(0);
+  const previousHref = useRef(href);
 
-    let cancelled = false;
-
-    async function loadMetadata() {
-      setIsLoading(true);
-      try {
-        const metadata = await handler.getLinkMetadata(href);
-        if (cancelled || !metadata) return;
-
-        setResolvedTitle(metadata.title || '');
-        setResolvedSiteName(metadata.siteName || '');
-        updateAttributes({
-          title: metadata.title || '',
-          siteName: metadata.siteName || '',
-          error: '',
+  const loadMetadata = useCallback(async (force = false) => {
+    if (!handler || !href) return;
+    const request = ++generation.current;
+    setIsLoading(true);
+    setError('');
+    try {
+      const metadata = await resolveLinkMetadata(handler, href, force);
+      if (request !== generation.current) return;
+      setResolvedTitle(metadata.title || '');
+      setResolvedSiteName(metadata.siteName || '');
+      if (editor.isEditable) {
+        current.current.updateAttributes({
+          title: metadata.title || '', siteName: metadata.siteName || '',
+          metadataHref: href, metadataResolved: true, error: '',
         });
-      } catch {
-        if (!cancelled) {
-          updateAttributes({ error: 'Could not resolve link metadata' });
-        }
-      } finally {
-        if (!cancelled) {
-          setIsLoading(false);
-        }
       }
+    } catch {
+      if (request === generation.current) setError('Preview unavailable');
+    } finally {
+      if (request === generation.current) setIsLoading(false);
     }
+  }, [handler, href, editor]);
 
-    void loadMetadata();
-    return () => {
-      cancelled = true;
-    };
-  }, [handler, href, siteName, title, updateAttributes]);
+  useEffect(() => {
+    const attrs = current.current.node.attrs;
+    const changed = previousHref.current !== href || Boolean(attrs.metadataHref && attrs.metadataHref !== href);
+    previousHref.current = href;
+    setResolvedTitle(changed ? '' : attrs.title || '');
+    setResolvedSiteName(changed ? '' : attrs.siteName || '');
+    setError('');
+    setIsLoading(false);
+    if (changed && editor.isEditable) {
+      current.current.updateAttributes({ title: '', siteName: '', metadataHref: href, metadataResolved: false, error: '' });
+    }
+    if (changed || !(attrs.title || attrs.metadataResolved)) void loadMetadata();
+    return () => { generation.current++; };
+  }, [href, handler, editor, loadMetadata]);
+
+  // Metadata can also arrive through collaboration without starting another fetch.
+  useEffect(() => {
+    if (node.attrs.metadataHref !== href) return;
+    if (title || node.attrs.metadataResolved) {
+      setResolvedTitle(title);
+      setResolvedSiteName(siteName);
+    }
+  }, [href, title, siteName, node.attrs.metadataHref, node.attrs.metadataResolved]);
 
   const providerLabel = useMemo(() => {
-    return resolvedSiteName || siteName || getHostnameLabel(href);
+    return resolvedSiteName || getHostnameLabel(href);
   }, [href, resolvedSiteName, siteName]);
 
   const titleLabel = useMemo(() => {
     if (resolvedTitle) return resolvedTitle;
-    if (isLoading) return 'Resolving title...';
     return href;
   }, [href, isLoading, resolvedTitle]);
 
@@ -108,6 +120,10 @@ export function ExternalLinkInlineView({ node, editor, updateAttributes, getPos,
             <FiExternalLink size={16} />
             <span>Open</span>
           </Toolbar.Button>
+          {handler && <Toolbar.Button className="editor-floating-toolbar-button" onClick={() => void loadMetadata(true)} disabled={isLoading} aria-label={error ? 'Retry link preview' : 'Refresh link preview'}>
+            <FiRefreshCw size={16} />
+            <span>{isLoading ? 'Loading preview…' : error ? 'Retry preview' : 'Refresh preview'}</span>
+          </Toolbar.Button>}
           <Toolbar.Button className="editor-floating-toolbar-button" onClick={deleteNode} aria-label="Delete link chip">
             <FiTrash2 size={16} />
             <span>Delete</span>
@@ -122,9 +138,10 @@ export function ExternalLinkInlineView({ node, editor, updateAttributes, getPos,
       <NodeViewWrapper as="span" className="external-link-inline-wrapper" contentEditable={false} ref={refs.setReference}>
         <button
           type="button"
-          className={`external-link-inline-chip${error ? ' is-error' : ''}`}
+          className={`external-link-inline-chip${error && editor.isEditable ? ' is-error' : ''}`}
           onClick={openInNewTab}
-          title={href || titleLabel}
+          title={`${href || titleLabel}${error && editor.isEditable ? ' — Preview unavailable; select to retry' : ''}`}
+          aria-busy={isLoading}
         >
           <FiGlobe aria-hidden="true" className="external-link-inline-icon" />
           <span className="external-link-inline-site">{providerLabel}</span>

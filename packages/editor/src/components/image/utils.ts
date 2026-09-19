@@ -47,6 +47,12 @@ export function copyImageBlock(editor: Editor): boolean {
       parentNode: $from.parent?.type.name,
     });
     
+    const selected = state.doc.nodeAt(state.selection.from);
+    if (selected?.type.name === 'imageBlock') {
+      // A node selection resolves before the image, so it is not an ancestor of $from.
+      return document.execCommand('copy');
+    }
+
     let imageBlockNode = null;
     let imageBlockPos = -1;
     

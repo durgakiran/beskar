@@ -7,6 +7,8 @@ import { getBrowserAppBaseUrl } from '../../nodes/internalDocumentUrl';
 
 export interface Command {
   name: string;
+  /** Schema nodes required for this action. */
+  requiredNodes?: string[];
   label: string;
   description: string;
   aliases?: string[];
@@ -74,6 +76,7 @@ export const GROUPS: Group[] = [
     commands: [
       {
         name: 'heading1',
+        requiredNodes: ['heading'],
         label: 'Heading 1',
         icon: 'H1',
         description: 'Large section heading',
@@ -85,6 +88,7 @@ export const GROUPS: Group[] = [
       },
       {
         name: 'heading2',
+        requiredNodes: ['heading'],
         label: 'Heading 2',
         icon: 'H2',
         description: 'Medium section heading',
@@ -96,6 +100,7 @@ export const GROUPS: Group[] = [
       },
       {
         name: 'heading3',
+        requiredNodes: ['heading'],
         label: 'Heading 3',
         icon: 'H3',
         description: 'Small section heading',
@@ -107,6 +112,7 @@ export const GROUPS: Group[] = [
       },
       {
         name: 'bulletList',
+        requiredNodes: ['bulletList'],
         label: 'Bullet List',
         icon: '•',
         description: 'Create a bulleted list',
@@ -118,6 +124,7 @@ export const GROUPS: Group[] = [
       },
       {
         name: 'numberedList',
+        requiredNodes: ['orderedList'],
         label: 'Numbered List',
         icon: '1.',
         description: 'Create a numbered list',
@@ -129,6 +136,7 @@ export const GROUPS: Group[] = [
       },
       {
         name: 'taskList',
+        requiredNodes: ['taskList'],
         label: 'Task List',
         icon: '☐',
         description: 'Create a task list with checkboxes',
@@ -140,6 +148,7 @@ export const GROUPS: Group[] = [
       },
       {
         name: 'blockquote',
+        requiredNodes: ['blockquote'],
         label: 'Quote',
         icon: '"',
         description: 'Add a quote block',
@@ -151,6 +160,7 @@ export const GROUPS: Group[] = [
       },
       {
         name: 'codeBlock',
+        requiredNodes: ['codeBlock'],
         label: 'Code Block',
         icon: '</>',
         description: 'Add a code block',
@@ -162,6 +172,7 @@ export const GROUPS: Group[] = [
       },
       {
         name: 'mathBlock',
+        requiredNodes: ['mathBlock'],
         label: 'Math Formula',
         icon: '∑',
         description: 'Add a LaTeX math formula',
@@ -173,6 +184,7 @@ export const GROUPS: Group[] = [
       },
       {
         name: 'tableOfContents',
+        requiredNodes: ['tableOfContents'],
         label: 'Table of Contents',
         icon: '📑',
         description: 'Insert a table of contents',
@@ -184,6 +196,7 @@ export const GROUPS: Group[] = [
       },
       {
         name: 'childPagesList',
+        requiredNodes: ['childPagesList'],
         label: 'Child Pages',
         icon: '▦',
         description: 'List child pages for this page',
@@ -196,6 +209,7 @@ export const GROUPS: Group[] = [
       },
       {
         name: 'table',
+        requiredNodes: ['table'],
         label: 'Table',
         icon: '⊞',
         description: 'Insert a 3x3 table',
@@ -207,6 +221,7 @@ export const GROUPS: Group[] = [
       },
       {
         name: 'note',
+        requiredNodes: ['noteBlock'],
         label: 'Note Block',
         icon: '📝',
         description: 'Add a highlighted note with custom styling',
@@ -220,6 +235,7 @@ export const GROUPS: Group[] = [
       },
       {
         name: 'horizontalRule',
+        requiredNodes: ['horizontalRule'],
         label: 'Divider',
         icon: '—',
         description: 'Insert a horizontal line',
@@ -231,6 +247,7 @@ export const GROUPS: Group[] = [
       },
       {
         name: 'details',
+        requiredNodes: ['details'],
         label: 'Details',
         icon: '▼',
         description: 'Create a collapsible details block',
@@ -247,7 +264,7 @@ export const GROUPS: Group[] = [
                   {
                     type: 'text',
                     text: 'This is a summary',
-                    marks: [{ type: 'bold' }],
+                    marks: editor.schema.marks.bold ? [{ type: 'bold' }] : [],
                   },
                 ],
               },
@@ -272,6 +289,7 @@ export const GROUPS: Group[] = [
     commands: [
       {
         name: 'twoColumns',
+        requiredNodes: ['columns'],
         label: '2 Columns',
         icon: '◫',
         description: 'Create a 2-column layout',
@@ -305,6 +323,7 @@ export const GROUPS: Group[] = [
       },
       {
         name: 'threeColumns',
+        requiredNodes: ['columns'],
         label: '3 Columns',
         icon: '▦',
         description: 'Create a 3-column layout',
@@ -349,6 +368,7 @@ export const GROUPS: Group[] = [
     commands: [
       {
         name: 'internalDocInline',
+        requiredNodes: ['internalDocInline'],
         label: 'Internal Link',
         icon: '📄',
         description: 'Insert an inline link to another document or whiteboard',
@@ -367,6 +387,7 @@ export const GROUPS: Group[] = [
       },
       {
         name: 'status',
+        requiredNodes: ['statusBadge'],
         label: 'Status Badge',
         icon: '🏷️',
         description: 'Insert an inline status badge',
@@ -384,6 +405,7 @@ export const GROUPS: Group[] = [
       },
       {
         name: 'date',
+        requiredNodes: ['dateInline'],
         label: 'Date',
         icon: '📅',
         description: 'Insert an inline date',
@@ -407,6 +429,7 @@ export const GROUPS: Group[] = [
     commands: [
       {
         name: 'image',
+        requiredNodes: ['imageBlock'],
         label: 'Image',
         icon: '🖼️',
         description: 'Upload and display an image',
@@ -418,6 +441,7 @@ export const GROUPS: Group[] = [
       },
       {
         name: 'imageInline',
+        requiredNodes: ['imageInline'],
         label: 'Inline Image',
         icon: '🖼️',
         description: 'Insert an image inline within text',
@@ -428,6 +452,7 @@ export const GROUPS: Group[] = [
       },
       {
         name: 'fileAttachment',
+        requiredNodes: ['attachmentInline'],
         label: 'File attachment',
         icon: '📎',
         description: 'Upload a file (PDF, zip, spreadsheet, …)',
@@ -473,6 +498,7 @@ export const GROUPS: Group[] = [
       },
       {
         name: 'embed',
+        requiredNodes: ['embedBlock'],
         label: 'Embed',
         icon: '⊞',
         description: 'Embed Figma, Miro, Loom, Airtable, and more',
@@ -484,6 +510,7 @@ export const GROUPS: Group[] = [
       },
       {
         name: 'embedVideo',
+        requiredNodes: ['embedBlock'],
         label: 'Embed Video',
         icon: '▶',
         description: 'Embed a YouTube, Vimeo, or Loom video',

@@ -59,6 +59,7 @@ export type {
   ImageAPIHandler,
   ImageUploadResult,
   AttachmentAPIHandler,
+  AttachmentPreviewHandler,
   AttachmentUploadResult,
   AttachmentUploadOptions,
   AttachmentRef,
@@ -83,7 +84,9 @@ export type {
 export { useEditor, useDebounce } from './hooks';
 
 // Extensions
-export { getExtensions, CustomAttributes, CommentMark } from './extensions';
+export { getExtensions, CustomAttributes, CommentMark, EDITOR_FEATURE_EXTENSIONS, MANDATORY_EDITOR_EXTENSIONS, resolveEditorFeatures } from './extensions';
+export type { GetExtensionsOptions } from './extensions';
+export type { EditorFeature, EditorFeatureOptions } from './extensions/features';
 
 // Utilities
 export { useDebounce as useDebounceUtil } from './utils/debounce';

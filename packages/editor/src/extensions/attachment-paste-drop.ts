@@ -66,7 +66,7 @@ export const AttachmentPasteDrop = Extension.create<AttachmentPasteDropOptions>(
     const options = this.options;
 
     // Track previous list to avoid spurious calls
-    let prevIds = '';
+    let previous = '';
 
     return [
       // ── Doc-change watcher: emit onAttachmentsChange ──────────────────────
@@ -95,9 +95,9 @@ export const AttachmentPasteDrop = Extension.create<AttachmentPasteDropOptions>(
               }
             });
 
-            const ids = refs.map((r) => r.attachmentId).join(',');
-            if (ids === prevIds) return;
-            prevIds = ids;
+            const snapshot = JSON.stringify(refs);
+            if (snapshot === previous) return;
+            previous = snapshot;
             cb(refs);
           },
         }),

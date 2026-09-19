@@ -84,10 +84,10 @@
   --editor-info: var(--editor-accent);
   
   /* Code Block Colors (light theme) */
-  --editor-code-bg: #fafafa;
-  --editor-code-text: #1f1f1f;
-  --editor-code-inline-bg: #f0f0f0;
-  --editor-code-inline-text: #1f1f1f;
+  --editor-code-bg: var(--gray-2, #fafafa);
+  --editor-code-text: var(--gray-12, #1f1f1f);
+  --editor-code-inline-bg: var(--gray-3, #f0f0f0);
+  --editor-code-inline-text: var(--gray-12, #1f1f1f);
   
   /* Caret Color */
   --editor-caret: var(--editor-text-primary);
@@ -95,7 +95,8 @@
 
 /* Dark Mode Overrides */
 .dark,
-[data-theme="dark"] {
+[data-theme="dark"],
+.beskar-editor:is(.dark *, [data-theme="dark"] *) {
   --editor-text-primary: var(--gray-12, #fcfcfc);
   --editor-text-secondary: var(--gray-11, #c8c8c8);
   --editor-text-tertiary: var(--gray-9, #8d8d8d);
@@ -111,6 +112,16 @@
   --editor-border-default: var(--gray-6, #3a3a3a);
   --editor-border-strong: var(--gray-8, #525252);
   
+  --editor-code-bg: var(--gray-2, #1a1a1a);
+  --editor-code-text: var(--gray-12, #eceef0);
+  --editor-code-inline-bg: var(--gray-3, #262626);
+  --editor-code-inline-text: var(--gray-12, #eceef0);
+  --editor-syntax-comment: #8b949e;
+  --editor-syntax-variable: #ff7b72;
+  --editor-syntax-number: #79c0ff;
+  --editor-syntax-string: #a5d6ff;
+  --editor-syntax-title: #d2a8ff;
+  --editor-syntax-keyword: #ff7b72;
   --editor-drag-handle-color: var(--gray-10, #999999);
   
   --editor-caret: var(--editor-text-primary);
@@ -138,3 +149,17 @@
    when using those themes, so consumers just need to map them.
 */
 
+
+/* Inherited content tokens: clients set these once on a shared host in either mode. */
+:root {
+  --editor-font-family: var(--default-font-family, ui-sans-serif, system-ui, sans-serif);
+  --editor-font-size: 1rem;
+  --editor-line-height: 1.625;
+  --editor-block-gap: 0.75rem;
+  --editor-section-gap: 1.5rem;
+  --editor-divider-gap: 1rem;
+  --editor-code-font-family: 'JetBrainsMono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  --editor-code-padding: 0.75rem 1rem;
+  --editor-code-radius: 0.5rem;
+  --editor-caption-line-height: 1.4;
+}

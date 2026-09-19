@@ -6,6 +6,7 @@
 import { Node, mergeAttributes } from '@tiptap/core';
 import { ReactNodeViewRenderer } from '@tiptap/react';
 import { Plugin } from '@tiptap/pm/state';
+import { blockMathInputRule } from '../extensions/math-input-rules';
 import { MathBlockView } from '../components/math/MathBlockView';
 
 export interface MathBlockAttributes {
@@ -60,9 +61,13 @@ export const MathBlock = Node.create({
           'data-display-mode': node.attrs.displayMode,
         }
       ),
-      0,
+      node.attrs.latex,
     ];
   },
+
+  renderText({ node }) { return `$$\n${node.attrs.latex}\n$$`; },
+
+  addInputRules() { return [blockMathInputRule(this.type)]; },
 
   addNodeView() {
     return ReactNodeViewRenderer(MathBlockView);
@@ -76,7 +81,7 @@ export const MathBlock = Node.create({
           return commands.insertContent({
             type: this.name,
             attrs: {
-              latex: attributes?.latex || 'c = \\pm\\sqrt{a^2 + b^2}',
+              latex: attributes?.latex ?? 'c = \\pm\\sqrt{a^2 + b^2}',
               displayMode: attributes?.displayMode ?? true,
             },
           });

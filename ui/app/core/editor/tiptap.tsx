@@ -1,3 +1,4 @@
+import { attachmentPreview } from "./attachmentPreview";
 import { contentUrl } from 'app/core/whiteboard/v2/api';
 import React, { useCallback } from "react";
 import type { Editor, JSONContent } from "@tiptap/core";
@@ -29,7 +30,6 @@ import {
     type InternalResourceType,
     TiptapEditor,
     TextFormattingMenu,
-    CodeBlockFloatingMenu,
 } from "@durgakiran/editor";
 import { uploadAttachmentData, downloadAttachmentBlob } from "../http/uploadAttachmentData";
 import { WebrtcProvider } from "y-webrtc";
@@ -38,6 +38,36 @@ import { makeCommentApiHandler } from "../http/commentApiHandler";
 import { useCommentEvents } from "../hooks/useCommentEvents";
 import { mapUploadErrorMessage } from "../queries/quota";
 import { CommentInputPopover, CommentGutter, CommentThreadCard, CommentSidePanel, OverlapDisambiguationPopover, type CommentThread } from "@durgakiran/editor";
+
+// Stable across editor mounts so preview requests and failures can be shared.
+const sharedExternalLinkHandler: ExternalLinkHandler = (() => {
+        const baseUrl = import.meta.env.VITE_USER_SERVER_URL?.replace(/\/+$/, "") || "";
+
+        const fetchJson = async <T,>(path: string, signal?: AbortSignal): Promise<T> => {
+            const response = await fetch(`${baseUrl}/${path}`, {
+                credentials: "include",
+                signal,
+                headers: {
+                    "Content-Type": "application/json",
+                },
+            });
+
+            if (!response.ok) {
+                const error: Error & { status?: number } = new Error(`Request failed: ${response.status}`);
+                error.status = response.status;
+                throw error;
+            }
+
+            return response.json() as Promise<T>;
+        };
+
+        return {
+            async getLinkMetadata(url: string, signal?: AbortSignal): Promise<ExternalLinkMetadata | null> {
+                const response = await fetchJson<{ data?: ExternalLinkMetadata }>(`editor/external-link/metadata?url=${encodeURIComponent(url)}`, signal);
+                return response.data || null;
+            },
+        };
+})();
 
 interface TipTapProps {
     setEditorContext: (editorContext: Editor) => void;
@@ -202,6 +232,7 @@ export function TipTap({
                     throw error;
                 }
             },
+            previewAttachment: attachmentPreview,
             downloadAttachment: async ({ url, fileName }) => {
                 await downloadAttachmentBlob(url, fileName);
             },
@@ -300,35 +331,7 @@ export function TipTap({
         };
     }, [spaceId]);
 
-    const externalLinkHandler: ExternalLinkHandler | undefined = useMemo(() => {
-        if (!spaceId) return undefined;
-
-        const baseUrl = import.meta.env.VITE_USER_SERVER_URL?.replace(/\/+$/, "") || "";
-
-        const fetchJson = async <T,>(path: string): Promise<T> => {
-            const response = await fetch(`${baseUrl}/${path}`, {
-                credentials: "include",
-                headers: {
-                    "Content-Type": "application/json",
-                },
-            });
-
-            if (!response.ok) {
-                const error: Error & { status?: number } = new Error(`Request failed: ${response.status}`);
-                error.status = response.status;
-                throw error;
-            }
-
-            return response.json() as Promise<T>;
-        };
-
-        return {
-            async getLinkMetadata(url: string): Promise<ExternalLinkMetadata | null> {
-                const response = await fetchJson<{ data?: ExternalLinkMetadata }>(`editor/external-link/metadata?url=${encodeURIComponent(url)}`);
-                return response.data || null;
-            },
-        };
-    }, [spaceId]);
+    const externalLinkHandler = spaceId ? sharedExternalLinkHandler : undefined;
 
     const childPagesHandler: ChildPagesHandler | undefined = useMemo(() => {
         if (!spaceId || !Number.isFinite(id) || id < 1) return undefined;
@@ -567,7 +570,7 @@ export function TipTap({
 
     return (
         <>
-            <div ref={menuContainerRef} className="beskar-editor">
+            <div ref={menuContainerRef} className="document-editor-surface">
                 {/* {editor && (
                 <Flex justify="end" gap="3" align="center" style={{ marginBottom: "1rem" }}>
                     <Button onClick={() => setIsSidePanelOpen(true)} variant="soft" color="indigo" style={{ cursor: 'pointer' }}>
@@ -610,7 +613,6 @@ export function TipTap({
                         onAttachmentRejected={handleAttachmentRejected}
                         allowedMimeAccept={ATTACHMENT_ACCEPT}
                         onAttachmentsChange={onDocAttachmentsChange}
-                        extensions={[]}
                         editable={editable}
                         placeholder={EDITOR_PLACEHOLDER}
                         onUpdate={editedDataFn}
@@ -641,7 +643,6 @@ export function TipTap({
                             <>
                                 {/* Table Floating Menu */}
                                 <TableFloatingMenu editor={editor} />
-                                <CodeBlockFloatingMenu editor={editor} />
                             </>
                         )}
 

@@ -1,3 +1,5 @@
+import PdfExportButton from "@editor/PdfExportButton";
+import type { Editor } from "@tiptap/core";
 import WhiteboardHistoryV2 from '@components/WhiteboardHistoryV2';
 import WhiteboardDeleteV2 from '@components/WhiteboardDeleteV2';
 
@@ -43,6 +45,8 @@ export default function Page() {
     const [workerInitiated, setWorkerInitiated] = useState(false);
     const [workerError, setWorkerError] = useState<string | null>(null);
     const [content, setContent] = useState();
+    const [pdfOpen, setPdfOpen] = useState(false);
+    const [pdfEditor, setPdfEditor] = useState<Editor | null>(null);
     const [publishedTitle, setPublishedTitle] = useState("");
     const [isSidePanelOpen, setIsSidePanelOpen] = useState(false);
     const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -165,7 +169,7 @@ export default function Page() {
                 key={page}
                 updateContent={(nextContent, nextTitle) => console.log(nextContent, nextTitle)}
                 title={title}
-                setEditorContext={() => { }}
+                setEditorContext={setPdfEditor}
                 editable={false}
                 content={content}
                 pageId={page}
@@ -217,8 +221,11 @@ export default function Page() {
 
     return (
         <>
+            {showShell && pageType === "document" && content ? <PdfExportButton key={`${spaceId}:${page}`} editor={pdfEditor} title={title} spaceId={spaceId} published open={pdfOpen} onOpenChange={setPdfOpen} hideTrigger /> : null}
             {showShell ? (
                 <ReadOnlyContentMain
+                    onExportPdf={pageType === "document" && content ? () => setPdfOpen(true) : undefined}
+                    exportDisabled={!pdfEditor || pdfEditor.isDestroyed}
                     spaceId={spaceId}
                     pageId={page}
                     title={title}

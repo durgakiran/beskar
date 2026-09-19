@@ -108,22 +108,22 @@
 }
 
 /* Dark mode support - uses theme variables which are already overridden */
-.dark .color-picker-popover {
+:is(.dark, [data-theme="dark"]) .color-picker-popover {
   background: var(--editor-bg-primary, #1f2937);
   border-color: var(--editor-border-default, #374151);
 }
 
-.dark .color-picker-label {
+:is(.dark, [data-theme="dark"]) .color-picker-label {
   color: var(--editor-text-tertiary, #9ca3af);
 }
 
-.dark .color-picker-remove {
+:is(.dark, [data-theme="dark"]) .color-picker-remove {
   background: var(--editor-bg-primary, #1f2937);
   border-color: var(--editor-border-default, #374151);
   color: var(--editor-text-tertiary, #9ca3af);
 }
 
-.dark .color-picker-remove:hover {
+:is(.dark, [data-theme="dark"]) .color-picker-remove:hover {
   background: var(--editor-bg-secondary, #374151);
   border-color: var(--editor-border-strong, #4b5563);
   color: var(--editor-text-primary, #d1d5db);

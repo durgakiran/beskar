@@ -1,0 +1,57 @@
+// Playwright CLI run-code body; serve this package with Vite after building.
+async (page) => {
+  const assert = (value, message) => { if (!value) throw new Error(message); };
+  await page.goto('http://127.0.0.1:5186/tests/dates.html');
+  const pill = page.locator('[data-fixture="edit"] .date-inline');
+  const saved = () => page.evaluate(() => window.dateEditor.getJSON().content[0].content.find(n => n.type === 'dateInline').attrs.value);
+  await pill.click();
+  await page.getByRole('button', { name: 'Tomorrow', exact: true }).click();
+  const tomorrow = await page.evaluate(() => {
+    const d = new Date(); d.setDate(d.getDate() + 1);
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  });
+  assert(await saved() === tomorrow, 'Tomorrow must ignore the selected future date');
+  await page.getByRole('button', { name: 'Tomorrow', exact: true }).click();
+  assert(await saved() === tomorrow, 'Repeated Tomorrow must not advance');
+  const input = page.getByRole('textbox', { name: 'Date (YYYY-MM-DD)', exact: true });
+  await input.fill('2024-02-29'); await input.press('Enter');
+  assert(await saved() === '2024-02-29', 'direct leap-day entry');
+  await input.fill('2026-02-29'); await input.press('Enter');
+  assert(await page.getByRole('alert').isVisible(), 'invalid date feedback');
+  assert(await saved() === '2024-02-29', 'invalid date cannot corrupt document');
+  await input.fill('2026-12-31'); await input.press('Enter');
+  await page.locator('[data-date="2026-12-31"]').focus();
+  await page.keyboard.press('ArrowRight');
+  assert(await page.locator('[data-date="2027-01-01"]').evaluate(e => e === document.activeElement), 'arrow crosses year and keeps focus');
+  assert(await saved() === '2026-12-31', 'navigation alone must not save');
+  await page.keyboard.press('Enter');
+  assert(await saved() === '2027-01-01', 'Enter selects focused date');
+  await page.keyboard.press('Escape');
+  assert(await page.getByRole('dialog').count() === 0, 'Escape closes');
+  assert(await saved() === '2027-01-01', 'Escape preserves saved selection');
+  await pill.click();
+  await input.fill('2028-04-12');
+  await page.locator('main').click({ position: { x: 5, y: 5 } });
+  assert(await saved() === '2028-04-12', 'outside click saves typed date');
+  await pill.click();
+  await input.fill('2027-01-01'); await input.press('Escape');
+  assert(await saved() === '2027-01-01', 'Escape saves a valid typed date');
+  await pill.click();
+  const year = page.getByRole('spinbutton', { name: 'Calendar year' });
+  await year.fill('2040'); await year.press('Enter');
+  assert(await page.locator('[data-date="2040-01-01"]').count() === 1, 'year jump');
+  assert(await saved() === '2027-01-01', 'year browsing alone must not save');
+  await input.fill('0099-12-31'); await input.press('Enter');
+  assert(await saved() === '0099-12-31', 'early year entry');
+  await page.locator('[data-date="0099-12-31"]').focus(); await page.keyboard.press('ArrowRight'); await page.keyboard.press('Space');
+  assert(await saved() === '0100-01-01', 'early year navigation');
+  await page.keyboard.press('Escape');
+  const reader = page.locator('[data-fixture="view"]');
+  assert(await reader.locator('.date-inline[role="button"]').count() === 0, 'read-only pill is not editable');
+  await reader.locator('.date-inline').click();
+  assert(await page.getByRole('dialog').count() === 0, 'reader click cannot edit');
+  await pill.click(); await page.getByRole('button', { name: 'Clear', exact: true }).click();
+  assert(await pill.count() === 0, 'Clear removes date');
+  assert(await page.locator('[data-fixture="edit"] .tiptap').innerText().then(t => t.includes('Due') && t.includes('next.')), 'surrounding text preserved');
+  return 'PASS: Tomorrow, repeated shortcut, direct entry, invalid dates, leap day, year navigation, keyboard selection, Escape, year jump, early years, read-only, Clear';
+}

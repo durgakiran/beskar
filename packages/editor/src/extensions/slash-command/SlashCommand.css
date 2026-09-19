@@ -95,7 +95,7 @@
 }
 
 /* Dark mode - uses theme variables which are already overridden */
-.dark .slash-command-menu {
+:is(.dark, [data-theme="dark"]) .slash-command-menu {
   background: var(--editor-bg-primary, rgb(31, 31, 31));
   border-color: var(--editor-border-subtle, rgba(255, 255, 255, 0.1));
 }
@@ -127,19 +127,19 @@
 }
 
 /* Dark mode tippy theme */
-.dark .tippy-box[data-theme~='slash-command'][data-placement^='top'] > .tippy-arrow::before {
+:is(.dark, [data-theme="dark"]) .tippy-box[data-theme~='slash-command'][data-placement^='top'] > .tippy-arrow::before {
   border-top-color: var(--editor-bg-primary, rgb(31, 31, 31));
 }
 
-.dark .tippy-box[data-theme~='slash-command'][data-placement^='bottom'] > .tippy-arrow::before {
+:is(.dark, [data-theme="dark"]) .tippy-box[data-theme~='slash-command'][data-placement^='bottom'] > .tippy-arrow::before {
   border-bottom-color: var(--editor-bg-primary, rgb(31, 31, 31));
 }
 
-.dark .tippy-box[data-theme~='slash-command'][data-placement^='left'] > .tippy-arrow::before {
+:is(.dark, [data-theme="dark"]) .tippy-box[data-theme~='slash-command'][data-placement^='left'] > .tippy-arrow::before {
   border-left-color: var(--editor-bg-primary, rgb(31, 31, 31));
 }
 
-.dark .tippy-box[data-theme~='slash-command'][data-placement^='right'] > .tippy-arrow::before {
+:is(.dark, [data-theme="dark"]) .tippy-box[data-theme~='slash-command'][data-placement^='right'] > .tippy-arrow::before {
   border-right-color: var(--editor-bg-primary, rgb(31, 31, 31));
 }
 

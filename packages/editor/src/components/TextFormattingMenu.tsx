@@ -59,8 +59,8 @@ export function TextFormattingMenu({
 
   useEffect(() => {
     const updateColors = () => {
-      setTextColor(editor.getAttributes('textStyle').color);
-      setHighlightColor(editor.getAttributes('highlight').color);
+      setTextColor(editor.schema.marks.textStyle ? editor.getAttributes('textStyle').color : undefined);
+      setHighlightColor(editor.schema.marks.highlight ? editor.getAttributes('highlight').color : undefined);
     };
 
     const updateCommentState = () => {
@@ -89,97 +89,114 @@ export function TextFormattingMenu({
     };
   }, [editor]);
 
-  if (!isFormattingEnabled) {
-    if (!commentHandler) {
-      return null;
-    }
-  }
+  const canComment = Boolean(commentHandler && editor.schema.marks.comment);
+
+  const hasFormattingActions = Boolean(
+    editor.schema.marks.bold || editor.schema.marks.italic || editor.schema.marks.underline ||
+    editor.schema.marks.code || editor.commands.setColor || editor.commands.setHighlight ||
+    editor.schema.nodes.inlineMath,
+  );
+  if (!(isFormattingEnabled && hasFormattingActions) && !canComment) return null;
 
   return (
     <BubbleMenu editor={editor}>
       {isFormattingEnabled && (
         <>
           {/* Bold */}
-          <BubbleMenuButton
-            onClick={() => editor.chain().focus().toggleBold().run()}
-            isActive={editor.isActive('bold')}
-            title="Bold (Cmd+B)"
-          >
-            <FiBold />
-          </BubbleMenuButton>
+          {Boolean(editor.schema.marks.bold) && (
+            <BubbleMenuButton
+              onClick={() => editor.chain().focus().toggleBold().run()}
+              isActive={editor.isActive('bold')}
+              title="Bold (Cmd+B)"
+            >
+              <FiBold />
+            </BubbleMenuButton>
+          )}
 
           {/* Italic */}
-          <BubbleMenuButton
-            onClick={() => editor.chain().focus().toggleItalic().run()}
-            isActive={editor.isActive('italic')}
-            title="Italic (Cmd+I)"
-          >
-            <FiItalic />
-          </BubbleMenuButton>
+          {Boolean(editor.schema.marks.italic) && (
+            <BubbleMenuButton
+              onClick={() => editor.chain().focus().toggleItalic().run()}
+              isActive={editor.isActive('italic')}
+              title="Italic (Cmd+I)"
+            >
+              <FiItalic />
+            </BubbleMenuButton>
+          )}
 
           {/* Underline */}
-          <BubbleMenuButton
-            onClick={() => editor.chain().focus().toggleUnderline().run()}
-            isActive={editor.isActive('underline')}
-            title="Underline (Cmd+U)"
-          >
-            <FiUnderline />
-          </BubbleMenuButton>
+          {Boolean(editor.schema.marks.underline) && (
+            <BubbleMenuButton
+              onClick={() => editor.chain().focus().toggleUnderline().run()}
+              isActive={editor.isActive('underline')}
+              title="Underline (Cmd+U)"
+            >
+              <FiUnderline />
+            </BubbleMenuButton>
+          )}
 
           {/* Inline Code */}
-          <BubbleMenuButton
-            onClick={() => editor.chain().focus().toggleCode().run()}
-            isActive={editor.isActive('code')}
-            title="Inline Code (Cmd+E)"
-          >
-            <FiCode />
-          </BubbleMenuButton>
+          {Boolean(editor.schema.marks.code) && (
+            <BubbleMenuButton
+              onClick={() => editor.chain().focus().toggleCode().run()}
+              isActive={editor.isActive('code')}
+              title="Inline Code (Cmd+E)"
+            >
+              <FiCode />
+            </BubbleMenuButton>
+          )}
 
           {/* Separator */}
           <div className="bubble-menu-separator" />
 
           {/* Text Color */}
-          <TextColorPicker
-            onColorSelect={(color) => {
-              if (color === '') {
-                editor.chain().focus().unsetColor().run();
-              } else {
-                editor.chain().focus().setColor(color).run();
-              }
-            }}
-            currentColor={textColor}
-            label="Text Color"
-          />
+          {Boolean(editor.commands.setColor) && (
+            <TextColorPicker
+              onColorSelect={(color) => {
+                if (color === '') {
+                  editor.chain().focus().unsetColor().run();
+                } else {
+                  editor.chain().focus().setColor(color).run();
+                }
+              }}
+              currentColor={textColor}
+              label="Text Color"
+            />
+          )}
 
           {/* Highlight Color */}
-          <TextColorPicker
-            onColorSelect={(color) => {
-              if (color === '' || color === 'transparent') {
-                editor.chain().focus().unsetHighlight().run();
-              } else {
-                editor.chain().focus().setHighlight({ color }).run();
-              }
-            }}
-            currentColor={highlightColor}
-            label="Highlight"
-          />
+          {Boolean(editor.commands.setHighlight) && (
+            <TextColorPicker
+              onColorSelect={(color) => {
+                if (color === '' || color === 'transparent') {
+                  editor.chain().focus().unsetHighlight().run();
+                } else {
+                  editor.chain().focus().setHighlight({ color }).run();
+                }
+              }}
+              currentColor={highlightColor}
+              label="Highlight"
+            />
+          )}
 
           {/* Separator */}
           <div className="bubble-menu-separator" />
 
           {/* Inline Math */}
-          <BubbleMenuButton
-            onClick={() => editor.chain().focus().insertInlineMath().run()}
-            isActive={editor.isActive('inlineMath')}
-            title="Convert to Math Formula (Cmd+Shift+M)"
-          >
-            <span style={{ fontWeight: 'bold', fontSize: '18px' }}>∑</span>
-          </BubbleMenuButton>
+          {Boolean(editor.schema.nodes.inlineMath) && (
+            <BubbleMenuButton
+              onClick={() => editor.chain().focus().insertInlineMath().run()}
+              isActive={editor.isActive('inlineMath')}
+              title="Convert to Math Formula (Cmd+Shift+M)"
+            >
+              <span style={{ fontWeight: 'bold', fontSize: '18px' }}>∑</span>
+            </BubbleMenuButton>
+          )}
         </>
       )}
 
       {/* Comment */}
-      {commentHandler && (
+      {canComment && (
         <>
           <div className="bubble-menu-separator" />
           <BubbleMenuButton

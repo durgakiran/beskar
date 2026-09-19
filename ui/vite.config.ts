@@ -6,6 +6,7 @@ export default defineConfig(({ mode }) => ({
   plugins: [react()],
   resolve: {
     alias: {
+      '@durgakiran/editor/pdf': path.resolve(__dirname, '../packages/editor/dist/pdf.mjs'),
       '@http/hooks':        path.resolve(__dirname, 'app/core/http/hooks'),
       '@http':              path.resolve(__dirname, 'app/core/http'),
       '@editor':            path.resolve(__dirname, 'app/core/editor'),
