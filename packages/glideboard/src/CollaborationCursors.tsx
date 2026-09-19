@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { awarenessSignal, wbEditor } from './editor';
-import { useSignalValue } from './useSignalValue';
+import { useGlideboardController } from './GlideboardContext.js';
+import { useSignalValue } from './useSignalValue.js';
 import type { Vec2 } from '@durgakiran/glideline';
-import type { GlideboardUser } from './types';
+import type { GlideboardUser } from './types.js';
+import { safeAwarenessEntries } from './collaboration/awareness.js';
 
 interface CursorState {
   user: GlideboardUser;
@@ -10,21 +11,26 @@ interface CursorState {
 }
 
 export function CollaborationCursors() {
+  const controller = useGlideboardController();
+  const editor = controller.editor;
   const [cursors, setCursors] = useState<Map<number, CursorState>>(new Map());
-  const camera = useSignalValue(wbEditor.camera.signal)!;
-  const awareness = useSignalValue(awarenessSignal);
+  const camera = useSignalValue(editor.camera.signal)!;
+  const awareness = useSignalValue(controller.awarenessSignal);
+  const activePageId = useSignalValue(editor.activePageId) ?? editor.getActivePageId();
+  const pageIds = useSignalValue(editor.getPageIdsSignal()) ?? [];
 
   useEffect(() => {
-    if (!awareness) return;
+    if (!awareness) {
+      setCursors(new Map());
+      return;
+    }
 
     const handleAwarenessChange = () => {
-      const states = awareness.getStates();
       const nextCursors = new Map<number, CursorState>();
-      states.forEach((state: any, clientID: number) => {
-        if (clientID !== awareness.clientID && state.user && state.cursor) {
-          nextCursors.set(clientID, { user: state.user, cursor: state.cursor });
-        }
-      });
+      for (const { clientId, user, cursor, pageId } of safeAwarenessEntries(awareness.getStates())) {
+        const samePage = pageId === activePageId || (pageId === null && pageIds.length === 1);
+        if (clientId !== awareness.clientID && cursor && samePage) nextCursors.set(clientId, { user, cursor });
+      }
       setCursors(nextCursors);
     };
 
@@ -33,7 +39,7 @@ export function CollaborationCursors() {
     return () => {
       awareness.off('change', handleAwarenessChange);
     };
-  }, [awareness]);
+  }, [activePageId, awareness, pageIds.length]);
 
   if (cursors.size === 0) return null;
 

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import type { Signal } from '@preact/signals';
+import type { ReadonlySignal } from '@preact/signals';
 
-export function useSignalValue<T>(sig?: Signal<T>): T | undefined {
+export function useSignalValue<T>(sig?: ReadonlySignal<T>): T | undefined {
   const [value, setValue] = useState(() => sig?.peek());
 
   useEffect(() => {

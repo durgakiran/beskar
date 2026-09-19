@@ -1,3 +1,6 @@
+import { EDITOR_FEATURE_EXTENSIONS, resolveEditorFeatures, type EditorFeature, type EditorFeatureOptions } from './features';
+export { EDITOR_FEATURE_EXTENSIONS, MANDATORY_EDITOR_EXTENSIONS, resolveEditorFeatures } from './features';
+export type { EditorFeature, EditorFeatureOptions } from './features';
 import { StarterKit } from '@tiptap/starter-kit';
 import { TextAlign } from '@tiptap/extension-text-align';
 import { Underline } from '@tiptap/extension-underline';
@@ -6,10 +9,9 @@ import { Color } from '@tiptap/extension-color';
 import { Highlight } from '@tiptap/extension-highlight';
 import { Collaboration } from '@tiptap/extension-collaboration';
 import { CollaborationCaret } from '@tiptap/extension-collaboration-caret';
-import { Typography } from '@tiptap/extension-typography';
+import { MathAwareTypography as Typography } from './math-aware-typography';
 import { TaskList, TaskItem } from '@tiptap/extension-list';
-import { ListItem } from '@tiptap/extension-list-item';
-import { Extension, type Extensions } from '@tiptap/core';
+import { Extension, flattenExtensions, type Extensions } from '@tiptap/core';
 import type {
   AttachmentAPIHandler,
   AttachmentRef,
@@ -25,6 +27,7 @@ import { AttachmentPasteDrop } from './attachment-paste-drop';
 import { Table, TableCell, TableHeader, TableRow } from '../nodes/table';
 import { SlashCommand } from './slash-command';
 import { BlockId } from './block-id';
+import { CodeBlockKeyboard } from './code-block-keyboard';
 import { BlockDragDrop } from './block-drag-drop';
 import Emoji, { gitHubEmojis } from '@tiptap/extension-emoji';
 import { Placeholder } from '@tiptap/extensions';
@@ -137,6 +140,7 @@ export interface GetExtensionsOptions {
   columnDetailsSummaryPlaceholder?: string;
   collaboration?: CollaborationConfig;
   additionalExtensions?: Extensions;
+  features?: EditorFeatureOptions;
   imageHandler?: ImageAPIHandler;
   attachmentHandler?: AttachmentAPIHandler;
   maxAttachmentBytes?: number;
@@ -164,6 +168,7 @@ export function getExtensions(options: GetExtensionsOptions = {}): Extensions {
     columnDetailsSummaryPlaceholder = 'Add summary…',
     collaboration,
     additionalExtensions = [],
+    features,
     imageHandler,
     attachmentHandler,
     maxAttachmentBytes,
@@ -178,12 +183,22 @@ export function getExtensions(options: GetExtensionsOptions = {}): Extensions {
     onPrevCommentShortcut,
   } = options;
 
+  const enabled = resolveEditorFeatures(features);
+  const hasCollaboration = !!collaboration || flattenExtensions(additionalExtensions).some(extension => extension.name === 'collaboration');
   const baseExtensions: Extensions = [
     CustomAttributes,
     BlockId, // Block-based editor with unique IDs for each block
     BlockDragDrop, // Drag and drop to rearrange blocks
     // Use StarterKit but exclude nodes we're replacing with block-enabled versions
     StarterKit.configure({
+      bold: enabled.formatting ? {} : false,
+      italic: enabled.formatting ? {} : false,
+      strike: enabled.formatting ? {} : false,
+      code: enabled.formatting ? {} : false,
+      underline: false, // Registered separately below, once.
+      link: enabled.links ? {} : false,
+      listKeymap: enabled.lists ? {} : false,
+      undoRedo: hasCollaboration ? false : {},
       heading: false,
       paragraph: false,
       blockquote: false,
@@ -235,14 +250,15 @@ export function getExtensions(options: GetExtensionsOptions = {}): Extensions {
     BlockParagraph,
     BlockBlockquote,
     BlockCodeBlockLowlight, // Use code block with syntax highlighting
-    BlockBulletList,
-    BlockOrderedList,
+    CodeBlockKeyboard,
+    BlockBulletList.configure({ HTMLAttributes: { 'data-editor-list': 'true' } }),
+    BlockOrderedList.configure({ HTMLAttributes: { 'data-editor-list': 'true' } }),
     BlockListItem, // Used by BlockBulletList and BlockOrderedList
     BlockHorizontalRule,
     BlockDetails,
     BlockDetailsSummary,
     BlockDetailsContent,
-    TaskList, // Task list with checkboxes (requires TaskItem)
+    TaskList.configure({ HTMLAttributes: { 'data-editor-list': 'true' } }), // Task list with checkboxes (requires TaskItem)
     TaskItem.configure({ nested: true }), // Task item (checkbox item) - extends ListItem
     NoteBlock, // Custom note block with themes and styling
     ImageBlock, // Custom image block with upload and resize
@@ -261,12 +277,12 @@ export function getExtensions(options: GetExtensionsOptions = {}): Extensions {
     InlineMath, // Inline math formulas within text
     ImagePasteDrop.configure({
       imageHandler,
-      attachmentHandler,
+      attachmentHandler: enabled.attachments ? attachmentHandler : undefined,
       maxAttachmentBytes,
       onAttachmentRejected,
     }),
     AttachmentPasteDrop.configure({
-      attachmentHandler,
+      attachmentHandler: enabled.attachments ? attachmentHandler : undefined,
       maxAttachmentBytes,
       onAttachmentRejected,
       allowedMimeAccept,
@@ -305,6 +321,26 @@ export function getExtensions(options: GetExtensionsOptions = {}): Extensions {
     CommentDecoration, // Highlight rendering
   ];
 
+  const disabledNames = new Set<string>(
+    (Object.keys(EDITOR_FEATURE_EXTENSIONS) as EditorFeature[])
+      .filter((feature) => !enabled[feature])
+      .flatMap((feature) => [...EDITOR_FEATURE_EXTENSIONS[feature]]),
+  );
+  const selectedExtensions = baseExtensions.filter((extension) => !disabledNames.has(extension.name));
+
+  // Reject collisions (including nested extension kits) rather than silently replacing core nodes.
+  const withCustomExtensions = (builtIns: Extensions): Extensions => {
+    const result = [...builtIns, ...additionalExtensions];
+    const names = new Set<string>();
+    for (const extension of flattenExtensions(result)) {
+      if (names.has(extension.name)) {
+        throw new Error(`Duplicate editor extension "${extension.name}". Disable its optional feature before supplying a replacement; mandatory extensions cannot be replaced.`);
+      }
+      names.add(extension.name);
+    }
+    return result;
+  };
+
   // Add collaboration extensions if provided
   if (collaboration) {
     const collaborationExtensions: Extensions = [
@@ -328,10 +364,10 @@ export function getExtensions(options: GetExtensionsOptions = {}): Extensions {
       }),
     ];
 
-    return [...baseExtensions, ...collaborationExtensions, ...additionalExtensions];
+    return withCustomExtensions([...selectedExtensions, ...collaborationExtensions]);
   }
 
-  return [...baseExtensions, ...additionalExtensions];
+  return withCustomExtensions(selectedExtensions);
 }
 
 export * from './custom-attributes';

@@ -3,7 +3,6 @@ import { Plugin } from '@tiptap/pm/state';
 import { TextSelection } from '@tiptap/pm/state';
 import { mergeAttributes } from '@tiptap/core';
 import { TableMap } from '@tiptap/pm/tables';
-import { blockDragDropKey } from '../../extensions/block-drag-drop';
 import { exitNodeAfter } from '../../extensions/node-escape';
 import { findCellClosestToPos } from './utils';
 
@@ -183,39 +182,9 @@ export const Table = TiptapTable.extend({
       return [];
     }
 
-    // Get parent plugins (includes fixTables)
-    const parentPlugins = this.parent?.() || [];
-    // Wrap parent plugins to skip fixTables during ANY drag operation
-    const wrappedParentPlugins = parentPlugins.map((plugin: any, index: number) => {
-      // If this plugin has appendTransaction, wrap it
-      if (plugin.spec.appendTransaction) {
-        const originalAppendTransaction = plugin.spec.appendTransaction;
-        return new Plugin({
-          ...plugin.spec,
-          appendTransaction: (transactions, oldState, newState) => {
-            // Skip if any transaction has skipFixTables meta
-            const hasSkipMeta = transactions.some(tr => tr.getMeta('skipFixTables'));
-            if (hasSkipMeta) {
-              return null;
-            }
-            
-            // Skip fixTables during ANY drag operation
-            // This prevents table corruption when dragging any block (not just tables)
-            const dragState = blockDragDropKey.getState(newState);
-            if (dragState?.isDragging) {
-              return null;
-            }
-            
-            // Otherwise, call the original
-            return originalAppendTransaction(transactions, oldState, newState);
-          },
-        });
-      }
-      return plugin;
-    });
-
+    // Block moves are atomic model transactions; normal table repair remains enabled.
     return [
-      ...wrappedParentPlugins,
+      ...(this.parent?.() || []),
       // Plugin to sync blockId and showRowNumbers attributes to DOM
       new Plugin({
         view: (view) => {

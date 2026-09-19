@@ -20,6 +20,9 @@ COPY packages/glideboard/dist /dist
 FROM scratch AS local-glideline-dist
 COPY packages/glideline/dist /dist
 
+FROM scratch AS local-canvas-text-editor-dist
+COPY packages/canvas-text-editor/dist /dist
+
 FROM golang:1.23.3-alpine AS wasm-builder
 
 WORKDIR /src/jbi
@@ -70,6 +73,7 @@ FROM builder-base AS builder-local-packages
 COPY --from=local-editor-dist /dist ./node_modules/@durgakiran/editor/dist
 COPY --from=local-glideboard-dist /dist ./node_modules/@durgakiran/glideboard/dist
 COPY --from=local-glideline-dist /dist ./node_modules/@durgakiran/glideline/dist
+COPY --from=local-canvas-text-editor-dist /dist ./node_modules/@durgakiran/canvas-text-editor/dist
 RUN npm run build:workers
 RUN npm run build
 

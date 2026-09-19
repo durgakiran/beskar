@@ -20,17 +20,17 @@
  * positioned <textarea>; during editing the SVG text is hidden.
  */
 
-import { ShapeUtil } from './ShapeUtil';
-import { T } from '../validators';
-import { defineMigrations } from '../migrations';
-import { makeBox } from '../types';
-import type { GlideShape, GlideProps } from '../types';
-import { Geometry2d, Rectangle2d } from '../geometry';
+import { ShapeUtil } from './ShapeUtil.js';
+import { T } from '../validators.js';
+import { defineMigrations } from '../migrations.js';
+import { makeBox } from '../types.js';
+import type { GlideShape, GlideProps } from '../types.js';
+import { Geometry2d, Rectangle2d } from '../geometry/index.js';
 import {
   FONT_SIZES, FONT_FAMILIES,
   resolveColor, createTextForeignObjectForExport,
   type FontSize, type TextAlign, type Font, type LabelProps,
-} from '../styles';
+} from '../styles.js';
 
 // ─────────────────────────────────────────────────────────────
 // Sticky-note background colours (warm palette)
@@ -263,7 +263,7 @@ export class StickyNoteUtil extends ShapeUtil<StickyNoteShape> {
 // Plugin export
 // ─────────────────────────────────────────────────────────────
 
-import type { GlidePlugin } from '../editor';
+import type { GlidePlugin } from '../editor.js';
 
 export const StickyNotePlugin: GlidePlugin = {
   id: 'sticky-note',

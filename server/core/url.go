@@ -27,7 +27,7 @@ func IssuerBaseURL() string {
 func AllowedOriginsFromEnv() []string {
 	raw := os.Getenv("CORS_ALLOWED_ORIGINS")
 	if raw == "" {
-		return []string{"http://localhost:3000", "http://localhost:8085"}
+		return []string{"http://localhost:3000", "http://localhost:8085", "wails://wails", "http://wails.localhost", "http://wails.localhost:5173"}
 	}
 
 	parts := strings.Split(raw, ",")
@@ -41,7 +41,7 @@ func AllowedOriginsFromEnv() []string {
 	}
 
 	if len(origins) == 0 {
-		return []string{"http://localhost:3000", "http://localhost:8085"}
+		return []string{"http://localhost:3000", "http://localhost:8085", "wails://wails", "http://wails.localhost", "http://wails.localhost:5173"}
 	}
 
 	return origins

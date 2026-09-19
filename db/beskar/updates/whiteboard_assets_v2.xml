@@ -1,0 +1,393 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+    <!-- V2 metadata belongs to whiteboard; object bytes remain in the existing
+         storage service. Keep tables, keys, indexes, and table/index rollback
+         in native Liquibase XML, matching adjacent whiteboard migrations.
+         CHECK constraints, functions/triggers, and grants use SQL where the
+         installed Liquibase core XML changes do not support them. Partial-index
+         predicates use modifySql in dedicated changesets to avoid altering other SQL. -->
+
+    <changeSet id="whiteboard_assets_v2_1_catalog" author="Codex" dbms="postgresql">
+        <comment>
+            Create the board-owned catalog of inspected, committed raster files.
+            Deduplicate hashes within each board, retain files for draft/history
+            use until board deletion, and keep staged uploads out of this catalog.
+        </comment>
+        <createTable schemaName="whiteboard" tableName="whiteboard_asset"
+            remarks="Immutable committed raster files owned and accounted for by one whiteboard">
+            <column name="page_id" type="BIGINT" remarks="Owning whiteboard; the same hash on another board is a separate asset">
+                <constraints nullable="false"/>
+            </column>
+            <column name="content_hash" type="TEXT" remarks="SHA-256 of the original file bytes as 64 lowercase hexadecimal characters">
+                <constraints nullable="false"/>
+            </column>
+            <column name="storage_key" type="TEXT" remarks="Unique physical object generation; never reused by a later upload">
+                <constraints nullable="false"/>
+            </column>
+            <column name="file_size" type="BIGINT" remarks="Inspected original byte count, charged once per board-owned hash">
+                <constraints nullable="false"/>
+            </column>
+            <column name="mime_type" type="TEXT" remarks="Image MIME type verified by decoding the uploaded bytes">
+                <constraints nullable="false"/>
+            </column>
+            <column name="width" type="INTEGER" remarks="Inspected intrinsic pixel width">
+                <constraints nullable="false"/>
+            </column>
+            <column name="height" type="INTEGER" remarks="Inspected intrinsic pixel height">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_by" type="UUID" remarks="Externally owned actor identity; no local user-cache foreign key">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="now()">
+                <constraints nullable="false"/>
+            </column>
+            <column name="provenance" type="JSONB" defaultValue="{}" remarks="Bounded server-owned metadata describing the asset source">
+                <constraints nullable="false"/>
+            </column>
+            <column name="inspector_version" type="INTEGER" remarks="Image validation version used before catalog commitment">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+        <addPrimaryKey schemaName="whiteboard" tableName="whiteboard_asset"
+            columnNames="page_id,content_hash" constraintName="whiteboard_asset_pk"/>
+        <addUniqueConstraint schemaName="whiteboard" tableName="whiteboard_asset"
+            columnNames="storage_key" constraintName="whiteboard_asset_storage_key_uq"/>
+        <addForeignKeyConstraint baseTableSchemaName="whiteboard" baseTableName="whiteboard_asset"
+            baseColumnNames="page_id" referencedTableSchemaName="whiteboard" referencedTableName="whiteboard"
+            referencedColumnNames="page_id" constraintName="whiteboard_asset_page_fk" onDelete="NO ACTION"/>
+        <!-- Bounds mirror the raster inspector; content verification stays in the
+             service. NO ACTION requires cleanup/accounting before board deletion. -->
+        <sql>
+            ALTER TABLE whiteboard.whiteboard_asset
+                ADD CONSTRAINT whiteboard_asset_hash_ck CHECK (content_hash ~ '^[0-9a-f]{64}$'),
+                ADD CONSTRAINT whiteboard_asset_storage_key_ck CHECK (storage_key LIKE 'whiteboard-v2-assets/%' AND length(storage_key) &lt;= 512),
+                ADD CONSTRAINT whiteboard_asset_size_ck CHECK (file_size &gt; 0 AND file_size &lt;= 20971520),
+                ADD CONSTRAINT whiteboard_asset_mime_ck CHECK (mime_type IN ('image/png','image/jpeg','image/webp')),
+                ADD CONSTRAINT whiteboard_asset_width_ck CHECK (width BETWEEN 1 AND 16384),
+                ADD CONSTRAINT whiteboard_asset_height_ck CHECK (height BETWEEN 1 AND 16384),
+                ADD CONSTRAINT whiteboard_asset_provenance_ck CHECK (jsonb_typeof(provenance)='object' AND octet_length(provenance::text) &lt;= 4096),
+                ADD CONSTRAINT whiteboard_asset_inspector_ck CHECK (inspector_version &gt; 0),
+                ADD CONSTRAINT whiteboard_asset_pixels_ck CHECK (width::bigint * height &lt;= 64000000);
+        </sql>
+        <rollback>
+            <dropTable schemaName="whiteboard" tableName="whiteboard_asset"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="whiteboard_assets_v2_2_uploads" author="Codex" dbms="postgresql">
+        <comment>
+            Persist actor-scoped upload sessions and retry receipts independently
+            of canvas checkpoints. Preserve expected file identity, quota reservations,
+            and storage-attempt leases so retries, cancellation, and crash recovery
+            cannot publish unfinished files or charge the same upload twice.
+        </comment>
+        <createTable schemaName="whiteboard" tableName="whiteboard_asset_upload"
+            remarks="Upload lifecycle and terminal retry receipts retained while the owning board exists">
+            <column name="id" type="UUID">
+                <constraints nullable="false" primaryKey="true" primaryKeyName="whiteboard_asset_upload_pk"/>
+            </column>
+            <column name="page_id" type="BIGINT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="actor_id" type="UUID" remarks="Authenticated upload owner; the session ID alone does not grant access">
+                <constraints nullable="false"/>
+            </column>
+            <column name="idempotency_key" type="UUID" remarks="Prepare retry key scoped to this board and actor">
+                <constraints nullable="false"/>
+            </column>
+            <column name="request_hash" type="TEXT" remarks="Digest of normalized prepare metadata; detects conflicting key reuse">
+                <constraints nullable="false"/>
+            </column>
+            <column name="expected_hash" type="TEXT" remarks="Expected SHA-256 of the exact original bytes">
+                <constraints nullable="false"/>
+            </column>
+            <column name="content_type" type="TEXT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="byte_length" type="BIGINT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="state" type="TEXT" defaultValue="prepared" remarks="prepared, staging, staged, committed, cancelled, or expired">
+                <constraints nullable="false"/>
+            </column>
+            <column name="storage_key" type="TEXT" remarks="Current attempt's unique object key, persisted before storage I/O"/>
+            <column name="width" type="INTEGER" remarks="Verified pixel width; required once staging succeeds"/>
+            <column name="height" type="INTEGER" remarks="Verified pixel height; required once staging succeeds"/>
+            <column name="inspector_version" type="INTEGER"/>
+            <column name="reservation" type="JSONB" defaultValue="{}" remarks="Durable quota reservation; cleared atomically on commitment or termination">
+                <constraints nullable="false"/>
+            </column>
+            <column name="lease_id" type="UUID" remarks="Attempt fence; prevents a late writer from finalizing a replacement attempt"/>
+            <column name="lease_until" type="TIMESTAMP WITH TIME ZONE" remarks="Storage-attempt deadline used to recover abandoned writes"/>
+            <column name="expires_at" type="TIMESTAMP WITH TIME ZONE" remarks="Upload eligibility deadline; expiry does not permit idempotency-key reuse">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="now()">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="now()">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+        <addUniqueConstraint schemaName="whiteboard" tableName="whiteboard_asset_upload"
+            columnNames="page_id,actor_id,idempotency_key" constraintName="whiteboard_asset_upload_retry_uq"/>
+        <addUniqueConstraint schemaName="whiteboard" tableName="whiteboard_asset_upload"
+            columnNames="storage_key" constraintName="whiteboard_asset_upload_storage_key_uq"/>
+        <addForeignKeyConstraint baseTableSchemaName="whiteboard" baseTableName="whiteboard_asset_upload"
+            baseColumnNames="page_id" referencedTableSchemaName="whiteboard" referencedTableName="whiteboard"
+            referencedColumnNames="page_id" constraintName="whiteboard_asset_upload_page_fk" onDelete="NO ACTION"/>
+        <sql>
+            ALTER TABLE whiteboard.whiteboard_asset_upload
+                ADD CONSTRAINT whiteboard_asset_upload_request_hash_ck CHECK (request_hash ~ '^sha256:[0-9a-f]{64}$'),
+                ADD CONSTRAINT whiteboard_asset_upload_expected_hash_ck CHECK (expected_hash ~ '^[0-9a-f]{64}$'),
+                ADD CONSTRAINT whiteboard_asset_upload_type_ck CHECK (content_type IN ('image/png','image/jpeg','image/webp')),
+                ADD CONSTRAINT whiteboard_asset_upload_size_ck CHECK (byte_length &gt; 0 AND byte_length &lt;= 20971520),
+                ADD CONSTRAINT whiteboard_asset_upload_state_ck CHECK (state IN ('prepared','staging','staged','committed','cancelled','expired')),
+                ADD CONSTRAINT whiteboard_asset_upload_storage_key_ck CHECK (storage_key LIKE 'whiteboard-v2-assets/%' AND length(storage_key) &lt;= 512),
+                ADD CONSTRAINT whiteboard_asset_upload_width_ck CHECK (width BETWEEN 1 AND 16384),
+                ADD CONSTRAINT whiteboard_asset_upload_height_ck CHECK (height BETWEEN 1 AND 16384),
+                ADD CONSTRAINT whiteboard_asset_upload_inspector_ck CHECK (inspector_version &gt; 0),
+                ADD CONSTRAINT whiteboard_asset_upload_reservation_ck CHECK (jsonb_typeof(reservation)='object' AND octet_length(reservation::text) &lt;= 8192),
+                ADD CONSTRAINT whiteboard_asset_upload_pixels_ck CHECK (width IS NULL OR height IS NULL OR width::bigint * height &lt;= 64000000),
+                ADD CONSTRAINT whiteboard_asset_upload_ready_ck CHECK (state NOT IN ('staged','committed') OR (width IS NOT NULL AND height IS NOT NULL AND inspector_version IS NOT NULL AND storage_key IS NOT NULL)),
+                ADD CONSTRAINT whiteboard_asset_upload_staging_ck CHECK (state &lt;&gt; 'staging' OR (lease_id IS NOT NULL AND lease_until IS NOT NULL AND storage_key IS NOT NULL)),
+                ADD CONSTRAINT whiteboard_asset_upload_lease_ck CHECK ((lease_id IS NULL) = (lease_until IS NULL)),
+                ADD CONSTRAINT whiteboard_asset_upload_expiry_ck CHECK (expires_at &gt; created_at);
+        </sql>
+        <rollback>
+            <dropTable schemaName="whiteboard" tableName="whiteboard_asset_upload"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="whiteboard_assets_v2_2a_expiry_index" author="Codex" dbms="postgresql">
+        <comment>
+            Index only active upload sessions for expiry recovery. Keep retained
+            terminal retry receipts out of the worker's expiry scan.
+        </comment>
+        <createIndex schemaName="whiteboard" tableName="whiteboard_asset_upload" indexName="whiteboard_asset_upload_expiry_idx">
+            <column name="expires_at"/>
+        </createIndex>
+        <rollback>
+            <dropIndex schemaName="whiteboard" tableName="whiteboard_asset_upload" indexName="whiteboard_asset_upload_expiry_idx"/>
+        </rollback>
+        <!-- Core createIndex has no predicate attribute. This changeset contains
+             only the index so the appended predicate cannot alter another statement. -->
+        <modifySql dbms="postgresql" applyToRollback="false">
+            <append value=" WHERE state IN ('prepared','staging','staged')"/>
+        </modifySql>
+    </changeSet>
+
+    <changeSet id="whiteboard_assets_v2_3_snapshots" author="Codex" dbms="postgresql">
+        <comment>
+            Record the exact committed raster dependencies of each immutable
+            snapshot and bind completed inspection to its state digest. A manifest
+            with no associations proves the snapshot was inspected and has no raster
+            dependencies; same-board foreign keys protect published reads and restore.
+        </comment>
+        <createTable schemaName="whiteboard" tableName="whiteboard_snapshot_asset_manifest"
+            remarks="Completed asset inspection bound to an immutable snapshot digest and extractor version">
+            <column name="snapshot_id" type="UUID">
+                <constraints nullable="false" primaryKey="true" primaryKeyName="whiteboard_snapshot_asset_manifest_pk"/>
+            </column>
+            <column name="page_id" type="BIGINT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="state_digest" type="TEXT" remarks="SHA-256 digest of the exact inspected snapshot bytes">
+                <constraints nullable="false"/>
+            </column>
+            <column name="extractor_version" type="TEXT" remarks="Server asset-extraction contract used to validate membership">
+                <constraints nullable="false"/>
+            </column>
+            <column name="completed_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="now()">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+        <addForeignKeyConstraint baseTableSchemaName="whiteboard" baseTableName="whiteboard_snapshot_asset_manifest"
+            baseColumnNames="page_id,snapshot_id" referencedTableSchemaName="whiteboard" referencedTableName="whiteboard_snapshot"
+            referencedColumnNames="page_id,id" constraintName="whiteboard_snapshot_asset_manifest_snapshot_fk" onDelete="CASCADE"/>
+        <sql>
+            ALTER TABLE whiteboard.whiteboard_snapshot_asset_manifest
+                ADD CONSTRAINT whiteboard_snapshot_asset_manifest_digest_ck CHECK (state_digest ~ '^sha256:[0-9a-f]{64}$'),
+                ADD CONSTRAINT whiteboard_snapshot_asset_manifest_extractor_ck CHECK (length(extractor_version) BETWEEN 1 AND 128);
+        </sql>
+        <createTable schemaName="whiteboard" tableName="whiteboard_snapshot_asset"
+            remarks="Exact raster membership used to authorize version-scoped downloads and preserve restore dependencies">
+            <column name="snapshot_id" type="UUID">
+                <constraints nullable="false"/>
+            </column>
+            <column name="page_id" type="BIGINT" remarks="Shared ownership key for both the snapshot and committed asset">
+                <constraints nullable="false"/>
+            </column>
+            <column name="content_hash" type="TEXT">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+        <addPrimaryKey schemaName="whiteboard" tableName="whiteboard_snapshot_asset"
+            columnNames="snapshot_id,content_hash" constraintName="whiteboard_snapshot_asset_pk"/>
+        <addForeignKeyConstraint baseTableSchemaName="whiteboard" baseTableName="whiteboard_snapshot_asset"
+            baseColumnNames="page_id,snapshot_id" referencedTableSchemaName="whiteboard" referencedTableName="whiteboard_snapshot"
+            referencedColumnNames="page_id,id" constraintName="whiteboard_snapshot_asset_snapshot_fk" onDelete="CASCADE"/>
+        <addForeignKeyConstraint baseTableSchemaName="whiteboard" baseTableName="whiteboard_snapshot_asset"
+            baseColumnNames="page_id,content_hash" referencedTableSchemaName="whiteboard" referencedTableName="whiteboard_asset"
+            referencedColumnNames="page_id,content_hash" constraintName="whiteboard_snapshot_asset_catalog_fk" onDelete="NO ACTION"/>
+        <createIndex schemaName="whiteboard" tableName="whiteboard_snapshot_asset" indexName="whiteboard_snapshot_asset_catalog_idx">
+            <column name="page_id"/>
+            <column name="content_hash"/>
+        </createIndex>
+        <rollback>
+            <dropTable schemaName="whiteboard" tableName="whiteboard_snapshot_asset"/>
+            <dropTable schemaName="whiteboard" tableName="whiteboard_snapshot_asset_manifest"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="whiteboard_assets_v2_4_cleanup" author="Codex" dbms="postgresql">
+        <comment>
+            Persist retryable object-deletion jobs before owner rows disappear.
+            Preserve the object key and former ownership without cascading foreign
+            keys so cancellation, expired uploads, and board deletion remain recoverable.
+            Physical deletion does not release quota again; the lifecycle transaction does.
+        </comment>
+        <createTable schemaName="whiteboard" tableName="whiteboard_asset_cleanup"
+            remarks="Durable object cleanup with bounded retries and leases; survives board and space deletion">
+            <column name="id" type="UUID">
+                <constraints nullable="false" primaryKey="true" primaryKeyName="whiteboard_asset_cleanup_pk"/>
+            </column>
+            <column name="page_id" type="BIGINT" remarks="Former owner, deliberately retained without a foreign key">
+                <constraints nullable="false"/>
+            </column>
+            <column name="space_id" type="UUID" remarks="Former space identity retained for recovery and diagnostics">
+                <constraints nullable="false"/>
+            </column>
+            <column name="account_id" type="UUID" remarks="Former billing account, when available; physical cleanup does not change quota"/>
+            <column name="storage_key" type="TEXT" remarks="Exact object generation to delete; unique across all cleanup jobs">
+                <constraints nullable="false"/>
+            </column>
+            <column name="byte_count" type="BIGINT" defaultValueNumeric="0" remarks="Object bytes for cleanup diagnostics, not a second quota release">
+                <constraints nullable="false"/>
+            </column>
+            <column name="reason" type="TEXT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="not_before" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="now()" remarks="Earliest deletion attempt after write grace or retry backoff">
+                <constraints nullable="false"/>
+            </column>
+            <column name="attempt_count" type="INTEGER" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="lease_id" type="UUID" remarks="Worker claim fence; stale completion cannot overwrite a newer claim"/>
+            <column name="lease_until" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="last_error" type="TEXT" remarks="Bounded diagnostic text from the most recent failed deletion"/>
+            <column name="completed_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="exhausted_at" type="TIMESTAMP WITH TIME ZONE" remarks="Retry budget exhausted; retained for operator investigation"/>
+            <column name="created_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="now()">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+        <addUniqueConstraint schemaName="whiteboard" tableName="whiteboard_asset_cleanup"
+            columnNames="storage_key" constraintName="whiteboard_asset_cleanup_storage_key_uq"/>
+        <sql>
+            ALTER TABLE whiteboard.whiteboard_asset_cleanup
+                ADD CONSTRAINT whiteboard_asset_cleanup_page_ck CHECK (page_id &gt; 0),
+                ADD CONSTRAINT whiteboard_asset_cleanup_storage_key_ck CHECK (storage_key LIKE 'whiteboard-v2-assets/%' AND length(storage_key) &lt;= 512),
+                ADD CONSTRAINT whiteboard_asset_cleanup_bytes_ck CHECK (byte_count &gt;= 0),
+                ADD CONSTRAINT whiteboard_asset_cleanup_reason_ck CHECK (length(reason) BETWEEN 1 AND 128),
+                ADD CONSTRAINT whiteboard_asset_cleanup_attempts_ck CHECK (attempt_count &gt;= 0),
+                ADD CONSTRAINT whiteboard_asset_cleanup_lease_ck CHECK ((lease_id IS NULL) = (lease_until IS NULL)),
+                ADD CONSTRAINT whiteboard_asset_cleanup_terminal_ck CHECK (completed_at IS NULL OR exhausted_at IS NULL);
+        </sql>
+        <rollback>
+            <dropTable schemaName="whiteboard" tableName="whiteboard_asset_cleanup"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="whiteboard_assets_v2_4a_pending_index" author="Codex" dbms="postgresql">
+        <comment>
+            Index pending object-deletion jobs by their next eligible attempt.
+            Retain completed and exhausted jobs for diagnostics without including
+            them in the cleanup worker's pending-work index.
+        </comment>
+        <createIndex schemaName="whiteboard" tableName="whiteboard_asset_cleanup" indexName="whiteboard_asset_cleanup_pending_idx">
+            <column name="not_before"/>
+        </createIndex>
+        <rollback>
+            <dropIndex schemaName="whiteboard" tableName="whiteboard_asset_cleanup" indexName="whiteboard_asset_cleanup_pending_idx"/>
+        </rollback>
+        <modifySql dbms="postgresql" applyToRollback="false">
+            <append value=" WHERE completed_at IS NULL AND exhausted_at IS NULL"/>
+        </modifySql>
+    </changeSet>
+
+    <changeSet id="whiteboard_assets_v2_5_invariants" author="Codex" dbms="postgresql">
+        <comment>
+            Enforce immutable upload identity, legal lifecycle transitions, and
+            immutable committed catalog content in PostgreSQL. Terminal sessions
+            cannot be revived, and a file replacement must create a new asset hash.
+        </comment>
+        <sql splitStatements="false"><![CDATA[
+CREATE FUNCTION whiteboard.enforce_asset_upload_transition() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    IF (NEW.id,NEW.page_id,NEW.actor_id,NEW.idempotency_key,NEW.request_hash,NEW.expected_hash,NEW.content_type,NEW.byte_length,NEW.created_at,NEW.expires_at)
+        IS DISTINCT FROM (OLD.id,OLD.page_id,OLD.actor_id,OLD.idempotency_key,OLD.request_hash,OLD.expected_hash,OLD.content_type,OLD.byte_length,OLD.created_at,OLD.expires_at) THEN
+        RAISE EXCEPTION 'whiteboard asset upload identity is immutable' USING ERRCODE='23514';
+    END IF;
+    IF NEW.state <> OLD.state AND NOT (
+        (OLD.state='prepared' AND NEW.state IN ('staging','cancelled','expired')) OR
+        (OLD.state='staging' AND NEW.state IN ('prepared','staged','cancelled','expired')) OR
+        (OLD.state='staged' AND NEW.state IN ('committed','cancelled','expired'))
+    ) THEN
+        RAISE EXCEPTION 'invalid whiteboard asset upload transition' USING ERRCODE='23514';
+    END IF;
+    RETURN NEW;
+END $$;
+CREATE TRIGGER whiteboard_asset_upload_transition BEFORE UPDATE ON whiteboard.whiteboard_asset_upload
+    FOR EACH ROW EXECUTE FUNCTION whiteboard.enforce_asset_upload_transition();
+CREATE FUNCTION whiteboard.enforce_asset_immutable() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    IF NEW IS DISTINCT FROM OLD THEN
+        RAISE EXCEPTION 'whiteboard asset content is immutable' USING ERRCODE='23514';
+    END IF;
+    RETURN NEW;
+END $$;
+CREATE TRIGGER whiteboard_asset_immutable BEFORE UPDATE ON whiteboard.whiteboard_asset
+    FOR EACH ROW EXECUTE FUNCTION whiteboard.enforce_asset_immutable();
+        ]]></sql>
+        <rollback>
+            <!-- Remove dependent triggers before their functions; table rollback
+                 happens afterwards in the preceding changesets. -->
+            <sql>
+                DROP TRIGGER whiteboard_asset_immutable ON whiteboard.whiteboard_asset;
+                DROP FUNCTION whiteboard.enforce_asset_immutable();
+                DROP TRIGGER whiteboard_asset_upload_transition ON whiteboard.whiteboard_asset_upload;
+                DROP FUNCTION whiteboard.enforce_asset_upload_transition();
+            </sql>
+        </rollback>
+    </changeSet>
+    <changeSet id="whiteboard_assets_v2_6_grants" author="Codex" dbms="postgresql">
+        <comment>
+            Grant the application role access to the five v2 asset tables so HTTP
+            handlers, publication/restore, and cleanup workers can use them. Grants
+            are explicit because core-schema defaults do not cover whiteboard tables.
+        </comment>
+        <sql>
+            GRANT SELECT, INSERT, UPDATE, DELETE ON
+                whiteboard.whiteboard_asset,
+                whiteboard.whiteboard_asset_upload,
+                whiteboard.whiteboard_snapshot_asset,
+                whiteboard.whiteboard_snapshot_asset_manifest,
+                whiteboard.whiteboard_asset_cleanup TO ${app_user};
+        </sql>
+        <rollback>
+            <sql>
+                REVOKE SELECT, INSERT, UPDATE, DELETE ON
+                    whiteboard.whiteboard_asset,
+                    whiteboard.whiteboard_asset_upload,
+                    whiteboard.whiteboard_snapshot_asset,
+                    whiteboard.whiteboard_snapshot_asset_manifest,
+                    whiteboard.whiteboard_asset_cleanup FROM ${app_user};
+            </sql>
+        </rollback>
+    </changeSet>
+</databaseChangeLog>

@@ -1,5 +1,5 @@
-import type { BaseRecord } from "./types";
-import { Box } from "./math";
+import type { BaseRecord } from "./types.js";
+import { Box } from "./math.js";
 
 interface LegacyShapeUtil<T extends BaseRecord> {
     getBounds(shape: T): Box;

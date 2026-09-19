@@ -1,0 +1,9 @@
+# yaml-language-server: $schema=https://v3.wails.io/schemas/template.v3.json
+name: default
+shortname: ""
+author: ""
+description: ""
+helpurl: ""
+version: v0.0.1
+wailsVersion: 3
+typescript: false

@@ -6,11 +6,10 @@ import (
 	"github.com/durgakiran/beskar/core"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/render"
-	"github.com/zitadel/zitadel-go/v3/pkg/authentication"
 )
 
 func authenticated(w http.ResponseWriter, r *http.Request) {
-	if authentication.IsAuthenticated(r.Context()) {
+	if _, err := core.GetUserInfo(r.Context()); err == nil {
 		render.Status(r, http.StatusOK)
 		render.Render(w, r, core.NewSucessResponse(core.SUCCESS, nil))
 		return
@@ -22,8 +21,6 @@ func authenticated(w http.ResponseWriter, r *http.Request) {
 
 func Router() *chi.Mux {
 	r := chi.NewRouter()
-	mw := core.ZitadelMiddleware()
-	r.Use(mw.CheckAuthentication())
 	r.Get("/authenticated", authenticated)
 	return r
 }

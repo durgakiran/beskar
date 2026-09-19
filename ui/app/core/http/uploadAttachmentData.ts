@@ -50,7 +50,7 @@ export async function uploadAttachmentData(file: File, pageId: number, options?:
 /** Authenticated download to a local file save (same pattern as editor chip). */
 export async function downloadAttachmentBlob(targetUrl: string, fileName: string): Promise<void> {
     const headers = new Headers();
-    const res = await fetch(targetUrl, { headers });
+    const res = await fetch(targetUrl, { headers, credentials: "include" });
     if (!res.ok) {
         throw new Error(`Download failed (${res.status})`);
     }
@@ -63,5 +63,5 @@ export async function downloadAttachmentBlob(targetUrl: string, fileName: string
     document.body.appendChild(a);
     a.click();
     a.remove();
-    URL.revokeObjectURL(objectUrl);
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
 }

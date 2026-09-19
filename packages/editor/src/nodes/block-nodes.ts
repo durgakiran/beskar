@@ -6,7 +6,7 @@
 import { Heading } from '@tiptap/extension-heading';
 import { Paragraph } from '@tiptap/extension-paragraph';
 import { Blockquote } from '@tiptap/extension-blockquote';
-import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight';
+import CodeBlockLowlight, { type CodeBlockLowlightOptions } from '@tiptap/extension-code-block-lowlight';
 import { BulletList } from '@tiptap/extension-bullet-list';
 import { OrderedList } from '@tiptap/extension-ordered-list';
 import { HorizontalRule } from '@tiptap/extension-horizontal-rule';
@@ -14,7 +14,10 @@ import { Details, DetailsContent, DetailsSummary } from '@tiptap/extension-detai
 import { ListItem } from '@tiptap/extension-list-item';
 import { mergeAttributes } from '@tiptap/core';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
-import { createLowlight, common } from 'lowlight';
+import { ReactNodeViewRenderer } from '@tiptap/react';
+import { Decoration, DecorationSet } from '@tiptap/pm/view';
+import { CodeBlockView } from '../components/codeblock/CodeBlockView';
+import { codeLowlight } from '../components/codeblock/codeBlockUtils';
 
 export const BlockHeading = Heading.extend({
   addAttributes() {
@@ -183,13 +186,56 @@ export const BlockHorizontalRule = HorizontalRule.extend({
 });
 
 // Create lowlight instance with common languages
-const lowlight = createLowlight(common);
+const lowlight = codeLowlight;
 
 export const BlockCodeBlockLowlight = CodeBlockLowlight
-  .extend({
+  .extend<CodeBlockLowlightOptions>({
+    addNodeView() {
+      return ReactNodeViewRenderer(CodeBlockView, {
+        // SVG icons and menu items are not native inputs. Keep their pointer/focus
+        // events out of ProseMirror so clicking them does not select the node.
+        stopEvent: ({ event }) => event.target instanceof Element && !!event.target.closest('.code-block-header, .code-block-popover, .code-block-preview, .code-block-expand, .code-block-caption'),
+      });
+    },
+    addProseMirrorPlugins() {
+      const numbers = (doc: import('@tiptap/pm/model').Node) => {
+        const decorations: Decoration[] = [];
+        doc.descendants((node, pos) => {
+          if (node.type.name !== this.name) return;
+          let offset = 0;
+          node.textContent.split('\n').forEach((line, index) => {
+            decorations.push(Decoration.widget(pos + 1 + offset, () => {
+              const marker = document.createElement('span');
+              marker.className = 'code-line-number';
+              marker.textContent = String(index + 1);
+              marker.setAttribute('aria-hidden', 'true');
+              return marker;
+            }, { side: -1, key: `code-line-${pos}-${index}`, ignoreSelection: true }));
+            offset += line.length + 1;
+          });
+        });
+        return DecorationSet.create(doc, decorations);
+      };
+      const key = new PluginKey('codeLineNumbers');
+      return [...(this.parent?.() || []), new Plugin({
+        key,
+        state: { init: (_, state) => numbers(state.doc), apply: (tr, value) => tr.docChanged ? numbers(tr.doc) : value },
+        props: { decorations: state => key.getState(state) },
+      })];
+    },
     addAttributes() {
       return {
         ...this.parent?.(),
+        ...Object.fromEntries(['wrap', 'lineNumbers', 'collapsed'].map(name => [name, {
+          default: false,
+          parseHTML: (element: HTMLElement) => element.getAttribute(`data-code-${name.toLowerCase()}`) === 'true',
+          renderHTML: (attributes: Record<string, unknown>) => ({ [`data-code-${name.toLowerCase()}`]: String(!!attributes[name]) }),
+        }])),
+        caption: {
+          default: '',
+          parseHTML: (element: HTMLElement) => element.getAttribute('data-code-caption') || '',
+          renderHTML: (attributes: Record<string, unknown>) => ({ 'data-code-caption': attributes.caption }),
+        },
         blockId: {
           default: null,
           parseHTML: (element) => element.getAttribute('data-block-id'),
@@ -221,6 +267,8 @@ export const BlockCodeBlockLowlight = CodeBlockLowlight
       class: 'code-block-lowlight',
     },
     defaultLanguage: 'plaintext',
+    enableTabIndentation: true,
+    tabSize: 2,
   });
 
 export const BlockDetails = Details.extend({

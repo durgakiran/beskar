@@ -1,5 +1,7 @@
 package space
 
+import "github.com/durgakiran/beskar/core"
+
 const (
 	GET_SPACE             = `SELECT id, name, description, date_created, date_updated, user_id, archived_at, archived_by, deleted_at, deleted_by FROM core.space WHERE id = $1 AND deleted_at IS NULL`
 	GET_SPACE_SETTINGS    = `SELECT id, name, description, date_created, date_updated, user_id, archived_at, archived_by, deleted_at, deleted_by FROM core.space WHERE id = $1 AND deleted_at IS NULL`
@@ -22,10 +24,16 @@ const (
 	GET_PAGE_LIST_QUERY = `SELECT
 								p.id,
 								p.owner_id,
-								p.parent_id,
-								CASE WHEN wd.doc_id IS NOT NULL THEN 'whiteboard' ELSE COALESCE(p.type, 'document') END AS type,
-								COALESCE(pr.title, d.title, 'Untitled') AS title,
-								COALESCE(d.draft, 0) AS draft
+								COALESCE(p.parent_id,0) AS parent_id,
+								CASE WHEN wb.page_id IS NOT NULL OR wd.doc_id IS NOT NULL THEN 'whiteboard' ELSE COALESCE(p.type, 'document') END AS type,
+								CASE WHEN wb.page_id IS NOT NULL THEN
+ CASE WHEN p.id=ANY($3::bigint[]) THEN COALESCE(wbt.title,wbs.title,'Untitled') ELSE COALESCE(wbp.title,'Untitled') END
+ ELSE COALESCE(pr.title, d.title, 'Untitled') END AS title,
+								CASE WHEN wb.page_id IS NOT NULL THEN CASE WHEN p.id=ANY($3::bigint[]) AND (wb.published_version_id IS NULL OR wbd.head_sequence > wbp.through_sequence) THEN 1 ELSE 0 END ELSE COALESCE(d.draft, 0) END AS draft,
+ CASE WHEN wb.page_id IS NOT NULL THEN 2 ELSE 1 END AS content_api_version,
+ wb.published_version_id,
+ COALESCE(p.id=ANY($3::bigint[]),false) AS can_edit,
+ EXISTS(SELECT 1 FROM whiteboard.whiteboard_version_preview WHERE version_id=wb.published_version_id) AS has_preview
 							FROM
 								core.page p
 								LEFT JOIN LATERAL (
@@ -37,7 +45,10 @@ const (
 								) d ON TRUE
 								LEFT JOIN project.projects pr ON pr.page_id = p.id
 								LEFT JOIN core.whiteboard_data wd ON wd.doc_id = d.doc_id
+` + core.WhiteboardTitleJoins + `
 							WHERE
 								p.space_id = $1 AND p.id = ANY($2)
+ AND EXISTS(SELECT 1 FROM core.space s WHERE s.id=p.space_id AND s.deleted_at IS NULL)
+ AND (wb.page_id IS NULL OR p.id=ANY($3::bigint[]) OR wb.published_version_id IS NOT NULL)
 							ORDER BY p.id`
 )

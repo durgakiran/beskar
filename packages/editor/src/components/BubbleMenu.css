@@ -12,7 +12,7 @@
   animation: bubbleMenuFadeIn 0.2s ease-out;
 }
 
-.dark .bubble-menu-content {
+:is(.dark, [data-theme="dark"]) .bubble-menu-content {
   background: var(--editor-bg-secondary, #1a1a1a);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3), 0 0 0 1px var(--editor-border-subtle, rgba(255, 255, 255, 0.1));
 }

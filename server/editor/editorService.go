@@ -90,6 +90,9 @@ func (p Page) Publish() int64 {
 }
 
 func (p Page) Delete(conn pgx.Tx, ctx context.Context) (int64, error) {
+	if err := lockLegacyWhiteboardPage(ctx, conn, p.Id); err != nil {
+		return 0, err
+	}
 	var rowsAffected int64
 	command, err := conn.Exec(ctx, deleteDocumentQuery, p.Id, p.SpaceId)
 	rowsAffected = command.RowsAffected()
@@ -101,6 +104,9 @@ func (p Page) Delete(conn pgx.Tx, ctx context.Context) (int64, error) {
 }
 
 func (d Doc) Create(conn pgx.Tx, ctx context.Context) (int64, error) {
+	if err := lockLegacyWhiteboardPage(ctx, conn, d.PageId); err != nil {
+		return 0, err
+	}
 	var docId int64
 	err := conn.QueryRow(ctx, newDoc, d.PageId, d.Title, d.Version, d.OwnerId, d.Draft).Scan(&docId)
 	if err != nil {
@@ -113,6 +119,9 @@ func (d Doc) Create(conn pgx.Tx, ctx context.Context) (int64, error) {
 }
 
 func (d Doc) Update(conn pgx.Tx, ctx context.Context) (int64, int64, error) {
+	if err := lockLegacyWhiteboardPage(ctx, conn, d.PageId); err != nil {
+		return 0, 0, err
+	}
 	var gen int64
 	err := conn.QueryRow(ctx, updateDocQuery, d.Title, d.Version, d.DocId, d.PageId, d.Draft).Scan(&gen)
 	if err != nil {
@@ -666,6 +675,17 @@ func GetDocumentView(pageId int64, spaceId uuid.UUID, ownerId uuid.UUID) (Output
 		}
 	}
 
+	if pageType == "whiteboard" {
+		var title string
+		var publishedAt *time.Time
+		err := tx.QueryRow(ctx, getV2WhiteboardViewMeta, pageId, capabilities.CanEdit).Scan(&title, &publishedAt)
+		if err == nil {
+			output.Title = title
+			output.Meta.PublishedAt = publishedAt
+		} else if !errors.Is(err, pgx.ErrNoRows) {
+			return output, err
+		}
+	}
 	tx.Commit(ctx)
 	return output, nil
 }

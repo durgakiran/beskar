@@ -121,6 +121,27 @@ describe('T3.1-04: starts in initial state after setCurrentTool', () => {
     const leaf = editor.getCurrentTool().current;
     expect((leaf.constructor as typeof StateNode).id).toBe('idle');
   });
+
+  it('clears shape selection when switching to a non-select tool', () => {
+    const editor = makeEditor();
+    const id = editor.createShape({ type: 'box', x: 0, y: 0, props: { w: 100, h: 100 } });
+    editor.setSelectedShapeIds([id]);
+
+    editor.setCurrentTool('box');
+
+    expect(editor.getSelectedShapeIds()).toEqual([]);
+  });
+
+  it('can preserve selection for a temporary pan tool', () => {
+    const editor = makeEditor();
+    editor._registerTool(TestTool);
+    const id = editor.createShape({ type: 'box', x: 0, y: 0, props: { w: 100, h: 100 } });
+    editor.setSelectedShapeIds([id]);
+
+    editor.setCurrentTool('test-tool', { preserveSelection: true });
+
+    expect(editor.getSelectedShapeIds()).toEqual([id]);
+  });
 });
 
 // ─────────────────────────────────────────────────────────────

@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="whiteboard_previews_1" author="Codex" dbms="postgresql">
+        <comment>Immutable client-generated PNG preview per publication, independent of document asset uploads</comment>
+        <createTable schemaName="whiteboard" tableName="whiteboard_version_preview">
+            <column name="version_id" type="UUID">
+                <constraints nullable="false" primaryKey="true" primaryKeyName="whiteboard_version_preview_pk"/>
+            </column>
+            <column name="png_bytes" type="BYTEA"><constraints nullable="false"/></column>
+            <column name="digest" type="TEXT"><constraints nullable="false"/></column>
+            <column name="width" type="INTEGER"><constraints nullable="false"/></column>
+            <column name="height" type="INTEGER"><constraints nullable="false"/></column>
+        </createTable>
+        <addForeignKeyConstraint baseTableSchemaName="whiteboard" baseTableName="whiteboard_version_preview"
+            baseColumnNames="version_id" referencedTableSchemaName="whiteboard" referencedTableName="whiteboard_version"
+            referencedColumnNames="id" constraintName="whiteboard_version_preview_version_fk" onDelete="NO ACTION"/>
+        <!-- Keep PostgreSQL checks and grants in SQL; Community Liquibase has no
+             native change types for them. All structural changes use XML. -->
+        <sql>
+            ALTER TABLE whiteboard.whiteboard_version_preview
+                ADD CONSTRAINT whiteboard_preview_bytes_ck CHECK (octet_length(png_bytes) BETWEEN 1 AND 4194304),
+                ADD CONSTRAINT whiteboard_preview_digest_ck CHECK (digest ~ '^sha256:[0-9a-f]{64}$'),
+                ADD CONSTRAINT whiteboard_preview_width_ck CHECK (width BETWEEN 1 AND 4096),
+                ADD CONSTRAINT whiteboard_preview_height_ck CHECK (height BETWEEN 1 AND 4096),
+                ADD CONSTRAINT whiteboard_preview_pixels_ck CHECK (width::bigint * height &lt;= 8000000);
+            GRANT SELECT, INSERT, UPDATE, DELETE ON whiteboard.whiteboard_version_preview TO ${app_user};
+        </sql>
+        <rollback>
+            <dropTable schemaName="whiteboard" tableName="whiteboard_version_preview"/>
+        </rollback>
+    </changeSet>
+</databaseChangeLog>

@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+ xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+ xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+ <changeSet id="whiteboard_draft_replay_1" author="Codex" dbms="postgresql">
+  <comment>Actor-scoped replay leases pin a snapshot and update interval for one hour</comment>
+  <createTable schemaName="whiteboard" tableName="whiteboard_draft_replay">
+   <column name="id" type="UUID">
+    <constraints nullable="false" primaryKey="true" primaryKeyName="whiteboard_draft_replay_pk"/>
+   </column>
+   <column name="page_id" type="BIGINT">
+    <constraints nullable="false"/>
+   </column>
+   <column name="actor_id" type="UUID">
+    <constraints nullable="false"/>
+   </column>
+   <column name="snapshot_id" type="UUID">
+    <constraints nullable="false"/>
+   </column>
+   <column name="base_sequence" type="BIGINT">
+    <constraints nullable="false"/>
+   </column>
+   <column name="head_sequence" type="BIGINT">
+    <constraints nullable="false"/>
+   </column>
+   <column name="cursor_secret" type="UUID">
+    <constraints nullable="false"/>
+   </column>
+   <column name="expires_at" type="TIMESTAMP WITH TIME ZONE">
+    <constraints nullable="false"/>
+   </column>
+  </createTable>
+  <addForeignKeyConstraint baseTableSchemaName="whiteboard" baseTableName="whiteboard_draft_replay"
+   baseColumnNames="page_id" referencedTableSchemaName="whiteboard" referencedTableName="whiteboard"
+   referencedColumnNames="page_id" constraintName="whiteboard_draft_replay_page_fk" onDelete="CASCADE"/>
+  <addForeignKeyConstraint baseTableSchemaName="whiteboard" baseTableName="whiteboard_draft_replay"
+   baseColumnNames="page_id,snapshot_id" referencedTableSchemaName="whiteboard" referencedTableName="whiteboard_snapshot"
+   referencedColumnNames="page_id,id" constraintName="whiteboard_draft_replay_snapshot_fk" onDelete="NO ACTION"/>
+  <createIndex schemaName="whiteboard" tableName="whiteboard_draft_replay" indexName="whiteboard_draft_replay_page_expiry_idx">
+   <column name="page_id"/>
+   <column name="expires_at"/>
+  </createIndex>
+  <!-- Match adjacent migrations: CHECK constraints and grants use SQL. -->
+  <sql>
+   ALTER TABLE whiteboard.whiteboard_draft_replay
+    ADD CONSTRAINT whiteboard_draft_replay_base_sequence_ck CHECK (base_sequence &gt;= 0),
+    ADD CONSTRAINT whiteboard_draft_replay_head_sequence_ck CHECK (head_sequence &gt;= base_sequence);
+   GRANT SELECT, INSERT, UPDATE, DELETE ON whiteboard.whiteboard_draft_replay TO ${app_user};
+  </sql>
+  <rollback>
+   <dropTable schemaName="whiteboard" tableName="whiteboard_draft_replay"/>
+  </rollback>
+ </changeSet>
+ <changeSet id="whiteboard_draft_replay_2" author="Codex" dbms="postgresql">
+  <comment>Prevent compaction from pruning update bytes needed by live replays</comment>
+  <sql splitStatements="false"><![CDATA[
+   CREATE FUNCTION whiteboard.protect_draft_replay_update() RETURNS trigger LANGUAGE plpgsql AS $$
+   BEGIN
+    -- Compactors must acquire space, page/board, then draft locks before pruning.
+    -- The draft lock serializes retention checks with creation of new leases.
+    PERFORM 1 FROM whiteboard.whiteboard_draft WHERE page_id = OLD.page_id FOR UPDATE;
+    IF EXISTS (SELECT 1 FROM whiteboard.whiteboard_draft_replay
+      WHERE page_id = OLD.page_id AND expires_at > clock_timestamp()
+       AND base_sequence < OLD.sequence AND head_sequence >= OLD.sequence) THEN
+     RAISE EXCEPTION 'update is retained by an active draft replay' USING ERRCODE = '55000';
+    END IF;
+    RETURN OLD;
+   END;
+   $$;
+  ]]></sql>
+  <sql>CREATE TRIGGER whiteboard_update_replay_retention BEFORE DELETE ON whiteboard.whiteboard_update
+   FOR EACH ROW EXECUTE FUNCTION whiteboard.protect_draft_replay_update();</sql>
+  <rollback>
+   <sql>DROP TRIGGER whiteboard_update_replay_retention ON whiteboard.whiteboard_update;</sql>
+   <sql>DROP FUNCTION whiteboard.protect_draft_replay_update();</sql>
+  </rollback>
+ </changeSet>
+</databaseChangeLog>

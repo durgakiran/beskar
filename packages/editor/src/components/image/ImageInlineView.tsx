@@ -10,6 +10,8 @@ import { useFloating, flip, shift, offset, autoUpdate } from '@floating-ui/react
 import { FiTrash2, FiCopy } from 'react-icons/fi';
 import * as Toolbar from '@radix-ui/react-toolbar';
 import * as Separator from '@radix-ui/react-separator';
+import { InlineImageCaption } from './InlineImageCaption';
+import { getImagePasteStorage } from '../../extensions/image-paste-drop';
 
 const DEFAULT_INLINE_HEIGHT = 24;
 const MIN_HEIGHT = 16;
@@ -23,7 +25,16 @@ export function ImageInlineView({
   getPos,
   deleteNode,
 }: NodeViewProps) {
-  const { src, alt, width, height, uploadStatus } = node.attrs;
+  let { src, alt, caption, width, height, uploadStatus } = node.attrs;
+  if (typeof src === 'string') {
+    const imageHandler = getImagePasteStorage(editor)?.imageHandler;
+    if (imageHandler?.getImageUrl) {
+      src = imageHandler.getImageUrl(src);
+    }
+  }
+  const [editingCaption, setEditingCaption] = useState(false);
+  const captionButton = useRef<HTMLButtonElement>(null);
+  const [hasFocus, setHasFocus] = useState(false);
   const imgRef = useRef<HTMLImageElement>(null);
   const [isResizing, setIsResizing] = useState(false);
 
@@ -47,7 +58,7 @@ export function ImageInlineView({
 
   useEffect(() => () => { clearTimeout(hideTimerRef.current); }, []);
 
-  const toolbarVisible = isHovered && editor.isEditable && !isResizing;
+  const toolbarVisible = (isHovered || selected || hasFocus || editingCaption) && editor.isEditable && !isResizing;
 
   const { refs, floatingStyles } = useFloating({
     placement: 'top',
@@ -58,7 +69,7 @@ export function ImageInlineView({
   // ── Handlers ────────────────────────────────────────────────────────────────
 
   const handleImageLoad = useCallback(() => {
-    if (!imgRef.current || width || height) return;
+    if (!editor.isEditable || !imgRef.current || width || height) return;
     const img = imgRef.current;
     const naturalH = img.naturalHeight || DEFAULT_INLINE_HEIGHT;
     const naturalW = img.naturalWidth || DEFAULT_INLINE_HEIGHT;
@@ -67,7 +78,7 @@ export function ImageInlineView({
       width: Math.round((naturalW / naturalH) * targetH),
       height: targetH,
     });
-  }, [width, height, updateAttributes]);
+  }, [width, height, updateAttributes, editor]);
 
   const handleClick = useCallback(() => {
     if (!selected && typeof getPos === 'function') {
@@ -96,7 +107,7 @@ export function ImageInlineView({
     if (pos === undefined) return;
 
     const { schema } = editor.state;
-    const blockNode = schema.nodes.imageBlock?.create({ src, alt, width, height, uploadStatus });
+    const blockNode = schema.nodes.imageBlock?.create({ src: node.attrs.src, alt, caption, width, height, uploadStatus });
     if (!blockNode) return;
 
     editor
@@ -110,7 +121,7 @@ export function ImageInlineView({
         return true;
       })
       .run();
-  }, [getPos, editor, src, alt, width, height, uploadStatus, node.nodeSize]);
+  }, [getPos, editor, node.attrs.src, alt, caption, width, height, uploadStatus, node.nodeSize]);
 
   const handleResizeStart = useCallback(
     (e: React.MouseEvent) => {
@@ -191,11 +202,18 @@ export function ImageInlineView({
       ref={refs.setReference}
       className={`image-inline-wrapper${selected ? ' image-inline-selected' : ''}`}
     >
+      <InlineImageCaption caption={caption || ''} editing={editingCaption && editor.isEditable}
+        onEditingChange={next => { setEditingCaption(next); if (!next) captionButton.current?.focus(); }}
+        onSave={value => { if (editor.isEditable) updateAttributes({ caption: value }); }}>
       {/* Image + resize handle */}
       <span
         className={`image-inline-inner${isResizing ? ' image-inline-resizing' : ''}`}
         contentEditable={false}
         onClick={handleClick}
+        tabIndex={0}
+        aria-label={alt || 'Inline image'}
+        onFocus={() => setHasFocus(true)}
+        onBlur={() => setHasFocus(false)}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
       >
@@ -218,14 +236,20 @@ export function ImageInlineView({
         )}
       </span>
 
+      </InlineImageCaption>
+
       {/* Floating toolbar — always mounted when editable so onMouseEnter can fire.
           Visibility + pointer-events controlled via inline styles. */}
       {editor.isEditable && uploadStatus === 'idle' && (
         <div
           ref={refs.setFloating}
+          contentEditable={false}
+          onFocus={() => setHasFocus(true)}
+          onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget as Node)) setHasFocus(false); }}
           style={{
             ...floatingStyles,
             zIndex: 50,
+            visibility: toolbarVisible ? 'visible' : 'hidden',
             opacity: toolbarVisible ? 1 : 0,
             pointerEvents: toolbarVisible ? 'auto' : 'none',
             transition: 'opacity 0.12s ease',
@@ -247,6 +271,9 @@ export function ImageInlineView({
               </Toolbar.Button>
 
               <Separator.Root className="editor-floating-toolbar-separator" orientation="vertical" />
+
+              <Toolbar.Button ref={captionButton} className="editor-floating-toolbar-button"
+                aria-label="Edit image caption" onClick={() => setEditingCaption(true)}>Caption</Toolbar.Button>
 
               {/* Convert to block */}
               <Toolbar.Button

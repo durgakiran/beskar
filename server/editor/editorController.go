@@ -197,6 +197,9 @@ func publishDoc(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	pageId, publishedDocId, err := inputDoc.Publish()
+	if legacyMigrationHTTPError(w, r, err) {
+		return
+	}
 	if err != nil && err.Error() == "nothing new to update" {
 		render.Status(r, http.StatusConflict)
 		render.Render(w, r, core.NewFailedResponse(http.StatusConflict, core.FAILURE, core.FAILURE, "There is nothing new to update"))
@@ -263,6 +266,9 @@ func updateDraftDoc(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	pageId, draftGen, err := inputDoc.Update()
+	if legacyMigrationHTTPError(w, r, err) {
+		return
+	}
 	if err != nil {
 		if errors.Is(err, ErrDraftPayloadTooSmall) {
 			render.Status(r, http.StatusConflict)
@@ -329,6 +335,9 @@ func deleteDocument(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	rowsAffected, err := DeleteDocument(page, spaceId, ownerId)
+	if legacyMigrationHTTPError(w, r, err) {
+		return
+	}
 	if err != nil {
 		core.SendFailedReponse(w, r, http.StatusInternalServerError, "Unable to delete document")
 		return
@@ -365,7 +374,9 @@ func getPageMetadataHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var metadata PageMetadata
-	err = core.GetPool().QueryRow(ctx, getPageMetadata, pageId, spaceId).Scan(&metadata.Id, &metadata.Type, &metadata.SpaceId)
+	metadata.CanEdit = core.ValidateUserPagePermission(pageIdStr, ownerId, "edit")
+	var hasPreview bool
+	err = core.GetPool().QueryRow(ctx, getPageMetadata, pageId, spaceId, metadata.CanEdit).Scan(&metadata.Id, &metadata.Type, &metadata.SpaceId, &metadata.ContentAPIVersion, &metadata.PublishedVersionID, &hasPreview)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			core.SendFailedReponse(w, r, http.StatusNotFound, "Page not found")
@@ -376,6 +387,7 @@ func getPageMetadataHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	metadata.Whiteboard = core.BuildWhiteboardNavigation(spaceId, metadata.Id, metadata.ContentAPIVersion, metadata.CanEdit, metadata.PublishedVersionID, hasPreview)
 	core.SendSuccessResponse(w, r, http.StatusOK, metadata)
 }
 
@@ -403,12 +415,15 @@ func getPageInlineLinkMetadataHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var metadata PageInlineLinkMetadata
-	err = core.GetPool().QueryRow(ctx, getPageInlineLinkMetadata, pageId, spaceId).Scan(
+	metadata.CanEdit = core.ValidateUserPagePermission(pageIdStr, ownerId, "edit")
+	var hasPreview bool
+	err = core.GetPool().QueryRow(ctx, getPageInlineLinkMetadata, pageId, spaceId, metadata.CanEdit).Scan(
 		&metadata.PageId,
 		&metadata.Type,
 		&metadata.SpaceId,
 		&metadata.Title,
 		&metadata.PreviewAssetName,
+		&metadata.ContentAPIVersion, &metadata.PublishedVersionID, &hasPreview,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -428,6 +443,7 @@ func getPageInlineLinkMetadataHandler(w http.ResponseWriter, r *http.Request) {
 		metadata.Title = "Untitled"
 	}
 
+	metadata.Whiteboard = core.BuildWhiteboardNavigation(spaceId, metadata.PageId, metadata.ContentAPIVersion, metadata.CanEdit, metadata.PublishedVersionID, hasPreview)
 	core.SendSuccessResponse(w, r, http.StatusOK, metadata)
 }
 
@@ -570,7 +586,7 @@ func Router() *chi.Mux {
 	r.Post("/space/{spaceId}/whiteboard/create", createWhiteboard)
 	r.Get("/space/{spaceId}/whiteboard/{pageId}", getWhiteboard)
 	r.Get("/space/{spaceId}/whiteboard/{pageId}/edit", getWhiteboardToEdit)
-	r.Put("/space/{spaceId}/whiteboard/{pageId}", updateWhiteboard)
+	r.Put("/space/{spaceId}/whiteboard/{pageId}/checkpoint", saveWhiteboardCheckpoint)
 	r.Delete("/space/{spaceId}/whiteboard/{pageId}", deleteWhiteboard)
 	r.Put("/space/{spaceId}/whiteboard/{pageId}/publish", publishWhiteboard)
 	r.Get("/space/{spaceId}/whiteboard/{pageId}/versions", listWhiteboardVersions)

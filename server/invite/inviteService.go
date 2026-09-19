@@ -2,12 +2,13 @@ package invite
 
 import (
 	"context"
-	"crypto/md5"
+	"crypto/rand"
 	"database/sql"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/durgakiran/beskar/core"
 	"github.com/durgakiran/beskar/quota"
@@ -78,114 +79,23 @@ func inviteDetailsResponse(invite InviteDetailsDBO) InviteDetailsResponse {
 		Name:       invite.Name,
 		Role:       invite.Role,
 		Token:      invite.Token,
-		Status:     normalizeInviteStatus(invite.Status),
+		Status:     effectiveInviteStatus(invite, time.Now()),
 		CreatedAt:  invite.CreatedAt,
 		UpdatedAt:  invite.UpdatedAt,
 	}
 }
 
-func (invite InviteDBO) _removeInvitation(userId string, token string, conn *pgxpool.Conn) error {
-	rows, err := conn.Query(context.Background(), GET_TOKEN_STATUS_BY_SENDER, invite.SenderId, token)
-	if err != nil {
-		logger().Error(err.Error())
-		return errors.New(core.ErrorCode_name[core.ErrorCode_ERROR_WHILE_FETCHING_ROWS])
-	}
-	defer rows.Close()
-	var inviteBySender InviteDBOV2
-	inviteBySender, err = pgx.CollectExactlyOneRow(rows, pgx.RowToStructByNameLax[InviteDBOV2])
-	if errors.Is(err, pgx.ErrNoRows) {
+const inviteLifetime = 7 * 24 * time.Hour
 
+func effectiveInviteStatus(invite InviteDetailsDBO, now time.Time) *string {
+	if status := normalizeInviteStatus(invite.Status); status != nil {
+		return status
 	}
-	if err != nil {
-		logger().Error(err.Error())
-		return errors.New(core.ErrorCode_name[core.ErrorCode_ERROR_WHILE_READING_ROWS])
+	if invite.CreatedAt == nil || !now.Before(invite.CreatedAt.Add(inviteLifetime)) {
+		status := "expired"
+		return &status
 	}
-	if inviteBySender.UserId != uuid.MustParse(userId) {
-		logger().Error("Userd of the token and sender id are not matching.")
-		return errors.New(core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNAUTHORIZED])
-	}
-	tag, err := conn.Exec(context.Background(), UPDATE_INVITE_BY_SENDER, STATUS_REMOVED, token, invite.SenderId)
-	if err != nil {
-		logger().Error(err.Error())
-		return errors.New(core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNSPECIFIED])
-	}
-	rowsAffected := tag.RowsAffected()
-	logger().Info(fmt.Sprintf("Updated rows %v", rowsAffected))
 	return nil
-}
-
-func (invite InviteDBO) _rejectInvitation(userId string, emailId string, role string, token string, conn *pgxpool.Conn) error {
-	tag, err := conn.Exec(context.Background(), UPDATE_INVITE, STATUS_REJECTED, token, emailId)
-	if err != nil {
-		logger().Error(err.Error())
-		return errors.New(core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNSPECIFIED])
-	}
-	rowsAffected := tag.RowsAffected()
-	logger().Info(fmt.Sprintf("Updated rows %v", rowsAffected))
-	return nil
-}
-
-func (invite InviteDBO) _acceptInvitation(userId string, emailId string, role string, token string, conn *pgxpool.Conn) error {
-	if invite.Entity == "space" {
-		spaceID, err := uuid.Parse(invite.EntityId)
-		if err == nil {
-			if err := quota.ValidateCollaboratorAddition(context.Background(), spaceID, 1, false); err != nil {
-				return err
-			}
-		}
-	}
-	_, err := core.CreateSubjectPermissions(invite.Entity, invite.EntityId, "user", userId, role)
-	if err != nil {
-		logger().Error(err.Error())
-		return errors.New(core.ErrorCode_name[core.ErrorCode_ERROR_CODE_PERMISSION_SERVER_ISSUE])
-	}
-	tag, err := conn.Exec(context.Background(), UPDATE_INVITE, STATUS_ACCEPTED, token, emailId)
-	if err != nil {
-		logger().Error(err.Error())
-		return errors.New(core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNSPECIFIED])
-	}
-	rowsAffected := tag.RowsAffected()
-	logger().Info(fmt.Sprintf("Updated rows %v", rowsAffected))
-	return nil
-}
-
-func processInvitation(userId string, emailId string, token string, decision string) error {
-	connPool := core.GetPool()
-	ctx := context.Background()
-	conn, err := connPool.Acquire(ctx)
-	if err != nil {
-		logger().Error(err.Error())
-		return errors.New(core.ErrorCode_name[core.ErrorCode_ERROR_CODE_CONNECTION_ISSUE])
-	}
-	defer conn.Release()
-	rows, err := conn.Query(ctx, GET_TOKEN_STATUS, emailId, token)
-	if err != nil {
-		logger().Error(err.Error())
-		return errors.New(core.ErrorCode_name[core.ErrorCode_ERROR_WHILE_FETCHING_ROWS])
-	}
-	defer rows.Close()
-	var invite InviteDBO
-	invite, err = pgx.CollectExactlyOneRow(rows, pgx.RowToStructByNameLax[InviteDBO])
-	if errors.Is(err, pgx.ErrNoRows) {
-
-	}
-	if err != nil {
-		logger().Error(err.Error())
-		return errors.New(core.ErrorCode_name[core.ErrorCode_ERROR_WHILE_READING_ROWS])
-	}
-	if invite.Status.Valid {
-		return errors.New(core.ErrorCode_name[core.ErrorCode_ERROR_CODE_INVALID_INPUT])
-	} else {
-		switch decision {
-		case STATUS_ACCEPTED:
-			return invite._acceptInvitation(userId, emailId, invite.Role, token, conn)
-		case STATUS_REJECTED:
-			return invite._rejectInvitation(userId, emailId, invite.Role, token, conn)
-		case STATUS_REMOVED:
-			return invite._removeInvitation(userId, token, conn)
-		}
-	}
-	return errors.New(core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNSPECIFIED])
 }
 
 func getInviteDetailsForUser(email string, token string) (InviteDetailsResponse, error) {
@@ -221,42 +131,128 @@ func getInviteDetailsForUser(email string, token string) (InviteDetailsResponse,
 		logger().Error(err.Error())
 		return InviteDetailsResponse{}, errors.New(core.ErrorCode_name[core.ErrorCode_ERROR_WHILE_READING_ROWS])
 	}
-	if !strings.EqualFold(invite.Email, email) {
+	if !strings.EqualFold(strings.TrimSpace(invite.Email), strings.TrimSpace(email)) {
 		return InviteDetailsResponse{}, errInviteWrongAccount
 	}
 
 	return inviteDetailsResponse(invite), nil
 }
 
-func processInviteDecision(userId string, emailId string, token string, decision string) (InviteDecisionResponse, error) {
+type inviteAcceptance func(context.Context, InviteDetailsDBO, string) error
+
+func grantInviteAccess(ctx context.Context, invite InviteDetailsDBO, userID string) error {
+	if invite.Entity != "space" {
+		return errors.New("unsupported invitation entity")
+	}
+	spaceID, err := uuid.Parse(invite.EntityId)
+	if err != nil {
+		return err
+	}
+	if err := core.ValidateSpaceMutable(spaceID); err != nil {
+		return err
+	}
+	permission := core.SPACE_INVITE_MEMBER
+	if invite.Role == "admin" {
+		permission = core.SPACE_INVITE_ADMIN
+	}
+	allowed, err := core.CheckPermission("space", invite.EntityId, "user", invite.SenderId.String(), permission)
+	if err != nil {
+		return err
+	}
+	if !allowed {
+		return errors.New("the sender can no longer invite users to this space")
+	}
+	role, err := normalizeInviteRelation(invite.Role)
+	if err != nil {
+		return err
+	}
+	existing, err := core.CheckPermission("space", invite.EntityId, "user", userID, core.SPACE_VIEW)
+	if err != nil {
+		return err
+	}
+	// A replay or a separately added member must not consume another quota slot
+	// or silently change an existing member's role.
+	if existing {
+		return nil
+	}
+	if err := quota.ValidateCollaboratorAddition(ctx, spaceID, 1, false); err != nil {
+		return err
+	}
+	_, err = core.CreateSubjectPermissionsContext(ctx, "space", invite.EntityId, "user", userID, role)
+	if err != nil {
+		return errors.New(core.ErrorCode_name[core.ErrorCode_ERROR_CODE_PERMISSION_SERVER_ISSUE])
+	}
+	return nil
+}
+
+// Lock the invitation until the decision commits so concurrent accept/reject and
+// revocation cannot race past the pending-status check. Permission writes are
+// idempotent; a failed database commit remains retryable without a second seat.
+func decideInvite(ctx context.Context, pool *pgxpool.Pool, userID, email, token, decision string, grant inviteAcceptance) (InviteDecisionResponse, *InviteDetailsDBO, error) {
 	status, err := inviteDecisionToStatus(decision)
 	if err != nil {
-		return InviteDecisionResponse{}, err
+		return InviteDecisionResponse{}, nil, err
 	}
-
-	details, err := getInviteDetailsForUser(emailId, token)
+	if _, err := uuid.Parse(userID); err != nil {
+		return InviteDecisionResponse{}, nil, errInviteWrongAccount
+	}
+	token = strings.TrimSpace(token)
+	if token == "" {
+		return InviteDecisionResponse{}, nil, errInviteNotFound
+	}
+	tx, err := pool.Begin(ctx)
 	if err != nil {
-		return InviteDecisionResponse{}, err
+		return InviteDecisionResponse{}, nil, err
 	}
-	if details.Status != nil {
-		return InviteDecisionResponse{
-			Status:   *details.Status,
-			Entity:   details.Entity,
-			EntityId: details.EntityId,
-		}, nil
+	defer tx.Rollback(ctx)
+	rows, err := tx.Query(ctx, GET_INVITE_DETAILS_BY_TOKEN_QUERY+" FOR UPDATE OF i", token)
+	if err != nil {
+		return InviteDecisionResponse{}, nil, err
 	}
+	invite, err := pgx.CollectExactlyOneRow(rows, pgx.RowToStructByNameLax[InviteDetailsDBO])
+	if errors.Is(err, pgx.ErrNoRows) {
+		return InviteDecisionResponse{}, nil, errInviteNotFound
+	}
+	if err != nil {
+		return InviteDecisionResponse{}, nil, err
+	}
+	if strings.TrimSpace(email) == "" || !strings.EqualFold(strings.TrimSpace(invite.Email), strings.TrimSpace(email)) {
+		return InviteDecisionResponse{}, nil, errInviteWrongAccount
+	}
+	result := InviteDecisionResponse{Entity: invite.Entity, EntityId: invite.EntityId}
+	if current := effectiveInviteStatus(invite, time.Now()); current != nil {
+		result.Status = *current
+		return result, nil, nil
+	}
+	if status == STATUS_ACCEPTED {
+		if err := grant(ctx, invite, userID); err != nil {
+			return InviteDecisionResponse{}, nil, err
+		}
+	}
+	tag, err := tx.Exec(ctx, UPDATE_INVITE, status, token, strings.TrimSpace(email))
+	if err != nil {
+		return InviteDecisionResponse{}, nil, err
+	}
+	if tag.RowsAffected() != 1 {
+		return InviteDecisionResponse{}, nil, errors.New("invitation changed; reload and try again")
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return InviteDecisionResponse{}, nil, err
+	}
+	result.Status = strings.ToLower(status)
+	return result, &invite, nil
+}
 
-	if err := processInvitation(userId, emailId, token, status); err != nil {
-		return InviteDecisionResponse{}, err
+func processInviteDecision(userId, emailId, token, decision string) (InviteDecisionResponse, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	result, changed, err := decideInvite(ctx, core.GetPool(), userId, emailId, token, decision, grantInviteAccess)
+	if err == nil && changed != nil {
+		emitSpaceInviteDecisionInApp(ctx, inviteDetailsResponse(*changed), userId, emailId, result.Status)
+	} else if err == nil {
+		resolveSpaceInviteNotification(ctx, token, userId)
 	}
-	emitSpaceInviteDecisionInApp(context.Background(), details, userId, emailId, status)
-
-	responseStatus := strings.ToLower(status)
-	return InviteDecisionResponse{
-		Status:   responseStatus,
-		Entity:   details.Entity,
-		EntityId: details.EntityId,
-	}, nil
+	return result, err
 }
 
 func (i Invite) removeInvitation() error {
@@ -279,6 +275,8 @@ func (i Invite) removeInvitation() error {
 }
 
 func (i *Invite) invite() (string, error) {
+	// Resolve recipient identity server-side; never trust a caller-supplied user ID.
+	i.UserId = uuid.Nil
 	token := i.token()
 	if token == "" {
 		logger().Error("unable to create token")
@@ -299,7 +297,10 @@ func (i *Invite) invite() (string, error) {
 		}
 	}
 	if i.UserId != uuid.Nil {
-		permission, _ := core.CheckPermission(i.Entity, i.EntityId, "user", i.UserId.String(), core.PAGE_VIEW)
+		permission, err := core.CheckPermission(i.Entity, i.EntityId, "user", i.UserId.String(), core.SPACE_VIEW)
+		if err != nil {
+			return token, err
+		}
 		if permission {
 			logger().Error("user is already a member of the space")
 			// user is already a member of the space
@@ -321,9 +322,15 @@ func (i *Invite) invite() (string, error) {
 	}
 	defer conn.Release()
 	defer tx.Rollback(ctx)
+	// Expired pending rows must not prevent a fresh invitation (or reserve seats).
+	if _, err := tx.Exec(ctx, `UPDATE notifications.invites SET status = 'EXPIRED', updated_at = now()
+        WHERE entity = $1 AND entity_id = $2 AND status IS NULL
+        AND (created_at IS NULL OR created_at <= now() - interval '7 days')`, i.Entity, i.EntityId); err != nil {
+		return token, err
+	}
 	var exists int
 	if i.UserId != uuid.Nil {
-		err = conn.QueryRow(ctx, CHECK_PENDING_INVITE_EXISTS_BY_USER_QUERY, i.Entity, i.EntityId, i.UserId).Scan(&exists)
+		err = tx.QueryRow(ctx, CHECK_PENDING_INVITE_EXISTS_BY_USER_QUERY, i.Entity, i.EntityId, i.UserId).Scan(&exists)
 		if err == nil && exists == 1 {
 			return token, errors.New("pending invite already exists")
 		}
@@ -332,7 +339,7 @@ func (i *Invite) invite() (string, error) {
 			return token, err
 		}
 	}
-	err = conn.QueryRow(ctx, CHECK_PENDING_INVITE_EXISTS_QUERY, i.Entity, i.EntityId, i.Email).Scan(&exists)
+	err = tx.QueryRow(ctx, CHECK_PENDING_INVITE_EXISTS_QUERY, i.Entity, i.EntityId, i.Email).Scan(&exists)
 	if err == nil && exists == 1 {
 		return token, errors.New("pending invite already exists")
 	}
@@ -366,14 +373,12 @@ func (i *Invite) invite() (string, error) {
 }
 
 func (i Invite) token() string {
-	str := i.Entity + i.EntityId + i.Email + i.SenderId.String() + i.Role
-	h := md5.New()
-	_, err := h.Write([]byte(str))
-	if err != nil {
+	// 128 random bits, encoded within the existing VARCHAR(35) column.
+	var token [16]byte
+	if _, err := rand.Read(token[:]); err != nil {
 		return ""
 	}
-	hashValue := h.Sum(nil)
-	return hex.EncodeToString(hashValue)
+	return hex.EncodeToString(token[:])
 }
 
 func getSpaceInvites(spaceId uuid.UUID) ([]InviteDBOV3, error) {

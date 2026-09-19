@@ -31,6 +31,9 @@ function pu(editor: ReturnType<typeof makeEditor>, x: number, y: number) {
 function esc(editor: ReturnType<typeof makeEditor>) {
   editor.dispatchEvent({ type: 'keyDown', key: 'Escape' });
 }
+function cancel(editor: ReturnType<typeof makeEditor>) {
+  editor.dispatchEvent({ type: 'pointerCancel' });
+}
 
 // ─────────────────────────────────────────────────────────────
 // T3.3-01: No shape created on pointerDown only (no drag)
@@ -57,6 +60,7 @@ describe('T3.3-02: preview created on drag', () => {
     pd(editor, 100, 100);
     pm(editor, 120, 100); // 20px — crosses threshold
     expect(shapeCount(editor)).toBe(before + 1);
+    expect(editor.serialize().records.filter(record => record.kind === 'shape')).toHaveLength(0);
     // Cleanup
     esc(editor);
   });
@@ -117,6 +121,27 @@ describe('T3.3-05: escape deletes preview', () => {
 });
 
 // ─────────────────────────────────────────────────────────────
+// pointerCancel: browser/OS-initiated abort commits the box as last staged
+// (distinct from Escape, which discards it)
+// ─────────────────────────────────────────────────────────────
+
+describe('pointerCancel commits the box as last staged', () => {
+  it('shape stays in store with the last-staged size, tool switches to select', () => {
+    const editor = makeEditor();
+    pd(editor, 0, 0);
+    pm(editor, 10, 0); // cross threshold
+    pm(editor, 80, 60);
+    cancel(editor);
+
+    expect(shapeCount(editor)).toBe(1);
+    const shape = editor.getShapesInBox({ minX: -1e6, minY: -1e6, maxX: 1e6, maxY: 1e6 })[0] as any;
+    expect(shape.props.w).toBe(80);
+    expect(shape.props.h).toBe(60);
+    expect(editor.currentToolId.value).toBe('select');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────
 // T3.3-06: Committed shape is a single undo entry
 // ─────────────────────────────────────────────────────────────
 
@@ -129,7 +154,7 @@ describe('T3.3-06: single undo entry for drawn box', () => {
     pu(editor, 100, 80);
 
     expect(shapeCount(editor)).toBe(1);
-    editor.history.undo();
+    editor.undo();
     expect(shapeCount(editor)).toBe(0);
   });
 });

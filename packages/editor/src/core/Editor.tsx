@@ -8,6 +8,9 @@ import { useDebounce } from '../utils/debounce';
 import { getEmbedUrlAndProvider, isSinglePlainUrl } from '../nodes/embed/embed-providers';
 import { parseInternalResourceUrl } from '../nodes/internalDocumentUrl';
 
+// Keep node views (and their open controls) alive across content/debounce renders.
+const NO_CUSTOM_EXTENSIONS: NonNullable<EditorProps['extensions']> = [];
+
 function replaceSelectionWithEmbedBlock(view: any, node: any): boolean {
   const { state, dispatch } = view;
   const { selection } = state;
@@ -136,7 +139,8 @@ export function Editor({
   collaboration,
   onUpdate,
   onReady,
-  extensions: customExtensions = [],
+  extensions: customExtensions = NO_CUSTOM_EXTENSIONS,
+  features,
   className = '',
   autoFocus = false,
   imageHandler,
@@ -180,6 +184,7 @@ export function Editor({
         columnDetailsSummaryPlaceholder,
         collaboration,
         additionalExtensions: customExtensions,
+        features,
         imageHandler,
         attachmentHandler,
         maxAttachmentBytes,
@@ -200,6 +205,7 @@ export function Editor({
       columnDetailsSummaryPlaceholder,
       collaboration,
       customExtensions,
+      features,
       imageHandler,
       attachmentHandler,
       maxAttachmentBytes,
@@ -230,30 +236,8 @@ export function Editor({
       },
     },
     onCreate: ({ editor: currentEditor }) => {
-      console.log('[Editor] onCreate called, adding blockIds...');
+      // BlockId owns initialization, split/paste repair and the shared type registry.
       setHasInitialized(true);
-
-      // Add blockIds to all block nodes right after creation
-      const { state, view } = currentEditor;
-      const tr = state.tr;
-      let modified = false;
-
-      state.doc.descendants((node, pos) => {
-        // Only process block-level nodes
-        const blockTypes = ['heading', 'paragraph', 'blockquote', 'codeBlock', 'bulletList', 'orderedList', 'horizontalRule'];
-        if (blockTypes.includes(node.type.name) && !node.attrs.blockId) {
-          const blockId = `block-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-          tr.setNodeMarkup(pos, undefined, {
-            ...node.attrs,
-            blockId,
-          });
-          modified = true;
-        }
-      });
-
-      if (modified) {
-        view.dispatch(tr);
-      }
 
       if (onReadyRef.current) {
         onReadyRef.current(currentEditor);
@@ -283,7 +267,7 @@ export function Editor({
   }, [editor, editable]);
 
   return (
-    <div ref={containerRef} className={`beskar-editor ${className}`}>
+    <div ref={containerRef} className={`beskar-editor ${className}`} data-editor-mode={editable ? 'edit' : 'view'}>
       {editor && <EditorContent editor={editor} className="editor-content" />}
     </div>
   );

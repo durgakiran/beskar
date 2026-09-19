@@ -16,9 +16,9 @@
  * being erased (visual feedback before commit).
  */
 
-import { StateNode } from '../state-node';
-import type { PointerDownEvent, PointerMoveEvent, PointerUpEvent, KeyDownEvent } from '../state-node';
-import type { ShapeId } from '../types';
+import { StateNode } from '../state-node.js';
+import type { PointerDownEvent, PointerMoveEvent, PointerUpEvent, KeyDownEvent } from '../state-node.js';
+import type { ShapeId } from '../types.js';
 
 // ─────────────────────────────────────────────────────────────
 // Idle
@@ -53,7 +53,7 @@ class Erasing extends StateNode {
 
   override onPointerUp(_e: PointerUpEvent): void {
     if (this.erasedIds.size > 0) {
-      this.editor.history.batch('Erase Shapes', () => {
+      this.editor.batch('Erase Shapes', () => {
         this.editor.deleteShapes(Array.from(this.erasedIds));
       });
     }
@@ -75,8 +75,9 @@ class Erasing extends StateNode {
     const hits = this.editor.getShapesAtPoint(point);
     let changed = false;
     for (const shape of hits) {
-      if (!this.erasedIds.has(shape.id as ShapeId)) {
-        this.erasedIds.add(shape.id as ShapeId);
+      const id = this.editor.getSelectableShapeId(shape.id as ShapeId);
+      if (id && !this.editor.isShapeEffectivelyLocked(id) && !this.erasedIds.has(id)) {
+        this.erasedIds.add(id);
         changed = true;
       }
     }

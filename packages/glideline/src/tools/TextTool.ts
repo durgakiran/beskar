@@ -12,10 +12,9 @@
  * (InlineEditor.tsx in the demo layer) listens to editingShapeId signal.
  */
 
-import { StateNode } from '../state-node';
-import type { PointerDownEvent } from '../state-node';
-import type { ShapeId } from '../types';
-import { sid } from '../types';
+import { StateNode } from '../state-node.js';
+import type { PointerDownEvent } from '../state-node.js';
+import type { ShapeId } from '../types.js';
 
 // ─────────────────────────────────────────────────────────────
 // Idle
@@ -37,18 +36,18 @@ class Idle extends StateNode {
     }
 
     // Create a new text shape at click position and start editing
-    const newId: ShapeId = sid(`text-${Date.now()}`);
-    this.editor.history.batch('Create Text', () => {
+    const newId: ShapeId = this.editor.createShapeId('text');
+    this.editor.batch('Create Text', () => {
       this.editor.createShape({
         id:       newId,
         type:     'text',
         x:        e.point.x,
         y:        e.point.y,
-        index:    'a1',
         rotation: 0,
         meta:     {},
         props: {
           text:     '',
+          textAlign: 'left',
         },
       });
     });

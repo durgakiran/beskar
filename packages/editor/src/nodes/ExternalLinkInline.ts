@@ -8,6 +8,8 @@ export interface ExternalLinkInlineAttributes {
   title: string;
   siteName: string;
   error: string;
+  metadataHref: string;
+  metadataResolved: boolean;
 }
 
 export interface ExternalLinkInlineOptions {
@@ -19,6 +21,8 @@ const DEFAULT_ATTRS: ExternalLinkInlineAttributes = {
   title: '',
   siteName: '',
   error: '',
+  metadataHref: '',
+  metadataResolved: false,
 };
 
 export const ExternalLinkInline = Node.create<ExternalLinkInlineOptions>({
@@ -61,6 +65,16 @@ export const ExternalLinkInline = Node.create<ExternalLinkInlineOptions>({
         default: DEFAULT_ATTRS.siteName,
         parseHTML: (element) => element.getAttribute('data-site-name') || '',
         renderHTML: (attributes) => (attributes.siteName ? { 'data-site-name': attributes.siteName } : {}),
+      },
+      metadataHref: {
+        default: '',
+        parseHTML: element => element.getAttribute('data-metadata-href') || '',
+        renderHTML: attributes => ({ 'data-metadata-href': attributes.metadataHref }),
+      },
+      metadataResolved: {
+        default: false,
+        parseHTML: element => element.getAttribute('data-metadata-resolved') === 'true',
+        renderHTML: attributes => ({ 'data-metadata-resolved': String(attributes.metadataResolved) }),
       },
       error: {
         default: DEFAULT_ATTRS.error,

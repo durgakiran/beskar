@@ -8,6 +8,8 @@ self.onmessage = (e) => {
             loadWasm().then(() => {
                 console.log("wasm loaded");
                 self.postMessage({ type: "initiated" })
+            }).catch((err) => {
+                self.postMessage({ type: "error", error: err.message || String(err) })
             });
             break;
         case 'data':

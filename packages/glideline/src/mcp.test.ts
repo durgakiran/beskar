@@ -56,14 +56,15 @@ describe('Phase Infinity MCP tool server', () => {
     expect(shape.y).toBe(100);
   });
 
-  it('T∞.2-02: AI-created shapes bypass the local undo stack', async () => {
+  it('T∞.2-02: AI-created shapes are one local undo command', async () => {
     const editor = makeEditor();
     const server = createCanvasToolServer(editor);
 
     const result = await server.callTool('create_shape', { type: 'box', x: 60, y: 80 }) as { id: ShapeId };
+    expect(editor.history.undoStack[editor.history.undoStack.length - 1]?.label).toBe('AI: Create Shape');
     editor.undo();
 
-    expect(editor.getShape(result.id)).toBeDefined();
+    expect(editor.getShape(result.id)).toBeUndefined();
   });
 
   it('T∞.2-03: invalid params return a structured error instead of throwing', async () => {
@@ -107,6 +108,24 @@ describe('Phase Infinity MCP tool server', () => {
     expect(result).toEqual(editor.getAIContext());
   });
 
+  it('exposes hierarchy-aware arrange and precision tools', async () => {
+    const editor = makeEditor();
+    const server = createCanvasToolServer(editor);
+    const first = createBox(editor, 'shape:arrange-a', 20, 20);
+    const second = createBox(editor, 'shape:arrange-b', 280, 100);
+
+    expect(await server.callTool('arrange_shapes', {
+      shapeIds: [first, second], operation: 'align-top',
+    })).toEqual({ ok: true });
+    expect(editor.getShapeVisualWorldBounds(first).minY)
+      .toBeCloseTo(editor.getShapeVisualWorldBounds(second).minY, 7);
+
+    expect(await server.callTool('set_shape_geometry', { id: first, x: 160, y: 140 }))
+      .toEqual({ ok: true });
+    expect(editor.getShapeVisualWorldBounds(first).minX).toBeCloseTo(160, 7);
+    expect(editor.getShapeVisualWorldBounds(first).minY).toBeCloseTo(140, 7);
+  });
+
   it('T∞.2-06: tool manifest is generated from Zod and round-trips as JSON Schema', () => {
     const editor = makeEditor();
     const server = createCanvasToolServer(editor);
@@ -121,6 +140,9 @@ describe('Phase Infinity MCP tool server', () => {
       'get_canvas_state',
       'create_diagram',
       'layout_shapes',
+      'arrange_shapes',
+      'set_shape_geometry',
+      'reparent_shapes',
       'get_canvas_image',
     ]);
     for (const tool of manifest) {
@@ -144,5 +166,11 @@ describe('Phase Infinity MCP tool server', () => {
     expect(updated).toEqual({ ok: true });
     expect(deleted).toEqual({ deleted: 1 });
     expect(editor.getShape(created.id)).toBeUndefined();
+
+    expect(editor.history.undoStack[editor.history.undoStack.length - 1]?.label).toBe('AI: Delete Shapes');
+    editor.undo();
+    expect(editor.getShape(created.id)).toMatchObject({ x: 180, y: 60 });
+    editor.undo();
+    expect(editor.getShape(created.id)).toMatchObject({ x: 20, y: 20 });
   });
 });

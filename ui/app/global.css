@@ -453,3 +453,12 @@ body {
 .w-1 {
     width: 0.25rem/* 4px */;
 }
+
+/* Shared document content contract for editing and published pages. */
+.document-editor-surface {
+  position: relative;
+  width: 100%;
+  --editor-font-family: var(--font-sans, Geist, Inter, system-ui, sans-serif);
+  --editor-font-size: 1rem;
+  --editor-line-height: 1.625;
+}

@@ -15,10 +15,12 @@ type Brand<T, B> = T & { [_brand]: B };
 export type ShapeId   = Brand<string, 'Shape'>;
 export type BindingId = Brand<string, 'Binding'>;
 export type PageId    = Brand<string, 'Page'>;
+export type AssetId   = Brand<string, 'Asset'>;
 
 export const sid = (id: string): ShapeId     => id as ShapeId;
 export const bid = (id: string): BindingId   => id as BindingId;
 export const pid = (id: string): PageId      => id as PageId;
+export const aid = (id: string): AssetId     => id as AssetId;
 
 // ─────────────────────────────────────────────────────────────
 // Geometry
@@ -44,13 +46,27 @@ export function makeBox(x: number, y: number, w: number, h: number): Box2d {
 // Record interfaces
 // ─────────────────────────────────────────────────────────────
 
+export type KnownRecordKind = 'shape' | 'binding' | 'page' | 'asset';
+export type RecordKind = KnownRecordKind | 'opaque' | (string & {});
+
+export interface RecordReferenceDescriptor {
+  /** JSON Pointer to an ID-valued field, for example /props/start/boundShapeId. */
+  readonly path: string;
+  readonly targetKind?: KnownRecordKind;
+  readonly onDetach?: 'delete' | 'null';
+}
+
 export interface BaseRecord {
   readonly id: string;
+  /** Required in persisted/store-v2 records; optional on legacy creation input. */
+  readonly kind?: RecordKind;
   readonly type: string;
+  /** Required in persisted/store-v2 records; inferred for legacy creation input. */
+  readonly schemaVersion?: number;
 }
 
 /** Every shape record in the store. `props` is typed per-shape via ShapeUtil<S>. */
-export interface GlideShape<Props extends Record<string, unknown> = Record<string, unknown>>
+export interface GlideShape<Props extends object = Record<string, unknown>>
   extends BaseRecord {
   readonly id: ShapeId;
   x: number;
@@ -59,12 +75,17 @@ export interface GlideShape<Props extends Record<string, unknown> = Record<strin
   index: string;
   /** Rotation in radians */
   rotation: number;
+  /** Required ownership parent. Coordinates are local to this parent. */
+  parentId: PageId | ShapeId;
+  isLocked: boolean;
+  isHidden: boolean;
+  name?: string;
   props: Props;
   meta: Record<string, unknown>;
 }
 
 /** Every binding record in the store (e.g. arrow → box). */
-export interface GlideBinding<Props extends Record<string, unknown> = Record<string, unknown>>
+export interface GlideBinding<Props extends object = Record<string, unknown>>
   extends BaseRecord {
   readonly id: BindingId;
   readonly fromId: ShapeId;
@@ -73,8 +94,30 @@ export interface GlideBinding<Props extends Record<string, unknown> = Record<str
   meta: Record<string, unknown>;
 }
 
+export interface GlidePage extends BaseRecord {
+  readonly id: PageId;
+  readonly kind?: 'page';
+  name: string;
+  index: string;
+  meta: Record<string, unknown>;
+}
+
+export interface GlideAsset extends BaseRecord {
+  readonly id: AssetId;
+  readonly kind?: 'asset';
+  props: Record<string, unknown>;
+  meta: Record<string, unknown>;
+}
+
 /** Convenience alias used internally. */
 export type AnyRecord = Record<string, unknown>;
+
+/** Recursively read-only JSON-compatible data exposed by the store. */
+export type DeepReadonly<T> =
+  T extends string | number | boolean | null ? T
+    : T extends readonly (infer U)[] ? readonly DeepReadonly<U>[]
+      : T extends Record<string, unknown> ? { readonly [K in keyof T]: DeepReadonly<T[K]> }
+        : T;
 
 // ─────────────────────────────────────────────────────────────
 // Validator types (used by T system in validators.ts)
@@ -85,7 +128,7 @@ export interface Validator<T> {
 }
 
 /** Maps every key in Props to a matching Validator. */
-export type GlideProps<Props extends Record<string, unknown>> = {
+export type GlideProps<Props extends object> = {
   [K in keyof Props]: Validator<Props[K]>;
 };
 
@@ -114,7 +157,7 @@ export interface GlideDocument {
     shapes: Record<string, number>;
     bindings: Record<string, number>;
   };
-  records: Array<GlideShape | GlideBinding | AnyRecord>;
+  records: Array<GlideShape | GlideBinding | GlidePage | GlideAsset | AnyRecord>;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -122,5 +165,15 @@ export interface GlideDocument {
 // ─────────────────────────────────────────────────────────────
 
 export function isGlideBinding(record: AnyRecord): boolean {
+  if (record['kind'] !== undefined) return record['kind'] === 'binding';
   return typeof record['fromId'] === 'string' && typeof record['toId'] === 'string';
+}
+
+export function isGlideShape(record: AnyRecord): boolean {
+  if (record['kind'] !== undefined) return record['kind'] === 'shape';
+  return !isGlideBinding(record)
+    && typeof record['x'] === 'number'
+    && typeof record['y'] === 'number'
+    && typeof record['rotation'] === 'number'
+    && typeof record['index'] === 'string';
 }

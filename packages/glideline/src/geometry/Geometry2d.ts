@@ -1,4 +1,4 @@
-import { Box2d, Vec2 } from '../types';
+import { Box2d, Vec2 } from '../types.js';
 
 export abstract class Geometry2d {
   abstract getBounds(): Box2d;

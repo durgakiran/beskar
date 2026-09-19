@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+    <changeSet id="whiteboard_titles_1" author="Codex" dbms="postgresql">
+        <comment>Title changes share the durable checkpoint sequence and remain queryable without decoding Yjs</comment>
+        <createTable schemaName="whiteboard" tableName="whiteboard_title_update">
+            <column name="page_id" type="BIGINT"><constraints nullable="false"/></column>
+            <column name="sequence" type="BIGINT"><constraints nullable="false"/></column>
+            <column name="title" type="TEXT"><constraints nullable="false"/></column>
+        </createTable>
+        <addPrimaryKey schemaName="whiteboard" tableName="whiteboard_title_update" columnNames="page_id,sequence" constraintName="whiteboard_title_update_pk"/>
+        <addForeignKeyConstraint baseTableSchemaName="whiteboard" baseTableName="whiteboard_title_update" baseColumnNames="page_id,sequence"
+            referencedTableSchemaName="whiteboard" referencedTableName="whiteboard_update" referencedColumnNames="page_id,sequence"
+            constraintName="whiteboard_title_update_checkpoint_fk" onDelete="NO ACTION"/>
+        <sql>
+            ALTER TABLE whiteboard.whiteboard_title_update ADD CONSTRAINT whiteboard_title_length_ck CHECK (char_length(title) BETWEEN 1 AND 255);
+            GRANT SELECT, INSERT, UPDATE, DELETE ON whiteboard.whiteboard_title_update TO ${app_user};
+        </sql>
+        <rollback><dropTable schemaName="whiteboard" tableName="whiteboard_title_update"/></rollback>
+    </changeSet>
+</databaseChangeLog>

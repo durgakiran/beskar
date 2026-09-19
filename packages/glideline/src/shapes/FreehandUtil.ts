@@ -17,14 +17,15 @@
  * This gives natural-looking curves without requiring an external library.
  */
 
-import { ShapeUtil } from './ShapeUtil';
-import { T } from '../validators';
-import { defineMigrations } from '../migrations';
-import { makeBox } from '../types';
-import type { GlideShape, Vec2, GlideProps } from '../types';
-import { STROKE_WIDTHS, STROKE_DASH_ARRAYS, resolveColor, StyleValidators } from '../styles';
-import type { SizeStyle, StrokeStyle } from '../styles';
-import { Geometry2d, Polyline2d } from '../geometry';
+import { ShapeUtil } from './ShapeUtil.js';
+import { T } from '../validators.js';
+import { defineMigrations } from '../migrations.js';
+import { makeBox } from '../types.js';
+import type { GlideShape, Vec2, GlideProps } from '../types.js';
+import { STROKE_WIDTHS, STROKE_DASH_ARRAYS, resolveColor, StyleValidators } from '../styles.js';
+import type { SizeStyle, StrokeStyle } from '../styles.js';
+import { Geometry2d, Polyline2d } from '../geometry/index.js';
+import { getStroke } from 'perfect-freehand';
 
 // ─────────────────────────────────────────────────────────────
 // Freehand point type
@@ -47,6 +48,8 @@ export interface FreehandProps {
   color:       string;
   strokeWidth: SizeStyle;
   strokeStyle: StrokeStyle;
+  pressureSensitive: boolean;
+  simulatePressure: boolean;
   opacity:     number;
   isClosed:    boolean;
   isComplete:  boolean;
@@ -79,7 +82,9 @@ const pointsValidator = {
 export function catmullRomPath(pts: Vec2[], isClosed: boolean): string {
   if (pts.length < 2) return '';
   if (pts.length === 2) {
-    return `M ${pts[0].x} ${pts[0].y} L ${pts[1].x} ${pts[1].y}`;
+    const first = pts[0]!;
+    const second = pts[1]!;
+    return `M ${first.x} ${first.y} L ${second.x} ${second.y}`;
   }
 
   // Tension factor: 0 = standard, higher = tighter
@@ -122,18 +127,22 @@ export function catmullRomPath(pts: Vec2[], isClosed: boolean): string {
 export class FreehandUtil extends ShapeUtil<FreehandShape> {
   static override readonly type = 'freehand';
 
+  override canEditLabel(_shape: FreehandShape): boolean { return false; }
+
   static override readonly props: GlideProps<FreehandProps> = {
     points:      pointsValidator,
     color:       T.string,
     strokeWidth: StyleValidators.strokeWidth,
     strokeStyle: StyleValidators.strokeStyle,
+    pressureSensitive: T.boolean,
+    simulatePressure: T.boolean,
     opacity:     T.number,
     isClosed:    T.boolean,
     isComplete:  T.boolean,
   };
 
   static override readonly migrations = defineMigrations({
-    currentVersion: 2,
+    currentVersion: 3,
     migrators: {
       1: {
         up: r => ({
@@ -164,6 +173,22 @@ export class FreehandUtil extends ShapeUtil<FreehandShape> {
         },
         down: r => r,
       },
+      3: {
+        up: r => ({
+          ...r,
+          props: {
+            pressureSensitive: false,
+            simulatePressure: false,
+            ...(r['props'] as object),
+          },
+        }),
+        down: r => {
+          const props = { ...((r['props'] as object) || {}) } as Record<string, unknown>;
+          delete props.pressureSensitive;
+          delete props.simulatePressure;
+          return { ...r, props };
+        },
+      },
     },
   });
 
@@ -173,6 +198,8 @@ export class FreehandUtil extends ShapeUtil<FreehandShape> {
       color:       'black',
       strokeWidth: 'medium',
       strokeStyle: 'solid',
+      pressureSensitive: false,
+      simulatePressure: false,
       opacity:     1,
       isClosed:    false,
       isComplete:  false,
@@ -187,7 +214,10 @@ export class FreehandUtil extends ShapeUtil<FreehandShape> {
 
   toSvg(shape: FreehandShape): SVGElement {
     const { props } = shape;
-    const { points, color, strokeWidth, strokeStyle, opacity, isClosed } = props;
+    const {
+      points, color, strokeWidth, strokeStyle, pressureSensitive, simulatePressure, opacity, isClosed,
+      isComplete,
+    } = props;
     const strokeW = STROKE_WIDTHS[strokeWidth];
     const strokeColor = resolveColor(color);
     const dashArray = STROKE_DASH_ARRAYS[strokeStyle];
@@ -199,17 +229,23 @@ export class FreehandUtil extends ShapeUtil<FreehandShape> {
 
     // Freehand points are in world space; offset by -shape.x, -shape.y to draw in local space
     const localPoints = points.map(pt => ({ x: pt.x - shape.x, y: pt.y - shape.y }));
-    const pathStr = catmullRomPath(localPoints, isClosed);
+    const pathStr = pressureSensitive
+      ? pressureStrokePath(points.map(point => [
+        point.x - shape.x,
+        point.y - shape.y,
+        point.pressure,
+      ]), strokeW, simulatePressure, isComplete)
+      : catmullRomPath(localPoints, isClosed);
 
     const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
     path.setAttribute('d', pathStr);
-    path.setAttribute('stroke', strokeColor);
-    path.setAttribute('stroke-width', String(strokeW));
+    path.setAttribute('stroke', pressureSensitive ? 'none' : strokeColor);
+    if (!pressureSensitive) path.setAttribute('stroke-width', String(strokeW));
     path.setAttribute('stroke-linecap', 'round');
     path.setAttribute('stroke-linejoin', 'round');
-    path.setAttribute('fill', isClosed ? strokeColor : 'none');
-    if (isClosed) path.setAttribute('fill-opacity', '0.12');
-    if (dashArray !== 'none') {
+    path.setAttribute('fill', pressureSensitive || isClosed ? strokeColor : 'none');
+    if (isClosed && !pressureSensitive) path.setAttribute('fill-opacity', '0.12');
+    if (!pressureSensitive && dashArray !== 'none') {
       path.setAttribute('stroke-dasharray', dashArray);
     }
     g.appendChild(path);
@@ -218,11 +254,36 @@ export class FreehandUtil extends ShapeUtil<FreehandShape> {
   }
 }
 
+export function pressureStrokePath(
+  points: Array<[number, number, number]>,
+  size: number,
+  simulatePressure: boolean,
+  isComplete = true,
+): string {
+  const outline = getStroke(points, {
+    size,
+    thinning: 0.7,
+    smoothing: 0.65,
+    streamline: 0.45,
+    simulatePressure,
+    last: isComplete,
+  });
+  if (outline.length === 0) return '';
+  const first = outline[0]!;
+  let path = `M ${first[0]} ${first[1]} Q`;
+  for (let index = 0; index < outline.length; index += 1) {
+    const point = outline[index]!;
+    const next = outline[(index + 1) % outline.length]!;
+    path += ` ${point[0]} ${point[1]} ${(point[0] + next[0]) / 2} ${(point[1] + next[1]) / 2}`;
+  }
+  return `${path} Z`;
+}
+
 // ─────────────────────────────────────────────────────────────
 // Plugin export
 // ─────────────────────────────────────────────────────────────
 
-import type { GlidePlugin } from '../editor';
+import type { GlidePlugin } from '../editor.js';
 
 export const FreehandPlugin: GlidePlugin = {
   id: 'freehand',

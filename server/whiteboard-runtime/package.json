@@ -1,0 +1,1 @@
+{"name":"beskar-whiteboard-runtime","private":true,"type":"module","scripts":{"test":"node --test materialize.test.mjs"},"dependencies":{"yjs":"13.6.27"}}

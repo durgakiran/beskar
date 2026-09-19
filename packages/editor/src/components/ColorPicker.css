@@ -93,22 +93,22 @@
 }
 
 /* Dark mode support */
-.dark .color-picker-popover {
+:is(.dark, [data-theme="dark"]) .color-picker-popover {
   background: #1f2937;
   border-color: #374151;
 }
 
-.dark .color-picker-label {
+:is(.dark, [data-theme="dark"]) .color-picker-label {
   color: #9ca3af;
 }
 
-.dark .color-picker-remove {
+:is(.dark, [data-theme="dark"]) .color-picker-remove {
   background: #1f2937;
   border-color: #374151;
   color: #9ca3af;
 }
 
-.dark .color-picker-remove:hover {
+:is(.dark, [data-theme="dark"]) .color-picker-remove:hover {
   background: #374151;
   border-color: #4b5563;
   color: #d1d5db;

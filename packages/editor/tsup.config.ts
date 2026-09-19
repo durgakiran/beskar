@@ -3,7 +3,7 @@ import { readFileSync, writeFileSync } from 'fs';
 import { resolve } from 'path';
 
 export default defineConfig({
-  entry: ['src/index.ts'],
+  entry: { index: 'src/index.ts', pdf: 'src/pdf/index.ts' },
   format: ['cjs', 'esm'],
   dts: true,
   splitting: false,
@@ -36,6 +36,8 @@ export default defineConfig({
   // Bundled code still imports @tiptap/pm / @tiptap/core externally above,
   // so the singleton constraint is preserved.
   noExternal: [
+    /^pdfmake\//,
+    /^mathjax-full\//,
     /^@tiptap\/extension-(?!collaboration)/,
     '@tiptap/starter-kit',
     '@tiptap/suggestion',

@@ -1,0 +1,192 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <!-- Additive foundation only: core.page remains shared, and existing core
+         whiteboard data is neither moved nor backfilled by these changesets.
+         Actor UUIDs refer to externally owned identities and intentionally have
+         no foreign keys to the local user_id_map cache. -->
+    <changeSet id="whiteboard_creation_1_schema" author="Codex" dbms="postgresql">
+        <comment>Create the dedicated whiteboard schema</comment>
+        <sql>CREATE SCHEMA whiteboard;</sql>
+        <rollback>
+            <!-- No CASCADE: rollback must not remove unrelated future objects. -->
+            <sql>DROP SCHEMA whiteboard;</sql>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="whiteboard_creation_2_board" author="Codex" dbms="postgresql">
+        <comment>Whiteboard identity linked to the existing shared page</comment>
+        <createTable schemaName="whiteboard" tableName="whiteboard">
+            <column name="page_id" type="BIGINT" remarks="Stable board identity; references the shared core.page">
+                <constraints nullable="false" primaryKey="true" primaryKeyName="whiteboard_pk"/>
+            </column>
+            <column name="published_version_id" type="UUID" remarks="Current published version; null before first publication"/>
+            <column name="created_by" type="UUID" remarks="Original creator's externally owned actor identity; independent of current page ownership">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="now()" remarks="Original whiteboard creation time">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+        <addForeignKeyConstraint baseTableSchemaName="whiteboard" baseTableName="whiteboard"
+            baseColumnNames="page_id" referencedTableSchemaName="core" referencedTableName="page"
+            referencedColumnNames="id" constraintName="whiteboard_page_fk" onDelete="NO ACTION"/>
+        <rollback>
+            <dropTable schemaName="whiteboard" tableName="whiteboard"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="whiteboard_creation_3_snapshot" author="Codex" dbms="postgresql">
+        <comment>Full Yjs state at a durable log boundary; creation supplies the initial snapshot through sequence zero</comment>
+        <createTable schemaName="whiteboard" tableName="whiteboard_snapshot">
+            <column name="id" type="UUID" remarks="Application-generated immutable snapshot identity">
+                <constraints nullable="false" primaryKey="true" primaryKeyName="whiteboard_snapshot_pk"/>
+            </column>
+            <column name="page_id" type="BIGINT" remarks="Whiteboard owning this snapshot">
+                <constraints nullable="false"/>
+            </column>
+            <column name="through_sequence" type="BIGINT" remarks="Highest update sequence included in the full state; zero for the initial snapshot">
+                <constraints nullable="false"/>
+            </column>
+            <column name="state_bytes" type="BYTEA" remarks="Complete encoded Yjs state; even an empty board requires a valid Yjs encoding">
+                <constraints nullable="false"/>
+            </column>
+            <column name="state_digest" type="TEXT" remarks="SHA-256 of state_bytes, formatted as sha256: followed by 64 lowercase hexadecimal characters">
+                <constraints nullable="false"/>
+            </column>
+            <column name="title" type="TEXT" remarks="Title captured at the same document boundary; title changes must participate in the ordered document state">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_by" type="UUID" remarks="Application actor associated with snapshot creation">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="now()" remarks="Snapshot materialization time">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+        <addUniqueConstraint schemaName="whiteboard" tableName="whiteboard_snapshot"
+            columnNames="page_id,id" constraintName="whiteboard_snapshot_page_id_uq"/>
+        <addUniqueConstraint schemaName="whiteboard" tableName="whiteboard_snapshot"
+            columnNames="page_id,through_sequence" constraintName="whiteboard_snapshot_boundary_uq"/>
+        <addForeignKeyConstraint baseTableSchemaName="whiteboard" baseTableName="whiteboard_snapshot"
+            baseColumnNames="page_id" referencedTableSchemaName="whiteboard" referencedTableName="whiteboard"
+            referencedColumnNames="page_id" constraintName="whiteboard_snapshot_page_fk" onDelete="CASCADE"/>
+        <sql>
+            ALTER TABLE whiteboard.whiteboard_snapshot
+                ADD CONSTRAINT whiteboard_snapshot_sequence_ck CHECK (through_sequence &gt;= 0),
+                ADD CONSTRAINT whiteboard_snapshot_bytes_ck CHECK (octet_length(state_bytes) &gt; 0),
+                ADD CONSTRAINT whiteboard_snapshot_digest_format_ck CHECK (state_digest ~ '^sha256:[0-9a-f]{64}$');
+        </sql>
+        <!-- Encoding validity, digest equality, immutable content, and complete
+             asset references are service responsibilities, not guaranteed by
+             the format and length checks above. -->
+        <rollback>
+            <dropTable schemaName="whiteboard" tableName="whiteboard_snapshot"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="whiteboard_creation_4_draft" author="Codex" dbms="postgresql">
+        <comment>One stable draft per board, reconstructed from its base snapshot and subsequent updates</comment>
+        <createTable schemaName="whiteboard" tableName="whiteboard_draft">
+            <column name="page_id" type="BIGINT" remarks="Stable draft identity; primary key enforces at most one draft per board">
+                <constraints nullable="false" primaryKey="true" primaryKeyName="whiteboard_draft_pk"/>
+            </column>
+            <column name="base_snapshot_id" type="UUID" remarks="Snapshot from which incremental replay starts; must belong to this board">
+                <constraints nullable="false"/>
+            </column>
+            <column name="head_sequence" type="BIGINT" defaultValueNumeric="0" remarks="Last committed update position; creation starts at zero">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_by" type="UUID" remarks="Creator initially; actor of latest accepted append subsequently">
+                <constraints nullable="false"/>
+            </column>
+            <column name="updated_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="now()" remarks="Creation time initially; latest append time subsequently">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+        <addForeignKeyConstraint baseTableSchemaName="whiteboard" baseTableName="whiteboard_draft"
+            baseColumnNames="page_id" referencedTableSchemaName="whiteboard" referencedTableName="whiteboard"
+            referencedColumnNames="page_id" constraintName="whiteboard_draft_page_fk" onDelete="CASCADE"/>
+        <addForeignKeyConstraint baseTableSchemaName="whiteboard" baseTableName="whiteboard_draft"
+            baseColumnNames="page_id,base_snapshot_id" referencedTableSchemaName="whiteboard" referencedTableName="whiteboard_snapshot"
+            referencedColumnNames="page_id,id" constraintName="whiteboard_draft_snapshot_fk" onDelete="CASCADE"/>
+        <sql>
+            ALTER TABLE whiteboard.whiteboard_draft ADD CONSTRAINT whiteboard_draft_sequence_ck
+                CHECK (head_sequence &gt;= 0);
+        </sql>
+        <!-- The create/append/compaction transactions must enforce existence of
+             exactly one draft and base.through_sequence &lt;= head_sequence. -->
+        <rollback>
+            <dropTable schemaName="whiteboard" tableName="whiteboard_draft"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="whiteboard_creation_5_receipt" author="Codex" dbms="postgresql">
+        <comment>Creation retry receipts independent of a client-known page ID; insert atomically with the board</comment>
+        <createTable schemaName="whiteboard" tableName="whiteboard_create_receipt">
+            <column name="actor_id" type="UUID" remarks="Authenticated caller; scopes the idempotency key">
+                <constraints nullable="false"/>
+            </column>
+            <column name="space_id" type="UUID" remarks="Destination space; scopes the idempotency key">
+                <constraints nullable="false"/>
+            </column>
+            <column name="idempotency_key" type="UUID" remarks="Client-generated key retained across retries of one create action">
+                <constraints nullable="false"/>
+            </column>
+            <column name="request_hash" type="TEXT" remarks="SHA-256 of the normalized creation request; detects key reuse with different content">
+                <constraints nullable="false"/>
+            </column>
+            <column name="page_id" type="BIGINT" remarks="Whiteboard created by this request">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="now()" remarks="Receipt creation time; no expiry until a safe retry-retention policy exists">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+        <addPrimaryKey schemaName="whiteboard" tableName="whiteboard_create_receipt"
+            columnNames="actor_id,space_id,idempotency_key" constraintName="whiteboard_create_receipt_pk"/>
+        <addForeignKeyConstraint baseTableSchemaName="whiteboard" baseTableName="whiteboard_create_receipt"
+            baseColumnNames="space_id" referencedTableSchemaName="core" referencedTableName="space"
+            referencedColumnNames="id" constraintName="whiteboard_create_receipt_space_fk" onDelete="NO ACTION"/>
+        <addForeignKeyConstraint baseTableSchemaName="whiteboard" baseTableName="whiteboard_create_receipt"
+            baseColumnNames="page_id" referencedTableSchemaName="whiteboard" referencedTableName="whiteboard"
+            referencedColumnNames="page_id" constraintName="whiteboard_create_receipt_page_fk" onDelete="NO ACTION"/>
+        <createIndex schemaName="whiteboard" tableName="whiteboard_create_receipt" indexName="whiteboard_create_receipt_page_idx">
+            <column name="page_id"/>
+        </createIndex>
+        <sql>
+            ALTER TABLE whiteboard.whiteboard_create_receipt
+                ADD CONSTRAINT whiteboard_create_receipt_hash_ck CHECK (request_hash ~ '^sha256:[0-9a-f]{64}$');
+        </sql>
+        <!-- Receipt space must match the created page in the create transaction.
+             Deletion/retention must preserve retry safety before removing receipts. -->
+        <rollback>
+            <dropTable schemaName="whiteboard" tableName="whiteboard_create_receipt"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="whiteboard_creation_6_grants" author="Codex" dbms="postgresql">
+        <comment>Grant application access explicitly; core schema defaults do not apply to the new schema</comment>
+        <sql>
+            GRANT USAGE ON SCHEMA whiteboard TO ${app_user};
+            GRANT SELECT, INSERT, UPDATE, DELETE ON
+                whiteboard.whiteboard,
+                whiteboard.whiteboard_snapshot,
+                whiteboard.whiteboard_draft,
+                whiteboard.whiteboard_create_receipt TO ${app_user};
+        </sql>
+        <rollback>
+            <sql>
+                REVOKE SELECT, INSERT, UPDATE, DELETE ON
+                    whiteboard.whiteboard,
+                    whiteboard.whiteboard_snapshot,
+                    whiteboard.whiteboard_draft,
+                    whiteboard.whiteboard_create_receipt FROM ${app_user};
+                REVOKE USAGE ON SCHEMA whiteboard FROM ${app_user};
+            </sql>
+        </rollback>
+    </changeSet>
+</databaseChangeLog>

@@ -81,6 +81,7 @@ export const SlashCommand = Extension.create<SlashCommandOptions>({
             const withFilteredCommands = GROUPS.map((group) => ({
               ...group,
               commands: group.commands
+                .filter((item: Command) => item.requiredNodes?.every((name) => Boolean(editor.schema.nodes[name])) ?? true)
                 .filter((item: Command) => !(hideBlockOnly && item.blockOnly))
                 .filter((item: Command) => {
                   const labelNormalized = item.label.toLowerCase().trim();
@@ -102,7 +103,7 @@ export const SlashCommand = Extension.create<SlashCommandOptions>({
 
             return withFilteredCommands.filter((group) => group.commands.length > 0);
           } catch {
-            return GROUPS;
+            return [];
           }
         },
         render: () => {

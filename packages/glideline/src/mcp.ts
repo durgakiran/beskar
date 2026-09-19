@@ -1,16 +1,15 @@
 import dagre from 'dagre';
 import { z } from 'zod';
-import type { GlideEditor } from './editor';
-import type { AIContextSnapshot } from './ai-context';
+import type { GlideEditor } from './editor.js';
+import type { AIContextSnapshot } from './ai-context.js';
 import {
   buildArrowBindingRecord,
   buildArrowShapeRecord,
-  createCanvasShapeId,
-  createTopIndex,
   resolveConnectionTerminal,
-} from './arrow-records';
-import type { ArrowRouteStyle } from './shapes/ArrowUtil';
-import type { AnyRecord, ShapeId } from './types';
+} from './arrow-records.js';
+import type { ArrowRouteStyle } from './shapes/ArrowUtil.js';
+import type { AnyRecord, ShapeId } from './types.js';
+import { MutationPermissionError } from './mutation-policy.js';
 
 const recordSchema = z.record(z.string(), z.unknown());
 const finiteNumber = z.number().finite();
@@ -82,6 +81,8 @@ const freehandShapeSchema = z.object({
   opacity:     z.number().min(0).max(1).optional(),
   strokeWidth: sizeStyleSchema.optional(),
   strokeStyle: strokeStyleSchema.optional(),
+  pressureSensitive: z.boolean().optional(),
+  simulatePressure: z.boolean().optional(),
 });
 
 // ── Rich discriminated union (replaces generic props: record) ──
@@ -156,6 +157,30 @@ export const layoutShapesInputSchema = z.object({
   rankSep:   finiteNumber.default(80),
 });
 
+export const arrangeShapesInputSchema = z.object({
+  shapeIds: z.array(z.string().min(1)).min(1),
+  operation: z.enum([
+    'align-left', 'align-center-x', 'align-right', 'align-top', 'align-center-y', 'align-bottom',
+    'distribute-horizontal', 'distribute-vertical', 'match-width', 'match-height', 'match-both',
+    'flip-horizontal', 'flip-vertical', 'tidy-row', 'tidy-grid',
+  ]),
+}).strict();
+
+export const setShapeGeometryInputSchema = z.object({
+  id: z.string().min(1),
+  x: finiteNumber.optional(),
+  y: finiteNumber.optional(),
+  w: finiteNumber.positive().optional(),
+  h: finiteNumber.positive().optional(),
+  rotation: finiteNumber.optional(),
+  lockAspect: z.boolean().optional(),
+}).strict();
+
+export const reparentShapesInputSchema = z.object({
+  shapeIds: z.array(z.string().min(1)).min(1),
+  parentId: z.string().min(1),
+}).strict();
+
 export const getCanvasImageInputSchema = z.object({
   viewport: z.boolean().default(false),
 }).strict();
@@ -168,6 +193,9 @@ export type CanvasToolName =
   | 'get_canvas_state'
   | 'create_diagram'
   | 'layout_shapes'
+  | 'arrange_shapes'
+  | 'set_shape_geometry'
+  | 'reparent_shapes'
   | 'get_canvas_image';
 
 export type CanvasToolResult =
@@ -182,6 +210,7 @@ export type CanvasToolResult =
 
 export interface CanvasToolError {
   error: string;
+  code?: string;
   issues?: Array<{ path: string; message: string }>;
 }
 
@@ -233,19 +262,18 @@ const TOOL_DEFINITIONS = [
         return { error: `Unknown shape type "${type}"` };
       }
 
-      const id = createCanvasShapeId(type);
-      editor.run(() => {
+      const id = editor.createShapeId(type);
+      editor.batch('AI: Create Shape', () => {
         editor.createShape({
           id,
           type,
           x,
           y,
-          index: createTopIndex(),
           rotation: 0,
           meta: {},
           props,
         });
-      }, { history: 'ignore' });
+      });
 
       return { id };
     },
@@ -267,9 +295,9 @@ const TOOL_DEFINITIONS = [
       if (input.rotation !== undefined) partial.rotation = input.rotation;
       if (input.props !== undefined) partial.props = input.props;
 
-      editor.run(() => {
+      editor.batch('AI: Update Shape', () => {
         editor.updateShape(id, partial as Partial<Omit<typeof existing, 'id' | 'type'>>);
-      }, { history: 'ignore' });
+      });
 
       return { ok: true };
     },
@@ -283,9 +311,9 @@ const TOOL_DEFINITIONS = [
       const existingIds = ids.filter((id: ShapeId) => Boolean(editor.getShape(id)));
 
       if (existingIds.length > 0) {
-        editor.run(() => {
+        editor.batch('AI: Delete Shapes', () => {
           editor.deleteShapes(existingIds);
-        }, { history: 'ignore' });
+        });
       }
 
       return { deleted: existingIds.length };
@@ -322,14 +350,14 @@ const TOOL_DEFINITIONS = [
         return { error: 'Unable to resolve connection anchors' };
       }
 
-      const id = createCanvasShapeId('arrow');
+      const id = editor.createShapeId('arrow');
       const routeStyle = input.routeStyle ?? editor.arrowRouteStyle;
       const arrow = buildArrowShapeRecord({
         id,
         startWorld: start.point,
         endWorld: end.point,
+        parentId: editor.getShapePageId(fromId) ?? editor.getActivePageId(),
         routeStyle,
-        index: createTopIndex(),
       });
       arrow.props = {
         ...arrow.props,
@@ -350,23 +378,25 @@ const TOOL_DEFINITIONS = [
         },
       };
 
-      editor.run(() => {
+      editor.batch('AI: Create Connection', () => {
         editor.createShape(arrow as unknown as AnyRecord);
         editor.createBinding(buildArrowBindingRecord({
           fromId: id,
           toId: fromId,
           terminal: 'start',
           normalizedAnchor: start.normalizedAnchor,
+          fromEdge: start.fromEdge,
         }));
         editor.createBinding(buildArrowBindingRecord({
           fromId: id,
           toId: toId,
           terminal: 'end',
           normalizedAnchor: end.normalizedAnchor,
+          fromEdge: end.fromEdge,
         }));
         editor.updateShape(fromId, { x: fromShape.x });
         editor.updateShape(toId, { x: toShape.x });
-      }, { history: 'ignore' });
+      });
 
       return { id };
     },
@@ -399,10 +429,10 @@ const TOOL_DEFINITIONS = [
 
       dagre.layout(g);
 
-      editor.run(() => {
+      editor.batch('AI: Create Diagram', () => {
         for (const node of input.nodes) {
           const dagreNode = g.node(node.id);
-          const canvasId = createCanvasShapeId(node.type);
+          const canvasId = editor.createShapeId(node.type);
           idMap.set(node.id, canvasId);
 
           const { id: _userNodeId, type, ...props } = node as any;
@@ -411,7 +441,6 @@ const TOOL_DEFINITIONS = [
             type,
             x: input.startX + dagreNode.x - dagreNode.width / 2,
             y: input.startY + dagreNode.y - dagreNode.height / 2,
-            index: createTopIndex(),
             rotation: 0,
             meta: {},
             props,
@@ -436,9 +465,15 @@ const TOOL_DEFINITIONS = [
           const end   = resolveConnectionTerminal(editor, toCanvasId,   fromCenter);
           if (!start || !end) continue;
 
-          const arrowId    = createCanvasShapeId('arrow');
+          const arrowId    = editor.createShapeId('arrow');
           const routeStyle = (edge.routeStyle ?? editor.arrowRouteStyle) as ArrowRouteStyle;
-          const arrow      = buildArrowShapeRecord({ id: arrowId, startWorld: start.point, endWorld: end.point, routeStyle, index: createTopIndex() });
+          const arrow      = buildArrowShapeRecord({
+            id: arrowId,
+            startWorld: start.point,
+            endWorld: end.point,
+            parentId: editor.getActivePageId(),
+            routeStyle,
+          });
 
           arrow.props = {
             ...arrow.props,
@@ -454,12 +489,12 @@ const TOOL_DEFINITIONS = [
           };
 
           editor.createShape(arrow as unknown as AnyRecord);
-          editor.createBinding(buildArrowBindingRecord({ fromId: arrowId, toId: fromCanvasId, terminal: 'start', normalizedAnchor: start.normalizedAnchor }));
-          editor.createBinding(buildArrowBindingRecord({ fromId: arrowId, toId: toCanvasId,   terminal: 'end',   normalizedAnchor: end.normalizedAnchor }));
+          editor.createBinding(buildArrowBindingRecord({ fromId: arrowId, toId: fromCanvasId, terminal: 'start', normalizedAnchor: start.normalizedAnchor, fromEdge: start.fromEdge }));
+          editor.createBinding(buildArrowBindingRecord({ fromId: arrowId, toId: toCanvasId,   terminal: 'end',   normalizedAnchor: end.normalizedAnchor, fromEdge: end.fromEdge }));
           editor.updateShape(fromCanvasId, { x: fromShape.x });
           editor.updateShape(toCanvasId,   { x: toShape.x });
         }
-      }, { history: 'ignore' });
+      });
 
       return {
         nodeIds: Object.fromEntries(idMap.entries()),
@@ -508,7 +543,7 @@ const TOOL_DEFINITIONS = [
 
       dagre.layout(g);
 
-      editor.run(() => {
+      editor.batch('AI: Layout Shapes', () => {
         for (const id of ids) {
           const dagreNode = g.node(id);
           editor.updateShape(id, {
@@ -516,9 +551,51 @@ const TOOL_DEFINITIONS = [
             y: dagreNode.y - dagreNode.height / 2,
           });
         }
-      }, { history: 'ignore' });
+      });
 
       return { ok: true, repositioned: ids.length } as any;
+    },
+  },
+  {
+    name: 'arrange_shapes',
+    description: 'Align, distribute, match, flip, or tidy shapes using hierarchy-aware page geometry.',
+    schema: arrangeShapesInputSchema,
+    handler: (editor, input: z.infer<typeof arrangeShapesInputSchema>) => {
+      const ids = input.shapeIds.map(id => id as ShapeId);
+      const operation = input.operation;
+      if (operation.startsWith('align-')) {
+        const map = { 'align-left': 'left', 'align-center-x': 'center-x', 'align-right': 'right',
+          'align-top': 'top', 'align-center-y': 'center-y', 'align-bottom': 'bottom' } as const;
+        editor.alignShapes(ids, map[operation as keyof typeof map]);
+      } else if (operation.startsWith('distribute-')) {
+        editor.distributeShapes(ids, operation === 'distribute-horizontal' ? 'horizontal' : 'vertical');
+      } else if (operation.startsWith('match-')) {
+        editor.matchShapeSizes(ids, operation === 'match-width' ? 'width' : operation === 'match-height' ? 'height' : 'both');
+      } else if (operation.startsWith('flip-')) {
+        editor.flipShapes(ids, operation === 'flip-horizontal' ? 'horizontal' : 'vertical');
+      } else {
+        editor.tidyShapes(ids, operation === 'tidy-grid' ? 'grid' : 'row');
+      }
+      return { ok: true };
+    },
+  },
+  {
+    name: 'set_shape_geometry',
+    description: 'Set a shape page position, intrinsic size, or rotation precisely.',
+    schema: setShapeGeometryInputSchema,
+    handler: (editor, input: z.infer<typeof setShapeGeometryInputSchema>) => {
+      const { id, ...patch } = input;
+      editor.setShapePrecision(id as ShapeId, patch);
+      return { ok: true };
+    },
+  },
+  {
+    name: 'reparent_shapes',
+    description: 'Move shapes into a page, frame, or group while preserving page geometry.',
+    schema: reparentShapesInputSchema,
+    handler: (editor, input: z.infer<typeof reparentShapesInputSchema>) => {
+      editor.reparentShapes(input.shapeIds.map(id => id as ShapeId), input.parentId as any);
+      return { ok: true };
     },
   },
   {
@@ -561,6 +638,7 @@ export function createCanvasToolServer(editor: GlideEditor) {
       } catch (error) {
         return {
           error: error instanceof Error ? error.message : String(error),
+          ...(error instanceof MutationPermissionError ? { code: error.code } : {}),
         };
       }
     },

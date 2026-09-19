@@ -1,3 +1,5 @@
+import { attachmentPreview } from "./attachmentPreview";
+import { contentUrl } from 'app/core/whiteboard/v2/api';
 import React, { useCallback } from "react";
 import type { Editor, JSONContent } from "@tiptap/core";
 import { useDebounce } from "../hooks/debounce";
@@ -28,7 +30,6 @@ import {
     type InternalResourceType,
     TiptapEditor,
     TextFormattingMenu,
-    CodeBlockFloatingMenu,
 } from "@durgakiran/editor";
 import { uploadAttachmentData, downloadAttachmentBlob } from "../http/uploadAttachmentData";
 import { WebrtcProvider } from "y-webrtc";
@@ -37,6 +38,36 @@ import { makeCommentApiHandler } from "../http/commentApiHandler";
 import { useCommentEvents } from "../hooks/useCommentEvents";
 import { mapUploadErrorMessage } from "../queries/quota";
 import { CommentInputPopover, CommentGutter, CommentThreadCard, CommentSidePanel, OverlapDisambiguationPopover, type CommentThread } from "@durgakiran/editor";
+
+// Stable across editor mounts so preview requests and failures can be shared.
+const sharedExternalLinkHandler: ExternalLinkHandler = (() => {
+        const baseUrl = import.meta.env.VITE_USER_SERVER_URL?.replace(/\/+$/, "") || "";
+
+        const fetchJson = async <T,>(path: string, signal?: AbortSignal): Promise<T> => {
+            const response = await fetch(`${baseUrl}/${path}`, {
+                credentials: "include",
+                signal,
+                headers: {
+                    "Content-Type": "application/json",
+                },
+            });
+
+            if (!response.ok) {
+                const error: Error & { status?: number } = new Error(`Request failed: ${response.status}`);
+                error.status = response.status;
+                throw error;
+            }
+
+            return response.json() as Promise<T>;
+        };
+
+        return {
+            async getLinkMetadata(url: string, signal?: AbortSignal): Promise<ExternalLinkMetadata | null> {
+                const response = await fetchJson<{ data?: ExternalLinkMetadata }>(`editor/external-link/metadata?url=${encodeURIComponent(url)}`, signal);
+                return response.data || null;
+            },
+        };
+})();
 
 interface TipTapProps {
     setEditorContext: (editorContext: Editor) => void;
@@ -136,6 +167,9 @@ export function TipTap({
 
     // Image upload handler for the editor
     const imageHandler: ImageAPIHandler = {
+        getImageUrl: (url: string) => {
+            return url.replace(/^[^?#]*?\/api\/v1\/media\//, '/api/v1/media/');
+        },
         uploadImage: async (file: File) => {
             try {
                 if (!Number.isFinite(id) || id < 1) {
@@ -198,6 +232,7 @@ export function TipTap({
                     throw error;
                 }
             },
+            previewAttachment: attachmentPreview,
             downloadAttachment: async ({ url, fileName }) => {
                 await downloadAttachmentBlob(url, fileName);
             },
@@ -274,6 +309,7 @@ export function TipTap({
                         type: string;
                         title: string;
                         previewAssetName?: string;
+                        whiteboard?: { previewUrl?: string };
                     };
                 }>(`editor/space/${spaceId}/page/${resourceId}/inline-link`);
                 const metadata = response.data;
@@ -285,7 +321,7 @@ export function TipTap({
                     resourceType: metadata.type as InternalResourceType,
                     title: metadata.title || "Untitled",
                     icon: metadata.type === "whiteboard" ? "▧" : "📄",
-                    thumbnailUrl: metadata.previewAssetName ? `${baseUrl}/media/image/${metadata.previewAssetName}` : undefined,
+                    thumbnailUrl: metadata.whiteboard?.previewUrl ? contentUrl(metadata.whiteboard.previewUrl) : metadata.previewAssetName ? `${baseUrl}/media/image/${metadata.previewAssetName}` : undefined,
                 };
             },
             navigateToResource(resourceId: string, _resourceType: InternalResourceType) {
@@ -295,35 +331,7 @@ export function TipTap({
         };
     }, [spaceId]);
 
-    const externalLinkHandler: ExternalLinkHandler | undefined = useMemo(() => {
-        if (!spaceId) return undefined;
-
-        const baseUrl = import.meta.env.VITE_USER_SERVER_URL?.replace(/\/+$/, "") || "";
-
-        const fetchJson = async <T,>(path: string): Promise<T> => {
-            const response = await fetch(`${baseUrl}/${path}`, {
-                credentials: "include",
-                headers: {
-                    "Content-Type": "application/json",
-                },
-            });
-
-            if (!response.ok) {
-                const error: Error & { status?: number } = new Error(`Request failed: ${response.status}`);
-                error.status = response.status;
-                throw error;
-            }
-
-            return response.json() as Promise<T>;
-        };
-
-        return {
-            async getLinkMetadata(url: string): Promise<ExternalLinkMetadata | null> {
-                const response = await fetchJson<{ data?: ExternalLinkMetadata }>(`editor/external-link/metadata?url=${encodeURIComponent(url)}`);
-                return response.data || null;
-            },
-        };
-    }, [spaceId]);
+    const externalLinkHandler = spaceId ? sharedExternalLinkHandler : undefined;
 
     const childPagesHandler: ChildPagesHandler | undefined = useMemo(() => {
         if (!spaceId || !Number.isFinite(id) || id < 1) return undefined;
@@ -546,9 +554,23 @@ export function TipTap({
         setEditorContext(editor);
     }, [editor, setEditorContext]);
 
+    const sanitizedContent = useMemo(() => {
+        if (!content) return content;
+        try {
+            // A foolproof way to strip out absolute domains from ANY image/media URLs
+            // inside the TipTap document (including nested attrs, custom extensions, etc).
+            let jsonStr = JSON.stringify(content);
+            jsonStr = jsonStr.replace(/"[^"]*?\/api\/v1\/media\//g, '"/api/v1/media/');
+            return JSON.parse(jsonStr);
+        } catch (e) {
+            console.error("Failed to sanitize content", e);
+            return content;
+        }
+    }, [content]);
+
     return (
         <>
-            <div ref={menuContainerRef} className="beskar-editor">
+            <div ref={menuContainerRef} className="document-editor-surface">
                 {/* {editor && (
                 <Flex justify="end" gap="3" align="center" style={{ marginBottom: "1rem" }}>
                     <Button onClick={() => setIsSidePanelOpen(true)} variant="soft" color="indigo" style={{ cursor: 'pointer' }}>
@@ -561,7 +583,7 @@ export function TipTap({
             )} */}
                 {editable ? (
                     <EditorBeskar
-                        initialContent={content}
+                        initialContent={sanitizedContent}
                         imageHandler={imageHandler}
                         attachmentHandler={attachmentHandler}
                         internalResourceHandler={internalResourceHandler}
@@ -580,7 +602,7 @@ export function TipTap({
                     />
                 ) : (
                     <EditorBeskar
-                        initialContent={content}
+                        initialContent={sanitizedContent}
                         imageHandler={imageHandler}
                         attachmentHandler={attachmentHandler}
                         internalResourceHandler={internalResourceHandler}
@@ -591,7 +613,6 @@ export function TipTap({
                         onAttachmentRejected={handleAttachmentRejected}
                         allowedMimeAccept={ATTACHMENT_ACCEPT}
                         onAttachmentsChange={onDocAttachmentsChange}
-                        extensions={[]}
                         editable={editable}
                         placeholder={EDITOR_PLACEHOLDER}
                         onUpdate={editedDataFn}
@@ -622,7 +643,6 @@ export function TipTap({
                             <>
                                 {/* Table Floating Menu */}
                                 <TableFloatingMenu editor={editor} />
-                                <CodeBlockFloatingMenu editor={editor} />
                             </>
                         )}
 

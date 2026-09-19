@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Beskar API documentation</title>
+  <link rel="icon" href="data:,">
+  <style>
+    body { margin: 0; font-family: system-ui, sans-serif; }
+    .docs-nav { padding: 12px 24px; border-bottom: 1px solid #ddd; display: flex; flex-wrap: wrap; gap: 20px; align-items: center; }
+    .docs-nav a { color: #3757c5; }
+  </style>
+</head>
+<body>
+  <nav class="docs-nav" aria-label="API documentation">
+    <strong>Beskar API</strong>
+    <a href="/auth/login?returnTo=%2Fapi%2Fdocs">Sign in</a>
+    <a href="/auth/register">Register</a>
+    <a href="/auth/logout">Sign out</a>
+    <a href="/api/openapi.json">OpenAPI JSON</a>
+  </nav>
+  <p style="padding: 0 24px">Use <a href="/auth/login?returnTo=%2Fapi%2Fdocs">Sign in</a> to authenticate this console. Login creates a browser session; it does not return a token to paste.</p>
+  <div id="app"></div>
+  <noscript>Enable JavaScript for the interactive console, or download the OpenAPI JSON above.</noscript>
+  <script src="https://cdn.jsdelivr.net/npm/@scalar/api-reference@1.68.0/dist/browser/standalone.js"></script>
+  <script>
+    if (window.Scalar) {
+      Scalar.createApiReference('#app', {
+        url: '/api/openapi.json',
+        persistAuth: false,
+        showDeveloperTools: "never",
+        telemetry: false,
+        agent: { disabled: true },
+        withDefaultFonts: false,
+        authentication: { preferredSecurityScheme: 'BrowserSession' },
+        // Direct requests to this instance; no third-party request proxy.
+        customFetch: async (input, init) => {
+          const url = new URL(input instanceof Request ? input.url : input, window.location.href);
+          if (url.origin === window.location.origin) {
+            if (['/auth/login', '/auth/register', '/auth/logout'].includes(url.pathname)) {
+              if (url.pathname === '/auth/login') url.searchParams.set('returnTo', '/api/docs');
+              // OIDC login pages must open as a document, never as a fetch.
+              window.location.assign(url.href);
+              throw new Error('Opening authentication in the browser. After signing in, use BrowserSession in this console.');
+            }
+            if (url.pathname === '/auth/callback') {
+              throw new Error('The callback is completed automatically by Zitadel. Use Sign in to begin.');
+            }
+          }
+          // Do not follow an expired session's redirect into the identity provider.
+          // Do not replay writes automatically after authentication.
+          const response = await fetch(input, { ...init, credentials: 'same-origin', redirect: 'manual' });
+          if (response.type === 'opaqueredirect' || (response.status >= 300 && response.status < 400)) {
+            throw new Error('This request redirected. Use Sign in above to establish a session, then retry the request.');
+          }
+          return response;
+        }
+      });
+    } else {
+      document.getElementById('app').textContent = 'Could not load Scalar. Check access to cdn.jsdelivr.net, or use the OpenAPI JSON link above.';
+    }
+  </script>
+</body>
+</html>

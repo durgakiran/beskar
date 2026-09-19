@@ -1,6 +1,6 @@
-
 import { useEffect, useMemo } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
+import { useDesktopLogout } from "../core/auth/useKeycloak";
 import { Response, useGet } from "@http/hooks";
 import { Icon } from "@components/ui/Icon";
 import { Topbar, TopbarMenuItem, TopbarUser } from "@components/primitives";
@@ -38,6 +38,7 @@ function getInitials(name?: string) {
 export default function MenuBar() {
     const navigate = useNavigate();
     const pathname = useLocation().pathname;
+    const desktopLogout = useDesktopLogout();
     const [{ data: res }, fetchUser] = useGet<Response<UserInfo>>("profile/details");
     const [{ data: notificationsData }, fetchNotifications] = useGet<Response<NotificationCounts>>("notifications/unread-count");
 
@@ -78,11 +79,16 @@ export default function MenuBar() {
                 icon: "LogOut",
                 tone: "danger",
                 onSelect: () => {
-                    window.location.href = "/auth/logout";
+                    // @ts-ignore
+                    if (window.wails) {
+                        desktopLogout();
+                    } else {
+                        window.location.href = "/auth/logout";
+                    }
                 },
             },
         ],
-        [],
+        [desktopLogout],
     );
 
     return (

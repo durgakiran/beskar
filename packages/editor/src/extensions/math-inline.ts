@@ -5,6 +5,7 @@
 
 import { Node, mergeAttributes } from '@tiptap/core';
 import { ReactNodeViewRenderer } from '@tiptap/react';
+import { inlineMathInputRules } from './math-input-rules';
 import { InlineMathView } from '../components/math/InlineMathView';
 
 export interface InlineMathOptions {
@@ -45,7 +46,7 @@ export const InlineMath = Node.create<InlineMathOptions>({
     return {
       latex: {
         default: 'x^2',
-        parseHTML: (element) => element.getAttribute('data-latex') || 'x^2',
+        parseHTML: (element) => element.getAttribute('data-latex') ?? 'x^2',
         renderHTML: (attributes) => {
           return {
             'data-latex': attributes.latex,
@@ -63,13 +64,14 @@ export const InlineMath = Node.create<InlineMathOptions>({
     ];
   },
 
-  renderHTML({ HTMLAttributes }) {
+  renderHTML({ node, HTMLAttributes }) {
     return [
       'span',
       mergeAttributes(this.options.HTMLAttributes, HTMLAttributes, {
         'data-type': 'inline-math',
         class: 'inline-math',
       }),
+      node.attrs.latex,
     ];
   },
 
@@ -84,7 +86,7 @@ export const InlineMath = Node.create<InlineMathOptions>({
         ({ commands }) => {
           return commands.insertContent({
             type: this.name,
-            attrs: { latex: latex || 'x^2' },
+            attrs: { latex: latex ?? 'x^2' },
           });
         },
       
@@ -103,6 +105,10 @@ export const InlineMath = Node.create<InlineMathOptions>({
         },
     };
   },
+
+  renderText({ node }) { return `$$${node.attrs.latex}$$`; },
+
+  addInputRules() { return inlineMathInputRules(this.type); },
 
   addKeyboardShortcuts() {
     return {
