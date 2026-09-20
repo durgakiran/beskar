@@ -9,6 +9,7 @@ import React, { useState, useEffect } from 'react';
 import { Editor } from '@tiptap/core';
 import { BubbleMenu, BubbleMenuButton } from './BubbleMenu';
 import { TextColorPicker } from './TextColorPicker';
+import { openLinkEditor } from './link/LinkEditor';
 import type { CommentAPIHandler } from '../types';
 import {
   FiBold,
@@ -16,6 +17,7 @@ import {
   FiUnderline,
   FiCode,
   FiMessageSquare,
+  FiLink,
 } from 'react-icons/fi';
 
 export interface TextFormattingMenuProps {
@@ -94,7 +96,7 @@ export function TextFormattingMenu({
   const hasFormattingActions = Boolean(
     editor.schema.marks.bold || editor.schema.marks.italic || editor.schema.marks.underline ||
     editor.schema.marks.code || editor.commands.setColor || editor.commands.setHighlight ||
-    editor.schema.nodes.inlineMath,
+    editor.schema.nodes.inlineMath || editor.schema.marks.link,
   );
   if (!(isFormattingEnabled && hasFormattingActions) && !canComment) return null;
 
@@ -102,6 +104,15 @@ export function TextFormattingMenu({
     <BubbleMenu editor={editor}>
       {isFormattingEnabled && (
         <>
+          {Boolean(editor.schema.marks.link) && (
+            <BubbleMenuButton
+              onClick={() => openLinkEditor(editor)}
+              isActive={editor.isActive('link')}
+              title="Add or edit link (Cmd/Ctrl+K)"
+            >
+              <FiLink />
+            </BubbleMenuButton>
+          )}
           {/* Bold */}
           {Boolean(editor.schema.marks.bold) && (
             <BubbleMenuButton

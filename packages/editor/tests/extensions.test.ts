@@ -4,6 +4,22 @@ import { Editor, Extension, flattenExtensions, getSchema } from '@tiptap/core';
 import { getExtensions } from '../src/extensions';
 import { EDITOR_FEATURE_EXTENSIONS, MANDATORY_EDITOR_EXTENSIONS, type EditorFeature } from '../src/extensions/features';
 import { GROUPS } from '../src/extensions/slash-command/groups';
+import { normalizeHyperlink } from '../src/utils/hyperlink';
+
+test('hyperlinks normalize destinations and reject unsafe or malformed URLs', () => {
+  for (const [input, expected] of [
+    [' example.com/path ', 'https://example.com/path'],
+    ['https://example.com/a?q=1#b', 'https://example.com/a?q=1#b'],
+    ['mailto:hello@example.com', 'mailto:hello@example.com'],
+    ['tel:+123456789', 'tel:+123456789'],
+    ['/documents/one', '/documents/one'],
+    ['#section', '#section'],
+  ]) assert.equal(normalizeHyperlink(input), expected);
+  for (const input of ['', 'javascript:alert(1)', 'data:text/html,test', 'vbscript:msgbox(1)',
+    'java\nscript:alert(1)', 'https://', 'not a url', 'https:\\example.com', 'mailto:']) {
+    assert.equal(normalizeHyperlink(input), null, input);
+  }
+});
 
 const names = (extensions: ReturnType<typeof getExtensions>) => flattenExtensions(extensions).map((e) => e.name);
 
