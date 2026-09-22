@@ -21,6 +21,7 @@ import (
 	"github.com/zitadel/zitadel-go/v3/pkg/authentication"
 	openid "github.com/zitadel/zitadel-go/v3/pkg/authentication/oidc"
 	"github.com/zitadel/zitadel-go/v3/pkg/zitadel"
+	"golang.org/x/oauth2"
 )
 
 type tokenType struct {
@@ -133,7 +134,10 @@ var authNLock = &sync.Mutex{}
 const zitadelOrgScopePrefix = "urn:zitadel:iam:org:id:"
 
 func zitadelAuthScopes() []string {
-	scopes := []string{zoidc.ScopeOpenID, zoidc.ScopeProfile, zoidc.ScopeEmail}
+	scopes := []string{zoidc.ScopeOpenID, zoidc.ScopeProfile, zoidc.ScopeEmail, zoidc.ScopeOfflineAccess}
+	if audience := strings.TrimSpace(os.Getenv("ZITADEL_API_AUDIENCE")); audience != "" {
+		scopes = append(scopes, "urn:zitadel:iam:org:project:id:"+audience+":aud")
+	}
 	orgID := strings.TrimSpace(os.Getenv("ZITADEL_REGISTRATION_ORG_ID"))
 	if orgID == "" {
 		return scopes
@@ -146,13 +150,27 @@ func zitadelRedirectURI() string {
 }
 
 func zitadelClientAuthentication() openid.ClientAuthentication {
-	key := os.Getenv("KEY")
-	return openid.PKCEAuthentication(
-		os.Getenv("CLIENT_ID"),
-		zitadelRedirectURI(),
-		zitadelAuthScopes(),
-		httphelper.NewCookieHandler([]byte(key), []byte(key)),
-	)
+	return zitadelClientAuthenticationWithHTTPClient(&http.Client{
+		Timeout:       10 * time.Second,
+		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+	})
+}
+
+func zitadelClientAuthenticationWithHTTPClient(client *http.Client) openid.ClientAuthentication {
+	return func(ctx context.Context, issuer string) (rp.RelyingParty, error) {
+		clientID, secret := strings.TrimSpace(os.Getenv("ZITADEL_CLIENT_ID")), os.Getenv("ZITADEL_CLIENT_SECRET")
+		if clientID == "" || strings.TrimSpace(secret) == "" {
+			return nil, errors.New("confidential browser login requires ZITADEL_CLIENT_ID and ZITADEL_CLIENT_SECRET")
+		}
+		key := os.Getenv("KEY")
+		// Client authentication and PKCE serve different purposes. Explicit Basic
+		// authentication prevents fallback to a public-client token exchange.
+		return rp.NewRelyingPartyOIDC(ctx, issuer, clientID, secret, zitadelRedirectURI(), zitadelAuthScopes(),
+			rp.WithPKCE(httphelper.NewCookieHandler([]byte(key), []byte(key))),
+			rp.WithAuthStyle(oauth2.AuthStyleInHeader),
+			rp.WithHTTPClient(client),
+		)
+	}
 }
 
 func ZitadelAuthenticator() *authentication.Authenticator[*openid.UserInfoContext[*zoidc.IDTokenClaims, *zoidc.UserInfo]] {
@@ -168,6 +186,7 @@ func ZitadelAuthenticator() *authentication.Authenticator[*openid.UserInfoContex
 				openid.WithCodeFlow[*openid.UserInfoContext[*zoidc.IDTokenClaims, *zoidc.UserInfo], *zoidc.IDTokenClaims, *zoidc.UserInfo](zitadelClientAuthentication()),
 				authentication.WithLogger[*openid.UserInfoContext[*zoidc.IDTokenClaims, *zoidc.UserInfo]](SlogLogger),
 				authentication.WithExternalSecure[*openid.UserInfoContext[*zoidc.IDTokenClaims, *zoidc.UserInfo]](true),
+				authentication.WithSessionStore[*browserAuthContext](browserSessions),
 			)
 			authN = authNClient
 			if err != nil {
@@ -231,6 +250,11 @@ func ZitadelAuthRouter() http.Handler {
 	r := chi.NewRouter()
 	r.Get("/register", ZitadelRegisterHandler())
 	r.Get("/login", ZitadelLoginHandler())
+	r.Get("/logout", func(w http.ResponseWriter, r *http.Request) {
+		id := browserSessionID(r)
+		defer browserSessions.Delete(id)
+		ZitadelAuthenticator().Logout(w, r)
+	})
 	r.Handle("/*", ZitadelAuthenticator())
 	return r
 }

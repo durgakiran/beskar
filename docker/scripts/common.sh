@@ -117,6 +117,8 @@ load_env_file() {
     require_var ZITADEL_ADMIN_PASSWORD
     require_var ZITADEL_CLIENT_ID
     require_var ZITADEL_CLIENT_SECRET
+    require_var ZITADEL_SESSION_KEY
+    require_var ZITADEL_API_AUDIENCE
     require_var ZITADEL_USER_PAT
 
     if [[ "$TLS_ENABLED" == "true" ]]; then
@@ -347,6 +349,8 @@ EOF
     export BESKAR_SERVER_URL
     export CORS_ALLOWED_ORIGINS
     export INSECURE_SKIP_VERIFY
+    export ZITADEL_API_AUDIENCE
+    export ZITADEL_SESSION_KEY
     export UPLOAD_STORAGE_DIR
     export STORAGE_S3_BUCKET
     export STORAGE_S3_ENDPOINT

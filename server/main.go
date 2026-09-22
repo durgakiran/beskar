@@ -119,6 +119,11 @@ func main() {
 		logger().Error(err.Error())
 	}
 
+	browserTokenValidator, err := core.NewBrowserAccessTokenValidator()
+	if err != nil {
+		logger().Fatal("Invalid browser access-token validation configuration", zap.Error(err))
+	}
+
 	// create connection pool with database
 	connPool := core.GetPool()
 	defer connPool.Close()
@@ -167,12 +172,13 @@ func main() {
 	r := chi.NewRouter()
 	addCorsMiddleWare(r)
 	mw := core.ZitadelMiddleware()
+	go core.RunBrowserSessionCleanup(appContext)
 
 	// Query credentials are opt-in for legacy media only. Invitation tokens
 	// are application data and must never override the browser session.
 	authChain := func(allowQueryToken bool) func(http.Handler) http.Handler {
 		return func(next http.Handler) http.Handler {
-			return core.SelectAuthentication(mw.CheckAuthentication()(next), core.AuthMiddleWare(next), allowQueryToken)
+			return core.SelectAuthentication(mw.CheckAuthentication()(browserTokenValidator.Middleware(next)), core.AuthMiddleWare(next), allowQueryToken)
 		}
 	}
 
@@ -205,7 +211,7 @@ func main() {
 	r.Mount("/api/v1/page", authChain(false)(page.Router()))
 	r.Mount("/api/v1/comment", authChain(false)(comment.Router()))
 	r.Mount("/api/v1/notifications", authChain(false)(notification.NewController().Router()))
-	r.Mount("/api/v1/user", user.Router())
+	r.Mount("/api/v1/user", authChain(false)(user.Router()))
 	if notificationConfig.AdminEnabled && notificationConfig.AdminToken != "" {
 		r.Mount("/api/v1/admin/email", authChain(false)(notification.NewAdminController(notificationConfig).Router()))
 	}
