@@ -246,15 +246,11 @@ func ZitadelLoginHandler() http.HandlerFunc {
 	}
 }
 
-func ZitadelAuthRouter() http.Handler {
+func ZitadelAuthRouter(validator *BrowserAccessTokenValidator) http.Handler {
 	r := chi.NewRouter()
 	r.Get("/register", ZitadelRegisterHandler())
 	r.Get("/login", ZitadelLoginHandler())
-	r.Get("/logout", func(w http.ResponseWriter, r *http.Request) {
-		id := browserSessionID(r)
-		defer browserSessions.Delete(id)
-		ZitadelAuthenticator().Logout(w, r)
-	})
+	r.Get("/logout", browserLogoutHandler(browserSessions, ZitadelAuthenticator().Logout, validator.revokeSessionTokens))
 	r.Handle("/*", ZitadelAuthenticator())
 	return r
 }

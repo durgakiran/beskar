@@ -1,6 +1,6 @@
 # Current Go-managed authentication sequence
 
-Reflects the local implementation as of 2026-09-21, after adding confidential-client authentication and browser access-token introspection. Live Zitadel configuration has not been verified. Refresh tokens and complete server-side logout invalidation are not implemented yet.
+Reflects the local implementation as of 2026-09-21, after adding confidential-client authentication and browser access-token introspection. Live Zitadel configuration has not been verified. Browser refresh and synchronous logout token revocation are implemented locally; POST/CSRF logout remains unfinished.
 
 All values below are dummy values. `Basic <base64(...)>` describes header construction, not a literal valid header. OAuth client ID/secret components are form-URL-encoded before concatenation and Base64 encoding. Query parameters are shown on separate lines for readability but form one URL. Discovery and signing-key fetches are omitted from the main diagrams; the OIDC SDK performs them.
 
@@ -21,7 +21,7 @@ sequenceDiagram
     participant Browser
     participant GoServer
     participant Zitadel
-    participant MemoryStore
+    participant RedisStore
     Browser->>GoServer: GET /api/v1/authenticated without session
     GoServer-->>Browser: 401
     Browser->>GoServer: GET /auth/login?returnTo=/space/demo
@@ -38,7 +38,7 @@ sequenceDiagram
     GoServer->>GoServer: SDK validates ID token
     GoServer->>Zitadel: GET /oidc/v1/userinfo, Bearer access token
     Zitadel-->>GoServer: 200 user identity
-    GoServer->>MemoryStore: Store userinfo/tokens under generated session ID
+    GoServer->>RedisStore: Store userinfo/tokens under generated session ID
     GoServer-->>Browser: Session cookie + 302 /space/demo
 ```
 
@@ -120,7 +120,7 @@ Content-Type: application/json
 {"sub":"user-101","name":"Demo User","preferred_username":"demo","email":"demo@example.com","email_verified":true}
 ```
 
-Go stores userinfo and tokens in the current in-memory session map. The browser receives only the encrypted session ID:
+Go stores authenticated-encrypted userinfo and tokens in Redis with a TTL capped by idle and absolute expiry. The browser receives only the encrypted session ID:
 
 ```http
 HTTP/1.1 302 Found
@@ -136,17 +136,17 @@ The SDK also clears the temporary transaction cookies. The session cookie does n
 sequenceDiagram
     participant Browser
     participant GoServer
-    participant MemoryStore
+    participant RedisStore
     participant Zitadel
     participant AppDatabase
     Browser->>GoServer: GET /api/v1/authenticated + session cookie
-    GoServer->>MemoryStore: Decrypt cookie and look up session ID
-    MemoryStore-->>GoServer: Stored userinfo, access token and refresh token
+    GoServer->>RedisStore: Decrypt cookie and look up session ID
+    RedisStore-->>GoServer: Stored userinfo, access token and refresh token
     GoServer->>GoServer: Check session deadlines and stored credentials
     opt Access token expired
         GoServer->>Zitadel: POST /oauth/v2/token, Basic web credentials, grant_type=refresh_token
         Zitadel-->>GoServer: New access token and rotated refresh token
-        GoServer->>MemoryStore: Atomically save replacement credentials
+        GoServer->>RedisStore: Atomically save replacement credentials
     end
     GoServer->>Zitadel: POST /oauth/v2/introspect, Basic web credentials + token
     Zitadel-->>GoServer: active status and token claims
@@ -231,7 +231,7 @@ Cache-Control: no-store
 {"status":"FAILED","error":{"code":503,"message":"AUTH_UNAVAILABLE"}}
 ```
 
-There is no positive introspection cache: each otherwise eligible cookie-authenticated API request checks with Zitadel. Introspection has a 10-second timeout and does not follow redirects. Login/callback/logout routes are outside this middleware. Refresh now runs on demand at expiry. Sessions have 30-minute idle and 8-hour absolute limits, and logout deletes the local session. Shared storage and explicit provider token revocation remain unfinished.
+There is no positive introspection cache: each otherwise eligible cookie-authenticated API request checks with Zitadel. Introspection has a 10-second timeout and does not follow redirects. Login/callback/logout routes are outside this middleware. Refresh now runs on demand at expiry. Sessions default to configurable 30-minute idle and 8-hour absolute limits, and logout deletes the shared Redis session before responding. Logout synchronously revokes refresh/access tokens before deleting the session. Provider failure returns 503 and retains the cookie and encrypted record for manual retry; an ending-session marker blocks authentication and refresh. There is no background revocation job.
 
 Implementation: `server/core/auth.go`, `server/core/browser_access_token.go`, `server/main.go`, `server/auth/auth.go`, and the installed Zitadel SDK. See the [deployment runbook](runbooks/browser-access-token-validation.md) for the required confidential-client and introspection settings.
 

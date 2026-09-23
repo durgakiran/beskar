@@ -2,13 +2,13 @@
 
 > Active decision: keep OAuth login, token exchange and subsequent refresh in Go. The browser-managed alternative is abandoned. Configure the Go web client as confidential with `client_secret_basic` and retain PKCE.
 
-Status: access-token validation, confidential-client code exchange and single-process browser refresh implemented locally. Date: 2026-09-22. Live Zitadel configuration and verification remain deployment work.
+Status: access-token validation, confidential-client code exchange and browser refresh and Redis session expiry/storage implemented locally. Date: 2026-09-23. Live Zitadel configuration and verification remain deployment work.
 
 Scope: browser session lifecycle, desktop authentication defects, and shared application behavior discussed in the authentication review. This document does not change running authentication or Zitadel settings. Priority order follows the user decision: validate access tokens first, introduce browser refresh second, then complete the remaining lifecycle and desktop work.
 
 ## Decision
 
-This section describes the target architecture. Current refresh uses a process-local synchronized store; shared Redis persistence and application-owned provider logout remain future work.
+This section describes the target architecture. Current refresh uses encrypted Redis storage, deadline-capped TTLs, and shared refresh coordination. Synchronous provider revocation is implemented; POST/CSRF logout remains future work.
 
 Keep Zitadel as the identity provider and authorization code + PKCE as the login protocol. Keep separate OIDC client registrations for browser and desktop. Share the authenticated-user contract, authorization checks, React state machine, and API error handling.
 
@@ -28,7 +28,7 @@ This browser/backend boundary follows the BFF architecture in [RFC 10017](https:
 
 ## Session and API contract
 
-Target policy (the current implementation uses fixed 30-minute idle and 8-hour absolute limits; other lifecycle items and configurability remain planned):
+Target policy (the current implementation uses configurable 30-minute idle and 8-hour absolute limits; other lifecycle items remain planned):
 
 | Policy | Initial value / behavior |
 | --- | --- |
@@ -81,19 +81,21 @@ Each slice includes configuration, backend/native behavior, affected UI, automat
 
 ### 2. P0 — Introduce server-side refresh for browser sessions
 
-**Status:** implemented for a single Go process; live provider verification and shared persistence remain deployment/follow-up work.
+**Status:** implemented with shared encrypted Redis storage and refresh coordination; live deployment verification remains required.
 
-**Delivered:** `offline_access`, confidential Basic refresh on access expiry, per-session serialization, saved refresh-token rotation, validation of the refreshed access token by introspection, preserved tokens on temporary errors, a three-second retry cooldown, and 401 on invalid_grant. Inactive unexpired tokens are never refreshed. The replacement in-memory store is concurrency-safe, with 30-minute idle and 8-hour absolute deadlines and periodic eviction. Logout deletes local state and cannot be undone by a completing refresh. Tokens remain server-side. Tests include concurrent SDK cookie requests, rotation, failure recovery and logout races.
+**Delivered:** `offline_access`, confidential Basic refresh on access expiry, per-session serialization, saved refresh-token rotation, validation of the refreshed access token by introspection, preserved tokens on temporary errors, a three-second retry cooldown, and 401 on invalid_grant. Inactive unexpired tokens are never refreshed. Redis TTLs enforce configurable 30-minute idle and 8-hour absolute deadlines. Logout deletes shared state and cannot be undone by a completing refresh. Tokens remain server-side. Tests include concurrent SDK cookie requests, rotation, failure recovery and logout races.
 
-**Rollout:** enable the Refresh Token grant in Zitadel and log in again. Use one Go replica. Do not describe the in-memory implementation as durable or distributed: process restarts lose sessions. Shared encrypted storage and distributed refresh coordination remain required before multi-replica deployment. Explicit provider revocation on logout remains in slice 3.
+**Rollout:** enable the Refresh Token grant in Zitadel and log in again. Configure all replicas with the same Redis database and session key. Existing in-memory sessions require a new login during migration. Synchronous provider revocation on logout is implemented in slice 3; outages require manual retry.
 
 **Depends on:** slice 1; see the [runbook](runbooks/browser-access-token-validation.md).
 
 ### 3. P0 — A browser session survives deploys, expires, and actually ends on logout
 
+**Status:** encrypted Redis storage, idle/absolute expiry, TTL cleanup, store-failure handling and cross-replica logout deletion implemented. Synchronous provider revocation is implemented; failure returns 503 and retains an authentication-blocked session for manual retry until its existing TTL expires. POST/CSRF logout and distinguishing user activity from polling remain unfinished. The current SDK cookie name is retained; do not mix old in-memory and new Redis replicas during rollout.
+
 **User outcome:** users remain signed in across an application restart or replica change; idle/absolute expiry is enforced; signing out makes the old cookie unusable.
 
-**Deliver:** replace the default SDK session lifecycle with the Redis-backed contract above; library-backed callback creates a new unpredictable session; authenticated requests enforce deadlines; explicit POST logout invalidates the record before reporting success and clears the cookie. Include the session endpoint, CSRF protection for logout, and minimal browser UI changes for logout, expiration, and 503 retry. Logout completes locally even when Zitadel is unavailable once store revocation succeeds; do not claim success if the store revocation cannot be confirmed. Retain encrypted data only as needed for a bounded provider-revocation retry. Fix singleton initialization using `sync.Once` or an equivalent race-free initialization path.
+**Deliver:** replace the default SDK session lifecycle with the Redis-backed contract above; library-backed callback creates a new unpredictable session; authenticated requests enforce deadlines; explicit POST logout invalidates the record before reporting success and clears the cookie. Include the session endpoint, CSRF protection for logout, and minimal browser UI changes for logout, expiration, and 503 retry. Logout requires synchronous provider revocation and confirmed store deletion before reporting success. If Zitadel is unavailable, return 503 and retain the cookie and encrypted session for manual retry until its existing TTL expires, while blocking authentication and refresh. No background revocation jobs are used. Fix singleton initialization using `sync.Once` or an equivalent race-free initialization path.
 
 **Acceptance:** sign in on replica A, use replica B, restart A, and remain authenticated; advance a fake clock past both deadlines and get 401; replay a copied cookie after logout on either replica and get 401; concurrent login/read/logout passes race testing; Redis failure gives 503 and no access; login/logout races cannot restore an invalidated session. Existing registration and invitation-return tests pass.
 

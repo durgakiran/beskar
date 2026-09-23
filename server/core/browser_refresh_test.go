@@ -1,12 +1,15 @@
 package core
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"golang.org/x/exp/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -164,7 +167,7 @@ func TestBrowserRefreshFailures(t *testing.T) {
 			f.refreshBody = tc.body
 			for i := 0; i < 2; i++ {
 				_, err := f.validator.prepareSession(context.Background(), f.store, "session")
-				if err == nil || (err == errBrowserTokenInvalid) != tc.invalid {
+				if err == nil || (err == errBrowserTokenInvalid) != (tc.invalid || (tc.name == "malformed" && i > 0)) {
 					t.Fatalf("unexpected error %v", err)
 				}
 			}
@@ -172,7 +175,7 @@ func TestBrowserRefreshFailures(t *testing.T) {
 				t.Fatal("failed refresh was immediately retried")
 			}
 			_, err := f.store.Get("session")
-			if (err != nil) != tc.invalid {
+			if (err != nil) != (tc.invalid || tc.name == "malformed") {
 				t.Fatal("incorrect session retention")
 			}
 		})
@@ -345,5 +348,43 @@ func TestBrowserRefreshLogoutDuringExchange(t *testing.T) {
 	<-deleted
 	if _, err := f.store.Get("session"); err == nil {
 		t.Fatal("refresh restored logged out session")
+	}
+}
+
+func TestBrowserRefreshPresenceLogs(t *testing.T) {
+	for _, replacement := range []bool{true, false} {
+		t.Run(fmt.Sprint(replacement), func(t *testing.T) {
+			var logs bytes.Buffer
+			previous := SlogLogger
+			SlogLogger = slog.New(slog.NewJSONHandler(&logs, nil))
+			t.Cleanup(func() { SlogLogger = previous })
+			f := newRefreshFixture(t)
+			if !replacement {
+				f.refreshBody = `{"access_token":"new-access","token_type":"Bearer","expires_in":3600}`
+			}
+			if _, err := f.validator.prepareSession(context.Background(), f.store, "session"); err != nil {
+				t.Fatal(err)
+			}
+			saved, _ := f.store.Get("session")
+			output := logs.String()
+			if !strings.Contains(output, `"access_token_expires_at":"`+saved.Tokens.Expiry.UTC().Format(time.RFC3339)+`"`) {
+				t.Fatal("refreshed expiry missing from logs")
+			}
+			for _, expected := range []string{`"msg":"browser login session stored"`, `"refresh_token_present":true`, `"access_token_expires_at":"` + f.now.Add(-time.Minute).UTC().Format(time.RFC3339) + `"`, fmt.Sprintf(`"refresh_token_received":%t`, replacement), fmt.Sprintf(`"refresh_token_rotated":%t`, replacement)} {
+				if !strings.Contains(output, expected) {
+					t.Fatalf("missing log field %s", expected)
+				}
+			}
+			for _, secret := range []string{"old-refresh", "new-refresh", "old-access", "new-access", "original-verified-id-token", "secret+:/="} {
+				if strings.Contains(output, secret) {
+					t.Fatal("credential leaked in logs")
+				}
+			}
+			logs.Reset()
+			_ = f.store.Set("empty", &browserAuthContext{})
+			if !strings.Contains(logs.String(), `"refresh_token_present":false`) || !strings.Contains(logs.String(), `"access_token_expires_at":"unknown"`) {
+				t.Fatal("missing-token login not logged")
+			}
+		})
 	}
 }

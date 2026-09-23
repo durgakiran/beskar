@@ -132,22 +132,29 @@ func (v *BrowserAccessTokenValidator) validate(ctx context.Context, session *bro
 	return errBrowserTokenInvalid
 }
 
-// Middleware must run inside the SDK's CheckAuthentication middleware. Missing
-// sessions still reach existing handlers, preserving intentionally public routes.
+// Middleware resolves cookies directly so Redis failures cannot be swallowed by
+// the SDK as anonymous sessions. Requests without cookies may reach public routes.
 func (v *BrowserAccessTokenValidator) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		session := authentication.Context[*browserAuthContext](r.Context())
-		if session == nil {
-			next.ServeHTTP(w, r)
-			return
-		}
 		var err error
 		if v.sessions != nil {
+			if _, cookieErr := r.Cookie("zitadel.session"); errors.Is(cookieErr, http.ErrNoCookie) {
+				next.ServeHTTP(w, r)
+				return
+			}
 			session, err = v.prepareSession(r.Context(), v.sessions, browserSessionID(r))
 		} else {
+			if session == nil {
+				next.ServeHTTP(w, r)
+				return
+			}
 			err = v.validate(r.Context(), session)
 		}
 		if err != nil {
+			if errors.Is(err, errBrowserStoreUnavailable) {
+				SlogLogger.WarnContext(r.Context(), "browser session validation unavailable", "reason", "session_storage_unavailable")
+			}
 			status, message := http.StatusServiceUnavailable, "AUTH_UNAVAILABLE"
 			if errors.Is(err, errBrowserTokenInvalid) {
 				status, message = http.StatusUnauthorized, "AUTH_REQUIRED"

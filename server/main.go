@@ -119,6 +119,11 @@ func main() {
 		logger().Error(err.Error())
 	}
 
+	closeBrowserSessions, err := core.InitializeBrowserSessions(appContext)
+	if err != nil {
+		logger().Fatal("Invalid browser session storage configuration", zap.Error(err))
+	}
+	defer closeBrowserSessions()
 	browserTokenValidator, err := core.NewBrowserAccessTokenValidator()
 	if err != nil {
 		logger().Fatal("Invalid browser access-token validation configuration", zap.Error(err))
@@ -171,14 +176,12 @@ func main() {
 
 	r := chi.NewRouter()
 	addCorsMiddleWare(r)
-	mw := core.ZitadelMiddleware()
-	go core.RunBrowserSessionCleanup(appContext)
 
 	// Query credentials are opt-in for legacy media only. Invitation tokens
 	// are application data and must never override the browser session.
 	authChain := func(allowQueryToken bool) func(http.Handler) http.Handler {
 		return func(next http.Handler) http.Handler {
-			return core.SelectAuthentication(mw.CheckAuthentication()(browserTokenValidator.Middleware(next)), core.AuthMiddleWare(next), allowQueryToken)
+			return core.SelectAuthentication(browserTokenValidator.Middleware(next), core.AuthMiddleWare(next), allowQueryToken)
 		}
 	}
 
@@ -198,7 +201,7 @@ func main() {
 	})
 
 	apidocs.Register(r)
-	r.Mount("/auth/", core.ZitadelAuthRouter())
+	r.Mount("/auth/", core.ZitadelAuthRouter(browserTokenValidator))
 	r.Mount("/api/v1", authChain(false)(auth.Router()))
 	r.Mount("/api/v1/media", authChain(true)(media.Router()))
 	r.Mount("/api/v1/attachments", authChain(true)(attachment.Router()))
