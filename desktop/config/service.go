@@ -13,7 +13,7 @@ type ConfigService struct {
 var (
 	DefaultServerURL  = "https://app.durgakiran.com"
 	DefaultZitadelURL = "https://id.durgakiran.com"
-	DefaultClientID   = "377926419071631362"
+	DefaultClientID   = "392021815213490183"
 )
 
 // NewConfigService creates a new ConfigService, loading the initial config.

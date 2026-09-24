@@ -87,7 +87,7 @@ func TestMalformedBearerHeadersReturnUnauthorizedWithoutPanic(t *testing.T) {
 			request := httptest.NewRequest("GET", "/api/v1/invite/user/details", nil)
 			request.Header.Set("Authorization", header)
 			response := httptest.NewRecorder()
-			AuthMiddleWare(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { t.Fatal("malformed header authorized") })).ServeHTTP(response, request)
+			(&BearerAccessTokenValidator{}).Middleware(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { t.Fatal("malformed header authorized") })).ServeHTTP(response, request)
 			if response.Code != http.StatusUnauthorized {
 				t.Fatalf("got %d", response.Code)
 			}

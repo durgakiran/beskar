@@ -12,14 +12,13 @@ import (
 	"strings"
 	"time"
 
-
+	"beskar/desktop/config"
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"golang.org/x/sync/singleflight"
-	"beskar/desktop/config"
 )
 
 const (
-	RedirectURI   = "teddox://callback"
+	RedirectURI = "teddox://callback"
 )
 
 var insecureClient = &http.Client{
@@ -107,8 +106,13 @@ func (s *AuthService) Login() error {
 	}
 	challenge := GenerateCodeChallenge(verifier)
 
-	authURL := fmt.Sprintf("%s/oauth/v2/authorize?client_id=%s&redirect_uri=%s&response_type=code&scope=openid%%20profile%%20email%%20offline_access&code_challenge=%s&code_challenge_method=S256",
-		s.cfg.ZitadelURL, s.cfg.ClientID, url.QueryEscape(RedirectURI), challenge)
+	authURL, err := loginAuthorizationURL(s.ctx, s.cfg, challenge, &http.Client{
+		Timeout:       10 * time.Second,
+		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+	})
+	if err != nil {
+		return err
+	}
 
 	s.loginCallbackChan = make(chan string, 1)
 
@@ -212,11 +216,11 @@ func (s *AuthService) revoke(token string) {
 // GetAccessToken returns the access token, refreshing if necessary.
 func (s *AuthService) GetAccessToken() string {
 	if !s.isExpired() {
-		return s.idToken
+		return s.accessToken
 	}
 	result, err, _ := s.refreshGroup.Do("refresh", func() (any, error) {
 		err := s.doRefresh()
-		return s.idToken, err
+		return s.accessToken, err
 	})
 	if err != nil {
 		return ""

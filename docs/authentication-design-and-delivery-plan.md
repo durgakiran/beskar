@@ -117,6 +117,8 @@ Each slice includes configuration, backend/native behavior, affected UI, automat
 
 ### 5. P0 — Only intended application access tokens reach protected APIs
 
+**Status:** bearer audience/client/lifetime validation and per-request introspection implemented, with a typed bearer identity and removal of legacy ID-token verification/Hasura claim definitions. Desktop API requests use access tokens and discover the API audience before login. Deployment must configure `ZITADEL_BEARER_CLIENT_IDS`; existing desktop grants require fresh login. Live provider verification and full cookie/bearer principal consolidation remain follow-up work.
+
 **User outcome:** current desktop can access its permitted data; unrelated-client tokens and ID tokens cannot authenticate to the API; browser and desktop user search work.
 
 **Deliver:** configure Zitadel's API audience and allowed clients; request that audience during desktop authorization and send `access_token`, not `id_token`. Extend slice 1's introspection policy to bearer access tokens with the desktop client allowlist; verify issuer, audience, expiry, and client restrictions. Cache provider metadata/keys safely and use request deadlines instead of discovering the provider on every request. Normalize cookie/bearer results into a typed principal and route `/api/v1/user` through authentication. Keep resource-level authorization intact. Remove unused Hasura claim definitions as part of this replacement.

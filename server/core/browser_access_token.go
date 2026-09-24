@@ -97,7 +97,22 @@ func (v *BrowserAccessTokenValidator) validate(ctx context.Context, session *bro
 	if token.AccessToken == "" || !strings.EqualFold(token.TokenType, "Bearer") || !token.Expiry.After(v.now()) {
 		return errBrowserTokenInvalid
 	}
-	result, err := rs.Introspect[*oidc.IntrospectionResponse](ctx, v.resourceServer, token.AccessToken)
+	result, err := v.introspectAccessToken(ctx, token.AccessToken, func(clientID string) bool { return clientID == v.clientID })
+	if err != nil {
+		return err
+	}
+	if result.Subject != session.UserInfo.Subject {
+		return errBrowserTokenInvalid
+	}
+	return nil
+}
+
+// Both credential paths use the same issuer, audience, lifetime and token-type
+// policy. Introspection is authoritative for opaque tokens and JWT revocation.
+func (v *BrowserAccessTokenValidator) introspectAccessToken(ctx context.Context, token string, allowedClient func(string) bool) (*oidc.IntrospectionResponse, error) {
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	result, err := rs.Introspect[*oidc.IntrospectionResponse](ctx, v.resourceServer, token)
 	if err != nil {
 		// Never log err.Error(): the SDK includes provider response bodies in errors.
 		reason := "request_or_response_error"
@@ -110,26 +125,26 @@ func (v *BrowserAccessTokenValidator) validate(ctx context.Context, session *bro
 				reason = "oauth_error"
 			}
 		}
-		SlogLogger.WarnContext(ctx, "browser token introspection failed", "reason", reason, "error_type", fmt.Sprintf("%T", err))
+		SlogLogger.WarnContext(ctx, "access token introspection failed", "reason", reason, "error_type", fmt.Sprintf("%T", err))
 		// Includes invalid_client, rate limiting, malformed responses and network
 		// errors: these are not evidence that the user's credentials were revoked.
-		return errors.New("browser access token validation unavailable")
+		return nil, errors.New("access token validation unavailable")
 	}
 	if result == nil {
-		SlogLogger.WarnContext(ctx, "browser token introspection failed", "reason", "null_response")
-		return errors.New("browser access token validation unavailable")
+		SlogLogger.WarnContext(ctx, "access token introspection failed", "reason", "null_response")
+		return nil, errors.New("access token validation unavailable")
 	}
-	if !result.Active || result.Subject != session.UserInfo.Subject || result.Issuer != v.issuer ||
-		result.ClientID != v.clientID || !strings.EqualFold(result.TokenType, "Bearer") ||
+	if !result.Active || result.Subject == "" || result.Issuer != v.issuer ||
+		!allowedClient(result.ClientID) || !strings.EqualFold(result.TokenType, "Bearer") ||
 		!result.Expiration.AsTime().After(v.now()) || result.NotBefore.AsTime().After(v.now()) {
-		return errBrowserTokenInvalid
+		return nil, errBrowserTokenInvalid
 	}
 	for _, audience := range result.Audience {
 		if audience == v.audience {
-			return nil
+			return result, nil
 		}
 	}
-	return errBrowserTokenInvalid
+	return nil, errBrowserTokenInvalid
 }
 
 // Middleware resolves cookies directly so Redis failures cannot be swallowed by

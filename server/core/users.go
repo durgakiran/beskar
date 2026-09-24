@@ -383,7 +383,7 @@ func GetUserInfo(ctx context.Context) (UserInfo, error) {
 	var user UserInfo
 
 	// Check for Bearer token claims first (desktop app flow)
-	if claims, ok := ctx.Value("claims").(Claims); ok && claims.Subject != "" {
+	if claims, ok := ctx.Value(bearerIdentityKey{}).(bearerIdentity); ok && claims.Subject != "" {
 		user.Id = claims.Subject
 		user.Email = claims.Email
 		user.IsVerified = claims.EmailVerified

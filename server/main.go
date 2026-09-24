@@ -129,6 +129,11 @@ func main() {
 		logger().Fatal("Invalid browser access-token validation configuration", zap.Error(err))
 	}
 
+	bearerValidator, err := core.NewBearerAccessTokenValidator(browserTokenValidator, os.Getenv("ZITADEL_BEARER_CLIENT_IDS"))
+	if err != nil {
+		logger().Fatal("Invalid bearer access-token validation configuration", zap.Error(err))
+	}
+
 	// create connection pool with database
 	connPool := core.GetPool()
 	defer connPool.Close()
@@ -181,7 +186,7 @@ func main() {
 	// are application data and must never override the browser session.
 	authChain := func(allowQueryToken bool) func(http.Handler) http.Handler {
 		return func(next http.Handler) http.Handler {
-			return core.SelectAuthentication(browserTokenValidator.Middleware(next), core.AuthMiddleWare(next), allowQueryToken)
+			return core.SelectAuthentication(browserTokenValidator.Middleware(next), bearerValidator.Middleware(next), allowQueryToken)
 		}
 	}
 
@@ -196,7 +201,8 @@ func main() {
 	// Desktop App Auto-Discovery Endpoint
 	r.Get("/.well-known/beskar", func(w http.ResponseWriter, req *http.Request) {
 		render.JSON(w, req, map[string]string{
-			"zitadel_url": core.IssuerBaseURL(),
+			"zitadel_url":  core.IssuerBaseURL(),
+			"api_audience": os.Getenv("ZITADEL_API_AUDIENCE"),
 		})
 	})
 

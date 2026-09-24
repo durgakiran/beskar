@@ -2,17 +2,14 @@ package core
 
 import (
 	"context"
-	"crypto/tls"
 	"errors"
 	"fmt"
 	"net/http"
 	"os"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/render"
 	"github.com/zitadel/oidc/v3/pkg/client/rp"
@@ -24,93 +21,12 @@ import (
 	"golang.org/x/oauth2"
 )
 
-type tokenType struct {
-	value  string
-	Claims Claims
-}
-
-type Claims struct {
-	Subject       string      `json:"sub"`
-	Name          string      `json:"name"`
-	Username      string      `json:"preferred_username"`
-	Email         string      `json:"email"`
-	EmailVerified bool        `json:"email_verified"`
-	Claims        DefaultRole `json:"https://hasura.io/jwt/claims"`
-}
-
-type DefaultRole struct {
-	DefaultRole  string   `json:"x-hasura-default-role"`
-	UserId       string   `json:"x-hasura-user-id"`
-	AllowedRoles []string `json:"x-hasura-allowed-roles"`
-}
-
-func (t *tokenType) authenticate() error {
-	insecureSkipVerify, err := strconv.ParseBool(strings.TrimSpace(os.Getenv("INSECURE_SKIP_VERIFY")))
-	if err != nil {
-		insecureSkipVerify = false
-	}
-
-	tr := &http.Transport{
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: insecureSkipVerify},
-	}
-	client := &http.Client{
-		Timeout:   time.Duration(6000) * time.Second,
-		Transport: tr,
-	}
-	ctx := oidc.ClientContext(context.Background(), client)
-	provider, err := oidc.NewProvider(ctx, IssuerBaseURL())
-	if err != nil {
-		Logger.Error("authorisation failed while getting the provider: " + err.Error())
-		return errors.New(err.Error())
-
-	}
-	oidcConfig := &oidc.Config{
-		SkipClientIDCheck: true,
-	}
-	verifier := provider.Verifier(oidcConfig)
-	idToken, err := verifier.Verify(ctx, t.value)
-	if err != nil {
-		Logger.Error("authorisation failed while verifying the token: " + err.Error())
-		return errors.New(err.Error())
-	}
-	var claims Claims
-
-	err = idToken.Claims(&claims)
-	if err != nil {
-		return err
-	}
-	t.Claims = claims
-	return nil
-}
-
-func AuthMiddleWare(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		parts := strings.Fields(r.Header.Get("Authorization"))
-		if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
-			render.Status(r, http.StatusUnauthorized)
-			render.Render(w, r, NewFailedResponse(401, FAILURE, "A valid Bearer authorization header is required", ""))
-			return
-		}
-		Itoken := tokenType{value: parts[1]}
-		err := Itoken.authenticate()
-		if err != nil {
-			Logger.Error(fmt.Sprintf("======> AuthMiddleWare auth failed: %v", err))
-			render.Status(r, http.StatusUnauthorized)
-			render.Render(w, r, NewFailedResponse(401, FAILURE, err.Error(), ""))
-			return
-		}
-		Logger.Info("======> AuthMiddleWare auth SUCCESS!")
-		ctx := context.WithValue(r.Context(), "claims", Itoken.Claims)
-		next.ServeHTTP(w, r.WithContext(ctx))
-	})
-}
-
 // SelectAuthentication keeps application tokens (such as invitation tokens)
 // separate from authentication credentials. Query credentials are an explicit
 // compatibility option for legacy media GET/HEAD requests only.
 func SelectAuthentication(cookiePath, bearerPath http.Handler, allowQueryToken bool) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("Authorization") != "" {
+		if len(r.Header.Values("Authorization")) != 0 {
 			bearerPath.ServeHTTP(w, r)
 			return
 		}

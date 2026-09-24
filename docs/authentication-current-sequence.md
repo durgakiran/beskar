@@ -251,3 +251,10 @@ grant_type=refresh_token&refresh_token=refresh-old-dummy
 ```
 
 Go saves the replacement credentials, then introspects `access-new-dummy` before continuing the original browser request. The browser still sends only its session cookie.
+
+
+## Bearer API requests
+
+The desktop discovers `api_audience` through `GET /.well-known/beskar` before login and requests that project's audience scope. It sends the returned access token, not the ID token, in `Authorization: Bearer ...`.
+
+`BearerAccessTokenValidator.Middleware` introspects the credential on every API request using the same issuer, audience and confidential introspection client as browser validation. It checks active status, subject, issuer, expiry/not-before, Bearer type and the `ZITADEL_BEARER_CLIENT_IDS` allowlist. Accepted claims become a typed bearer identity used by `GetUserInfo`; existing application-user lookup and resource permissions still run. A rejected token returns 401; provider failure returns 503. Neither falls back to cookie authentication. Legacy media query credentials use this same bearer validator.
