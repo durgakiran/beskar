@@ -1,0 +1,5 @@
+User-Agent: *
+Allow: /
+
+Host: https://teddox.com
+Sitemap: https://teddox.com/sitemap.xml
