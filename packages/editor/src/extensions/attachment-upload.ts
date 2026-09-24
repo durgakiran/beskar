@@ -70,13 +70,13 @@ export function insertAttachmentAtPos(
       ? crypto.randomUUID()
       : `ph-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
 
-  registerPendingAttachmentFile(placeholderId, file);
-
   const nodeType = view.state.schema.nodes.attachmentInline;
   if (!nodeType) {
     console.warn('[attachment] attachmentInline node missing from schema');
     return 0;
   }
+
+  registerPendingAttachmentFile(placeholderId, file);
 
   const node = nodeType.create(makeAttachmentPlaceholderAttrs(file, placeholderId));
   const { state } = view;
@@ -131,8 +131,8 @@ export function startAttachmentUpload(
   file: File,
   handler: AttachmentAPIHandler,
 ): void {
-  handler
-    .uploadAttachment(file)
+  Promise.resolve()
+    .then(() => handler.uploadAttachment(file))
     .then((result) => applyAttachmentUploadSuccess(view, placeholderId, result, handler))
     .catch((err: unknown) => {
       console.error('[attachment] Upload failed:', err);
@@ -147,23 +147,17 @@ export function applyAttachmentUploadSuccess(
   result: AttachmentUploadResult,
   handler: AttachmentAPIHandler,
 ): void {
+  const attrs = attachmentResultAttrs(result, handler);
+  clearPendingAttachmentFile(placeholderId);
+  if (view.isDestroyed || !view.editable) return;
   const { state } = view;
   const hit = findAttachmentByPlaceholderId(state.doc, placeholderId);
   if (!hit) return;
-
-  const url = handler.getAttachmentUrl?.(result.url) ?? result.url;
   const tr = state.tr.setNodeMarkup(hit.pos, undefined, {
     ...hit.node.attrs,
-    attachmentId: result.attachmentId,
-    fileUrl: url,
-    fileName: result.fileName,
-    fileSize: result.fileSize,
-    fileType: result.mimeType,
-    uploadStatus: 'success',
-    errorMessage: null,
+    ...attrs,
   });
   view.dispatch(tr);
-  clearPendingAttachmentFile(placeholderId);
 }
 
 export function applyAttachmentUploadError(
@@ -171,9 +165,10 @@ export function applyAttachmentUploadError(
   placeholderId: string,
   message: string,
 ): void {
+  if (view.isDestroyed || !view.editable) return;
   const { state } = view;
   const hit = findAttachmentByPlaceholderId(state.doc, placeholderId);
-  if (!hit) return;
+  if (!hit) { clearPendingAttachmentFile(placeholderId); return; }
 
   const tr = state.tr.setNodeMarkup(hit.pos, undefined, {
     ...hit.node.attrs,
@@ -181,4 +176,20 @@ export function applyAttachmentUploadError(
     errorMessage: message,
   });
   view.dispatch(tr);
+}
+
+/** Validate integration output before committing a successful node. */
+export function attachmentResultAttrs(result: AttachmentUploadResult, handler: AttachmentAPIHandler) {
+  if (!result || typeof result.attachmentId !== 'string' || !result.attachmentId.trim() ||
+      typeof result.fileName !== 'string' || !result.fileName.trim() ||
+      typeof result.mimeType !== 'string' || !result.mimeType.trim() || !Number.isFinite(result.fileSize) || result.fileSize < 0) {
+    throw new Error('The upload service returned an incomplete attachment. Please try again.');
+  }
+  const url = handler.getAttachmentUrl?.(result.url) ?? result.url;
+  if (typeof url !== 'string' || !url.trim() || !/^(https?:|blob:|data:|\/)/i.test(url)) {
+    throw new Error('The upload service returned an invalid attachment URL.');
+  }
+  return { attachmentId: result.attachmentId, fileUrl: url, fileName: result.fileName,
+    fileSize: result.fileSize, fileType: result.mimeType, uploadStatus: 'success',
+    errorMessage: null, placeholderId: '' };
 }

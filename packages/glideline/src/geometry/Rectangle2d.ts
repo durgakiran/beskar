@@ -1,5 +1,5 @@
-import { Box2d, Vec2, makeBox } from '../types';
-import { Geometry2d } from './Geometry2d';
+import { Box2d, Vec2, makeBox } from '../types.js';
+import { Geometry2d } from './Geometry2d.js';
 
 export class Rectangle2d extends Geometry2d {
   constructor(public x: number, public y: number, public w: number, public h: number) {

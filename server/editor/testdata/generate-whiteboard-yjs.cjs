@@ -1,0 +1,32 @@
+// Run from the repository root:
+// node server/editor/testdata/generate-whiteboard-yjs.cjs
+const fs = require('node:fs');
+const Y = require('../../../ui/node_modules/yjs');
+const fixtures = [];
+const record = (name, update) => fixtures.push({name, update: Buffer.from(update).toString('base64')});
+let nextClient = 1;
+const doc = () => { const d = new Y.Doc(); d.clientID = nextClient++; return d; };
+const d = doc();
+record('empty', Y.encodeStateAsUpdate(d));
+d.on('update', u => record('incremental-' + fixtures.length, u));
+const shapes = d.getMap('shapes');
+shapes.set('one', {x: 10, y: -10, color: 'blue', points: [1.25, 2.5], visible: true, removed: null});
+shapes.set('one', {x: 30, color: 'red'});
+const text = new Y.Text(); shapes.set('text', text);
+text.insert(0, 'Hello 🌍');
+text.format(0, 5, {bold: true});
+text.delete(1, 2);
+const arr = d.getArray('values');
+arr.push([{values: [undefined, null, true, false, 3.141592653589793, -9007199254740991, 123n]}, new Uint8Array([0,255]), 'text']);
+const xml = d.getXmlFragment('xml');
+const el = new Y.XmlElement('p'); xml.insert(0,[el]);
+const xt = new Y.XmlText(); el.insert(0,[xt]); xt.insert(0,'hello');
+el.setAttribute('id','p1');
+const sub = doc(); sub.guid = 'fixture-subdoc'; shapes.set('sub',sub);
+record('full',Y.encodeStateAsUpdate(d));
+const updates = fixtures.filter(f=>f.name.startsWith('incremental')).map(f=>Buffer.from(f.update,'base64'));
+record('merged-overlapping',Y.mergeUpdates([...updates, updates[0]]));
+record('merged-gaps',Y.mergeUpdates([updates[0],updates[updates.length-1]]));
+const large = doc(); large.getText('text').insert(0,'a'.repeat(16*1024));
+record('large-text',Y.encodeStateAsUpdate(large));
+fs.writeFileSync(__dirname+'/whiteboard-yjs-v1.json',JSON.stringify({yjsVersion:require('../../../ui/node_modules/yjs/package.json').version,fixtures},null,2)+'\n');

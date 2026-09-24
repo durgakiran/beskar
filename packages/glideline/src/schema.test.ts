@@ -4,7 +4,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { GlideSchema } from './schema';
+import { CURRENT_STORE_VERSION, GlideSchema, createDefaultPageRecord } from './schema';
 import { GlideStore } from './store';
 import { T } from './validators';
 import { defineMigrations } from './migrations';
@@ -19,7 +19,6 @@ interface BoxProps { w: number; h: number; }
 const BoxUtil = {
   type: 'box' as const,
   props: { w: T.number, h: T.number } as Record<string, { validate(v: unknown): unknown }>,
-  migrations: undefined,
 };
 
 // ─────────────────────────────────────────────────────────────
@@ -72,7 +71,12 @@ describe('T1.2-05: Unknown type bypasses validation', () => {
 
     const alien = { id: 'alien:1', type: 'my-plugin-shape', props: { x: 1 } };
     store.put([alien]);
-    expect(store.get('alien:1')).toEqual(alien);
+    expect(store.get('alien:1')).toMatchObject({
+      ...alien,
+      kind: 'opaque',
+      schemaVersion: 0,
+      meta: {},
+    });
   });
 });
 
@@ -98,7 +102,10 @@ describe('GlideSchema.load', () => {
 
     const doc = {
       schema: { storeVersion: 1, shapes: { box: 0 }, bindings: {} },
-      records: [{ id: 'shape:1', type: 'box', props: { w: 100 } }],
+      records: [{
+        id: 'shape:1', type: 'box', x: 0, y: 0, rotation: 0, index: 'a1', meta: {},
+        props: { w: 100 },
+      }],
     };
 
     const records = schema.load(doc);
@@ -130,7 +137,10 @@ describe('GlideSchema.load', () => {
 
     const doc = {
       schema: { storeVersion: 1, shapes: { box: 99 }, bindings: {} }, // savedVersion=99 > currentVersion=1
-      records: [{ id: 'shape:1', type: 'box', props: { futureProp: true } }],
+      records: [{
+        id: 'shape:1', type: 'box', x: 0, y: 0, rotation: 0, index: 'a1', meta: {},
+        props: { futureProp: true },
+      }],
     };
 
     const records = schema.load(doc);
@@ -156,8 +166,10 @@ describe('GlideSchema.save', () => {
     };
     schema.registerShapeUtil(util);
 
-    const doc = schema.save([{ id: 'shape:1', type: 'box', props: {} }]);
+    const doc = schema.save([createDefaultPageRecord(), {
+      id: 'shape:1', type: 'box', x: 0, y: 0, rotation: 0, index: 'a1', meta: {}, props: {},
+    }]);
     expect(doc.schema.shapes['box']).toBe(3);
-    expect(doc.schema.storeVersion).toBe(1);
+    expect(doc.schema.storeVersion).toBe(CURRENT_STORE_VERSION);
   });
 });

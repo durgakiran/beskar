@@ -16,3 +16,144 @@ body, html {
   touch-action: none;
   user-select: none;
 }
+
+.collaboration-demo {
+  min-height: calc(100vh - 43px);
+  background: #f6f7f9;
+  color: #17181a;
+}
+
+.collaboration-controls {
+  min-height: 52px;
+  padding: 8px 16px;
+  border-bottom: 1px solid #d9dce2;
+  background: #fff;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  flex-wrap: wrap;
+  box-sizing: border-box;
+}
+
+.collaboration-control-group,
+.collaboration-control-actions,
+.collaboration-latency,
+.collaboration-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.collaboration-toggle,
+.collaboration-latency,
+.collaboration-queue {
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.collaboration-latency input {
+  width: 120px;
+}
+
+.collaboration-latency output {
+  width: 48px;
+  color: #5c626d;
+  font-variant-numeric: tabular-nums;
+}
+
+.collaboration-control-actions {
+  margin-left: auto;
+}
+
+.collaboration-control-actions button {
+  min-height: 32px;
+  padding: 0 11px;
+  border: 1px solid #c8ccd4;
+  border-radius: 6px;
+  background: #fff;
+  color: #202226;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.collaboration-control-actions button:hover:not(:disabled) {
+  background: #f0f2f5;
+}
+
+.collaboration-control-actions button:disabled {
+  color: #9da2ac;
+  cursor: default;
+}
+
+.collaboration-boards {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  min-height: calc(100vh - 112px);
+}
+
+.collaboration-client {
+  min-width: 0;
+  display: grid;
+  grid-template-rows: 38px minmax(520px, 1fr);
+  background: #fff;
+}
+
+.collaboration-client + .collaboration-client {
+  border-left: 1px solid #cfd3da;
+}
+
+.collaboration-client-header {
+  padding: 0 14px;
+  border-bottom: 1px solid #d9dce2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+}
+
+.collaboration-client-header span::before {
+  content: '';
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.collaboration-client-header .is-online {
+  color: #16803d;
+}
+
+.collaboration-client-header .is-offline {
+  color: #9b2c2c;
+}
+
+.collaboration-board {
+  position: relative;
+  min-width: 0;
+  min-height: 520px;
+  overflow: hidden;
+}
+
+@media (max-width: 900px) {
+  .collaboration-control-actions {
+    margin-left: 0;
+  }
+
+  .collaboration-boards {
+    grid-template-columns: 1fr;
+  }
+
+  .collaboration-client {
+    grid-template-rows: 38px 500px;
+  }
+
+  .collaboration-client + .collaboration-client {
+    border-top: 1px solid #cfd3da;
+    border-left: 0;
+  }
+}

@@ -1,6 +1,7 @@
-import { MouseEvent, useCallback, useEffect, useState } from "react";
+import { MouseEvent, useCallback, useEffect, useState, useRef } from "react";
 import { Dialog, Button, TextField, Flex, Text } from "@radix-ui/themes";
 import { Response, usePost } from "@http/hooks";
+import { boardUrl, post } from "app/core/whiteboard/v2/api";
 
 interface IAddPage {
     isOpen: boolean;
@@ -28,7 +29,9 @@ export default function AddPage({ isOpen, setIsOpen, spaceId, parentId, editPage
     const [pendingCreate, setPendingCreate] = useState(false);
     
     const [{ data: docData, isLoading: docLoading, errors: docErrors }, createDoc] = usePost<Response<PageResponse>, Page>(`editor/space/${spaceId}/page/create`);
-    const [{ data: whiteboardData, isLoading: whiteboardLoading, errors: whiteboardErrors }, createWhiteboard] = usePost<Response<PageResponse>, Page>(`editor/space/${spaceId}/whiteboard/create`);
+    const [whiteboardLoading, setWhiteboardLoading] = useState(false);
+    const [whiteboardErrors, setWhiteboardErrors] = useState("");
+    const createAttempt = useRef<{ body: { title: string; parentId?: number }; key: string } | null>(null);
 
     const loading = docLoading || whiteboardLoading;
     const added = pendingCreate && !loading;
@@ -45,7 +48,16 @@ export default function AddPage({ isOpen, setIsOpen, spaceId, parentId, editPage
         setPendingCreate(true);
         const payload = { title: name, spaceId, parentId };
         if (pageType === "whiteboard") {
-            createWhiteboard(payload);
+            setWhiteboardLoading(true); setWhiteboardErrors("");
+            const body = { title: name.trim(), ...(parentId ? { parentId } : {}) };
+            if (!createAttempt.current || JSON.stringify(createAttempt.current.body) !== JSON.stringify(body)) createAttempt.current = { body, key: crypto.randomUUID() };
+            try {
+                const result = await post<{ pageId: number }>(`${boardUrl(spaceId, 'create')}`, createAttempt.current.body, createAttempt.current.key);
+                createAttempt.current = null;
+                setPendingCreate(false);
+                editPage(result.pageId);
+            } catch (error) { setWhiteboardErrors(error instanceof Error ? error.message : 'Unable to create whiteboard'); setPendingCreate(false); }
+            finally { setWhiteboardLoading(false); }
             return;
         }
         createDoc(payload);
@@ -55,12 +67,12 @@ export default function AddPage({ isOpen, setIsOpen, spaceId, parentId, editPage
         if (!pendingCreate) {
             return;
         }
-        const createdPageId = docData?.data?.page || whiteboardData?.data?.page;
-        if (createdPageId) {
+        const createdPageId = docData?.data?.page;
+        if (createdPageId && pageType === "document") {
             setPendingCreate(false);
             editPage(createdPageId);
         }
-    }, [docData, editPage, pendingCreate, whiteboardData]);
+    }, [docData, editPage, pendingCreate, pageType]);
 
     useEffect(() => {
         if (!loading && pendingCreate && (docErrors || whiteboardErrors)) {
@@ -120,6 +132,7 @@ export default function AddPage({ isOpen, setIsOpen, spaceId, parentId, editPage
                             placeholder={pageType === "whiteboard" ? "Untitled whiteboard" : "Untitled page"}
                         />
                     </label>
+                    {whiteboardErrors ? <Text role="alert" color="red">{whiteboardErrors}</Text> : null}
                     <Flex gap="3" mt="4" justify="end">
                         <Dialog.Close>
                             <Button variant="surface" color="gray">

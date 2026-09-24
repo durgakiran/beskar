@@ -1,0 +1,25 @@
+{
+  "name": "canvas-text-editor-demo",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@durgakiran/canvas-text-editor": "file:../canvas-text-editor",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "y-protocols": "1.0.6",
+    "yjs": "13.6.32"
+  },
+  "devDependencies": {
+    "@types/react": "18.3.28",
+    "@types/react-dom": "18.3.7",
+    "@vitejs/plugin-react": "4.7.0",
+    "typescript": "5.9.3",
+    "vite": "6.4.3"
+  }
+}

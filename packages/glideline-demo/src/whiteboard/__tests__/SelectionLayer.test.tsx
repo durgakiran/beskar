@@ -16,6 +16,7 @@ vi.mock('../editor', () => ({
     },
     getShape: vi.fn(),
     getShapeUtil: vi.fn(),
+    localToPage: vi.fn((_id, point) => point),
     getBindingsFromShape: vi.fn(() => []),
     getCurrentTool: vi.fn(() => ({})),
   }

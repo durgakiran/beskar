@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="whiteboard_updates_1_table" author="Codex" dbms="postgresql">
+        <comment>Incremental Yjs batches ordered per whiteboard, with per-actor checkpoint retry deduplication</comment>
+        <createTable schemaName="whiteboard" tableName="whiteboard_update">
+            <column name="id" type="UUID" remarks="Application-generated identity returned in the checkpoint acknowledgement">
+                <constraints nullable="false" primaryKey="true" primaryKeyName="whiteboard_update_pk"/>
+            </column>
+            <column name="page_id" type="BIGINT" remarks="Owning whiteboard; updates remain independent of the draft's current base snapshot">
+                <constraints nullable="false"/>
+            </column>
+            <column name="sequence" type="BIGINT" remarks="Server-assigned batch position within the board; replay after the base snapshot through_sequence up to draft head_sequence">
+                <constraints nullable="false"/>
+            </column>
+            <column name="actor_id" type="UUID" remarks="Authenticated submitter and idempotency scope; externally owned identity with no local user foreign key">
+                <constraints nullable="false"/>
+            </column>
+            <column name="idempotency_key" type="UUID" remarks="Client-generated key retained with the exact batch until acknowledged; identifies retries by this actor on this board">
+                <constraints nullable="false"/>
+            </column>
+            <column name="update_bytes" type="BYTEA" remarks="Decoded incremental Yjs batch; overlapping document changes across batches are allowed">
+                <constraints nullable="false"/>
+            </column>
+            <column name="update_encoding" type="TEXT" remarks="Binary encoding used to decode update_bytes; initially only yjs-update-v1 is supported">
+                <constraints nullable="false"/>
+            </column>
+            <column name="request_hash" type="TEXT" remarks="SHA-256 of the normalized encoding and decoded bytes; detects key reuse with different content; sha256: followed by 64 lowercase hexadecimal characters">
+                <constraints nullable="false"/>
+            </column>
+            <column name="created_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="now()" remarks="Server acceptance time for this batch">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+        <!-- The sequence unique index also supports ordered replay by page. -->
+        <addUniqueConstraint schemaName="whiteboard" tableName="whiteboard_update"
+            columnNames="page_id,sequence" constraintName="whiteboard_update_sequence_uq"/>
+        <addUniqueConstraint schemaName="whiteboard" tableName="whiteboard_update"
+            columnNames="page_id,actor_id,idempotency_key" constraintName="whiteboard_update_idempotency_uq"/>
+        <addForeignKeyConstraint baseTableSchemaName="whiteboard" baseTableName="whiteboard_update"
+            baseColumnNames="page_id" referencedTableSchemaName="whiteboard" referencedTableName="whiteboard"
+            referencedColumnNames="page_id" constraintName="whiteboard_update_page_fk" onDelete="CASCADE"/>
+        <sql>
+            ALTER TABLE whiteboard.whiteboard_update
+                ADD CONSTRAINT whiteboard_update_sequence_ck CHECK (sequence &gt; 0),
+                ADD CONSTRAINT whiteboard_update_bytes_ck CHECK (octet_length(update_bytes) &gt; 0),
+                ADD CONSTRAINT whiteboard_update_encoding_ck CHECK (update_encoding = 'yjs-update-v1'),
+                ADD CONSTRAINT whiteboard_update_hash_ck CHECK (request_hash ~ '^sha256:[0-9a-f]{64}$');
+        </sql>
+        <!-- The service validates Yjs structure and hash equality, locks the draft,
+             and atomically inserts head_sequence + 1 and advances the draft.
+             No content-hash uniqueness: different actors/batches may overlap.
+             Rows also serve as retry receipts; compaction must preserve retry
+             deduplication before pruning them. Accepted batch content is immutable
+             by service convention, not enforced by these database constraints. -->
+        <rollback>
+            <dropTable schemaName="whiteboard" tableName="whiteboard_update"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="whiteboard_updates_2_grants" author="Codex" dbms="postgresql">
+        <comment>Grant application access to the incremental update table</comment>
+        <sql>GRANT SELECT, INSERT, UPDATE, DELETE ON whiteboard.whiteboard_update TO ${app_user};</sql>
+        <rollback>
+            <sql>REVOKE SELECT, INSERT, UPDATE, DELETE ON whiteboard.whiteboard_update FROM ${app_user};</sql>
+        </rollback>
+    </changeSet>
+</databaseChangeLog>

@@ -1,0 +1,36 @@
+async (page) => {
+  const assert = (v, m) => { if (!v) throw new Error(m); };
+  await page.reload();
+  const inline = page.locator('[data-fixture="edit"] .image-inline-wrapper');
+  await inline.locator('.image-inline-inner').focus();
+  await inline.getByRole('button', { name: 'Edit image caption' }).click();
+  const draft = page.getByRole('textbox', { name: 'Image caption text' });
+  await draft.fill('Discard on Escape');
+  await draft.press('Escape');
+  assert(await draft.count() === 0, 'Escape closes caption editor');
+  assert(await page.evaluate(() => window.imageEditor.state.doc.child(1).child(1).attrs.caption) === 'Inline caption example', 'Escape discards draft');
+  await inline.getByRole('button', { name: 'Edit image caption' }).click();
+  await draft.fill('');
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  assert(await page.evaluate(() => window.imageEditor.state.doc.child(1).child(1).attrs.caption) === '', 'empty caption removes caption');
+  await inline.getByRole('button', { name: 'Edit image caption' }).click();
+  await draft.fill('Round trip <caption> & text');
+  await draft.press('Control+Enter');
+  await page.evaluate(() => { const e = window.imageEditor; e.commands.setContent(e.getHTML()); });
+  assert(await page.evaluate(() => window.imageEditor.state.doc.child(1).child(1).attrs.caption) === 'Round trip <caption> & text', 'HTML parse preserves escaped caption');
+  const reader = page.locator('[data-fixture="view"]');
+  const indicator = reader.locator('.image-inline-inner');
+  await indicator.scrollIntoViewIfNeeded();
+  const box = await indicator.boundingBox();
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send('Emulation.setTouchEmulationEnabled', { enabled: true });
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: box.x + box.width / 2, y: box.y + box.height / 2, id: 1 }] });
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  const close = page.getByRole('dialog', { name: 'Image caption', exact: true });
+  await close.waitFor();
+  assert(await close.isVisible(), 'touch focuses image to reveal caption');
+  await cdp.send('Emulation.setTouchEmulationEnabled', { enabled: false });
+  await cdp.detach();
+  await page.screenshot({ path: '/private/tmp/inline-caption-preview.png' });
+  console.log('PASS: Escape cancel, remove, re-add, HTML round trip, touch activation');
+}

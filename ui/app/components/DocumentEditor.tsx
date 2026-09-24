@@ -20,6 +20,7 @@ import { getSignalingUrl } from "app/core/signaling";
 import { extractAssetReferences, type AssetReferencesPayload } from "app/core/editor/extractAssetReferences";
 import { useEditorPageEvents, type PageEventV1 } from "app/core/editor/useEditorPageEvents";
 import { useEditorPresenceHeartbeat } from "app/core/editor/useEditorPresenceHeartbeat";
+import { isDesktop } from "app/core/desktop/isDesktop";
 
 const FRESH_INIT_BLOCK_NAMES = new Set([
     "paragraph",
@@ -516,9 +517,11 @@ export default function DocumentEditor({ slug }: { slug: string[] }) {
                     setIsEditorReady(true);
                     return;
                 }
-                safeMerge(data);
-                lastMergedDraftBase64Ref.current = data;
-                setIsEditorReady(true);
+                setTimeout(() => {
+                    safeMerge(data);
+                    lastMergedDraftBase64Ref.current = data;
+                    setIsEditorReady(true);
+                }, 0);
             } else if (documentData.data.nodeData) {
                 // nodeData exists — but it may be an empty object {} for a brand-new doc.
                 // Only treat it as real content if it has actual keys (e.g. "type", "content").
@@ -636,18 +639,40 @@ export default function DocumentEditor({ slug }: { slug: string[] }) {
     }, [publishing]);
 
     useEffect(() => {
-        const _provider = new WebrtcProvider(slug[1] + "-space-" + slug[0], ydoc, {
-            signaling: [getSignalingUrl()],
-            filterBcConns: false
-        });
-        setProvider(_provider);
-        return () => {
-            // y-webrtc: destroy() does not unregister from the shared SignalingConn — WS stays open.
-            _provider.disconnect();
-            _provider.destroy();
-            setProvider(null);
+        let active = true;
+        
+        const initProvider = async () => {
+            let signalingUrl = getSignalingUrl();
+            if (isDesktop) {
+                const { GetAccessToken } = await import("../../wailsjs/beskar/desktop/auth/authservice");
+                const token = await GetAccessToken();
+                if (token) {
+                    const separator = signalingUrl.includes("?") ? "&" : "?";
+                    signalingUrl = `${signalingUrl}${separator}token=${encodeURIComponent(token)}`;
+                }
+            }
+            if (!active) return;
+
+            const _provider = new WebrtcProvider(slug[1] + "-space-" + slug[0], ydoc, {
+                signaling: [signalingUrl],
+                filterBcConns: false
+            });
+            setProvider(_provider);
         };
-    }, [ydoc]);
+
+        initProvider();
+
+        return () => {
+            active = false;
+            setProvider(current => {
+                if (current) {
+                    current.disconnect();
+                    current.destroy();
+                }
+                return null;
+            });
+        };
+    }, [ydoc, slug]);
 
     useEffect(() => {
         if (!ydoc) return;

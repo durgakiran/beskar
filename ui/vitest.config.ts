@@ -10,6 +10,7 @@ export default defineConfig({
     },
     resolve: {
         alias: {
+            "@durgakiran/editor/pdf": path.resolve(__dirname, "../packages/editor/dist/pdf.mjs"),
             app: path.resolve(__dirname, "app"),
             "@http": path.resolve(__dirname, "app/core/http"),
             "@http/hooks": path.resolve(__dirname, "app/core/http/hooks"),

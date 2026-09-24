@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { createEditor } from './editor';
+import { createEditor, getMutableStoreForTesting } from './editor';
 import { BoxUtil } from './shapes/BoxUtil';
 import { sid } from './types';
 
@@ -18,7 +18,7 @@ describe('Story 2.4: Spatial Index Integration (RBush)', () => {
 
     const shapes = editor.getShapesAtPoint({ x: 150, y: 150 });
     expect(shapes.length).toBe(1);
-    expect(shapes[0].id).toBe('b1');
+    expect(shapes[0]!.id).toBe('b1');
   });
 
   it('T2.4-02: Point outside returns empty', () => {
@@ -67,7 +67,7 @@ describe('Story 2.4: Spatial Index Integration (RBush)', () => {
         props: { ...new BoxUtil().getDefaultProps(), w: 8, h: 8, cornerRadius: 0, color: '#fff', label: '' }
       });
     }
-    editor.store.put(shapes); // Bulk insert
+    getMutableStoreForTesting(editor).put(shapes); // Bulk insert
 
     const start = performance.now();
     const hits = editor.getShapesAtPoint({ x: 505, y: 505 });
@@ -86,7 +86,7 @@ describe('Story 2.4: Spatial Index Integration (RBush)', () => {
         props: { ...new BoxUtil().getDefaultProps(), w: 8, h: 8, cornerRadius: 0, color: '#fff', label: '' }
       });
     }
-    editor.store.put(shapes);
+    getMutableStoreForTesting(editor).put(shapes);
 
     // Simulate dragging one shape
     const start = performance.now();

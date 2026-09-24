@@ -4,12 +4,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"net/http"
 	"os"
+	"os/signal"
 	"strconv"
 	"strings"
+	"syscall"
+	"time"
 
+	"github.com/durgakiran/beskar/apidocs"
 	"github.com/durgakiran/beskar/assetcleanup"
 	attachment "github.com/durgakiran/beskar/attachment/controller"
 	auth "github.com/durgakiran/beskar/auth"
@@ -20,6 +23,7 @@ import (
 	"github.com/durgakiran/beskar/editor/pageevents"
 	"github.com/durgakiran/beskar/invite"
 	media "github.com/durgakiran/beskar/media/controller"
+	mediaservice "github.com/durgakiran/beskar/media/services"
 	"github.com/durgakiran/beskar/notification"
 	page "github.com/durgakiran/beskar/page"
 	profile "github.com/durgakiran/beskar/profile/controller"
@@ -30,9 +34,23 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
+	"github.com/go-chi/render"
 	"github.com/joho/godotenv"
 	"go.uber.org/zap"
 )
+
+var launchWhiteboardStagingCleanup = func(ctx context.Context, worker *mediaservice.WhiteboardStagingCleanupWorker) <-chan struct{} {
+	return worker.Start(ctx)
+}
+
+func startWhiteboardStagingCleanup(ctx context.Context, config mediaservice.WhiteboardStagingCleanupConfig) <-chan struct{} {
+	if config.Enabled {
+		return launchWhiteboardStagingCleanup(ctx, mediaservice.NewWhiteboardStagingCleanupWorker(config))
+	}
+	done := make(chan struct{})
+	close(done)
+	return done
+}
 
 func logger() *zap.Logger {
 	return core.Logger
@@ -56,7 +74,7 @@ func addCorsMiddleWare(r *chi.Mux) {
 			AllowedOrigins: core.AllowedOriginsFromEnv(),
 			// AllowOriginFunc:  func(r *http.Request, origin string) bool { return true },
 			AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-			AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
+			AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token", "Idempotency-Key"},
 			ExposedHeaders:   []string{"Link"},
 			AllowCredentials: false,
 			MaxAge:           300, // Maximum value not ignored by any of major browsers
@@ -93,10 +111,27 @@ func QueryParamLogger(next http.Handler) http.Handler {
 func main() {
 	core.InitializeLogger()
 	core.InitializeSlogLogger()
+	appContext, stopApplication := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stopApplication()
 	const port = ":9095"
 	err := godotenv.Load()
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		logger().Error(err.Error())
+	}
+
+	closeBrowserSessions, err := core.InitializeBrowserSessions(appContext)
+	if err != nil {
+		logger().Fatal("Invalid browser session storage configuration", zap.Error(err))
+	}
+	defer closeBrowserSessions()
+	browserTokenValidator, err := core.NewBrowserAccessTokenValidator()
+	if err != nil {
+		logger().Fatal("Invalid browser access-token validation configuration", zap.Error(err))
+	}
+
+	bearerValidator, err := core.NewBearerAccessTokenValidator(browserTokenValidator, os.Getenv("ZITADEL_BEARER_CLIENT_IDS"))
+	if err != nil {
+		logger().Fatal("Invalid bearer access-token validation configuration", zap.Error(err))
 	}
 
 	// create connection pool with database
@@ -126,6 +161,7 @@ func main() {
 	quotaConfig := quota.LoadConfig()
 	assetCleanupConfig := assetcleanup.LoadConfig()
 	documentVersionCleanupConfig := docversioncleanup.LoadConfig()
+	whiteboardStagingCleanupConfig := mediaservice.LoadWhiteboardStagingCleanupConfig()
 	if notificationConfig.WorkerEnabled {
 		go notification.NewWorker(notificationConfig).Start(context.Background())
 	}
@@ -140,10 +176,19 @@ func main() {
 	if documentVersionCleanupConfig.Enabled {
 		go documentVersionCleanupWorker.Start(context.Background())
 	}
+	whiteboardStagingCleanupDone := startWhiteboardStagingCleanup(appContext, whiteboardStagingCleanupConfig)
+	whiteboardAssetV2CleanupDone := editor.StartWhiteboardAssetCleanupV2(appContext)
 
 	r := chi.NewRouter()
 	addCorsMiddleWare(r)
-	mw := core.ZitadelMiddleware()
+
+	// Query credentials are opt-in for legacy media only. Invitation tokens
+	// are application data and must never override the browser session.
+	authChain := func(allowQueryToken bool) func(http.Handler) http.Handler {
+		return func(next http.Handler) http.Handler {
+			return core.SelectAuthentication(browserTokenValidator.Middleware(next), bearerValidator.Middleware(next), allowQueryToken)
+		}
+	}
 
 	if requestLoggingEnabled() {
 		r.Use(middleware.Logger)
@@ -152,35 +197,61 @@ func main() {
 	r.Use(middleware.Recoverer)
 	// r.Use(CookieLogger)
 	// r.Use(QueryParamLogger)
-	r.Mount("/auth/", core.ZitadelAuthRouter())
-	r.Mount("/api/v1", auth.Router())
-	r.Mount("/api/v1/media", mw.CheckAuthentication()(media.Router()))
-	r.Mount("/api/v1/attachments", mw.CheckAuthentication()(attachment.Router()))
-	r.Mount("/api/v1/profile", mw.CheckAuthentication()(profile.Router()))
-	r.Mount("/api/v1/quota", mw.CheckAuthentication()(quota.Router()))
-	r.Mount("/api/v1/editor", mw.CheckAuthentication()(editor.Router()))
-	r.Mount("/api/v1/space", mw.CheckAuthentication()(space.Router()))
-	r.Mount("/api/v1/invite", mw.CheckAuthentication()(invite.Router()))
-	r.Mount("/api/v1/page", mw.CheckAuthentication()(page.Router()))
-	r.Mount("/api/v1/comment", mw.CheckAuthentication()(comment.Router()))
-	r.Mount("/api/v1/notifications", mw.CheckAuthentication()(notification.NewController().Router()))
-	r.Mount("/api/v1/user", user.Router())
+
+	// Desktop App Auto-Discovery Endpoint
+	r.Get("/.well-known/beskar", func(w http.ResponseWriter, req *http.Request) {
+		render.JSON(w, req, map[string]string{
+			"zitadel_url":  core.IssuerBaseURL(),
+			"api_audience": os.Getenv("ZITADEL_API_AUDIENCE"),
+		})
+	})
+
+	apidocs.Register(r)
+	r.Mount("/auth/", core.ZitadelAuthRouter(browserTokenValidator))
+	r.Mount("/api/v1", authChain(false)(auth.Router()))
+	r.Mount("/api/v1/media", authChain(true)(media.Router()))
+	r.Mount("/api/v1/attachments", authChain(true)(attachment.Router()))
+	r.Mount("/api/v1/profile", authChain(false)(profile.Router()))
+	r.Mount("/api/v1/quota", authChain(false)(quota.Router()))
+	r.Mount("/api/v1/editor", authChain(false)(editor.Router()))
+	r.Mount("/api/v2/editor", authChain(false)(editor.RouterV2()))
+	r.Mount("/api/v1/space", authChain(false)(space.Router()))
+	r.Mount("/api/v1/invite", authChain(false)(invite.Router()))
+	r.Mount("/api/v1/page", authChain(false)(page.Router()))
+	r.Mount("/api/v1/comment", authChain(false)(comment.Router()))
+	r.Mount("/api/v1/notifications", authChain(false)(notification.NewController().Router()))
+	r.Mount("/api/v1/user", authChain(false)(user.Router()))
 	if notificationConfig.AdminEnabled && notificationConfig.AdminToken != "" {
-		r.Mount("/api/v1/admin/email", mw.CheckAuthentication()(notification.NewAdminController(notificationConfig).Router()))
+		r.Mount("/api/v1/admin/email", authChain(false)(notification.NewAdminController(notificationConfig).Router()))
 	}
 	if quotaConfig.AdminEnabled && quotaConfig.AdminToken != "" {
-		r.Mount("/api/v1/admin/quota", mw.CheckAuthentication()(quota.NewAdminController(quotaConfig).Router()))
+		r.Mount("/api/v1/admin/quota", authChain(false)(quota.NewAdminController(quotaConfig).Router()))
 	}
 	if assetCleanupConfig.AdminEnabled && assetCleanupConfig.AdminToken != "" {
-		r.Mount("/api/v1/admin/asset-cleanup", mw.CheckAuthentication()(assetcleanup.NewAdminController(assetCleanupConfig, assetCleanupWorker).Router()))
+		r.Mount("/api/v1/admin/asset-cleanup", authChain(false)(assetcleanup.NewAdminController(assetCleanupConfig, assetCleanupWorker).Router()))
 	}
 	if documentVersionCleanupConfig.AdminEnabled && documentVersionCleanupConfig.AdminToken != "" {
-		r.Mount("/api/v1/admin/document-versions/cleanup", mw.CheckAuthentication()(docversioncleanup.NewAdminController(documentVersionCleanupConfig, documentVersionCleanupWorker).Router()))
+		r.Mount("/api/v1/admin/document-versions/cleanup", authChain(false)(docversioncleanup.NewAdminController(documentVersionCleanupConfig, documentVersionCleanupWorker).Router()))
 	}
 
 	logger().Info(fmt.Sprintf("Serving on port: %s", port))
-	err = http.ListenAndServe(port, r)
-	if err != nil {
-		log.Fatal(err)
+	server := &http.Server{Addr: port, Handler: r}
+	serveError := make(chan error, 1)
+	go func() { serveError <- server.ListenAndServe() }()
+	select {
+	case err = <-serveError:
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
+			logger().Error(err.Error())
+		}
+	case <-appContext.Done():
+		shutdownContext, cancelShutdown := context.WithTimeout(context.Background(), 10*time.Second)
+		err = server.Shutdown(shutdownContext)
+		cancelShutdown()
+		if err != nil {
+			logger().Error("HTTP server shutdown failed: " + err.Error())
+		}
 	}
+	stopApplication()
+	<-whiteboardStagingCleanupDone
+	<-whiteboardAssetV2CleanupDone
 }

@@ -12,14 +12,20 @@ import { makeBox } from './types';
 const from = makeBox(0,   0,   100, 80);
 const to   = makeBox(300, 50,  100, 80);
 
+function expectAxisAlignedSegments(pts: ReturnType<typeof parseElbowPoints>): void {
+  for (let i = 1; i < pts.length; i++) {
+    const prev = pts[i - 1]!;
+    const current = pts[i]!;
+    expect(prev.y === current.y || prev.x === current.x).toBe(true);
+  }
+}
+
 describe('T4.3-01: right→left produces Z-path', () => {
   it('has 3 segments, all axis-aligned', () => {
     const path = computeElbowPath(from, to, 'right', 'left');
     expect(countElbowSegments(path)).toBe(3);
     const pts = parseElbowPoints(path);
-    for (let i = 1; i < pts.length; i++) {
-      expect(pts[i-1].y === pts[i].y || pts[i-1].x === pts[i].x).toBe(true);
-    }
+    expectAxisAlignedSegments(pts);
   });
 });
 
@@ -30,9 +36,7 @@ describe('T4.3-02: right→right U-bend', () => {
     const path  = computeElbowPath(fromB, toB, 'right', 'right');
     expect(countElbowSegments(path)).toBeGreaterThanOrEqual(3);
     const pts = parseElbowPoints(path);
-    for (let i = 1; i < pts.length; i++) {
-      expect(pts[i-1].y === pts[i].y || pts[i-1].x === pts[i].x).toBe(true);
-    }
+    expectAxisAlignedSegments(pts);
   });
 });
 
@@ -41,9 +45,7 @@ describe('T4.3-03: right→top L-shape', () => {
     const path = computeElbowPath(from, to, 'right', 'top');
     expect(countElbowSegments(path)).toBe(2);
     const pts = parseElbowPoints(path);
-    for (let i = 1; i < pts.length; i++) {
-      expect(pts[i-1].y === pts[i].y || pts[i-1].x === pts[i].x).toBe(true);
-    }
+    expectAxisAlignedSegments(pts);
   });
 });
 
@@ -65,8 +67,10 @@ describe('T4.3-05: No diagonal segments', () => {
         const path = computeElbowPath(from, to, fe, te);
         const pts  = parseElbowPoints(path);
         for (let i = 1; i < pts.length; i++) {
-          const horiz = Math.abs(pts[i-1].y - pts[i].y) < 1e-9;
-          const vert  = Math.abs(pts[i-1].x - pts[i].x) < 1e-9;
+          const prev = pts[i - 1]!;
+          const current = pts[i]!;
+          const horiz = Math.abs(prev.y - current.y) < 1e-9;
+          const vert  = Math.abs(prev.x - current.x) < 1e-9;
           expect(horiz || vert).toBe(true);
         }
       });

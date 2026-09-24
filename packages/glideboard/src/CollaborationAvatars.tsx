@@ -1,24 +1,26 @@
 import React, { useEffect, useState } from 'react';
-import { awarenessSignal } from './editor';
-import { useSignalValue } from './useSignalValue';
-import { wbTheme } from './theme';
-import type { GlideboardUser } from './types';
+import { useGlideboardController } from './GlideboardContext.js';
+import { useSignalValue } from './useSignalValue.js';
+import { wbTheme } from './theme.js';
+import type { GlideboardUser } from './types.js';
+import { safeAwarenessEntries } from './collaboration/awareness.js';
 
 export function CollaborationAvatars() {
+  const controller = useGlideboardController();
   const [users, setUsers] = useState<Map<number, GlideboardUser>>(new Map());
-  const awareness = useSignalValue(awarenessSignal);
+  const awareness = useSignalValue(controller.awarenessSignal);
 
   useEffect(() => {
-    if (!awareness) return;
+    if (!awareness) {
+      setUsers(new Map());
+      return;
+    }
 
     const handleAwarenessChange = () => {
-      const states = awareness.getStates();
       const nextUsers = new Map<number, GlideboardUser>();
-      states.forEach((state: any, clientID: number) => {
-        if (state.user) {
-          nextUsers.set(clientID, state.user);
-        }
-      });
+      for (const { clientId, user } of safeAwarenessEntries(awareness.getStates())) {
+        nextUsers.set(clientId, user);
+      }
       setUsers(nextUsers);
     };
 

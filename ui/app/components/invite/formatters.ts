@@ -59,3 +59,15 @@ export function formatInviteTime(value?: string) {
         year: "numeric",
     });
 }
+
+// The server's terminal result can differ from the requested decision when a
+// link expired, was revoked, or another client already acted on it.
+export function inviteDecisionNotice(status?: string): { type: "success" | "warning"; message: string } {
+    switch (normalizeInviteStatus(status)) {
+        case "accepted": return { type: "success", message: "Invitation accepted." };
+        case "rejected": return { type: "success", message: "Invitation declined." };
+        case "expired": return { type: "warning", message: "This invitation has expired. Ask the sender for a new invitation." };
+        case "removed": return { type: "warning", message: "This invitation was revoked. Ask the sender for a new invitation." };
+        default: return { type: "warning", message: "Could not confirm the invitation status. Open the invitation to check." };
+    }
+}

@@ -1,11 +1,13 @@
 import React from "react";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import Page from "./page";
 
+let contentApiVersion: number | undefined;
 const useGet = vi.fn();
 const useDelete = vi.fn();
-const push = vi.fn();
+const push = vi.hoisted(() => vi.fn());
 
 vi.mock("@http/hooks", () => ({
     useGet: (...args: unknown[]) => useGet(...args),
@@ -14,6 +16,11 @@ vi.mock("@http/hooks", () => ({
 
 vi.mock("next/navigation", () => ({
     useRouter: () => ({ push }),
+}));
+
+vi.mock("react-router-dom", async importOriginal => ({
+    ...(await importOriginal<typeof import("react-router-dom")>()),
+    useNavigate: () => push,
 }));
 
 vi.mock("@components/WhiteboardEditor", () => ({
@@ -51,18 +58,22 @@ vi.mock("@components/ReadOnlyContentMain", () => ({
     ),
 }));
 
+vi.mock("@components/WhiteboardPreviewV2", () => ({ default: () => <div data-testid="v2-preview" /> }));
+
 vi.mock("@editor", () => ({
     TipTap: () => <div data-testid="tiptap" />,
     AttachmentPanel: () => <div data-testid="attachments" />,
 }));
 
 describe("whiteboard view page", () => {
+    afterEach(() => vi.unstubAllGlobals());
     beforeEach(() => {
+        contentApiVersion = undefined;
         vi.clearAllMocks();
         useDelete.mockReturnValue([{ isLoading: false, data: null, errors: null }, vi.fn()]);
         useGet.mockImplementation((url: string) => {
             if (url === "editor/space/space-1/page/42/metadata") {
-                return [{ isLoading: false, data: { data: { type: "whiteboard" } }, errors: null }, vi.fn()];
+                return [{ isLoading: false, data: { data: { type: "whiteboard", contentApiVersion } }, errors: null }, vi.fn()];
             }
             if (url === "editor/space/space-1/page/42") {
                 return [{
@@ -97,9 +108,13 @@ describe("whiteboard view page", () => {
     it("renders whiteboards inside the shared read-only shell with edit and delete actions", async () => {
         await act(async () => {
             render(
-                <React.Suspense fallback={<div data-testid="loading" />}>
-                    <Page params={Promise.resolve({ page: "42", spaceId: "space-1" })} />
-                </React.Suspense>
+                <MemoryRouter initialEntries={["/space-1/42"]}>
+                    <React.Suspense fallback={<div data-testid="loading" />}>
+                        <Routes>
+                            <Route path="/:spaceId/:page" element={<Page />} />
+                        </Routes>
+                    </React.Suspense>
+                </MemoryRouter>
             );
         });
 
@@ -119,4 +134,18 @@ describe("whiteboard view page", () => {
         fireEvent.click(screen.getByText("Delete page"));
         expect(screen.getAllByText("Delete Page").length).toBeGreaterThan(0);
     });
+    it("routes v2 deletion through the v2 API and exposes version history", async () => {
+        contentApiVersion = 2;
+        const fetcher = vi.fn(async (_url: string, _init?: RequestInit) => new Response(null, { status: 204 }));
+        vi.stubGlobal('fetch', fetcher);
+        render(<MemoryRouter initialEntries={["/space-1/42"]}><Routes><Route path="/:spaceId/:page" element={<Page />} /></Routes></MemoryRouter>);
+        await screen.findByTestId('v2-preview');
+        expect(screen.getByText('Version history')).toBeTruthy();
+        fireEvent.click(screen.getByText('Delete page'));
+        fireEvent.click(await screen.findByRole('button', { name: 'Delete whiteboard' }));
+        await waitFor(() => expect(push).toHaveBeenCalledWith('/space/space-1'));
+        expect(fetcher.mock.calls[0][0]).toContain('/api/v2/editor/space/space-1/whiteboard/42');
+        expect(useDelete.mock.results[0].value[1]).not.toHaveBeenCalled();
+    });
+
 });

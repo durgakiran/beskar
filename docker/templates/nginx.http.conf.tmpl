@@ -92,8 +92,41 @@ server {
         proxy_cookie_flags ~ nosecure SameSite=Lax;
     }
 
+    location /api/v2 {
+        set $server_upstream http://server:9095;
+        proxy_pass $server_upstream;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Cookie $http_cookie;
+        proxy_cookie_flags ~ nosecure SameSite=Lax;
+    }
+
+    location /api/ {
+        set $server_upstream http://server:9095;
+        proxy_pass $server_upstream;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Cookie $http_cookie;
+        proxy_cookie_flags ~ nosecure SameSite=Lax;
+    }
+
+    location = /.well-known/beskar {
+        set $server_upstream http://server:9095;
+        proxy_pass $server_upstream;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Cookie $http_cookie;
+        proxy_cookie_flags ~ nosecure SameSite=Lax;
+    }
+
     location /ws {
-        set $signal_upstream http://signalserver:8080/ws;
+        set $signal_upstream http://signalserver:8080;
         proxy_pass $signal_upstream;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;

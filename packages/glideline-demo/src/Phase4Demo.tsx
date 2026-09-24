@@ -477,7 +477,7 @@ function drawCanvas(
 export default function Phase4Demo() {
   const [specs, setSpecs] = useState<{ id: string; ok: boolean; msg: string }[]>([]);
   const [toolId, setToolId] = useState('select');
-  const [routeStyle, setRouteStyle] = useState<'curve' | 'ortho'>('curve');
+  const [routeStyle, setRouteStyle] = useState<'curve' | 'ortho'>('ortho');
   const [shapeCt, setShapeCt] = useState(0);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const W = 620; const H = 480;

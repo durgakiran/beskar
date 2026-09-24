@@ -10,6 +10,7 @@ import { ImageInlineView } from '../components/image/ImageInlineView';
 export interface ImageInlineAttributes {
   src: string;
   alt: string;
+  caption: string;
   /** Explicit pixel width; null = natural / auto */
   width: number | null;
   /** Explicit pixel height; null = natural / auto */
@@ -35,6 +36,11 @@ export const ImageInline = Node.create({
         default: '',
         parseHTML: (el) => el.getAttribute('data-alt') || el.querySelector('img')?.getAttribute('alt') || '',
         renderHTML: (attrs) => ({ 'data-alt': attrs.alt }),
+      },
+      caption: {
+        default: '',
+        parseHTML: (el) => el.getAttribute('data-caption') || el.querySelector('.image-inline-caption-export')?.textContent || '',
+        renderHTML: (attrs) => ({ 'data-caption': attrs.caption }),
       },
       width: {
         default: null,
@@ -81,6 +87,7 @@ export const ImageInline = Node.create({
           class: 'image-inline-img',
         },
       ],
+      ...(node.attrs.caption ? [['span', { class: 'image-inline-caption-export' }, node.attrs.caption]] : []),
     ];
   },
 

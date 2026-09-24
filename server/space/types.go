@@ -1,6 +1,7 @@
 package space
 
 import (
+	"github.com/durgakiran/beskar/core"
 	"time"
 
 	"github.com/google/uuid"
@@ -38,13 +39,18 @@ type SpaceListItem struct {
 }
 
 type PageList struct {
-	PageId   int64     `json:"pageId" db:"id"`
-	OwnerId  uuid.UUID `json:"ownerId" db:"owner_id"`
-	Title    string    `json:"title" db:"title"`
-	ParentId int64     `json:"parentId" db:"parent_id"`
-	Draft    int8      `json:"draft" db:"draft"`
-	Type     string    `json:"type" db:"type"`
-	CanDelete bool     `json:"canDelete"`
+	ContentAPIVersion  int                        `json:"contentApiVersion" db:"content_api_version"`
+	PublishedVersionID *uuid.UUID                 `json:"publishedVersionId,omitempty" db:"published_version_id"`
+	CanEdit            bool                       `json:"canEdit" db:"can_edit"`
+	HasPreview         bool                       `json:"-" db:"has_preview"`
+	Whiteboard         *core.WhiteboardNavigation `json:"whiteboard,omitempty" db:"-"`
+	PageId             int64                      `json:"pageId" db:"id"`
+	OwnerId            uuid.UUID                  `json:"ownerId" db:"owner_id"`
+	Title              string                     `json:"title" db:"title"`
+	ParentId           int64                      `json:"parentId" db:"parent_id"`
+	Draft              int8                       `json:"draft" db:"draft"`
+	Type               string                     `json:"type" db:"type"`
+	CanDelete          bool                       `json:"canDelete"`
 }
 
 type PageDescendant struct {

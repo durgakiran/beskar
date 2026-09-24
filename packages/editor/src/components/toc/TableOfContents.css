@@ -1,7 +1,7 @@
 /* Table of Contents Styles - Clean & Simple */
 
 .table-of-contents {
-  margin: 1.5rem 0;
+  margin: var(--editor-block-gap) 0 0;
   position: relative;
 }
 
@@ -144,27 +144,27 @@
 }
 
 /* Dark mode support */
-.dark .ProseMirror-selectednode .toc-container {
+:is(.dark, [data-theme="dark"]) .ProseMirror-selectednode .toc-container {
   outline-color: var(--toc-outline-selected-dark, rgba(96, 165, 250, 0.4));
 }
 
-.dark .toc-title {
+:is(.dark, [data-theme="dark"]) .toc-title {
   color: var(--toc-title-color-dark, rgba(255, 255, 255, 0.6));
 }
 
-.dark .toc-link {
+:is(.dark, [data-theme="dark"]) .toc-link {
   color: var(--toc-link-color-dark, #60a5fa);
 }
 
-.dark .toc-link:hover {
+:is(.dark, [data-theme="dark"]) .toc-link:hover {
   color: var(--toc-link-color-hover-dark, #93c5fd);
 }
 
-.dark .toc-link:active {
+:is(.dark, [data-theme="dark"]) .toc-link:active {
   color: var(--toc-link-color-active-dark, #3b82f6);
 }
 
-.dark .toc-empty {
+:is(.dark, [data-theme="dark"]) .toc-empty {
   color: var(--toc-empty-color-dark, rgba(255, 255, 255, 0.5));
 }
 

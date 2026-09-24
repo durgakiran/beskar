@@ -4,7 +4,7 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import { createEditor } from './editor';
+import { createEditor, getMutableStoreForTesting } from './editor';
 import { ArrowPlugin, ArrowUtil } from './shapes/ArrowUtil';
 import { BoxUtil } from './shapes/BoxUtil';
 import { ArrowTool } from './tools/ArrowTool';
@@ -68,7 +68,7 @@ function makeBinding(id: string, fromId: string, toId: string) {
 describe('T4.1-01: createBinding indexes correctly', () => {
   it('getBindingsFromShape and getBindingsToShape return the binding', () => {
     const ed = makeEditor();
-    ed.store.put([boxShape('boxA'), arrowShape('arr1')]);
+    getMutableStoreForTesting(ed).put([boxShape('boxA'), arrowShape('arr1')]);
 
     ed.createBinding(makeBinding('bind1', 'arr1', 'boxA') as unknown as AnyRecord);
 
@@ -76,9 +76,9 @@ describe('T4.1-01: createBinding indexes correctly', () => {
     const toBox   = ed.getBindingsToShape(sid('boxA'));
 
     expect(fromArr).toHaveLength(1);
-    expect(fromArr[0].id).toBe(bid('bind1'));
+    expect(fromArr[0]!.id).toBe(bid('bind1'));
     expect(toBox).toHaveLength(1);
-    expect(toBox[0].id).toBe(bid('bind1'));
+    expect(toBox[0]!.id).toBe(bid('bind1'));
   });
 });
 
@@ -89,7 +89,7 @@ describe('T4.1-01: createBinding indexes correctly', () => {
 describe('T4.1-02: onAfterChangeToShape fires on updateShape', () => {
   it('moving the target shape triggers the hook', () => {
     const ed = makeEditor();
-    ed.store.put([boxShape('boxB', 0, 0), arrowShape('arr2', 0, 0)]);
+    getMutableStoreForTesting(ed).put([boxShape('boxB', 0, 0), arrowShape('arr2', 0, 0)]);
 
     const bindingUtil = (ed as any)._bindingUtils.get('arrow');
     const spy = vi.spyOn(bindingUtil, 'onAfterChangeToShape');
@@ -101,8 +101,32 @@ describe('T4.1-02: onAfterChangeToShape fires on updateShape', () => {
     ed.updateShape(sid('boxB'), { x: 100, y: 100 });
 
     expect(spy).toHaveBeenCalledTimes(1);
-    const binding = spy.mock.calls[0][0];
+    const binding = spy.mock.calls[0]![0] as AnyRecord;
     expect(binding.id).toBe(bid('bind2'));
+  });
+
+  it('moves a bound arrow terminal when the target rotates', () => {
+    const ed = makeEditor();
+    getMutableStoreForTesting(ed).put([
+      boxShape('rotating-target', 100, 100, 200, 100),
+      arrowShape('rotating-arrow', 0, 0),
+    ]);
+    ed.createBinding({
+      ...makeBinding('rotating-binding', 'rotating-arrow', 'rotating-target'),
+      props: {
+        terminal: 'end',
+        normalizedAnchor: { x: 0.5, y: 0 },
+        fromEdge: 'top',
+      },
+    } as unknown as AnyRecord);
+
+    ed.updateShape(sid('rotating-target'), { rotation: Math.PI / 2 });
+
+    const arrow = ed.getShape(sid('rotating-arrow')) as ReturnType<typeof arrowShape>;
+    expect(arrow.props.end.point.x).toBeCloseTo(250);
+    expect(arrow.props.end.point.y).toBeCloseTo(150);
+    const binding = ed.getBinding(bid('rotating-binding')) as AnyRecord;
+    expect((binding['props'] as AnyRecord)['fromEdge']).toBe('right');
   });
 });
 
@@ -113,15 +137,15 @@ describe('T4.1-02: onAfterChangeToShape fires on updateShape', () => {
 describe('T4.1-03: onBeforeDeleteToShape fires before delete', () => {
   it('hook is called with binding still in store', () => {
     const ed = makeEditor();
-    ed.store.put([boxShape('boxC', 0, 0), arrowShape('arr3', 0, 0)]);
+    getMutableStoreForTesting(ed).put([boxShape('boxC', 0, 0), arrowShape('arr3', 0, 0)]);
     ed.createBinding(makeBinding('bind3', 'arr3', 'boxC') as unknown as AnyRecord);
 
     const bindingUtil = (ed as any)._bindingUtils.get('arrow');
     let hookCalledWithBinding: AnyRecord | null = null;
     let boxStillExistsOnHook = false;
 
-    vi.spyOn(bindingUtil, 'onBeforeDeleteToShape').mockImplementation((b: AnyRecord) => {
-      hookCalledWithBinding = b;
+    vi.spyOn(bindingUtil, 'onBeforeDeleteToShape').mockImplementation((b: unknown) => {
+      hookCalledWithBinding = b as AnyRecord;
       boxStillExistsOnHook = !!ed.store.get(sid('boxC'));
     });
 
@@ -139,12 +163,12 @@ describe('T4.1-03: onBeforeDeleteToShape fires before delete', () => {
 describe('T4.1-04: Detach on target delete', () => {
   it('arrow end.boundShapeId becomes null after target deleted', () => {
     const ed = makeEditor();
-    ed.store.put([boxShape('boxD', 100, 100, 200, 100), arrowShape('arr4', 0, 0)]);
+    getMutableStoreForTesting(ed).put([boxShape('boxD', 100, 100, 200, 100), arrowShape('arr4', 0, 0)]);
 
     ed.createBinding(makeBinding('bind4', 'arr4', 'boxD') as unknown as AnyRecord);
     // Manually set boundShapeId on the arrow terminal so we can verify detach
     const arrow = ed.getShape(sid('arr4')) as any;
-    ed.store.put([{
+    getMutableStoreForTesting(ed).put([{
       ...arrow,
       props: {
         ...arrow.props,
@@ -166,7 +190,7 @@ describe('T4.1-04: Detach on target delete', () => {
 describe('T4.1-05: fromId delete cascades bindings', () => {
   it('deleting arrow removes its bindings from the store', () => {
     const ed = makeEditor();
-    ed.store.put([boxShape('boxE', 0, 0), arrowShape('arr5', 0, 0)]);
+    getMutableStoreForTesting(ed).put([boxShape('boxE', 0, 0), arrowShape('arr5', 0, 0)]);
     ed.createBinding(makeBinding('bind5', 'arr5', 'boxE') as unknown as AnyRecord);
 
     ed.deleteShapes([sid('arr5')]);
@@ -183,7 +207,7 @@ describe('T4.1-05: fromId delete cascades bindings', () => {
 describe('T4.1-06: updateBinding merges props', () => {
   it('updateBinding(id, {fromEdge:"right"}) merges without losing other props', () => {
     const ed = makeEditor();
-    ed.store.put([boxShape('boxF', 0, 0), arrowShape('arr6', 0, 0)]);
+    getMutableStoreForTesting(ed).put([boxShape('boxF', 0, 0), arrowShape('arr6', 0, 0)]);
     ed.createBinding(makeBinding('bind6', 'arr6', 'boxF') as unknown as AnyRecord);
 
     ed.updateBinding(bid('bind6'), { fromEdge: 'right' } as AnyRecord);

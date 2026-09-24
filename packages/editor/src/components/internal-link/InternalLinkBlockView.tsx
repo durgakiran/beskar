@@ -315,10 +315,9 @@ export function InternalLinkBlockView({ node, editor, updateAttributes, getPos, 
                 <span className="internal-link-card__icon">{icon}</span>
                 <Box>
                   <Text 
-                    as="a" 
+                    asChild
                     size="3" 
                     weight="bold"
-                    href="#"
                     style={{ cursor: state === 'idle' ? 'pointer' : 'default', color: 'var(--accent-11)', textDecoration: 'none' }}
                     onClick={(e: React.MouseEvent) => {
                       e.preventDefault();
@@ -327,7 +326,7 @@ export function InternalLinkBlockView({ node, editor, updateAttributes, getPos, 
                     onMouseOver={(e) => e.currentTarget.style.textDecoration = state === 'idle' ? 'underline' : 'none'}
                     onMouseOut={(e) => e.currentTarget.style.textDecoration = 'none'}
                   >
-                    {cardTitle}
+                    <a href="#">{cardTitle}</a>
                   </Text>
                   <Flex gap="2" align="center" mt="1">
                     <Badge color={(metadata?.resourceType || attrs.resourceType) === 'whiteboard' ? 'cyan' : 'indigo'} variant="soft">

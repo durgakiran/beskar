@@ -67,6 +67,22 @@ WHERE s.id = $1 AND s.deleted_at IS NULL`
         JOIN core.page p ON p.id = i.page_id
         JOIN core.space s ON s.id = p.space_id
         WHERE s.account_id = $1 AND s.deleted_at IS NULL AND i.deleted_at IS NULL
+    ), 0)
+    +
+    COALESCE((
+        SELECT SUM(w.file_size)
+        FROM core.whiteboard_asset w
+        JOIN core.page p ON p.id = w.page_id
+        JOIN core.space s ON s.id = p.space_id
+        WHERE s.account_id = $1 AND s.deleted_at IS NULL
+    ), 0)
+    +
+    COALESCE((
+        SELECT SUM(w.file_size)
+        FROM whiteboard.whiteboard_asset w
+        JOIN core.page p ON p.id = w.page_id
+        JOIN core.space s ON s.id = p.space_id
+        WHERE s.account_id = $1 AND s.deleted_at IS NULL
     ), 0)`
 
 	getSpaceReconciledStorageQuery = `SELECT
@@ -82,6 +98,20 @@ WHERE s.id = $1 AND s.deleted_at IS NULL`
         FROM core.image_asset i
         JOIN core.page p ON p.id = i.page_id
         WHERE p.space_id = $1 AND i.deleted_at IS NULL
+    ), 0)
+    +
+    COALESCE((
+        SELECT SUM(w.file_size)
+        FROM core.whiteboard_asset w
+        JOIN core.page p ON p.id = w.page_id
+        WHERE p.space_id = $1
+    ), 0)
+    +
+    COALESCE((
+        SELECT SUM(w.file_size)
+        FROM whiteboard.whiteboard_asset w
+        JOIN core.page p ON p.id = w.page_id
+        WHERE p.space_id = $1
     ), 0)`
 
 	getActiveSubscriptionQuery = `SELECT
@@ -153,7 +183,8 @@ VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now())`
 
 	getPendingInviteCountQuery = `SELECT COUNT(*)
 FROM notifications.invites
-WHERE entity = 'space' AND entity_id = $1 AND status IS NULL`
+WHERE entity = 'space' AND entity_id = $1 AND status IS NULL
+AND created_at > now() - interval '7 days'`
 
 	getPageStorageBytesQuery = `SELECT
     COALESCE((
@@ -166,6 +197,18 @@ WHERE entity = 'space' AND entity_id = $1 AND status IS NULL`
         SELECT SUM(file_size)
         FROM core.image_asset
         WHERE page_id = $1 AND deleted_at IS NULL
+    ), 0)
+    +
+    COALESCE((
+        SELECT SUM(file_size)
+        FROM core.whiteboard_asset
+        WHERE page_id = $1
+    ), 0)
+    +
+    COALESCE((
+        SELECT SUM(file_size)
+        FROM whiteboard.whiteboard_asset
+        WHERE page_id = $1
     ), 0)`
 
 	getSpaceUsageStateForUpdateQuery = `SELECT

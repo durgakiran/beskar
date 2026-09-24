@@ -80,33 +80,81 @@ export function useEditorPageEvents({ spaceId, pageId, enabled, onPageEvent, onT
             onTransportRef.current?.("sse");
         }
         const eventsUrl = `${USER_URI}/editor/space/${spaceId}/page/${pageId}/events`;
-        const es = new EventSource(eventsUrl);
+        const controller = new AbortController();
+        let reconnectTimer: number | null = null;
+        let stopped = false;
 
-        const onMessage = (ev: MessageEvent) => {
+        const connect = async () => {
             try {
-                const parsed = JSON.parse(ev.data as string) as PageEventV1;
-                if (
-                    parsed?.schemaVersion === 1 &&
-                    (parsed.type === "document.published" ||
-                        parsed.type === "draft.updated" ||
-                        parsed.type === "editor.inactive")
-                ) {
-                    onPageEventRef.current(parsed);
+                const res = await fetch(eventsUrl, {
+                    method: 'GET',
+                    headers: { Accept: 'text/event-stream' },
+                    credentials: 'include',
+                    signal: controller.signal,
+                });
+
+                if (!res.ok) throw new Error(`SSE failed: ${res.status}`);
+                if (!res.body) throw new Error('SSE response has no body');
+
+                const reader = res.body.getReader();
+                const decoder = new TextDecoder();
+                let buffer = '';
+
+                while (!stopped) {
+                    const { value, done } = await reader.read();
+                    if (done) break;
+
+                    buffer += decoder.decode(value, { stream: true }).replace(/\r\n/g, '\n');
+                    let boundary = buffer.indexOf('\n\n');
+
+                    while (boundary >= 0) {
+                        const rawEvent = buffer.slice(0, boundary);
+                        buffer = buffer.slice(boundary + 2);
+                        boundary = buffer.indexOf('\n\n');
+
+                        // Extract data line
+                        const dataLine = rawEvent
+                            .split('\n')
+                            .filter(line => line.startsWith('data:'))
+                            .map(line => line.slice(5).trimStart())
+                            .join('\n');
+
+                        if (dataLine) {
+                            try {
+                                const parsed = JSON.parse(dataLine) as PageEventV1;
+                                if (
+                                    parsed?.schemaVersion === 1 &&
+                                    (parsed.type === "document.published" ||
+                                        parsed.type === "draft.updated" ||
+                                        parsed.type === "editor.inactive")
+                                ) {
+                                    onPageEventRef.current(parsed);
+                                }
+                            } catch {
+                                /* ignore non-json */
+                            }
+                        }
+                    }
                 }
-            } catch {
-                /* ignore ping / non-json */
+            } catch (err: any) {
+                if (stopped || err?.name === 'AbortError') return;
+                console.error("SSE Error:", err);
+            }
+
+            if (!stopped) {
+                reconnectTimer = window.setTimeout(connect, 2000);
             }
         };
 
-        es.addEventListener("message", onMessage as EventListener);
-        es.onerror = () => {
-            /* browser will retry */
-        };
+        connect();
 
         return () => {
+            stopped = true;
+            controller.abort();
             reportedTransportRef.current = false;
-            es.removeEventListener("message", onMessage as EventListener);
-            es.close();
+            if (reconnectTimer) {
+                window.clearTimeout(reconnectTimer);
+            }
         };
     }, [spaceId, pageId, enabled]);
 }

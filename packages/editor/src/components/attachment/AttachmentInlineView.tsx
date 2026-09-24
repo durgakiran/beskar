@@ -1,23 +1,18 @@
-import React, { useCallback } from 'react';
-import { NodeViewWrapper } from '@tiptap/react';
+import React, { useEffect, useId, useRef, useState } from 'react';
+import { NodeViewWrapper, useEditorState } from '@tiptap/react';
 import type { NodeViewProps } from '@tiptap/react';
-import type { AttachmentAPIHandler } from '../../types';
-import {
-  getPendingAttachmentFile,
-  startAttachmentUpload,
-} from '../../extensions/attachment-upload';
+import * as Toolbar from '@radix-ui/react-toolbar';
+import * as Separator from '@radix-ui/react-separator';
+import { useFloating, FloatingPortal, autoUpdate, offset, flip, shift } from '@floating-ui/react';
+import { FiTrash2, FiDownload, FiEye, FiRepeat, FiUpload, FiRefreshCw } from 'react-icons/fi';
+import type { AttachmentRef } from '../../types';
+import { attachmentResultAttrs, clearPendingAttachmentFile, getPendingAttachmentFile } from '../../extensions/attachment-upload';
 import { getAttachmentPasteStorage } from '../../extensions/attachment-paste-drop';
-import type { Editor } from '@tiptap/core';
-
-function getAttachmentHandler(editor: Editor): AttachmentAPIHandler | undefined {
-  return getAttachmentPasteStorage(editor)?.attachmentHandler;
-}
 
 async function downloadViaFetch(url: string, fileName: string): Promise<void> {
   const res = await fetch(url, { credentials: 'include', mode: 'cors' });
   if (!res.ok) throw new Error(`Download failed (${res.status})`);
-  const blob = await res.blob();
-  const objectUrl = URL.createObjectURL(blob);
+  const objectUrl = URL.createObjectURL(await res.blob());
   const a = document.createElement('a');
   a.href = objectUrl;
   a.download = fileName || 'download';
@@ -25,142 +20,180 @@ async function downloadViaFetch(url: string, fileName: string): Promise<void> {
   document.body.appendChild(a);
   a.click();
   a.remove();
-  URL.revokeObjectURL(objectUrl);
+  setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
 }
 
-export function AttachmentInlineView({
-  node,
-  editor,
-  updateAttributes,
-  deleteNode,
-}: NodeViewProps) {
-  const {
-    fileUrl,
-    fileName,
-    fileSize,
-    fileType: _fileType,
-    placeholderId,
-    uploadStatus,
-    errorMessage,
-  } = node.attrs as {
-    fileUrl: string;
-    fileName: string;
-    fileSize: number;
-    fileType: string;
-    placeholderId: string;
-    uploadStatus: 'uploading' | 'success' | 'error';
-    errorMessage: string | null;
+export function AttachmentInlineView({ node, editor, updateAttributes, deleteNode, selected, getPos }: NodeViewProps) {
+  const editable = useEditorState({ editor, selector: ({ editor }) => editor.isEditable });
+  const storage = getAttachmentPasteStorage(editor);
+  const handler = storage?.attachmentHandler;
+  const { fileUrl, fileName, fileSize, fileType, placeholderId, uploadStatus, errorMessage } = node.attrs;
+  const name = fileName || 'file';
+  const success = uploadStatus === 'success' && !!fileUrl;
+  const pendingFile = getPendingAttachmentFile(placeholderId);
+  const [busy, setBusy] = useState('');
+  const [error, setError] = useState('');
+  const [hovered, setHovered] = useState(false);
+  const [focused, setFocused] = useState(false);
+  const [dismissed, setDismissed] = useState(false);
+  const toolbarId = useId();
+  const hideTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const { refs, floatingStyles } = useFloating({
+    placement: 'top-start', strategy: 'fixed',
+    middleware: [offset(8), flip({ padding: 8 }), shift({ padding: 8 })],
+    whileElementsMounted: autoUpdate,
+  });
+  const visible = !dismissed && (hovered || focused || selected || !!busy) && (success || editable);
+  const enter = () => { clearTimeout(hideTimer.current); setHovered(true); setDismissed(false); };
+  const leave = () => { hideTimer.current = setTimeout(() => setHovered(false), 150); };
+  const focus = () => { setFocused(true); setDismissed(false); };
+  const blur = (event: React.FocusEvent) => {
+    const next = event.relatedTarget as Node | null;
+    if (!refs.floating.current?.contains(next) && !actionsTrigger.current?.contains(next)) setFocused(false);
   };
+  const escape = (event: React.KeyboardEvent) => {
+    if (event.key !== 'Escape') return;
+    event.preventDefault();
+    event.stopPropagation();
+    actionsTrigger.current?.focus();
+    setDismissed(true);
+    setHovered(false);
+  };
+  const lock = useRef(false);
+  const input = useRef<HTMLInputElement>(null);
+  const actionsTrigger = useRef<HTMLButtonElement>(null);
+  const current = useRef({ node, updateAttributes });
+  current.current = { node, updateAttributes };
+  const mounted = useRef(true);
+  const controller = useRef<AbortController | null>(null);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; controller.current?.abort(); clearTimeout(hideTimer.current); }; }, []);
+  useEffect(() => { setError(''); }, [fileUrl, placeholderId, uploadStatus]);
 
-  const displayName = fileName || 'file';
+  const attachment: AttachmentRef = { attachmentId: node.attrs.attachmentId, fileUrl, fileName: name, fileSize, fileType };
+  const preview = handler?.previewAttachment;
+  const canPreview = success && !!preview?.supports(attachment);
 
-  const handleChipClick = useCallback(async () => {
-    if (uploadStatus !== 'success' || !fileUrl) return;
-    const h = getAttachmentHandler(editor);
+  async function read(action: 'download' | 'preview') {
+    if (!success || lock.current) return;
+    lock.current = true;
+    setBusy(action === 'download' ? 'Downloading…' : 'Opening preview…');
+    setError('');
     try {
-      if (h?.downloadAttachment) {
-        await h.downloadAttachment({ url: fileUrl, fileName: displayName });
-        return;
+      if (action === 'preview') {
+        if (!preview || !preview.supports(attachment)) throw new Error('Preview is unavailable for this file.');
+        await preview.open(attachment);
+      } else if (handler?.downloadAttachment) {
+        await handler.downloadAttachment({ url: fileUrl, fileName: name });
+      } else {
+        await downloadViaFetch(fileUrl, name);
       }
-      if (fileUrl.startsWith('blob:') || fileUrl.startsWith('data:')) {
-        const a = document.createElement('a');
-        a.href = fileUrl;
-        a.download = displayName;
-        a.rel = 'noopener';
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        return;
-      }
-      await downloadViaFetch(fileUrl, displayName);
     } catch (e) {
-      console.error('[AttachmentInlineView] download failed', e);
+      if (mounted.current) setError(e instanceof Error ? e.message : 'Could not open the attachment. Please try again.');
+    } finally {
+      lock.current = false;
+      if (mounted.current) {
+        setBusy('');
+        if (action === 'preview') {
+          requestAnimationFrame(() => actionsTrigger.current?.focus());
+        }
+      }
     }
-  }, [editor, fileUrl, displayName, uploadStatus]);
+  }
 
-  const handleRetry = useCallback(
-    (e: React.MouseEvent) => {
-      e.stopPropagation();
-      const h = getAttachmentHandler(editor);
-      if (!h || !placeholderId) return;
-      const file = getPendingAttachmentFile(placeholderId);
-      if (!file) return;
-      updateAttributes({ uploadStatus: 'uploading', errorMessage: null });
-      queueMicrotask(() => {
-        startAttachmentUpload(editor.view, placeholderId, file, h);
-      });
-    },
-    [editor, placeholderId, updateAttributes],
-  );
+  async function upload(file: File) {
+    if (!editor.isEditable || !handler || lock.current) return;
+    if (storage?.maxAttachmentBytes != null && file.size > storage.maxAttachmentBytes) {
+      setError('This file exceeds the attachment size limit. Choose a smaller file.');
+      storage.onAttachmentRejected?.('too_large', file);
+      return;
+    }
+    lock.current = true;
+    setBusy(success ? 'Replacing attachment…' : 'Uploading…');
+    setError('');
+    const original = current.current.node.attrs;
+    const abort = new AbortController();
+    controller.current = abort;
+    try {
+      const result = await handler.uploadAttachment(file, { signal: abort.signal });
+      const attrs = attachmentResultAttrs(result, handler);
+      if (!mounted.current || editor.isDestroyed || !editor.isEditable || current.current.node.attrs !== original) return;
+      current.current.updateAttributes(attrs);
+      clearPendingAttachmentFile(placeholderId);
+    } catch (e) {
+      if (mounted.current && !abort.signal.aborted) setError(e instanceof Error ? e.message : 'Upload failed. Please try again.');
+    } finally {
+      lock.current = false;
+      if (mounted.current) setBusy('');
+    }
+  }
 
-  const handleRemove = useCallback(
-    (e: React.MouseEvent) => {
-      e.stopPropagation();
-      deleteNode();
-    },
-    [deleteNode],
-  );
-
-  const isSuccess = uploadStatus === 'success' && !!fileUrl;
-  const isUploading = uploadStatus === 'uploading';
-  const isError = uploadStatus === 'error';
-  const canRetry = isError && !!placeholderId && !!getPendingAttachmentFile(placeholderId);
-
-  const sizeLabel = fileSize > 0 ? ` · ${formatFileSize(fileSize)}` : '';
-
+  const recovering = !success && !pendingFile;
   return (
-    <NodeViewWrapper as="span" className="attachment-inline-wrapper">
-      <span
-        className={`attachment-inline-chip attachment-inline-${uploadStatus}`}
-        contentEditable={false}
-        onClick={isSuccess ? handleChipClick : undefined}
-        title={isSuccess ? `Download ${displayName}` : displayName}
-        aria-label={isSuccess ? `Download ${displayName}` : displayName}
-        role={isSuccess ? 'button' : undefined}
-      >
-        <span className="attachment-inline-icon" aria-hidden>
-          {isError ? '⚠' : '📎'}
-        </span>
-        <span className="attachment-inline-filename">
-          {displayName}
-          {!isUploading && sizeLabel}
-        </span>
-
-        {isUploading && (
-          <span className="attachment-inline-spinner" aria-label="Uploading…" />
-        )}
-
-        {isError && (
-          <span className="attachment-inline-actions">
-            {canRetry && (
-              <button
-                type="button"
-                className="attachment-inline-action-btn"
-                onClick={handleRetry}
-                title="Retry upload"
-              >
-                Retry
-              </button>
-            )}
-            <button
-              type="button"
-              className="attachment-inline-action-btn attachment-inline-remove-btn"
-              onClick={handleRemove}
-              title="Remove attachment"
-            >
-              ✕
-            </button>
-          </span>
-        )}
+    <NodeViewWrapper as="span" className="attachment-inline-wrapper" contentEditable={false}>
+      <span ref={refs.setReference} className={`attachment-inline-chip attachment-inline-${uploadStatus}`}
+        onMouseEnter={enter} onMouseLeave={leave} onFocusCapture={focus} onBlurCapture={blur} onKeyDown={escape}
+        aria-busy={!!busy || uploadStatus === 'uploading'}>
+        <button ref={actionsTrigger} type="button" className="attachment-inline-main"
+          aria-label={`Attachment: ${name}`} aria-expanded={visible} aria-controls={visible ? toolbarId : undefined}
+          title={`${name} · ${formatFileSize(fileSize)}`}
+          onClick={() => {
+            setDismissed(false);
+            setFocused(true);
+            const pos = getPos();
+            if (editor.isEditable && pos !== undefined) editor.commands.setNodeSelection(pos);
+          }}
+          onKeyDown={(event) => {
+            if (event.key === 'ArrowDown') {
+              event.preventDefault();
+              setDismissed(false);
+              setFocused(true);
+              requestAnimationFrame(() => refs.floating.current?.querySelector<HTMLButtonElement>('button')?.focus());
+            }
+          }}>
+          <span aria-hidden>{uploadStatus === 'error' ? '⚠' : '📎'}</span>
+          <span className="attachment-inline-filename">{name}{success ? ` · ${formatFileSize(fileSize)}` : ''}</span>
+        </button>
+      </span>
+      {visible && <FloatingPortal>
+        <div ref={refs.setFloating} style={floatingStyles} className="attachment-inline-toolbar-container"
+          contentEditable={false} onMouseEnter={enter} onMouseLeave={leave}
+          onFocusCapture={focus} onBlurCapture={blur} onKeyDown={escape}>
+          <Toolbar.Root id={toolbarId} className="editor-floating-toolbar attachment-inline-toolbar" aria-label={`Attachment actions for ${name}`}>
+            {success && <Toolbar.Button className="editor-floating-toolbar-button" aria-disabled={!!busy} aria-label="Download attachment" title="Download attachment" onClick={() => void read('download')}><FiDownload size={16} aria-hidden="true" /></Toolbar.Button>}
+            {canPreview && <Toolbar.Button className="editor-floating-toolbar-button" aria-disabled={!!busy} aria-label="Preview attachment" title="Preview attachment" onClick={() => void read('preview')}><FiEye size={16} aria-hidden="true" /></Toolbar.Button>}
+            {editable && <>
+              {success && <Separator.Root className="editor-floating-toolbar-separator" orientation="vertical" />}
+              {handler && (success || uploadStatus === 'error' || recovering) && (
+                <Toolbar.Button className="editor-floating-toolbar-button" disabled={!!busy} aria-label={success ? 'Replace file' : 'Choose file again'} title={success ? 'Replace file' : 'Choose file again'} onClick={() => input.current?.click()}>{success ? <FiRepeat size={16} aria-hidden="true" /> : <FiUpload size={16} aria-hidden="true" />}</Toolbar.Button>
+              )}
+              {handler && uploadStatus === 'error' && pendingFile && (
+                <Toolbar.Button className="editor-floating-toolbar-button" disabled={!!busy} aria-label="Retry upload" title="Retry upload" onClick={() => void upload(pendingFile)}><FiRefreshCw size={16} aria-hidden="true" /></Toolbar.Button>
+              )}
+              <Toolbar.Button className="editor-floating-toolbar-button" disabled={!!busy} aria-label="Remove attachment" title="Remove attachment" onClick={() => {
+                if (!editor.isEditable) return;
+                clearPendingAttachmentFile(placeholderId);
+                deleteNode();
+                editor.commands.focus();
+              }}><FiTrash2 size={16} aria-hidden="true" /></Toolbar.Button>
+            </>}
+          </Toolbar.Root>
+        </div>
+      </FloatingPortal>}
+      {editable && <input ref={input} type="file" hidden accept={storage?.allowedMimeAccept || '*'} onChange={(event) => {
+        const file = event.currentTarget.files?.[0];
+        event.currentTarget.value = '';
+        if (file) void upload(file);
+      }} />}
+      <span className="attachment-inline-feedback" role="status" aria-live="polite">
+        {busy || error || (uploadStatus === 'error' ? errorMessage || 'Upload failed.' : uploadStatus === 'uploading' ? 'Upload pending…' : '')}
       </span>
     </NodeViewWrapper>
   );
 }
 
 function formatFileSize(bytes: number): string {
-  if (bytes === 0) return '0 B';
+  if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
   const units = ['B', 'KB', 'MB', 'GB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(1024));
-  const value = bytes / Math.pow(1024, i);
-  return `${value % 1 === 0 ? value : value.toFixed(1)} ${units[i]}`;
+  const i = Math.min(units.length - 1, Math.floor(Math.log(bytes) / Math.log(1024)));
+  return `${Number((bytes / 1024 ** i).toFixed(1))} ${units[i]}`;
 }

@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="whiteboard_durability_1" author="Codex">
+        <comment>Add compare-and-swap revision and verified checkpoint metadata to whiteboard drafts</comment>
+        <addColumn schemaName="core" tableName="whiteboard_data">
+            <column name="revision" type="BIGINT" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="state_digest" type="TEXT"/>
+            <column name="server_update_sequence" type="BIGINT" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+        </addColumn>
+        <rollback>
+            <dropColumn schemaName="core" tableName="whiteboard_data" columnName="server_update_sequence"/>
+            <dropColumn schemaName="core" tableName="whiteboard_data" columnName="state_digest"/>
+            <dropColumn schemaName="core" tableName="whiteboard_data" columnName="revision"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="whiteboard_durability_2" author="Codex">
+        <comment>Persist scoped idempotency results for revisioned whiteboard saves</comment>
+        <createTable schemaName="core" tableName="whiteboard_save_request">
+            <column name="draft_doc_id" type="BIGINT"><constraints nullable="false"/></column>
+            <column name="owner_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="client_id" type="TEXT"><constraints nullable="false"/></column>
+            <column name="request_id" type="TEXT"><constraints nullable="false"/></column>
+            <column name="request_hash" type="TEXT"><constraints nullable="false"/></column>
+            <column name="response_revision" type="BIGINT"><constraints nullable="false"/></column>
+            <column name="response_state_digest" type="TEXT"><constraints nullable="false"/></column>
+            <column name="response_server_sequence" type="BIGINT"><constraints nullable="false"/></column>
+            <column name="created_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="NOW()"><constraints nullable="false"/></column>
+        </createTable>
+        <addPrimaryKey
+            schemaName="core"
+            tableName="whiteboard_save_request"
+            columnNames="draft_doc_id, owner_id, client_id, request_id"
+            constraintName="whiteboard_save_request_pk"/>
+        <addForeignKeyConstraint
+            baseTableSchemaName="core"
+            baseTableName="whiteboard_save_request"
+            baseColumnNames="draft_doc_id"
+            referencedTableSchemaName="core"
+            referencedTableName="page_doc_map"
+            referencedColumnNames="doc_id"
+            constraintName="whiteboard_save_request_draft_fk"
+            onDelete="CASCADE"/>
+        <createIndex schemaName="core" tableName="whiteboard_save_request" indexName="whiteboard_save_request_created_at_idx">
+            <column name="created_at"/>
+        </createIndex>
+        <rollback>
+            <dropTable schemaName="core" tableName="whiteboard_save_request"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="whiteboard_durability_3" author="Codex">
+        <comment>Persist idempotent revision-checked whiteboard publish results</comment>
+        <createTable schemaName="core" tableName="whiteboard_publish_request">
+            <column name="page_id" type="BIGINT"><constraints nullable="false"/></column>
+            <column name="owner_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="client_id" type="TEXT"><constraints nullable="false"/></column>
+            <column name="request_id" type="TEXT"><constraints nullable="false"/></column>
+            <column name="request_hash" type="TEXT"><constraints nullable="false"/></column>
+            <column name="source_draft_doc_id" type="BIGINT"><constraints nullable="false"/></column>
+            <column name="published_doc_id" type="BIGINT"><constraints nullable="false"/></column>
+            <column name="next_draft_doc_id" type="BIGINT"><constraints nullable="false"/></column>
+            <column name="created_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="NOW()"><constraints nullable="false"/></column>
+        </createTable>
+        <addPrimaryKey schemaName="core" tableName="whiteboard_publish_request"
+            columnNames="page_id, owner_id, client_id, request_id"
+            constraintName="whiteboard_publish_request_pk"/>
+        <addForeignKeyConstraint baseTableSchemaName="core" baseTableName="whiteboard_publish_request"
+            baseColumnNames="page_id" referencedTableSchemaName="core" referencedTableName="page"
+            referencedColumnNames="id" constraintName="whiteboard_publish_request_page_fk" onDelete="CASCADE"/>
+        <rollback>
+            <dropTable schemaName="core" tableName="whiteboard_publish_request"/>
+        </rollback>
+    </changeSet>
+</databaseChangeLog>

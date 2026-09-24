@@ -6,6 +6,7 @@ import (
 
 	"github.com/durgakiran/beskar/core"
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 )
 
 func getBreadCrumbs(w http.ResponseWriter, r *http.Request) {
@@ -25,7 +26,17 @@ func getBreadCrumbs(w http.ResponseWriter, r *http.Request) {
 		core.SendFailedReponse(w, r, http.StatusInternalServerError, "Unable to get document")
 		return
 	}
-	breadCrumbs, err := getPageBreadCrumbs(page)
+	actor, err := uuid.Parse(user.AId)
+	if err != nil || !core.ValidateUserPagePermission(pageId, actor, "view") {
+		core.SendFailedReponse(w, r, http.StatusForbidden, "Invalid page permissions")
+		return
+	}
+	editable, err := core.GetEntitiesWithPermission("page", "user", actor.String(), core.PAGE_EDIT)
+	if err != nil {
+		core.SendFailedReponse(w, r, http.StatusInternalServerError, "Unable to get permissions")
+		return
+	}
+	breadCrumbs, err := getPageBreadCrumbs(page, editable)
 	if err != nil {
 		core.SendFailedReponse(w, r, http.StatusInternalServerError, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNSPECIFIED])
 		return

@@ -8,9 +8,11 @@ import PluginDemo from './PluginDemo';
 import RBushDemo from './RBushDemo';
 import ShapesDemo from './ShapesDemo';
 import Phase3Demo from './Phase3Demo';
+import CollaborationDemo from './CollaborationDemo';
 
 const TABS = [
   { id: 'whiteboard', label: '🎨 Whiteboard',         component: GlideboardDemo },
+  { id: 'collaboration', label: 'Collaboration',       component: CollaborationDemo },
   { id: 'phase5',     label: 'Phase 5 — Performance', component: Phase5Demo },
   { id: 'phase4',     label: 'Phase 4 — Arrows',      component: Phase4Demo  },
   { id: 'phase3',     label: 'Phase 3 — Tools',       component: Phase3Demo  },

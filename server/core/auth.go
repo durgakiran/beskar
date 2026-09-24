@@ -2,17 +2,14 @@ package core
 
 import (
 	"context"
-	"crypto/tls"
 	"errors"
 	"fmt"
 	"net/http"
 	"os"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/render"
 	"github.com/zitadel/oidc/v3/pkg/client/rp"
@@ -21,81 +18,27 @@ import (
 	"github.com/zitadel/zitadel-go/v3/pkg/authentication"
 	openid "github.com/zitadel/zitadel-go/v3/pkg/authentication/oidc"
 	"github.com/zitadel/zitadel-go/v3/pkg/zitadel"
+	"golang.org/x/oauth2"
 )
 
-type tokenType struct {
-	value  string
-	Claims Claims
-}
-
-type Claims struct {
-	Email         string      `json:"email"`
-	EmailVerified bool        `json:"email_verified"`
-	Claims        DefaultRole `json:"https://hasura.io/jwt/claims"`
-}
-
-type DefaultRole struct {
-	DefaultRole  string   `json:"x-hasura-default-role"`
-	UserId       string   `json:"x-hasura-user-id"`
-	AllowedRoles []string `json:"x-hasura-allowed-roles"`
-}
-
-func (t *tokenType) authenticate() error {
-	insecureSkipVerify, err := strconv.ParseBool(strings.TrimSpace(os.Getenv("INSECURE_SKIP_VERIFY")))
-	if err != nil {
-		insecureSkipVerify = false
-	}
-
-	tr := &http.Transport{
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: insecureSkipVerify},
-	}
-	client := &http.Client{
-		Timeout:   time.Duration(6000) * time.Second,
-		Transport: tr,
-	}
-	ctx := oidc.ClientContext(context.Background(), client)
-	provider, err := oidc.NewProvider(ctx, IssuerBaseURL())
-	if err != nil {
-		Logger.Error("authorisation failed while getting the provider: " + err.Error())
-		return errors.New(err.Error())
-
-	}
-	oidcConfig := &oidc.Config{
-		SkipClientIDCheck: true,
-	}
-	verifier := provider.Verifier(oidcConfig)
-	idToken, err := verifier.Verify(ctx, t.value)
-	if err != nil {
-		Logger.Error("authorisation failed while verifying the token: " + err.Error())
-		return errors.New(err.Error())
-	}
-	var claims Claims
-
-	err = idToken.Claims(&claims)
-	if err != nil {
-		return err
-	}
-	t.Claims = claims
-	return nil
-}
-
-func AuthMiddleWare(next http.Handler) http.Handler {
+// SelectAuthentication keeps application tokens (such as invitation tokens)
+// separate from authentication credentials. Query credentials are an explicit
+// compatibility option for legacy media GET/HEAD requests only.
+func SelectAuthentication(cookiePath, bearerPath http.Handler, allowQueryToken bool) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		token := r.Header.Get("Authorization")
-		if len(token) == 0 {
-			render.Status(r, http.StatusUnauthorized)
-			render.Render(w, r, NewFailedResponse(401, FAILURE, "Authorization token not provided", ""))
+		if len(r.Header.Values("Authorization")) != 0 {
+			bearerPath.ServeHTTP(w, r)
 			return
 		}
-		Itoken := tokenType{value: strings.Split(token, " ")[1]}
-		err := Itoken.authenticate()
-		if err != nil {
-			render.Status(r, http.StatusUnauthorized)
-			render.Render(w, r, NewFailedResponse(401, FAILURE, err.Error(), ""))
-			return
+		if allowQueryToken && (r.Method == http.MethodGet || r.Method == http.MethodHead) {
+			if token := r.URL.Query().Get("token"); token != "" {
+				request := r.Clone(r.Context())
+				request.Header.Set("Authorization", "Bearer "+token)
+				bearerPath.ServeHTTP(w, request)
+				return
+			}
 		}
-		ctx := context.WithValue(r.Context(), "claims", Itoken.Claims)
-		next.ServeHTTP(w, r.WithContext(ctx))
+		cookiePath.ServeHTTP(w, r)
 	})
 }
 
@@ -107,7 +50,10 @@ var authNLock = &sync.Mutex{}
 const zitadelOrgScopePrefix = "urn:zitadel:iam:org:id:"
 
 func zitadelAuthScopes() []string {
-	scopes := []string{zoidc.ScopeOpenID, zoidc.ScopeProfile, zoidc.ScopeEmail}
+	scopes := []string{zoidc.ScopeOpenID, zoidc.ScopeProfile, zoidc.ScopeEmail, zoidc.ScopeOfflineAccess}
+	if audience := strings.TrimSpace(os.Getenv("ZITADEL_API_AUDIENCE")); audience != "" {
+		scopes = append(scopes, "urn:zitadel:iam:org:project:id:"+audience+":aud")
+	}
 	orgID := strings.TrimSpace(os.Getenv("ZITADEL_REGISTRATION_ORG_ID"))
 	if orgID == "" {
 		return scopes
@@ -120,13 +66,27 @@ func zitadelRedirectURI() string {
 }
 
 func zitadelClientAuthentication() openid.ClientAuthentication {
-	key := os.Getenv("KEY")
-	return openid.PKCEAuthentication(
-		os.Getenv("CLIENT_ID"),
-		zitadelRedirectURI(),
-		zitadelAuthScopes(),
-		httphelper.NewCookieHandler([]byte(key), []byte(key)),
-	)
+	return zitadelClientAuthenticationWithHTTPClient(&http.Client{
+		Timeout:       10 * time.Second,
+		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+	})
+}
+
+func zitadelClientAuthenticationWithHTTPClient(client *http.Client) openid.ClientAuthentication {
+	return func(ctx context.Context, issuer string) (rp.RelyingParty, error) {
+		clientID, secret := strings.TrimSpace(os.Getenv("ZITADEL_CLIENT_ID")), os.Getenv("ZITADEL_CLIENT_SECRET")
+		if clientID == "" || strings.TrimSpace(secret) == "" {
+			return nil, errors.New("confidential browser login requires ZITADEL_CLIENT_ID and ZITADEL_CLIENT_SECRET")
+		}
+		key := os.Getenv("KEY")
+		// Client authentication and PKCE serve different purposes. Explicit Basic
+		// authentication prevents fallback to a public-client token exchange.
+		return rp.NewRelyingPartyOIDC(ctx, issuer, clientID, secret, zitadelRedirectURI(), zitadelAuthScopes(),
+			rp.WithPKCE(httphelper.NewCookieHandler([]byte(key), []byte(key))),
+			rp.WithAuthStyle(oauth2.AuthStyleInHeader),
+			rp.WithHTTPClient(client),
+		)
+	}
 }
 
 func ZitadelAuthenticator() *authentication.Authenticator[*openid.UserInfoContext[*zoidc.IDTokenClaims, *zoidc.UserInfo]] {
@@ -142,6 +102,7 @@ func ZitadelAuthenticator() *authentication.Authenticator[*openid.UserInfoContex
 				openid.WithCodeFlow[*openid.UserInfoContext[*zoidc.IDTokenClaims, *zoidc.UserInfo], *zoidc.IDTokenClaims, *zoidc.UserInfo](zitadelClientAuthentication()),
 				authentication.WithLogger[*openid.UserInfoContext[*zoidc.IDTokenClaims, *zoidc.UserInfo]](SlogLogger),
 				authentication.WithExternalSecure[*openid.UserInfoContext[*zoidc.IDTokenClaims, *zoidc.UserInfo]](true),
+				authentication.WithSessionStore[*browserAuthContext](browserSessions),
 			)
 			authN = authNClient
 			if err != nil {
@@ -201,10 +162,11 @@ func ZitadelLoginHandler() http.HandlerFunc {
 	}
 }
 
-func ZitadelAuthRouter() http.Handler {
+func ZitadelAuthRouter(validator *BrowserAccessTokenValidator) http.Handler {
 	r := chi.NewRouter()
 	r.Get("/register", ZitadelRegisterHandler())
 	r.Get("/login", ZitadelLoginHandler())
+	r.Get("/logout", browserLogoutHandler(browserSessions, ZitadelAuthenticator().Logout, validator.revokeSessionTokens))
 	r.Handle("/*", ZitadelAuthenticator())
 	return r
 }
@@ -215,7 +177,7 @@ func ZitadelMiddleware() *authentication.Interceptor[*openid.UserInfoContext[*zo
 
 func Authenticated(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if authentication.IsAuthenticated(r.Context()) {
+		if _, err := GetUserInfo(r.Context()); err == nil {
 			next.ServeHTTP(w, r)
 		} else {
 			render.Status(r, http.StatusUnauthorized)

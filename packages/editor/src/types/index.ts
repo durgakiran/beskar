@@ -1,3 +1,4 @@
+import type { EditorFeatureOptions } from '../extensions/features';
 import type { Editor as TiptapEditor } from '@tiptap/core';
 import type { HocuspocusProvider } from '@hocuspocus/provider';
 import type { Extensions } from '@tiptap/core';
@@ -40,13 +41,24 @@ export interface AttachmentUploadOptions {
   signal?: AbortSignal;
 }
 
+export interface AttachmentPreviewHandler {
+  /** Must return false for types the application cannot safely display. */
+  supports: (attachment: AttachmentRef) => boolean;
+  /** Resolve when the viewer is dismissed; reject with a user-facing error on failure. */
+  open: (attachment: AttachmentRef) => Promise<void>;
+}
+
 export interface AttachmentAPIHandler {
+  /** Reject on failure; resolve only with a durable, complete uploaded-file reference. */
   uploadAttachment: (
     file: File,
     options?: AttachmentUploadOptions,
   ) => Promise<AttachmentUploadResult>;
   getAttachmentUrl?: (url: string) => string;
-  downloadAttachment?: (params: { url: string; fileName: string }) => void | Promise<void>;
+  /** Resolve after handing the download to the browser; reject on failure. */
+  downloadAttachment?: (params: { url: string; fileName: string }) => Promise<void>;
+  /** Omit to hide Preview. The package never guesses preview support from a URL. */
+  previewAttachment?: AttachmentPreviewHandler;
 }
 
 /** Lightweight reference to a successfully uploaded attachment — emitted via `onAttachmentsChange`. */
@@ -102,7 +114,7 @@ export interface ExternalLinkMetadata {
 }
 
 export interface ExternalLinkHandler {
-  getLinkMetadata: (url: string) => Promise<ExternalLinkMetadata | null>;
+  getLinkMetadata: (url: string, signal?: AbortSignal) => Promise<ExternalLinkMetadata | null>;
 }
 
 // ─── Child Pages List ────────────────────────────────────────────────────────
@@ -234,7 +246,10 @@ export interface EditorProps {
   collaboration?: CollaborationConfig;
   onUpdate?: (content: any) => void;
   onReady?: (editor: TiptapEditor) => void;
+  /** Additional custom extensions; built-in selection is controlled by `features`. */
   extensions?: Extensions;
+  /** Configure optional built-ins at mount time. Remount to change the schema. */
+  features?: EditorFeatureOptions;
   className?: string;
   autoFocus?: boolean | 'start' | 'end' | number;
   imageHandler?: ImageAPIHandler;

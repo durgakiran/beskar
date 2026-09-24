@@ -1,252 +1,93 @@
 import { Extension } from '@tiptap/core';
-import { Plugin, PluginKey } from '@tiptap/pm/state';
-import { blockDragDropKey } from './block-drag-drop';
-import { Fragment, Slice } from '@tiptap/pm/model';
+import { Plugin, PluginKey, type EditorState, type Transaction } from '@tiptap/pm/state';
+import { Fragment, Slice, type Node as PMNode } from '@tiptap/pm/model';
+import { BLOCK_TYPES } from './block-movement';
 
-export interface BlockIdOptions {
-  types: string[];
+export interface BlockIdOptions { types: string[] }
+const INITIALIZE_IDS = 'initializeBlockIds';
+const newId = () => `block-${crypto.randomUUID()}`;
+
+/** Split and paste can inherit attributes. Repair identity once, after the document transaction. */
+export function normalizeBlockIds(state: EditorState, types = BLOCK_TYPES): Transaction | null {
+  const seen = new Set<string>();
+  const tr = state.tr;
+  state.doc.descendants((node, pos) => {
+    if (!types.includes(node.type.name)) return;
+    const $pos = state.doc.resolve(pos);
+    let restricted = false;
+    if (!node.isTextblock) {
+      for (let depth = $pos.depth; depth > 0; depth--) {
+        const parent = $pos.node(depth).type.name;
+        if ((parent === 'table' && node.type.name !== 'table') ||
+          (['listItem', 'taskItem'].includes(parent) && !['bulletList', 'orderedList', 'taskList'].includes(node.type.name))) restricted = true;
+      }
+    }
+    const id = node.attrs.blockId as string | null;
+    if (restricted) {
+      if (id) tr.setNodeMarkup(pos, undefined, { ...node.attrs, blockId: null });
+      return;
+    }
+    if (!id || seen.has(id)) {
+      const blockId = newId();
+      tr.setNodeMarkup(pos, undefined, { ...node.attrs, blockId });
+      seen.add(blockId);
+    } else seen.add(id);
+  });
+  return tr.docChanged ? tr : null;
 }
 
-/**
- * Extension that adds unique IDs to block nodes
- * Essential for block-based editor functionality
- */
 export const BlockId = Extension.create<BlockIdOptions>({
   name: 'blockId',
-
-  addOptions() {
-    return {
-      types: [
-        'heading',
-        'paragraph',
-        'bulletList',
-        'orderedList',
-        'taskList',
-        'blockquote',
-        'codeBlock', // CodeBlockLowlight extends CodeBlock, so it uses 'codeBlock' as node type
-        'table',
-        'horizontalRule',
-        'details', // Only details should be a block, not detailsSummary/detailsContent
-        'noteBlock',
-        'imageBlock',
-        'attachmentBlock',
-        'mathBlock',
-        'tableOfContents',
-        'columns',
-      ],
-    };
-  },
-
+  addOptions: () => ({ types: BLOCK_TYPES }),
   addGlobalAttributes() {
-    return [
-      {
-        // Exclude 'table' and 'codeBlock' from global rendering - codeBlock handles its own wrapper rendering
-        types: this.options.types.filter(type => type !== 'table'),
-        attributes: {
-          blockId: {
-            default: null,
-            parseHTML: (element) => element.getAttribute('data-block-id'),
-            renderHTML: (attributes) => {
-              // Only render block attributes if blockId exists
-              // This prevents table cell content from being treated as blocks
-              if (!attributes.blockId) {
-                return {};
-              }
-              return {
-                'data-block-id': attributes.blockId,
-                class: 'block-node',
-                draggable: 'false', // Only draggable via handle
-              };
-            },
-          },
+    return [{
+      // Tables render their identity on both the table and its custom wrapper.
+      types: this.options.types.filter(type => type !== 'table'),
+      attributes: {
+        blockId: {
+          default: null,
+          keepOnSplit: false,
+          parseHTML: element => element.getAttribute('data-block-id'),
+          renderHTML: attributes => attributes.blockId ? { 'data-block-id': attributes.blockId, class: 'block-node', draggable: 'false' } : {},
         },
       },
-    ];
+    }];
   },
-
   addProseMirrorPlugins() {
-    const editor = this.editor;
-    
-    // Helper to check if a position is inside a table
-    const isInsideTable = (doc: any, pos: number): boolean => {
-      const $pos = doc.resolve(pos);
-      for (let i = $pos.depth; i > 0; i--) {
-        const node = $pos.node(i);
-        if (node.type.name === 'table' || node.type.name === 'tableRow' || node.type.name === 'tableCell' || node.type.name === 'tableHeader') {
-          return true;
-        }
-      }
-      return false;
-    };
-    
-    // Helper to check if a position is inside a list
-    const isInsideList = (doc: any, pos: number): boolean => {
-      const $pos = doc.resolve(pos);
-      for (let i = $pos.depth; i > 0; i--) {
-        const node = $pos.node(i);
-        if (node.type.name === 'bulletList' || node.type.name === 'orderedList' || node.type.name === 'taskList' || node.type.name === 'listItem' || node.type.name === 'taskItem') {
-          return true;
-        }
-      }
-      return false;
-    };
-    
-    return [
-      new Plugin({
-        key: new PluginKey('blockId'),
-
-        props: {
-          transformPasted: (slice: Slice) => {
-            if (!slice || !slice.content) {
-              return slice;
-            }
-        
-            // Recursively remove blockId from nodes
-            const removeBlockIds = (node: any): any => {
-              if (node.attrs?.blockId && this.options.types.includes(node.type.name)) {
-                const newAttrs = { ...node.attrs, blockId: null };
-                
-                let newContent = node.content;
-                if (node.content && node.content.content) {
-                  newContent = node.content.content.map((child: any) => removeBlockIds(child));
-                }
-                
-                return node.type.create(newAttrs, Fragment.from(newContent), node.marks);
-              }
-              if (node.content && node.content.content) {
-                const newContent = node.content.content.map((child: any) => removeBlockIds(child));
-                if (newContent !== node.content) {
-                  return node.type.create(node.attrs, Fragment.from(newContent), node.marks);
-                }
-              }
-              
-              return node;
-            };
-        
-            const processedNodes = (slice.content as any).content.map((node: any) => removeBlockIds(node));
-            const processedFragment = Fragment.from(processedNodes);
-            return new Slice(processedFragment, slice.openStart, slice.openEnd);
-          },
-        },
-        view: () => {
-          return {
-            update: (view) => {
-              // Run on initial load and whenever document changes
-              let modified = false;
-              const tr = view.state.tr;
-              
-              view.state.doc.descendants((node, pos) => {
-                // Only process block-level nodes that are in our types list
-                if (!this.options.types.includes(node.type.name)) {
-                  return;
-                }
-
-                // Check if node is inside a table or list (but not if it IS a table or list).
-                // IMPORTANT: textblock nodes (paragraph, heading, codeBlock, noteBlock, …) are
-                // ALWAYS allowed to have their own blockId, even when nested inside a list or
-                // table. This is the foundation of unambiguous comment anchoring — each textblock
-                // carries a unique ID, so resolveAnchor never needs to disambiguate between
-                // multiple list items or table cells. Non-textblock container nodes (e.g. a
-                // nested bulletList inside a listItem) still obey the old stripping rule.
-                const isTextblockNode = node.isTextblock;
-                const isInTable = !isTextblockNode && node.type.name !== 'table' && isInsideTable(view.state.doc, pos);
-                const isInList = !isTextblockNode && node.type.name !== 'bulletList' && node.type.name !== 'orderedList' && node.type.name !== 'taskList' && isInsideList(view.state.doc, pos);
-
-                // If node is inside a table/list and has a blockId, remove it
-                if ((isInTable || isInList) && node.attrs.blockId) {
-                  tr.setNodeMarkup(pos, undefined, {
-                    ...node.attrs,
-                    blockId: null,
-                  });
-                  modified = true;
-                  return;
-                }
-
-                // Skip if already has blockId or is inside table/list
-                if (node.attrs.blockId || isInTable || isInList) {
-                  return;
-                }
-
-                // Generate unique block ID
-                const blockId = `block-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-
-                tr.setNodeMarkup(pos, undefined, {
-                  ...node.attrs,
-                  blockId,
-                });
-
-                modified = true;
-              });
-
-              if (modified) {
-                view.dispatch(tr);
-              }
-            },
+    const types = this.options.types;
+    return [new Plugin({
+      key: new PluginKey('blockId'),
+      props: {
+        transformPasted(slice) {
+          const strip = (node: PMNode): PMNode => {
+            const children: PMNode[] = [];
+            node.content.forEach(child => children.push(strip(child)));
+            if (node.isText) return node;
+            const attrs = types.includes(node.type.name) ? { ...node.attrs, blockId: null } : node.attrs;
+            return node.type.create(attrs, Fragment.from(children), node.marks);
           };
+          const children: PMNode[] = [];
+          slice.content.forEach(node => children.push(strip(node)));
+          return new Slice(Fragment.from(children), slice.openStart, slice.openEnd);
         },
-        
-        appendTransaction: (transactions, oldState, newState) => {
-          // Skip during drag operations to prevent table corruption
-          const dragState = blockDragDropKey.getState(newState);
-          if (dragState?.isDragging) {
-            return null;
-          }
-          
-          // Only run if document changed
-          const docChanged = transactions.some((transaction) => transaction.docChanged);
-          if (!docChanged) {
-            return null;
-          }
-
-          const tr = newState.tr;
-          let modified = false;
-
-          newState.doc.descendants((node, pos) => {
-            const nodeType = node.type.name;
-            
-            // Only process block-level nodes that are in our types list
-            if (!this.options.types.includes(nodeType)) {
-              return;
-            }
-
-            // Check if node is inside a table or list (but not if it IS a table or list).
-            // Textblock nodes always get their own blockId — see view.update comment above.
-            const isTextblockNode = node.isTextblock;
-            const isInTable = !isTextblockNode && nodeType !== 'table' && isInsideTable(newState.doc, pos);
-            const isInList = !isTextblockNode && nodeType !== 'bulletList' && nodeType !== 'orderedList' && nodeType !== 'taskList' && isInsideList(newState.doc, pos);
-
-            // If node is inside a table/list and has a blockId, remove it
-            if ((isInTable || isInList) && node.attrs.blockId) {
-              tr.setNodeMarkup(pos, undefined, {
-                ...node.attrs,
-                blockId: null,
-              });
-              modified = true;
-              return;
-            }
-
-            // Skip if already has blockId or is inside table/list
-            if (node.attrs.blockId || isInTable || isInList) {
-              return;
-            }
-
-            // Generate unique block ID
-            const blockId = `block-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-
-            tr.setNodeMarkup(pos, undefined, {
-              ...node.attrs,
-              blockId,
-            });
-
-            modified = true;
-          });
-
-          return modified ? tr : null;
-        },
-      }),
-    ];
+      },
+      view(view) {
+        let destroyed = false;
+        // React mounts the view after plugin construction. Never dispatch recursively in view.update.
+        queueMicrotask(() => {
+          if (!destroyed) view.dispatch(view.state.tr.setMeta(INITIALIZE_IDS, true).setMeta('addToHistory', false));
+        });
+        return { destroy() { destroyed = true; } };
+      },
+      appendTransaction(transactions, _old, state) {
+        if (!transactions.some(tr => tr.docChanged || tr.getMeta(INITIALIZE_IDS))) return null;
+        const tr = normalizeBlockIds(state, types);
+        // Yjs uses the final transaction's history flag for the whole update. Repairs
+        // after typing/paste must join that edit; only initialization is excluded.
+        if (tr && (transactions.some(t => t.getMeta(INITIALIZE_IDS)) || transactions.every(t => t.getMeta('addToHistory') === false))) tr.setMeta('addToHistory', false);
+        return tr;
+      },
+    })];
   },
 });
-
 export default BlockId;
-

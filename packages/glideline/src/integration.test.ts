@@ -146,6 +146,7 @@ describe('Forward compatibility: savedVersion > currentVersion', () => {
       records: [{
         id: 'shape:future',
         type: 'box',
+        x: 0, y: 0, rotation: 0, index: 'a1', meta: {},
         props: { w: 100, h: 100, futureProp: 'hello' },
       }],
     };

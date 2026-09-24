@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="whiteboard_publication_1" author="Codex" dbms="postgresql">
+        <comment>Immutable publications, same-board snapshot references, and durable retry keys</comment>
+        <createTable schemaName="whiteboard" tableName="whiteboard_version">
+            <column name="id" type="UUID">
+                <constraints nullable="false" primaryKey="true" primaryKeyName="whiteboard_version_pk"/>
+            </column>
+            <column name="page_id" type="BIGINT"><constraints nullable="false"/></column>
+            <column name="snapshot_id" type="UUID"><constraints nullable="false"/></column>
+            <column name="version_number" type="BIGINT"><constraints nullable="false"/></column>
+            <column name="published_by" type="UUID"><constraints nullable="false"/></column>
+            <column name="published_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="now()">
+                <constraints nullable="false"/>
+            </column>
+            <column name="idempotency_key" type="UUID"><constraints nullable="false"/></column>
+        </createTable>
+        <addUniqueConstraint schemaName="whiteboard" tableName="whiteboard_version"
+            columnNames="page_id,id" constraintName="whiteboard_version_page_id_uq"/>
+        <addUniqueConstraint schemaName="whiteboard" tableName="whiteboard_version"
+            columnNames="page_id,version_number" constraintName="whiteboard_version_number_uq"/>
+        <addUniqueConstraint schemaName="whiteboard" tableName="whiteboard_version"
+            columnNames="page_id,published_by,idempotency_key" constraintName="whiteboard_version_request_uq"/>
+        <addForeignKeyConstraint baseTableSchemaName="whiteboard" baseTableName="whiteboard_version"
+            baseColumnNames="page_id" referencedTableSchemaName="whiteboard" referencedTableName="whiteboard"
+            referencedColumnNames="page_id" constraintName="whiteboard_version_page_fk" onDelete="NO ACTION"/>
+        <addForeignKeyConstraint baseTableSchemaName="whiteboard" baseTableName="whiteboard_version"
+            baseColumnNames="page_id,snapshot_id" referencedTableSchemaName="whiteboard" referencedTableName="whiteboard_snapshot"
+            referencedColumnNames="page_id,id" constraintName="whiteboard_version_snapshot_fk" onDelete="NO ACTION"/>
+        <addForeignKeyConstraint baseTableSchemaName="whiteboard" baseTableName="whiteboard"
+            baseColumnNames="page_id,published_version_id" referencedTableSchemaName="whiteboard" referencedTableName="whiteboard_version"
+            referencedColumnNames="page_id,id" constraintName="whiteboard_published_version_fk" onDelete="NO ACTION"/>
+        <!-- Community Liquibase requires SQL for CHECK constraints and grants,
+             matching whiteboard_creation.xml and whiteboard_assets.xml. -->
+        <sql>
+            ALTER TABLE whiteboard.whiteboard_version
+                ADD CONSTRAINT whiteboard_version_number_ck CHECK (version_number &gt; 0);
+            GRANT SELECT, INSERT, UPDATE, DELETE ON whiteboard.whiteboard_version TO ${app_user};
+        </sql>
+        <rollback>
+            <dropForeignKeyConstraint baseTableSchemaName="whiteboard" baseTableName="whiteboard"
+                constraintName="whiteboard_published_version_fk"/>
+            <update schemaName="whiteboard" tableName="whiteboard">
+                <column name="published_version_id" valueComputed="NULL"/>
+            </update>
+            <dropTable schemaName="whiteboard" tableName="whiteboard_version"/>
+        </rollback>
+    </changeSet>
+</databaseChangeLog>

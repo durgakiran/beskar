@@ -13,16 +13,21 @@
  *   - onBeforeDeleteToShape: detaches terminal (boundShapeId → null).
  */
 
-import { ShapeUtil, BindingUtil, type ResizeInfo } from './ShapeUtil';
-import { T } from '../validators';
-import { defineMigrations } from '../migrations';
+import { ShapeUtil, BindingUtil, type ResizeInfo } from './ShapeUtil.js';
+import { T } from '../validators.js';
+import { defineMigrations } from '../migrations.js';
 import type {
   GlideShape, GlideBinding, GlideProps,
   Box2d, Vec2, EdgeName, ShapeId,
-} from '../types';
-import { Geometry2d, Polyline2d } from '../geometry';
-import { resolveArrowRoute } from '../arrow-routing';
-import { StyleValidators, STROKE_WIDTHS, STROKE_DASH_ARRAYS, resolveColor, type StrokeStyle, type SizeStyle } from '../styles';
+} from '../types.js';
+import { makeBox } from '../types.js';
+import { Geometry2d, Polyline2d } from '../geometry/index.js';
+import { resolveArrowRoute } from '../arrow-routing.js';
+import {
+  StyleValidators, STROKE_WIDTHS, STROKE_DASH_ARRAYS, resolveColor,
+  FONT_FAMILIES, FONT_SIZES, createTextForeignObjectForExport,
+  type StrokeStyle, type SizeStyle, type Font, type FontSize, type LabelProps,
+} from '../styles.js';
 
 const ARROW_HIT_TEST_PADDING = 8;
 
@@ -59,6 +64,11 @@ export interface ArrowProps {
   opacity: number;
   strokeStyle: StrokeStyle;
   strokeWidth: SizeStyle;
+  label: string;
+  labelPosition: number;
+  labelColor: string;
+  font: Font;
+  fontSize: FontSize;
 }
 
 export type ArrowShape = GlideShape<ArrowProps>;
@@ -105,6 +115,10 @@ const arrowheadStyleValidator = {
 
 export class ArrowUtil extends ShapeUtil<ArrowShape> {
   static override readonly type = 'arrow';
+  static override readonly references = [
+    { path: '/props/start/boundShapeId', targetKind: 'shape', onDetach: 'null' },
+    { path: '/props/end/boundShapeId', targetKind: 'shape', onDetach: 'null' },
+  ] as const;
 
   static override readonly props: GlideProps<ArrowProps> = {
     start:       terminalValidator,
@@ -117,10 +131,15 @@ export class ArrowUtil extends ShapeUtil<ArrowShape> {
     opacity:     T.number,
     strokeStyle: StyleValidators.strokeStyle,
     strokeWidth: StyleValidators.strokeWidth,
+    label: T.string,
+    labelPosition: T.number,
+    labelColor: T.string,
+    font: StyleValidators.font,
+    fontSize: StyleValidators.fontSize,
   };
 
   static override readonly migrations = defineMigrations({
-    currentVersion: 5,
+    currentVersion: 6,
     migrators: {
       1: {
         up:   r => ({
@@ -199,6 +218,28 @@ export class ArrowUtil extends ShapeUtil<ArrowShape> {
           },
         }),
       },
+      6: {
+        up: r => ({
+          ...r,
+          props: {
+            label: '',
+            labelPosition: 0.5,
+            labelColor: 'black',
+            font: 'sans',
+            fontSize: 'md',
+            ...(r['props'] as object),
+          },
+        }),
+        down: (r: any) => {
+          const props = { ...r.props };
+          delete props.label;
+          delete props.labelPosition;
+          delete props.labelColor;
+          delete props.font;
+          delete props.fontSize;
+          return { ...r, props };
+        },
+      },
     },
   });
 
@@ -212,7 +253,7 @@ export class ArrowUtil extends ShapeUtil<ArrowShape> {
     return {
       start:      terminal,
       end:        terminal,
-      routeStyle: 'curve',
+      routeStyle: 'ortho',
       bend:       0,
       arrowheadStart: 'none',
       arrowheadEnd: 'arrow',
@@ -220,6 +261,11 @@ export class ArrowUtil extends ShapeUtil<ArrowShape> {
       opacity:     1,
       strokeStyle: 'solid',
       strokeWidth: 'medium',
+      label: '',
+      labelPosition: 0.5,
+      labelColor: 'black',
+      font: 'sans',
+      fontSize: 'md',
     };
   }
 
@@ -231,6 +277,14 @@ export class ArrowUtil extends ShapeUtil<ArrowShape> {
       boundsPadding: ARROW_HIT_TEST_PADDING,
       hitThreshold: ARROW_HIT_TEST_PADDING,
     });
+  }
+
+  override getVisualBounds(shape: ArrowShape): Box2d {
+    const bounds = this.getGeometry(shape).getBounds();
+    if (!shape.props.label) return bounds;
+    // The route-relative label is 160×40 and its center lies on the route.
+    // Inflating once avoids resolving a smart route a second time during indexing.
+    return makeBox(bounds.minX - 80, bounds.minY - 20, bounds.w + 160, bounds.h + 40);
   }
 
   /** Arrows are resized via terminal handle drags, not the standard resize UI. */
@@ -261,6 +315,56 @@ export class ArrowUtil extends ShapeUtil<ArrowShape> {
     return resolveArrowRoute(this.editor as any, shape).localPoints;
   }
 
+  override getLabelProps(shape: ArrowShape): LabelProps {
+    const point = pointAlongPolyline(
+      this.getLocalPathPoints(shape),
+      Math.max(0, Math.min(1, shape.props.labelPosition)),
+    );
+    return {
+      text: shape.props.label,
+      fontFamily: FONT_FAMILIES[shape.props.font] ?? FONT_FAMILIES.sans,
+      fontSize: FONT_SIZES[shape.props.fontSize] ?? FONT_SIZES.md,
+      color: resolveColor(shape.props.labelColor),
+      textAlign: 'center',
+      verticalAlign: 'center',
+      padding: 4,
+      x: point.x - 80,
+      y: point.y - 20,
+      w: 160,
+      h: 40,
+      background: 'white',
+    };
+  }
+
+  override getTextEditProps(
+    shape: ArrowShape,
+    pagePoint: Vec2,
+  ): Readonly<Record<string, unknown>> | null {
+    if (shape.props.label) return null;
+    return {
+      labelPosition: nearestPositionAlongPolyline(
+        resolveArrowRoute(this.editor as any, shape).worldPoints,
+        pagePoint,
+      ),
+    };
+  }
+
+  override getTextCommitPatch(
+    latestShape: ArrowShape,
+    draft: string,
+    pendingProps?: Readonly<Record<string, unknown>>,
+  ): Partial<ArrowShape> {
+    const pendingPosition = pendingProps?.['labelPosition'];
+    return {
+      props: {
+        label: draft,
+        ...(typeof pendingPosition === 'number' && Number.isFinite(pendingPosition)
+          ? { labelPosition: Math.max(0, Math.min(1, pendingPosition)) }
+          : {}),
+      },
+    } as Partial<ArrowShape>;
+  }
+
 
   /**
    * Override: hit-test the arrow line, not just its AABB.
@@ -268,7 +372,7 @@ export class ArrowUtil extends ShapeUtil<ArrowShape> {
    * start.point = {0,0}, end.point = local offset.
    */
   override hitTestPoint(shape: ArrowShape, point: Vec2): boolean {
-    return this.getGeometry(shape).hitTestPoint(point);
+    return super.hitTestPoint(shape, point);
   }
 
   /**
@@ -335,6 +439,93 @@ export class ArrowUtil extends ShapeUtil<ArrowShape> {
 
     return g;
   }
+
+  override toSvgExport(shape: ArrowShape): SVGElement {
+    const g = this.toSvg(shape) as SVGGElement;
+    if (!shape.props.label) return g;
+    const layout = this.getLabelProps(shape);
+    g.appendChild(createTextForeignObjectForExport({
+      x: layout.x ?? 0,
+      y: layout.y ?? 0,
+      w: layout.w ?? 160,
+      h: layout.h ?? 40,
+      text: shape.props.label,
+      font: layout.fontFamily,
+      fontSize: layout.fontSize,
+      textAlign: 'center',
+      color: layout.color,
+      background: layout.background,
+      verticalAlign: 'center',
+    }));
+    return g;
+  }
+}
+
+function pointAlongPolyline(points: readonly Vec2[], position: number): Vec2 {
+  if (points.length === 0) return { x: 0, y: 0 };
+  if (points.length === 1) return points[0]!;
+  const lengths: number[] = [];
+  let total = 0;
+  for (let index = 1; index < points.length; index++) {
+    const start = points[index - 1]!;
+    const end = points[index]!;
+    const length = Math.hypot(end.x - start.x, end.y - start.y);
+    lengths.push(length);
+    total += length;
+  }
+  let remaining = total * position;
+  for (let index = 0; index < lengths.length; index++) {
+    const length = lengths[index]!;
+    if (remaining <= length || index === lengths.length - 1) {
+      const start = points[index]!;
+      const end = points[index + 1]!;
+      const ratio = length === 0 ? 0 : remaining / length;
+      return {
+        x: start.x + (end.x - start.x) * ratio,
+        y: start.y + (end.y - start.y) * ratio,
+      };
+    }
+    remaining -= length;
+  }
+  return points[points.length - 1]!;
+}
+
+function nearestPositionAlongPolyline(points: readonly Vec2[], point: Vec2): number {
+  if (points.length < 2) return 0.5;
+  const segmentLengths: number[] = [];
+  let totalLength = 0;
+  for (let index = 1; index < points.length; index++) {
+    const start = points[index - 1]!;
+    const end = points[index]!;
+    const length = Math.hypot(end.x - start.x, end.y - start.y);
+    segmentLengths.push(length);
+    totalLength += length;
+  }
+  if (totalLength <= Number.EPSILON) return 0.5;
+
+  let bestDistanceSquared = Number.POSITIVE_INFINITY;
+  let bestLength = totalLength / 2;
+  let traversed = 0;
+  for (let index = 1; index < points.length; index++) {
+    const start = points[index - 1]!;
+    const end = points[index]!;
+    const length = segmentLengths[index - 1]!;
+    if (length <= Number.EPSILON) continue;
+    const dx = end.x - start.x;
+    const dy = end.y - start.y;
+    const t = Math.max(0, Math.min(1, (
+      (point.x - start.x) * dx + (point.y - start.y) * dy
+    ) / (length * length)));
+    const projectedX = start.x + dx * t;
+    const projectedY = start.y + dy * t;
+    const distanceSquared = (point.x - projectedX) ** 2 + (point.y - projectedY) ** 2;
+    if (distanceSquared < bestDistanceSquared) {
+      bestDistanceSquared = distanceSquared;
+      bestLength = traversed + length * t;
+    }
+    traversed += length;
+  }
+  return bestLength / totalLength;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -343,29 +534,37 @@ export class ArrowUtil extends ShapeUtil<ArrowShape> {
 
 function arrowStartPoint(pathStr: string, fallback: { x: number; y: number }): { x: number; y: number } {
   const match = pathStr.match(/^M\s+([\d.\-eE+]+)\s+([\d.\-eE+]+)/);
-  if (match) return { x: parseFloat(match[1]), y: parseFloat(match[2]) };
+  const x = match?.[1];
+  const y = match?.[2];
+  if (x !== undefined && y !== undefined) return { x: parseFloat(x), y: parseFloat(y) };
   return fallback;
 }
 
 function arrowTangentTo(pathStr: string, fallback: { x: number; y: number }): { x: number; y: number } {
   const qMatch = pathStr.match(/^M\s+[\d.\-eE+]+\s+[\d.\-eE+]+\s+Q\s+([\d.\-eE+]+)\s+([\d.\-eE+]+)/);
-  if (qMatch) return { x: parseFloat(qMatch[1]), y: parseFloat(qMatch[2]) };
+  const qx = qMatch?.[1];
+  const qy = qMatch?.[2];
+  if (qx !== undefined && qy !== undefined) return { x: parseFloat(qx), y: parseFloat(qy) };
   const pts = getPathPoints(pathStr);
-  if (pts.length >= 2) return pts[1];
+  if (pts.length >= 2) return pts[1]!;
   return fallback;
 }
 
 function arrowEndPoint(pathStr: string, fallback: { x: number; y: number }): { x: number; y: number } {
   const match = pathStr.match(/(?:Q\s+[\d.\-eE+]+\s+[\d.\-eE+]+\s+|L\s+)([\d.\-eE+]+)\s+([\d.\-eE+]+)$/);
-  if (match) return { x: parseFloat(match[1]), y: parseFloat(match[2]) };
+  const x = match?.[1];
+  const y = match?.[2];
+  if (x !== undefined && y !== undefined) return { x: parseFloat(x), y: parseFloat(y) };
   return fallback;
 }
 
 function arrowTangentFrom(pathStr: string, fallback: { x: number; y: number }): { x: number; y: number } {
   const qMatch = pathStr.match(/Q\s+([\d.\-eE+]+)\s+([\d.\-eE+]+)\s+[\d.\-eE+]+\s+[\d.\-eE+]+/);
-  if (qMatch) return { x: parseFloat(qMatch[1]), y: parseFloat(qMatch[2]) };
+  const qx = qMatch?.[1];
+  const qy = qMatch?.[2];
+  if (qx !== undefined && qy !== undefined) return { x: parseFloat(qx), y: parseFloat(qy) };
   const pts = getPathPoints(pathStr);
-  if (pts.length >= 2) return pts[pts.length - 2];
+  if (pts.length >= 2) return pts[pts.length - 2]!;
   return fallback;
 }
 
@@ -373,7 +572,13 @@ function getPathPoints(pathStr: string): { x: number; y: number }[] {
   const pts: { x: number; y: number }[] = [];
   const re = /[ML]\s+([\d.\-eE+]+)\s+([\d.\-eE+]+)/g;
   let m: RegExpExecArray | null;
-  while ((m = re.exec(pathStr)) !== null) pts.push({ x: parseFloat(m[1]), y: parseFloat(m[2]) });
+  while ((m = re.exec(pathStr)) !== null) {
+    const x = m[1];
+    const y = m[2];
+    if (x !== undefined && y !== undefined) {
+      pts.push({ x: parseFloat(x), y: parseFloat(y) });
+    }
+  }
   return pts;
 }
 
@@ -457,7 +662,7 @@ export function getConnectionPoints(bounds: Box2d): Array<{ normalizedAnchor: Ve
 export function getClosestConnectionPoint(pt: Vec2, bounds: Box2d): { normalizedAnchor: Vec2; point: Vec2 } {
   const points = getConnectionPoints(bounds);
   let minDistance = Infinity;
-  let closest = points[0];
+  let closest = points[0]!;
   for (const p of points) {
     const d = Math.hypot(pt.x - p.point.x, pt.y - p.point.y);
     if (d < minDistance) {
@@ -519,32 +724,16 @@ export class ArrowBindingUtil extends BindingUtil<ArrowBinding> {
    *  - props.end.point = local offset (world_end - world_start)
    */
   override onAfterChangeToShape(binding: ArrowBinding): void {
-    const editor = this.editor as import('../editor').GlideEditor;
+    const editor = this.editor as import('../editor.js').GlideEditor;
     const arrow = editor.getShape<ArrowShape>(binding.fromId as ShapeId);
     if (!arrow) return;
 
     const targetShape = editor.getShape(binding.toId);
     if (!targetShape) return;
 
-    const util = editor.getShapeUtil(targetShape.type);
-    // getGeometry returns LOCAL bounds for non-arrow shapes (minX=0, minY=0)
-    // anchorToPoint uses bounds.x/bounds.y which equals 0 for local bounds.
-    // We need WORLD position, so use targetShape.x/y + local offset.
-    const localBounds = util.getGeometry(targetShape as any).getBounds();
-    // World bounds = localBounds shifted by targetShape.x/y
-    const worldBounds = {
-      ...localBounds,
-      x:    localBounds.minX + targetShape.x,
-      y:    localBounds.minY + targetShape.y,
-      minX: localBounds.minX + targetShape.x,
-      minY: localBounds.minY + targetShape.y,
-      maxX: localBounds.maxX + targetShape.x,
-      maxY: localBounds.maxY + targetShape.y,
-    };
-
     const { normalizedAnchor, terminal } = binding.props;
-    const worldPoint = anchorToPoint(normalizedAnchor, worldBounds);
-    const fromEdge   = anchorToEdge(normalizedAnchor);
+    const worldPoint = editor.transforms.normalizedAnchorToPage(binding.toId as ShapeId, normalizedAnchor);
+    const fromEdge = editor.transforms.getAnchorPageEdge(binding.toId as ShapeId, normalizedAnchor);
 
     const terminalData = arrow.props[terminal];
 
@@ -598,7 +787,7 @@ export class ArrowBindingUtil extends BindingUtil<ArrowBinding> {
    * Detaches the terminal: sets boundShapeId = null, keeps last known point.
    */
   override onBeforeDeleteToShape(binding: ArrowBinding): void {
-    const editor = this.editor as import('../editor').GlideEditor;
+    const editor = this.editor as import('../editor.js').GlideEditor;
     const arrow = editor.getShape<ArrowShape>(binding.fromId as ShapeId);
     if (!arrow) return;
 
@@ -620,7 +809,7 @@ export class ArrowBindingUtil extends BindingUtil<ArrowBinding> {
 // ArrowPlugin convenience export
 // ─────────────────────────────────────────────────────────────
 
-import type { GlidePlugin } from '../editor';
+import type { GlidePlugin } from '../editor.js';
 
 export const ArrowPlugin: GlidePlugin = {
   id: 'arrow',

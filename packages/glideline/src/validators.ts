@@ -6,9 +6,11 @@
  * Zod is reserved for external/MCP API validation only.
  */
 
-import type { Validator, GlideProps } from './types';
+import type { Validator, GlideProps } from './types.js';
 
 export type { Validator, GlideProps };
+
+type ValidatorValue<V> = V extends Validator<infer T> ? T : never;
 
 export const T = {
   number: {
@@ -58,9 +60,9 @@ export const T = {
     };
   },
 
-  union<T>(...validators: Validator<T>[]): Validator<T> {
+  union<const V extends readonly Validator<any>[]>(...validators: V): Validator<ValidatorValue<V[number]>> {
     return {
-      validate(v: unknown): T {
+      validate(v: unknown): ValidatorValue<V[number]> {
         for (const val of validators) {
           try { return val.validate(v); } catch { /* try next */ }
         }

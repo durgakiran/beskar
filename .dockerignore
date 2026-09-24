@@ -33,5 +33,9 @@ packages/glideboard/*
 packages/glideline/*
 !packages/glideline/dist/
 !packages/glideline/dist/**
+!packages/canvas-text-editor/
+packages/canvas-text-editor/*
+!packages/canvas-text-editor/dist/
+!packages/canvas-text-editor/dist/**
 
 *.log

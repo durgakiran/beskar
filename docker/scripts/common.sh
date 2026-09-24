@@ -117,6 +117,9 @@ load_env_file() {
     require_var ZITADEL_ADMIN_PASSWORD
     require_var ZITADEL_CLIENT_ID
     require_var ZITADEL_CLIENT_SECRET
+    require_var ZITADEL_SESSION_KEY
+    require_var ZITADEL_BEARER_CLIENT_IDS
+    require_var ZITADEL_API_AUDIENCE
     require_var ZITADEL_USER_PAT
 
     if [[ "$TLS_ENABLED" == "true" ]]; then
@@ -253,6 +256,16 @@ load_env_file() {
             echo "Run: npm --prefix packages/glideboard run build" >&2
             exit 1
         fi
+        if [[ ! -f "$ROOT_DIR/packages/glideline/dist/index.js" ]]; then
+            echo "UI_USE_LOCAL_PACKAGES_DIST=true requires built glideline files at $ROOT_DIR/packages/glideline/dist" >&2
+            echo "Run: npm --prefix packages/glideline run build" >&2
+            exit 1
+        fi
+        if [[ ! -f "$ROOT_DIR/packages/canvas-text-editor/dist/index.js" ]]; then
+            echo "UI_USE_LOCAL_PACKAGES_DIST=true requires built canvas text editor files at $ROOT_DIR/packages/canvas-text-editor/dist" >&2
+            echo "Run: npm --prefix packages/canvas-text-editor run build" >&2
+            exit 1
+        fi
     else
         UI_DOCKER_BUILD_TARGET="runner"
     fi
@@ -337,6 +350,12 @@ EOF
     export BESKAR_SERVER_URL
     export CORS_ALLOWED_ORIGINS
     export INSECURE_SKIP_VERIFY
+    export ZITADEL_BEARER_CLIENT_IDS
+    export ZITADEL_API_AUDIENCE
+    BROWSER_SESSION_IDLE_TIMEOUT="${BROWSER_SESSION_IDLE_TIMEOUT:-30m}"
+    BROWSER_SESSION_ABSOLUTE_TIMEOUT="${BROWSER_SESSION_ABSOLUTE_TIMEOUT:-8h}"
+    export BROWSER_SESSION_IDLE_TIMEOUT BROWSER_SESSION_ABSOLUTE_TIMEOUT
+    export ZITADEL_SESSION_KEY
     export UPLOAD_STORAGE_DIR
     export STORAGE_S3_BUCKET
     export STORAGE_S3_ENDPOINT

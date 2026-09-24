@@ -1,7 +1,6 @@
-import { StateNode } from '../state-node';
-import type { PointerDownEvent, PointerMoveEvent, PointerUpEvent, KeyDownEvent } from '../state-node';
-import type { ShapeId, Vec2 } from '../types';
-import { sid } from '../types';
+import { StateNode } from '../state-node.js';
+import type { PointerDownEvent, PointerMoveEvent, PointerUpEvent, KeyDownEvent } from '../state-node.js';
+import type { ShapeId, Vec2 } from '../types.js';
 
 const DRAG_THRESHOLD = 4;
 
@@ -18,10 +17,6 @@ function getToolClass(node: StateNode): GeoShapeToolClass {
   return (node.parent?.constructor ?? node.constructor) as GeoShapeToolClass;
 }
 
-function getPreviewId(node: StateNode): ShapeId {
-  return sid(`__${getToolClass(node).shapeType}-preview__`);
-}
-
 function makeShape(node: StateNode, id: ShapeId, x: number, y: number, w: number, h: number) {
   const shapeType = getToolClass(node).shapeType;
   const util = node.editor.getShapeUtil(shapeType as any) as any;
@@ -30,7 +25,6 @@ function makeShape(node: StateNode, id: ShapeId, x: number, y: number, w: number
     type: shapeType,
     x: Math.min(x, x + w),
     y: Math.min(y, y + h),
-    index: 'a1',
     rotation: 0,
     meta: {},
     props: {
@@ -69,27 +63,68 @@ class Pointing extends StateNode {
   }
 }
 
+/**
+ * The in-progress shape is staged under its real, final shape id via
+ * beginHistoryPreview()/recordHistoryPreview() — the same InteractionManager
+ * preview lifecycle SelectTool uses for drag/resize/rotate — so there's no
+ * delete-then-recreate step between the live preview and the committed shape.
+ * pointerCancel (a browser/OS-initiated abort, e.g. trackpad gesture
+ * disambiguation on a fast short drag) commits the shape exactly as it was
+ * last staged rather than losing it; Escape still discards it.
+ */
 class Drawing extends StateNode {
   static override readonly id = 'drawing';
 
+  private _id!: ShapeId;
   private _origin!: Vec2;
 
   override onEnter(info: { origin: Vec2; current: Vec2 }): void {
     this._origin = info.origin;
+    this._id = this.editor.createShapeId(getToolClass(this).shapeType);
+
     const w = info.current.x - info.origin.x;
     const h = info.current.y - info.origin.y;
 
-    this.editor.history.batch('Geo Shape Preview', () => {
-      this.editor.createShape(makeShape(this, getPreviewId(this), info.origin.x, info.origin.y, w, h));
+    this.editor.beginHistoryPreview();
+    this.editor.batch('Geo Shape Preview', () => {
+      this.editor.createShape(makeShape(this, this._id, info.origin.x, info.origin.y, w, h));
     }, { history: 'ignore' });
   }
 
   override onPointerMove(e: PointerMoveEvent): void {
-    const w = e.point.x - this._origin.x;
-    const h = e.point.y - this._origin.y;
+    this._updateShape(e.point);
+  }
 
-    this.editor.history.batch('Geo Shape Preview Update', () => {
-      this.editor.updateShape(getPreviewId(this), {
+  override onPointerUp(e: PointerUpEvent): void {
+    this._updateShape(e.point);
+    this._commit();
+  }
+
+  override onPointerCancel(): void {
+    // No reliable point on a browser/OS-initiated cancel — commit the shape
+    // exactly as it was last staged rather than losing it.
+    this._commit();
+  }
+
+  override onKeyDown(e: KeyDownEvent): void {
+    if (e.key === 'Escape') {
+      this.editor.cancelHistoryPreview();
+      this.parent!.transition('idle');
+    }
+  }
+
+  override onExit(): void {
+    // Safety net: if the tool is switched away mid-drag without a
+    // pointerUp/pointerCancel/Escape, make sure no staged preview lingers.
+    this.editor.cancelHistoryPreview();
+  }
+
+  private _updateShape(point: Vec2): void {
+    const w = point.x - this._origin.x;
+    const h = point.y - this._origin.y;
+
+    this.editor.batch('Geo Shape Preview Update', () => {
+      this.editor.updateShape(this._id, {
         x: Math.min(this._origin.x, this._origin.x + w),
         y: Math.min(this._origin.y, this._origin.y + h),
         props: {
@@ -100,32 +135,14 @@ class Drawing extends StateNode {
     }, { history: 'ignore' });
   }
 
-  override onPointerUp(e: PointerUpEvent): void {
-    const w = e.point.x - this._origin.x;
-    const h = e.point.y - this._origin.y;
-    const shapeType = getToolClass(this).shapeType;
-    const finalId = sid(`${shapeType}-${Date.now()}`);
-
-    this.editor.history.batch('Geo Shape Preview Cleanup', () => {
-      this.editor.deleteShapes([getPreviewId(this)]);
-    }, { history: 'ignore' });
-
-    this.editor.history.batch(`Create ${shapeType}`, () => {
-      this.editor.createShape(makeShape(this, finalId, this._origin.x, this._origin.y, w, h));
-    });
+  private _commit(): void {
+    // Promote the staged record into the real store as a single atomic,
+    // history-recorded transaction under its original id.
+    this.editor.recordHistoryPreview(`Create ${getToolClass(this).shapeType}`, new Map([[this._id, null]]));
 
     this.editor.setCurrentTool('select');
-    this.editor.setSelectedShapeIds([finalId]);
+    this.editor.setSelectedShapeIds([this._id]);
     this.parent!.transition('idle');
-  }
-
-  override onKeyDown(e: KeyDownEvent): void {
-    if (e.key === 'Escape') {
-      this.editor.history.batch('Geo Shape Preview Cleanup', () => {
-        this.editor.deleteShapes([getPreviewId(this)]);
-      }, { history: 'ignore' });
-      this.parent!.transition('idle');
-    }
   }
 }
 
@@ -152,4 +169,39 @@ export class HexagonTool extends BaseGeoShapeTool {
 export class StarTool extends BaseGeoShapeTool {
   static override readonly id = 'star';
   static override readonly shapeType = 'star';
+}
+
+export class RoundedRectTool extends BaseGeoShapeTool {
+  static override readonly id = 'rounded-rect';
+  static override readonly shapeType = 'rounded-rect';
+}
+
+export class ParallelogramTool extends BaseGeoShapeTool {
+  static override readonly id = 'parallelogram';
+  static override readonly shapeType = 'parallelogram';
+}
+
+export class ChevronTool extends BaseGeoShapeTool {
+  static override readonly id = 'chevron';
+  static override readonly shapeType = 'chevron';
+}
+
+export class DocumentTool extends BaseGeoShapeTool {
+  static override readonly id = 'document';
+  static override readonly shapeType = 'document';
+}
+
+export class CylinderTool extends BaseGeoShapeTool {
+  static override readonly id = 'cylinder';
+  static override readonly shapeType = 'cylinder';
+}
+
+export class NoteTool extends BaseGeoShapeTool {
+  static override readonly id = 'note';
+  static override readonly shapeType = 'note';
+}
+
+export class CalloutTool extends BaseGeoShapeTool {
+  static override readonly id = 'callout';
+  static override readonly shapeType = 'callout';
 }

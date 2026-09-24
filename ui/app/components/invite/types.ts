@@ -1,5 +1,5 @@
 export type InviteDecision = "accept" | "reject";
-export type InviteStatus = "accepted" | "rejected" | "removed";
+export type InviteStatus = "accepted" | "rejected" | "removed" | "expired";
 
 export interface InviteDetails {
     entity: string;

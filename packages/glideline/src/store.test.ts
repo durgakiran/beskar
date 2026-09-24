@@ -10,7 +10,10 @@ import { GlideSchema } from './schema';
 import { sid, bid } from './types';
 
 function makeStore() {
-  return new GlideStore(new GlideSchema());
+  const schema = new GlideSchema();
+  schema.registerShapeUtil({ type: 'box' });
+  schema.registerBindingUtil({ type: 'arrow-binding' });
+  return new GlideStore(schema);
 }
 
 function makeShape(id: string, overrides: Record<string, unknown> = {}) {
@@ -139,7 +142,11 @@ describe('T1.1-04: secondary index (bindingsByFrom) stays consistent', () => {
     const from = sid('shape:arrow1');
     const to   = sid('shape:box1');
 
-    store.put([makeBinding('binding:1', from, to)]);
+    store.put([
+      makeShape(from, { type: 'box' }),
+      makeShape(to, { type: 'box' }),
+      makeBinding('binding:1', from, to),
+    ]);
 
     const bindings = store.getBindingsFromShape(from);
     expect(bindings).toHaveLength(1);
@@ -151,7 +158,11 @@ describe('T1.1-04: secondary index (bindingsByFrom) stays consistent', () => {
     const from = sid('shape:arrow1');
     const to   = sid('shape:box1');
 
-    store.put([makeBinding('binding:1', from, to)]);
+    store.put([
+      makeShape(from, { type: 'box' }),
+      makeShape(to, { type: 'box' }),
+      makeBinding('binding:1', from, to),
+    ]);
 
     const bindings = store.getBindingsToShape(to);
     expect(bindings).toHaveLength(1);
@@ -184,10 +195,10 @@ describe('T1.1-05: signal isolation — updating shape B does not fire shape A s
 });
 
 // ─────────────────────────────────────────────────────────────
-// T1.1-06 remove() deletes record and signal
+// T1.1-06 remove() publishes a tombstone on the stable signal
 // ─────────────────────────────────────────────────────────────
 
-describe('T1.1-06: remove() deletes record and does not fire subscriber', () => {
+describe('T1.1-06: remove() deletes record and preserves its signal', () => {
   it('get(id) returns undefined after remove()', () => {
     const store = makeStore();
     store.put([makeShape('shape:s1')]);
@@ -202,11 +213,13 @@ describe('T1.1-06: remove() deletes record and does not fire subscriber', () => 
     expect(store.has('shape:s1')).toBe(false);
   });
 
-  it('signal is removed from the store (getSignal returns undefined)', () => {
+  it('the original signal remains and publishes null', () => {
     const store = makeStore();
     store.put([makeShape('shape:s1')]);
+    const original = store.getSignal('shape:s1');
     store.remove(['shape:s1']);
-    expect(store.getSignal('shape:s1')).toBeUndefined();
+    expect(store.getSignal('shape:s1')).toBe(original);
+    expect(original?.peek()).toBeNull();
   });
 });
 
@@ -232,10 +245,14 @@ describe('Spatial index', () => {
 
   it('bindings are NOT added to the spatial index', () => {
     const store = makeStore();
-    store.put([makeBinding('binding:1', sid('shape:a'), sid('shape:b'))]);
+    store.put([
+      makeShape('shape:a'),
+      makeShape('shape:b'),
+      makeBinding('binding:1', sid('shape:a'), sid('shape:b')),
+    ]);
     // no x/y/w/h on binding → not in RBush
     const hits = store.getShapesAtPoint(0, 0);
-    expect(hits).toHaveLength(0);
+    expect(hits.map(record => record['id'])).not.toContain('binding:1');
   });
 });
 

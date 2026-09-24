@@ -3,18 +3,21 @@
  *
  * Drawing tool. FSM: Idle → Pointing → Drawing
  *
- * Preview shape created with { history: 'ignore' } during drag.
- * Final shape committed as a single undo entry on pointerUp.
+ * The in-progress box is staged under its real, final shape id via
+ * beginHistoryPreview()/recordHistoryPreview() — the same InteractionManager
+ * preview lifecycle SelectTool uses for drag/resize/rotate — so there's no
+ * delete-then-recreate step between the live preview and the committed shape.
+ * pointerCancel (a browser/OS-initiated abort, e.g. trackpad gesture
+ * disambiguation on a fast short drag) commits the box exactly as it was
+ * last staged rather than losing it; Escape still discards it.
  * Drag threshold: 4px.
  */
 
-import { StateNode } from '../state-node';
-import type { PointerDownEvent, PointerMoveEvent, PointerUpEvent, KeyDownEvent } from '../state-node';
-import type { ShapeId, Vec2 } from '../types';
-import { sid } from '../types';
+import { StateNode } from '../state-node.js';
+import type { PointerDownEvent, PointerMoveEvent, PointerUpEvent, KeyDownEvent } from '../state-node.js';
+import type { ShapeId, Vec2 } from '../types.js';
 
 const DRAG_THRESHOLD = 4;
-const PREVIEW_ID = sid('__box-preview__');
 
 function dist(a: Vec2, b: Vec2): number {
   return Math.sqrt((b.x - a.x) ** 2 + (b.y - a.y) ** 2);
@@ -26,7 +29,6 @@ function makeBoxShape(id: ShapeId, x: number, y: number, w: number, h: number) {
     type: 'box',
     x: Math.min(x, x + w),
     y: Math.min(y, y + h),
-    index: 'a1',
     rotation: 0,
     meta: {},
     props: {
@@ -80,28 +82,59 @@ class Pointing extends StateNode {
 class Drawing extends StateNode {
   static override readonly id = 'drawing';
 
+  private _id!: ShapeId;
   private _origin!: Vec2;
 
   override onEnter(info: { origin: Vec2; current: Vec2 }): void {
     this._origin = info.origin;
+    this._id = this.editor.createShapeId('box');
 
-    // Create preview shape (not recorded in history)
     const { x, y } = info.origin;
     const w = info.current.x - x;
     const h = info.current.y - y;
-    this.editor.history.batch('Preview', () => {
-      this.editor.createShape(makeBoxShape(PREVIEW_ID, x, y, w, h));
+
+    this.editor.beginHistoryPreview();
+    this.editor.batch('Box Preview', () => {
+      this.editor.createShape(makeBoxShape(this._id, x, y, w, h));
     }, { history: 'ignore' });
   }
 
   override onPointerMove(e: PointerMoveEvent): void {
+    this._updateBox(e.point);
+  }
+
+  override onPointerUp(e: PointerUpEvent): void {
+    this._updateBox(e.point);
+    this._commit();
+  }
+
+  override onPointerCancel(): void {
+    // No reliable point on a browser/OS-initiated cancel — commit the box
+    // exactly as it was last staged rather than losing it.
+    this._commit();
+  }
+
+  override onKeyDown(e: KeyDownEvent): void {
+    if (e.key === 'Escape') {
+      this.editor.cancelHistoryPreview();
+      this.parent!.transition('idle');
+    }
+  }
+
+  override onExit(): void {
+    // Safety net: if the tool is switched away mid-drag without a
+    // pointerUp/pointerCancel/Escape, make sure no staged preview lingers.
+    this.editor.cancelHistoryPreview();
+  }
+
+  private _updateBox(point: Vec2): void {
     const x = this._origin.x;
     const y = this._origin.y;
-    const w = e.point.x - x;
-    const h = e.point.y - y;
+    const w = point.x - x;
+    const h = point.y - y;
 
-    this.editor.history.batch('Preview Update', () => {
-      this.editor.updateShape(PREVIEW_ID, {
+    this.editor.batch('Box Preview Update', () => {
+      this.editor.updateShape(this._id, {
         x: Math.min(x, x + w),
         y: Math.min(y, y + h),
         props: {
@@ -112,37 +145,14 @@ class Drawing extends StateNode {
     }, { history: 'ignore' });
   }
 
-  override onPointerUp(e: PointerUpEvent): void {
-    const x = this._origin.x;
-    const y = this._origin.y;
-    const w = e.point.x - x;
-    const h = e.point.y - y;
-
-    // Remove preview without history
-    this.editor.history.batch('Preview Cleanup', () => {
-      this.editor.deleteShapes([PREVIEW_ID]);
-    }, { history: 'ignore' });
-
-    // Commit final shape as a single undo entry
-    const finalId = sid(`box-${Date.now()}`);
-    this.editor.history.batch('Create Box', () => {
-      this.editor.createShape(makeBoxShape(finalId, x, y, w, h));
-    });
+  private _commit(): void {
+    // Promote the staged record into the real store as a single atomic,
+    // history-recorded transaction under its original id.
+    this.editor.recordHistoryPreview('Create Box', new Map([[this._id, null]]));
 
     // Switch to select and highlight the newly created shape
     this.editor.setCurrentTool('select');
-    this.editor.setSelectedShapeIds([finalId]);
-  }
-
-  override onKeyDown(e: KeyDownEvent): void {
-    if (e.key === 'Escape') {
-      // Delete preview without history
-      this.editor.history.batch('Preview Cleanup', () => {
-        this.editor.deleteShapes([PREVIEW_ID]);
-      }, { history: 'ignore' });
-
-      this.parent!.transition('idle');
-    }
+    this.editor.setSelectedShapeIds([this._id]);
   }
 }
 

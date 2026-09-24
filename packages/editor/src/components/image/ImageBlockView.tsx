@@ -2,15 +2,23 @@
  * ImageBlockView - React component for rendering image blocks
  */
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useLayoutEffect, useRef, useCallback } from 'react';
 import { NodeViewWrapper } from '@tiptap/react';
 import type { NodeViewProps } from '@tiptap/react';
 import { ImageFloatingMenu } from './ImageFloatingMenu';
 import { useFloating, flip, shift, offset, autoUpdate } from '@floating-ui/react';
+import { getImagePasteStorage } from '../../extensions/image-paste-drop';
 
 export function ImageBlockView({ node, updateAttributes, selected, editor, getPos }: NodeViewProps) {
-  const { src, alt, caption, align, width, height, isUploading } = node.attrs;
+  let { src, alt, caption, align, width, height, isUploading } = node.attrs;
+  if (typeof src === 'string') {
+    const imageHandler = getImagePasteStorage(editor)?.imageHandler;
+    if (imageHandler?.getImageUrl) {
+      src = imageHandler.getImageUrl(src);
+    }
+  }
   const [isResizing, setIsResizing] = useState(false);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isToolbarHovered, setIsToolbarHovered] = useState(false);
   
   const { refs, floatingStyles } = useFloating({
@@ -19,9 +27,24 @@ export function ImageBlockView({ node, updateAttributes, selected, editor, getPo
     whileElementsMounted: autoUpdate,
   });
 
-  const showToolbar = (selected || isToolbarHovered) && !isResizing && editor.isEditable;
+  const showToolbar = (selected || isToolbarHovered || isMenuOpen) && !isResizing;
 
   const imageRef = useRef<HTMLImageElement>(null);
+  const captionRef = useRef<HTMLTextAreaElement>(null);
+  useLayoutEffect(() => {
+    const textarea = captionRef.current;
+    if (!textarea) return;
+    const resize = () => {
+      textarea.style.height = '0px';
+      const border = textarea.offsetHeight - textarea.clientHeight;
+      textarea.style.height = `${textarea.scrollHeight + border}px`;
+    };
+    resize();
+    const observer = new ResizeObserver(resize);
+    // Observe the image width, not the textarea height that this callback changes.
+    if (textarea.parentElement) observer.observe(textarea.parentElement);
+    return () => observer.disconnect();
+  }, [caption, width, selected, editor.isEditable]);
   // containerRef is the element whose width we update live during drag.
   // Updating the container (not the <img>) means:
   //   • img (width:100%) follows automatically
@@ -30,13 +53,21 @@ export function ImageBlockView({ node, updateAttributes, selected, editor, getPo
   const containerRef = useRef<HTMLDivElement>(null);
 
   const getMaxWidth = useCallback(() => {
-    const el = containerRef.current ?? imageRef.current;
-    const scope = el?.closest('.editor-column') ?? el?.closest('.ProseMirror');
-    return (scope as HTMLElement | null)?.clientWidth ?? 800;
+    // The block wrapper already reflects cell, callout, list and column constraints.
+    return containerRef.current?.parentElement?.clientWidth || 800;
   }, []);
+  const resizeSession = useRef<{
+    pointerId: number; startX: number; width: number; ratio: number;
+    direction: 'left' | 'right'; factor: number; latest: number;
+  } | null>(null);
+  const clampWidth = (value: number) => Math.min(getMaxWidth(), Math.max(50, value));
+  const commitWidth = (value: number, ratio: number) => {
+    const nextWidth = Math.round(clampWidth(value));
+    updateAttributes({ width: nextWidth, height: Math.max(1, nextWidth / ratio) });
+  };
 
   const handleImageLoad = () => {
-    if (imageRef.current && (!width || !height)) {
+    if (editor.isEditable && imageRef.current && (!width || !height)) {
       const img = imageRef.current;
       const aspectRatio = img.naturalWidth / img.naturalHeight;
       const maxW = getMaxWidth();
@@ -48,57 +79,60 @@ export function ImageBlockView({ node, updateAttributes, selected, editor, getPo
     }
   };
 
-  const handleResizeStart = (e: React.MouseEvent, direction: 'left' | 'right') => {
-    e.preventDefault();
-    e.stopPropagation();
-
-    if (!containerRef.current) return;
-
-    const startX = e.clientX;
-    const initWidth = width || containerRef.current.offsetWidth;
-    const initHeight = height || (imageRef.current?.offsetHeight ?? initWidth);
-    const aspectRatio = initWidth / initHeight;
-
-    setIsResizing(true);
-
-    let latestWidth = initWidth;
-    let latestHeight = initHeight;
-
-    const onMove = (ev: MouseEvent) => {
-      const delta = ev.clientX - startX;
-      const maxW = getMaxWidth();
-      // Left handle dragged right → shrink; right handle dragged right → grow
-      const raw = direction === 'left' ? initWidth - delta : initWidth + delta;
-      const newW = Math.max(100, Math.min(raw, maxW));
-      const newH = newW / aspectRatio;
-
-      latestWidth = Math.round(newW);
-      latestHeight = Math.round(newH);
-
-      // Drive the container width live — <img width:100%> and handles follow
-      if (containerRef.current) {
-        containerRef.current.style.width = `${latestWidth}px`;
-      }
-    };
-
-    const onUp = () => {
-      setIsResizing(false);
-      // Remove inline override before React re-renders with committed attr value
-      if (containerRef.current) {
-        containerRef.current.style.width = '';
-      }
-      if (latestWidth && latestHeight) {
-        updateAttributes({ width: latestWidth, height: latestHeight });
-      }
-      document.removeEventListener('mousemove', onMove);
-      document.removeEventListener('mouseup', onUp);
-    };
-
-    document.addEventListener('mousemove', onMove);
-    document.addEventListener('mouseup', onUp);
+  const getAspectRatio = (rect: DOMRect) => {
+    const image = imageRef.current;
+    return image?.naturalWidth && image.naturalHeight
+      ? image.naturalWidth / image.naturalHeight
+      : rect.width / rect.height;
   };
 
-  const handleCaptionChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleResizeStart = (e: React.PointerEvent<HTMLButtonElement>, direction: 'left' | 'right') => {
+    if (!editor.isEditable || e.button !== 0 || resizeSession.current) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const rect = imageRef.current?.getBoundingClientRect();
+    if (!rect?.width || !rect.height) return;
+    e.currentTarget.focus();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    resizeSession.current = {
+      pointerId: e.pointerId, startX: e.clientX, width: rect.width,
+      ratio: getAspectRatio(rect), direction,
+      factor: !align || align === 'center' ? 2 : 1, latest: rect.width,
+    };
+    setIsResizing(true);
+  };
+  const handleResizeMove = (e: React.PointerEvent<HTMLButtonElement>) => {
+    const session = resizeSession.current;
+    if (!session || session.pointerId !== e.pointerId) return;
+    const delta = (e.clientX - session.startX) * (session.direction === 'left' ? -1 : 1);
+    session.latest = clampWidth(session.width + delta * session.factor);
+    if (containerRef.current) containerRef.current.style.width = `${session.latest}px`;
+  };
+  const finishResize = (commit: boolean) => {
+    const session = resizeSession.current;
+    if (!session) return;
+    resizeSession.current = null;
+    if (containerRef.current) containerRef.current.style.width = width ? `${width}px` : 'auto';
+    setIsResizing(false);
+    if (commit && editor.isEditable) commitWidth(session.latest, session.ratio);
+  };
+  const handleResizeKey = (e: React.KeyboardEvent<HTMLButtonElement>, direction: 'left' | 'right') => {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation();
+      finishResize(false);
+      return;
+    }
+    if (!editor.isEditable || !['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const rect = imageRef.current?.getBoundingClientRect();
+    if (!rect?.width || !rect.height) return;
+    const delta = (e.key === 'ArrowRight' ? 1 : -1) * (direction === 'left' ? -1 : 1) * (e.shiftKey ? 25 : 10);
+    commitWidth(e.key === 'Home' ? 50 : e.key === 'End' ? getMaxWidth() : rect.width + delta, getAspectRatio(rect));
+  };
+
+  const handleCaptionChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     updateAttributes({ caption: e.target.value });
   };
 
@@ -168,14 +202,24 @@ export function ImageBlockView({ node, updateAttributes, selected, editor, getPo
 
           {!isUploading && editor.isEditable && selected && (
             <>
-              <div
-                className="image-resize-handle image-resize-handle--left"
-                onMouseDown={(e) => handleResizeStart(e, 'left')}
-              />
-              <div
-                className="image-resize-handle image-resize-handle--right"
-                onMouseDown={(e) => handleResizeStart(e, 'right')}
-              />
+              {(['left', 'right'] as const).filter(direction =>
+                align === 'left' ? direction === 'right' : align === 'right' ? direction === 'left' : true
+              ).map(direction => (
+                <button
+                  key={direction}
+                  type="button"
+                  className={`image-resize-handle image-resize-handle--${direction}`}
+                  aria-label={`Resize image from ${direction}`}
+                  title="Resize image. Arrow keys adjust width; Shift makes larger steps; Home sets minimum; End fits container."
+                  onPointerDown={e => handleResizeStart(e, direction)}
+                  onPointerMove={handleResizeMove}
+                  onPointerUp={() => finishResize(true)}
+                  onPointerCancel={() => finishResize(false)}
+                  onLostPointerCapture={() => finishResize(false)}
+                  onKeyDown={e => handleResizeKey(e, direction)}
+                  onClick={e => e.stopPropagation()}
+                />
+              ))}
             </>
           )}
         </div>
@@ -183,8 +227,10 @@ export function ImageBlockView({ node, updateAttributes, selected, editor, getPo
         {/* Caption — editable input, shown when selected or already has content */}
         {(caption || selected) && editor.isEditable && (
           <div className="image-caption-wrapper" contentEditable={false}>
-            <input
-              type="text"
+            <textarea
+              ref={captionRef}
+              rows={1}
+              aria-label="Image caption"
               className={`image-caption-input${!caption ? ' is-empty' : ''}`}
               value={caption || ''}
               placeholder="Add a caption…"
@@ -214,6 +260,8 @@ export function ImageBlockView({ node, updateAttributes, selected, editor, getPo
             getPos={getPos}
             currentAlign={align || 'center'}
             updateAttributes={updateAttributes}
+            src={src}
+            onMenuOpenChange={setIsMenuOpen}
           />
         </div>
       )}

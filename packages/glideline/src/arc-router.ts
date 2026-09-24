@@ -1,4 +1,11 @@
-import type { Vec2, Box2d } from './types';
+import type { Vec2 } from './types.js';
+
+interface BezierClipBox {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
 
 /**
  * Compute the intersection parameters (t) of a quadratic Bezier curve with an axis-aligned box boundary.
@@ -7,7 +14,7 @@ export function intersectBezierWithBox(
   p0: Vec2,
   p1: Vec2,
   p2: Vec2,
-  box: Box2d
+  box: BezierClipBox
 ): number[] {
   const tValues: number[] = [];
 
@@ -175,6 +182,8 @@ export function parseArcControlPoint(path: string): Vec2 | undefined {
   // Match Q command
   const match = path.match(/Q\s+([\d.\-]+)\s+([\d.\-]+)/);
   if (!match) return undefined;
-  return { x: parseFloat(match[1]), y: parseFloat(match[2]) };
+  const x = match[1];
+  const y = match[2];
+  if (x === undefined || y === undefined) return undefined;
+  return { x: parseFloat(x), y: parseFloat(y) };
 }
-

@@ -5,7 +5,7 @@ function pad(value: number): string {
 }
 
 export function toLocalDateValue(date: Date): string {
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+  return `${String(date.getFullYear()).padStart(4, '0')}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 }
 
 export function getTodayDateValue(): string {
@@ -18,7 +18,9 @@ export function addDaysToDateValue(value: string, days: number): string {
   }
 
   const [year, month, day] = value.split('-').map(Number);
-  const next = new Date(year, month - 1, day);
+  const next = new Date(0);
+  next.setHours(0, 0, 0, 0);
+  next.setFullYear(year, month - 1, day);
   next.setDate(next.getDate() + days);
   return toLocalDateValue(next);
 }
@@ -29,9 +31,11 @@ export function isValidDateValue(value: string | null | undefined): value is str
   }
 
   const [year, month, day] = value.split('-').map(Number);
-  const utc = new Date(Date.UTC(year, month - 1, day));
+  const utc = new Date(0);
+  utc.setUTCFullYear(year, month - 1, day);
 
   return (
+    year >= 1 &&
     utc.getUTCFullYear() === year &&
     utc.getUTCMonth() === month - 1 &&
     utc.getUTCDate() === day
@@ -44,21 +48,30 @@ export function parseDateValue(value: string | null | undefined): Date | null {
   }
 
   const [year, month, day] = value.split('-').map(Number);
-  return new Date(year, month - 1, day);
+  const date = new Date(0);
+  date.setHours(0, 0, 0, 0);
+  date.setFullYear(year, month - 1, day);
+  return date;
 }
 
 export function getMonthStart(date: Date): Date {
-  return new Date(date.getFullYear(), date.getMonth(), 1);
+  const start = new Date(date);
+  start.setDate(1);
+  return start;
 }
 
 export function addMonths(date: Date, months: number): Date {
-  return new Date(date.getFullYear(), date.getMonth() + months, 1);
+  const next = getMonthStart(date);
+  next.setMonth(next.getMonth() + months);
+  return next;
 }
 
 export function getCalendarMonthDays(month: Date): Array<Date | null> {
   const start = getMonthStart(month);
   const startWeekday = start.getDay();
-  const daysInMonth = new Date(start.getFullYear(), start.getMonth() + 1, 0).getDate();
+  const end = addMonths(start, 1);
+  end.setDate(0);
+  const daysInMonth = end.getDate();
   const cells: Array<Date | null> = [];
 
   for (let i = 0; i < startWeekday; i += 1) {
@@ -66,7 +79,9 @@ export function getCalendarMonthDays(month: Date): Array<Date | null> {
   }
 
   for (let day = 1; day <= daysInMonth; day += 1) {
-    cells.push(new Date(start.getFullYear(), start.getMonth(), day));
+    const cell = new Date(start);
+    cell.setDate(day);
+    cells.push(cell);
   }
 
   while (cells.length % 7 !== 0) {
@@ -97,11 +112,25 @@ export function formatDateLabel(value: string | null | undefined): string {
   }
 
   const [year, month, day] = value.split('-').map(Number);
-  const utc = new Date(Date.UTC(year, month - 1, day));
+  const utc = new Date(0);
+  utc.setUTCFullYear(year, month - 1, day);
   return new Intl.DateTimeFormat(undefined, {
     month: 'short',
     day: 'numeric',
     year: 'numeric',
     timeZone: 'UTC',
   }).format(utc);
+}
+
+/** Relative labels are presentation only; persisted/exported dates stay absolute. */
+export function formatRelativeDateLabel(
+  value: string | null | undefined,
+  today: string = getTodayDateValue()
+): string {
+  if (isValidDateValue(value) && isValidDateValue(today)) {
+    if (value === today) return 'Today';
+    if (value === addDaysToDateValue(today, 1)) return 'Tomorrow';
+    if (value === addDaysToDateValue(today, -1)) return 'Yesterday';
+  }
+  return formatDateLabel(value);
 }

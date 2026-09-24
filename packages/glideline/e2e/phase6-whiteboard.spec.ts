@@ -42,7 +42,7 @@ test.describe('Phase 6 whiteboard browser coverage', () => {
       localStorage.clear();
     });
     await page.goto('/#whiteboard');
-    await page.waitForSelector('#wb-canvas', { timeout: 10_000 });
+    await page.waitForSelector('[data-glideboard-role="canvas"]', { timeout: 10_000 });
     await page.evaluate(() => {
       window.__GLIDELINE_WHITEBOARD__?.reset();
     });
@@ -265,7 +265,7 @@ test.describe('Phase 6 whiteboard browser coverage', () => {
   });
 
   test('browser bridge exposes AI context, screenshot, MCP manifest, and history-ignore behavior', async ({ page }) => {
-    await page.focus('#whiteboard-app');
+    await page.focus('[data-glideboard-role="app"]');
     const data = await page.evaluate(async () => {
       const api = window.__GLIDELINE_WHITEBOARD__!;
       const shape = api.callTool('create_shape', {

@@ -7,7 +7,7 @@ import (
 	"github.com/durgakiran/beskar/core"
 )
 
-func getPageBreadCrumbs(pageId int64) ([]Crumb, error) {
+func getPageBreadCrumbs(pageId int64, editablePageIDs []string) ([]Crumb, error) {
 	pool := core.GetPool()
 	ctx := context.Background()
 	conn, err := pool.Acquire(ctx)
@@ -16,7 +16,7 @@ func getPageBreadCrumbs(pageId int64) ([]Crumb, error) {
 		return nil, errors.New(core.ErrorCode_name[core.ErrorCode_ERROR_CODE_CONNECTION_ISSUE])
 	}
 	defer conn.Release()
-	rows, err := conn.Query(ctx, GET_PAGE_BREAD_CRUMBS, pageId)
+	rows, err := conn.Query(ctx, GET_PAGE_BREAD_CRUMBS, pageId, editablePageIDs)
 	if err != nil {
 		core.Logger.Error("Unable to get rows: " + err.Error())
 		return nil, errors.New(core.ErrorCode_name[core.ErrorCode_ERROR_WHILE_FETCHING_ROWS])
@@ -36,5 +36,5 @@ func getPageBreadCrumbs(pageId int64) ([]Crumb, error) {
 }
 
 func GetPageBreadCrumbs(pageId int64) ([]Crumb, error) {
-	return getPageBreadCrumbs(pageId)
+	return getPageBreadCrumbs(pageId, nil)
 }

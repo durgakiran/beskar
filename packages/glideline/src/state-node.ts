@@ -7,25 +7,32 @@
  * unhandled events bubble up to the parent.
  */
 
-import type { GlideEditor } from './editor';
-import type { Vec2, ShapeId } from './types';
+import type { GlideEditor } from './editor.js';
+import type { Vec2, ShapeId } from './types.js';
 
 // ─────────────────────────────────────────────────────────────
 // Event union
 // ─────────────────────────────────────────────────────────────
 
 export type GlideEvent =
-  | { type: 'pointerDown'; point: Vec2; screenPoint?: Vec2; shiftKey: boolean; target: 'shape' | 'canvas' | 'handle'; shapeId?: ShapeId; handleId?: string }
-  | { type: 'pointerMove'; point: Vec2; screenPoint?: Vec2 }
-  | { type: 'pointerUp';   point: Vec2; screenPoint?: Vec2 }
+  | { type: 'pointerDown'; point: Vec2; screenPoint?: Vec2; shiftKey: boolean; pressure?: number; pointerType?: string; target: 'shape' | 'canvas' | 'handle'; shapeId?: ShapeId; handleId?: string }
+  | { type: 'pointerMove'; point: Vec2; screenPoint?: Vec2; shiftKey?: boolean; altKey?: boolean; pressure?: number; pointerType?: string }
+  | { type: 'pointerUp';   point: Vec2; screenPoint?: Vec2; shiftKey?: boolean; altKey?: boolean; pressure?: number; pointerType?: string }
+  // Browser/OS-initiated abort of an in-progress pointer sequence (e.g. a
+  // trackpad disambiguating a fast short drag as a scroll gesture instead of
+  // firing pointerUp). No point: the browser doesn't guarantee one is
+  // meaningful here. Distinct from a user-pressed Escape, which stays a hard
+  // abort — a tool may choose to salvage in-progress work on this instead.
+  | { type: 'pointerCancel' }
   | { type: 'keyDown';     key: string }
   | { type: 'doubleClick'; point: Vec2; shapeId?: ShapeId };
 
-export type PointerDownEvent  = Extract<GlideEvent, { type: 'pointerDown' }>;
-export type PointerMoveEvent  = Extract<GlideEvent, { type: 'pointerMove' }>;
-export type PointerUpEvent    = Extract<GlideEvent, { type: 'pointerUp' }>;
-export type KeyDownEvent      = Extract<GlideEvent, { type: 'keyDown' }>;
-export type DoubleClickEvent  = Extract<GlideEvent, { type: 'doubleClick' }>;
+export type PointerDownEvent   = Extract<GlideEvent, { type: 'pointerDown' }>;
+export type PointerMoveEvent   = Extract<GlideEvent, { type: 'pointerMove' }>;
+export type PointerUpEvent     = Extract<GlideEvent, { type: 'pointerUp' }>;
+export type PointerCancelEvent = Extract<GlideEvent, { type: 'pointerCancel' }>;
+export type KeyDownEvent       = Extract<GlideEvent, { type: 'keyDown' }>;
+export type DoubleClickEvent   = Extract<GlideEvent, { type: 'doubleClick' }>;
 
 // ─────────────────────────────────────────────────────────────
 // StateNode
@@ -45,7 +52,7 @@ export abstract class StateNode {
   editor!: GlideEditor;
 
   /** Parent node (undefined for root tools). */
-  parent?: StateNode;
+  parent: StateNode | undefined;
 
   /** Active child state. Points to `this` for leaf nodes. */
   current!: StateNode;
@@ -114,6 +121,7 @@ export abstract class StateNode {
   onPointerDown?(_e: PointerDownEvent): void;
   onPointerMove?(_e: PointerMoveEvent): void;
   onPointerUp?(_e: PointerUpEvent): void;
+  onPointerCancel?(_e: PointerCancelEvent): void;
   onKeyDown?(_e: KeyDownEvent): void;
   onDoubleClick?(_e: DoubleClickEvent): void;
 
@@ -143,6 +151,9 @@ export abstract class StateNode {
         break;
       case 'pointerUp':
         if (this.onPointerUp) { this.onPointerUp(event); return true; }
+        break;
+      case 'pointerCancel':
+        if (this.onPointerCancel) { this.onPointerCancel(event); return true; }
         break;
       case 'keyDown':
         if (this.onKeyDown) { this.onKeyDown(event); return true; }
