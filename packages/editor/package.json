@@ -1,6 +1,6 @@
 {
   "name": "@durgakiran/editor",
-  "version": "0.1.10",
+  "version": "0.1.10.alpha.0",
   "description": "A rich text editor built on TipTap with Radix UI",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
@@ -30,12 +30,14 @@
     "dist"
   ],
   "scripts": {
+    "clean": "rm -rf dist",
     "dev": "tsup --watch",
-    "build": "tsup",
+    "build": "npm run clean && tsup",
     "type-check": "tsc --noEmit",
     "test": "node tests/run.mjs",
     "build:pdf": "tsup --config tsup.pdf.config.ts",
-    "test:pdf": "npm run build:pdf && node --test tests/pdf.test.mjs"
+    "test:pdf": "npm run build:pdf && node --test tests/pdf.test.mjs",
+    "publish:github": "npm run build && npm publish"
   },
   "engines": {
     "node": ">=22.0.0",
