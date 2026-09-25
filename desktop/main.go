@@ -15,6 +15,7 @@ import (
 
 	"beskar/desktop/auth"
 	"beskar/desktop/config"
+	"beskar/desktop/pdfexport"
 	"beskar/desktop/platform"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
@@ -105,6 +106,7 @@ func main() {
 			application.NewService(configService),
 			application.NewService(platform.NewNotificationService()),
 			application.NewService(&APIProxyService{}),
+			application.NewService(&pdfexport.Service{}),
 		},
 		Windows: application.WindowsOptions{
 			AdditionalBrowserArgs: []string{"--ignore-certificate-errors", "--disable-web-security"},

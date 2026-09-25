@@ -1,8 +1,6 @@
 module github.com/durgakiran/beskar
 
-go 1.22.7
-
-toolchain go1.23.0
+go 1.25.0
 
 require (
 	buf.build/gen/go/permifyco/permify/protocolbuffers/go v1.34.2-20240722150440-5ee7aa4c5fb5.2

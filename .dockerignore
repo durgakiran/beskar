@@ -39,3 +39,13 @@ packages/canvas-text-editor/*
 !packages/canvas-text-editor/dist/**
 
 *.log
+
+# Build the PDF entry from source without including other package sources.
+!packages/editor/package.json
+!packages/editor/package-lock.json
+!packages/editor/tsconfig.json
+!packages/editor/tsup.pdf.config.ts
+!packages/editor/src/
+packages/editor/src/*
+!packages/editor/src/pdf/
+!packages/editor/src/pdf/**

@@ -1,3 +1,10 @@
+FROM node:22-alpine AS editor-pdf
+WORKDIR /packages/editor
+COPY packages/editor/package.json packages/editor/package-lock.json ./
+RUN npm ci --ignore-scripts
+COPY packages/editor/src ./src
+COPY packages/editor/tsconfig.json packages/editor/tsup.pdf.config.ts ./
+
 FROM node:22-alpine AS deps
 
 WORKDIR /app
@@ -23,7 +30,7 @@ COPY packages/glideline/dist /dist
 FROM scratch AS local-canvas-text-editor-dist
 COPY packages/canvas-text-editor/dist /dist
 
-FROM golang:1.23.3-alpine AS wasm-builder
+FROM golang:1.25-alpine AS wasm-builder
 
 WORKDIR /src/jbi
 ENV GODEBUG=netdns=go
@@ -60,6 +67,7 @@ ENV VITE_PAGE_EVENTS_TRANSPORT_LOG=$NEXT_PUBLIC_PAGE_EVENTS_TRANSPORT_LOG
 ENV VITE_EDITOR_PRESENCE=$NEXT_PUBLIC_EDITOR_PRESENCE
 
 COPY --from=deps /app/node_modules ./node_modules
+COPY --from=editor-pdf /packages/editor /packages/editor
 RUN mkdir -p /app/public
 COPY ui ./
 COPY --from=wasm-builder /out/jbi.wasm ./public/jbi.wasm
