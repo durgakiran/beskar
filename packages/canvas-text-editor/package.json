@@ -1,6 +1,6 @@
 {
   "name": "@durgakiran/canvas-text-editor",
-  "version": "0.1.5-alpha.0",
+  "version": "0.1.5-alpha.1",
   "description": "Lightweight rich-text editor for canvas text shapes",
   "type": "module",
   "main": "./dist/index.js",
@@ -46,7 +46,8 @@
     "test:watch": "vitest",
     "type-check": "tsc --noEmit",
     "prepublishOnly": "npm run build",
-    "publish:dry-run": "npm run build && npm pack --dry-run"
+    "publish:dry-run": "npm run build && npm pack --dry-run",
+    "publish:github": "npm run build && npm publish"
   },
   "engines": {
     "node": ">=20.19.0",
