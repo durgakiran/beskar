@@ -215,15 +215,15 @@ function MobileActionDock({
                 </div>
             ) : null}
 
-                <button
-                    type="button"
-                    aria-label={actionsOpen ? "Close actions" : "Open actions"}
-                    title={actionsOpen ? "Close actions" : "Open actions"}
-                    className="readonly-dock-btn"
-                    onClick={() => setActionsOpen((current) => !current)}
-                >
-                    <FiMoreVertical size={15} />
-                </button>
+            <button
+                type="button"
+                aria-label={actionsOpen ? "Close actions" : "Open actions"}
+                title={actionsOpen ? "Close actions" : "Open actions"}
+                className="readonly-dock-btn"
+                onClick={() => setActionsOpen((current) => !current)}
+            >
+                <FiMoreVertical size={15} />
+            </button>
             {capabilities.canShare ? (
                 <button
                     type="button"
@@ -386,7 +386,7 @@ export default function ReadOnlyContentMain({
                                 </div>
                             </Box>
 
-                            <Box className="w-full pr-0 xl:pr-24">
+                            <Box className="w-full pr-0 xl:pr-24 pl-[40px]">
                                 <Flex direction="column" gap="2">
                                     <Flex align="center" gap="3" wrap="wrap">
                                         <h1 className="text-[28px] font-semibold leading-[1.15] tracking-[-0.01em] text-[#221f26] md:text-[38px]">
