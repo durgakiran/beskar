@@ -1,4 +1,4 @@
-FROM golang:1.23.3-alpine AS builder
+FROM golang:1.25-alpine AS builder
 
 WORKDIR /src/signalserver
 ENV GODEBUG=netdns=go

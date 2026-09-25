@@ -4,7 +4,6 @@ import {
   Editor,
   TableFloatingMenu,
   TextFormattingMenu,
-  CodeBlockFloatingMenu,
   CommentInputPopover,
   CommentGutter,
   CommentThreadCard,
@@ -636,7 +635,6 @@ function App() {
             {isEditable && (
               <>
                 <TableFloatingMenu editor={editor} />
-                <CodeBlockFloatingMenu editor={editor} />
               </>
             )}
 
