@@ -15,9 +15,28 @@ const (
 )
 
 type whiteboardDraftInput struct {
-	SpaceID uuid.UUID
-	PageID  int64
-	ActorID uuid.UUID
+	SpaceID     uuid.UUID
+	PageID      int64
+	ActorID     uuid.UUID
+	Incremental *whiteboardDraftPosition
+}
+type whiteboardDraftPosition struct {
+	AfterSequence     int64 `json:"afterSequence,string"`
+	RestoreGeneration int64 `json:"restoreGeneration,string"`
+}
+type whiteboardDraftStatus struct {
+	HeadSequence      int64 `json:"headSequence,string"`
+	RestoreGeneration int64 `json:"restoreGeneration,string"`
+	ReadOnly          bool  `json:"readOnly"`
+}
+type whiteboardDraftIncremental struct {
+	whiteboardDraftPosition
+	HeadSequence int64      `json:"headSequence,string"`
+	Title        string     `json:"title"`
+	ReadOnly     bool       `json:"readOnly"`
+	Complete     bool       `json:"complete"`
+	UpdatesURL   *string    `json:"updatesUrl"`
+	ExpiresAt    *time.Time `json:"expiresAt"`
 }
 type whiteboardDraftSnapshot struct {
 	ID              uuid.UUID `json:"id"`
@@ -29,6 +48,7 @@ type whiteboardDraftSnapshot struct {
 	StateDigest     string    `json:"stateDigest"`
 }
 type whiteboardDraftManifest struct {
+	ReadOnly          bool                    `json:"-"`
 	RestoreGeneration int64                   `json:"restoreGeneration,string"`
 	Title             string                  `json:"title"`
 	PageID            int64                   `json:"pageId"`
@@ -63,6 +83,7 @@ type whiteboardSnapshotStream struct {
 	Digest  string
 }
 type whiteboardDraftReader interface {
+	GetDraftStatus(context.Context, whiteboardDraftInput) (whiteboardDraftStatus, error)
 	GetDraft(context.Context, whiteboardDraftInput) (whiteboardDraftManifest, error)
 	GetDraftUpdates(context.Context, whiteboardDraftInput, string) (whiteboardDraftPage, error)
 	OpenDraftSnapshot(context.Context, whiteboardDraftInput, uuid.UUID, uuid.UUID) (whiteboardSnapshotStream, error)

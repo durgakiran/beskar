@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
     createPublishPreview: vi.fn(),
     flush: vi.fn(),
     loadDraft: vi.fn(),
+    syncDraft: vi.fn(),
     jsonRequest: vi.fn(),
     post: vi.fn(),
     navigate: vi.fn(),
@@ -22,6 +23,9 @@ const mocks = vi.hoisted(() => ({
     digest: vi.fn(),
     providerConstruct: vi.fn(),
     durabilityConstruct: vi.fn(),
+    awarenessSet: vi.fn(),
+    awarenessStates: new Map<number, Record<string, unknown>>(),
+    awarenessChange: undefined as undefined | (() => void),
 }));
 
 vi.mock('react-router-dom', () => ({ useNavigate: () => mocks.navigate }));
@@ -52,13 +56,13 @@ vi.mock('app/core/whiteboard/v2/WhiteboardAssetHttpAdapterV2', () => ({
 vi.mock('y-webrtc', () => ({
     WebrtcProvider: class {
         constructor() { mocks.providerConstruct(); }
-        awareness = { getStates: () => new Map(), setLocalStateField: vi.fn(), on: vi.fn(), off: vi.fn() };
+        awareness = { getStates: () => mocks.awarenessStates, setLocalStateField: mocks.awarenessSet, on: (_event: string, callback: () => void) => { mocks.awarenessChange = callback; }, off: vi.fn() };
         destroy() {}
         disconnect() {}
         connect() {}
     },
 }));
-vi.mock('app/core/whiteboard/v2/replay', () => ({ loadDraft: mocks.loadDraft }));
+vi.mock('app/core/whiteboard/v2/replay', () => ({ loadDraft: mocks.loadDraft, syncDraft: mocks.syncDraft }));
 vi.mock('app/core/whiteboard/v2/api', async importOriginal => ({
     ...await importOriginal<Record<string, unknown>>(),
     digest: mocks.digest,
@@ -73,7 +77,7 @@ vi.mock('app/core/whiteboard/durability/IndexedDbYjsRecoveryAdapter', () => ({
 }));
 vi.mock('app/core/whiteboard/durability/YjsDurabilityCoordinator', () => ({
     YjsDurabilityCoordinator: class {
-        constructor() { mocks.durabilityConstruct(); }
+        constructor(options: unknown) { mocks.durabilityConstruct(options); }
         flush = mocks.flush;
         getSnapshot() { return { phase: 'clean' }; }
         subscribeStatus() { return () => {}; }
@@ -93,12 +97,19 @@ async function renderEditor() {
 describe('WhiteboardEditorV2 capture preparation', () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        mocks.awarenessStates.clear();
+        mocks.awarenessChange = undefined;
+        mocks.awarenessSet.mockImplementation((field: string, value: unknown) => {
+            mocks.awarenessStates.set(1, { ...mocks.awarenessStates.get(1), [field]: value });
+            mocks.awarenessChange?.();
+        });
         sessionStorage.clear();
         localStorage.clear();
         const doc = new Y.Doc();
         const state = Y.encodeStateAsUpdate(doc);
         doc.destroy();
         mocks.loadDraft.mockResolvedValue({ state, cache: {}, manifest: { title: 'Board', headSequence: '1', restoreGeneration: '0' } });
+        mocks.syncDraft.mockImplementation(async (_base, previous) => ({ ...previous, readOnly: false }));
         mocks.jsonRequest.mockImplementation(async (url: string) => url.endsWith('/profile/details') ? { id: 'user-1', name: 'Asha' } : {});
         mocks.prepareForCapture.mockResolvedValue({ reason: 'publish', release: mocks.release });
         mocks.getPendingAssetCount.mockReturnValue(0);
@@ -111,7 +122,130 @@ describe('WhiteboardEditorV2 capture preparation', () => {
         mocks.digest.mockResolvedValue('sha256:state');
     });
 
-    afterEach(cleanup);
+    afterEach(() => { cleanup(); vi.useRealTimers(); vi.restoreAllMocks(); });
+
+    it('checks status every minute instead of replaying every ten seconds', async () => {
+        vi.useFakeTimers();
+        vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
+        await act(async () => { render(<WhiteboardEditorV2 slug={['space-1', 'page-1']} />); });
+        await act(async () => { await vi.advanceTimersByTimeAsync(10000); });
+        expect(mocks.syncDraft).not.toHaveBeenCalled();
+        await act(async () => { await vi.advanceTimersByTimeAsync(50000); });
+        expect(mocks.syncDraft).toHaveBeenCalledTimes(1);
+        expect(mocks.loadDraft).toHaveBeenCalledTimes(1);
+    });
+
+    it.each(['hidden', 'offline'])('skips periodic fallback checks while %s', async condition => {
+        vi.useFakeTimers();
+        vi.spyOn(document, 'visibilityState', 'get').mockReturnValue(condition === 'hidden' ? 'hidden' : 'visible');
+        vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(condition !== 'offline');
+        await act(async () => { render(<WhiteboardEditorV2 slug={['space-1', 'page-1']} />); });
+        await act(async () => { await vi.advanceTimersByTimeAsync(120000); });
+        expect(mocks.syncDraft).not.toHaveBeenCalled();
+    });
+
+    it('checks when a tab becomes visible, but skips focus checks while offline', async () => {
+        await renderEditor();
+        const visibility = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
+        const online = vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
+        await act(async () => {
+            document.dispatchEvent(new Event('visibilitychange'));
+            window.dispatchEvent(new Event('focus'));
+        });
+        expect(mocks.syncDraft).not.toHaveBeenCalled();
+        online.mockReturnValue(true);
+        visibility.mockReturnValue('visible');
+        await act(async () => { document.dispatchEvent(new Event('visibilitychange')); });
+        expect(mocks.syncDraft).toHaveBeenCalledTimes(1);
+    });
+
+    it('removes fallback listeners and timers when the editor closes', async () => {
+        vi.useFakeTimers();
+        vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
+        let editor!: ReturnType<typeof render>;
+        await act(async () => { editor = render(<WhiteboardEditorV2 slug={['space-1', 'page-1']} />); });
+        await act(async () => { editor.unmount(); });
+        await act(async () => {
+            window.dispatchEvent(new Event('online'));
+            window.dispatchEvent(new Event('focus'));
+            document.dispatchEvent(new Event('visibilitychange'));
+            await vi.advanceTimersByTimeAsync(120000);
+        });
+        expect(mocks.syncDraft).not.toHaveBeenCalled();
+    });
+
+    it('debounces newer peer save notifications and ignores already applied sequences', async () => {
+        await renderEditor();
+        vi.useFakeTimers();
+        mocks.syncDraft.mockImplementationOnce(async (_base, previous) => ({ ...previous, manifest: { ...previous.manifest, headSequence: '3' }, readOnly: false }));
+        await act(async () => {
+            mocks.awarenessStates.set(2, { savedSequence: '2' }); mocks.awarenessChange?.();
+            mocks.awarenessStates.set(2, { savedSequence: '3' }); mocks.awarenessChange?.();
+            await vi.advanceTimersByTimeAsync(300);
+        });
+        expect(mocks.syncDraft).toHaveBeenCalledTimes(1);
+        await act(async () => { mocks.awarenessChange?.(); await vi.advanceTimersByTimeAsync(300); });
+        expect(mocks.syncDraft).toHaveBeenCalledTimes(1);
+    });
+
+    it('reconciles a newer notification that arrives during a fixed-head replay', async () => {
+        await renderEditor();
+        vi.useFakeTimers();
+        let finish!: () => void;
+        mocks.syncDraft.mockImplementationOnce((_base, previous) => new Promise(resolve => { finish = () => resolve({ ...previous, manifest: { ...previous.manifest, headSequence: '2' }, readOnly: false }); }));
+        await act(async () => { window.dispatchEvent(new Event('online')); });
+        await act(async () => {
+            mocks.awarenessStates.set(2, { savedSequence: '3' }); mocks.awarenessChange?.();
+            await vi.advanceTimersByTimeAsync(300);
+        });
+        expect(mocks.syncDraft).toHaveBeenCalledTimes(1);
+        await act(async () => { finish(); });
+        await act(async () => { await vi.advanceTimersByTimeAsync(300); });
+        expect(mocks.syncDraft).toHaveBeenCalledTimes(2);
+        expect(mocks.syncDraft.mock.calls[1][1].manifest.headSequence).toBe('2');
+    });
+
+    it('broadcasts successful checkpoints without advancing the verified sequence', async () => {
+        await renderEditor();
+        vi.useFakeTimers();
+        const adapter = mocks.durabilityConstruct.mock.calls[0][0].persistence;
+        const request = { sessionKey: 's', draftId: 'page-1', generation: 1, clientId: 'c', expectedDurableRevision: '1', requestId: 'key', signal: new AbortController().signal, encodedState: new Uint8Array([0, 0]), target };
+        mocks.post.mockResolvedValueOnce({ pageId: 'page-1', sequence: '4' });
+        await act(async () => { await adapter.save(request); });
+        expect(mocks.awarenessSet).toHaveBeenCalledWith('savedSequence', '4');
+        await act(async () => { await vi.advanceTimersByTimeAsync(300); });
+        expect(mocks.syncDraft).toHaveBeenCalledTimes(1);
+        expect(mocks.syncDraft.mock.calls[0][1].manifest.headSequence).toBe('1');
+    });
+
+    it('broadcasts saved title sequences through the same collaboration notification', async () => {
+        await renderEditor();
+        mocks.post.mockResolvedValueOnce({ sequence: '2' });
+        fireEvent.change(screen.getByLabelText('Whiteboard title'), { target: { value: 'Renamed' } });
+        fireEvent.blur(screen.getByLabelText('Whiteboard title'));
+        await waitFor(() => expect(mocks.awarenessSet).toHaveBeenCalledWith('savedSequence', '2'));
+        expect(mocks.awarenessSet).toHaveBeenCalledWith('titleSequence', '2');
+    });
+
+    it('shares an in-flight reconciliation across reconnect events', async () => {
+        await renderEditor();
+        let finish!: (value: unknown) => void;
+        mocks.syncDraft.mockImplementationOnce((_base, previous) => new Promise(resolve => { finish = () => resolve({ ...previous, readOnly: false }); }));
+        await act(async () => { window.dispatchEvent(new Event('online')); window.dispatchEvent(new Event('focus')); });
+        expect(mocks.syncDraft).toHaveBeenCalledTimes(1);
+        await act(async () => finish(undefined));
+    });
+
+    it('finishes reconciliation before taking the publish edit lock', async () => {
+        await renderEditor();
+        let finish!: () => void;
+        mocks.syncDraft.mockImplementationOnce((_base, previous) => new Promise(resolve => { finish = () => resolve({ ...previous, readOnly: false }); }));
+        fireEvent.click(screen.getByRole('button', { name: 'Publish' }));
+        expect(mocks.prepareForCapture).not.toHaveBeenCalled();
+        await act(async () => finish());
+        await waitFor(() => expect(mocks.post).toHaveBeenCalledTimes(1));
+        expect(mocks.release).toHaveBeenCalledTimes(1);
+    });
 
     it('binds asset storage to the board session and preserves it while editing', async () => {
         await renderEditor();
@@ -171,7 +305,7 @@ describe('WhiteboardEditorV2 capture preparation', () => {
 
         fireEvent.click(screen.getByRole('button', { name: 'Publish' }));
 
-        expect(mocks.prepareForCapture).toHaveBeenCalledWith('publish', { signal: expect.any(AbortSignal) });
+        await waitFor(() => expect(mocks.prepareForCapture).toHaveBeenCalledWith('publish', { signal: expect.any(AbortSignal) }));
         expect(screen.getByTestId('glideboard').getAttribute('data-readonly')).toBe('false');
         expect(mocks.settleActiveEdit).not.toHaveBeenCalled();
         expect(mocks.flush).not.toHaveBeenCalled();

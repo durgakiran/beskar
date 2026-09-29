@@ -7,7 +7,7 @@ import { post, sequence } from './api';
 export class CheckpointAdapter implements YjsPersistenceAdapter {
     private vector: Uint8Array;
     private pending = new Map<string, { update: string }>();
-    constructor(private base: string, initialState: Uint8Array, private restoreGeneration = '0') {
+    constructor(private base: string, initialState: Uint8Array, private restoreGeneration = '0', private onSaved?: (sequence: string) => void) {
         this.vector = Y.encodeStateVectorFromUpdate(initialState);
     }
     async save(request: YjsSaveRequest): Promise<YjsSaveResult> {
@@ -23,6 +23,7 @@ export class CheckpointAdapter implements YjsPersistenceAdapter {
         sequence(receipt.sequence);
         this.vector = Y.encodeStateVectorFromUpdate(request.encodedState);
         this.pending.delete(request.requestId);
+        this.onSaved?.(receipt.sequence);
         return { draftId: request.draftId, durableRevision: receipt.sequence, acknowledgedCheckpoint: { ...request.target.yjs } };
     }
 }

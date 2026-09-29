@@ -17,6 +17,8 @@ import (
 )
 
 var (
+	errWhiteboardDraftReset     = errors.New("draft reset required")
+	errWhiteboardDraftPosition  = errors.New("invalid draft position")
 	errWhiteboardDraftExpired   = errors.New("draft replay expired or unavailable")
 	errWhiteboardDraftCursor    = errors.New("invalid draft cursor")
 	errWhiteboardDraftIntegrity = errors.New("invalid draft replay data")
@@ -52,6 +54,32 @@ func parseDraftCursor(cursor string) (uuid.UUID, int64, []byte, error) {
 	return id, int64(after), data, nil
 }
 
+// Status reads metadata in one statement; it never creates a replay lease or loads update bytes.
+func (service *whiteboardServiceV2) GetDraftStatus(ctx context.Context, in whiteboardDraftInput) (whiteboardDraftStatus, error) {
+	var result whiteboardDraftStatus
+	tx, err := service.begin(ctx)
+	if err != nil {
+		return result, err
+	}
+	defer draftRollback(ctx, tx)
+	var head, generation *int64
+	err = tx.QueryRow(ctx, whiteboardV2DraftStatus, in.PageID, in.SpaceID).Scan(&head, &generation, &result.ReadOnly)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return result, errWhiteboardV2BoardNotFound
+	}
+	if err != nil {
+		return result, err
+	}
+	if head == nil || generation == nil {
+		return result, errWhiteboardV2DraftMissing
+	}
+	if *head < 0 || *generation < 0 {
+		return result, errWhiteboardDraftIntegrity
+	}
+	result.HeadSequence, result.RestoreGeneration = *head, *generation
+	return result, nil
+}
+
 func (service *whiteboardServiceV2) GetDraft(ctx context.Context, in whiteboardDraftInput) (whiteboardDraftManifest, error) {
 	result := whiteboardDraftManifest{PageID: in.PageID, SpaceID: in.SpaceID}
 	tx, err := service.begin(ctx)
@@ -80,6 +108,7 @@ func (service *whiteboardServiceV2) GetDraft(ctx context.Context, in whiteboardD
 	if err != nil {
 		return result, err
 	}
+	result.ReadOnly = archived
 	snapshot := &result.BaseSnapshot
 	err = tx.QueryRow(ctx, whiteboardV2DraftLock, in.PageID).Scan(&snapshot.ID, &result.HeadSequence, &result.UpdatedBy, &result.UpdatedAt, &result.RestoreGeneration)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -95,8 +124,29 @@ func (service *whiteboardServiceV2) GetDraft(ctx context.Context, in whiteboardD
 	if snapshot.ThroughSequence < 0 || result.HeadSequence < snapshot.ThroughSequence || snapshot.ByteLength <= 0 {
 		return result, errWhiteboardDraftIntegrity
 	}
+	after := snapshot.ThroughSequence
+	if position := in.Incremental; position != nil {
+		if position.AfterSequence < 0 || position.RestoreGeneration < 0 {
+			return result, errWhiteboardDraftPosition
+		}
+		// A generation mismatch takes precedence over sequence checks after a restore.
+		if position.RestoreGeneration != result.RestoreGeneration {
+			return result, errWhiteboardDraftReset
+		}
+		if position.AfterSequence > result.HeadSequence {
+			return result, errWhiteboardDraftPosition
+		}
+		if position.AfterSequence < snapshot.ThroughSequence {
+			return result, errWhiteboardDraftReset
+		}
+		after = position.AfterSequence
+	}
 	if err = tx.QueryRow(ctx, whiteboardV2TitleAtSequence, in.PageID, snapshot.ThroughSequence, result.HeadSequence, snapshot.Title).Scan(&result.Title); err != nil {
 		return result, err
+	}
+	// An unchanged incremental read needs neither update pages nor a retention lease.
+	if in.Incremental != nil && after == result.HeadSequence {
+		return result, tx.Commit(ctx)
 	}
 	if _, err = tx.Exec(ctx, whiteboardV2ReplayCleanup, in.PageID); err != nil {
 		return result, err
@@ -108,7 +158,7 @@ func (service *whiteboardServiceV2) GetDraft(ctx context.Context, in whiteboardD
 	}
 	snapshot.UpdateEncoding = whiteboardUpdateEncodingV1
 	snapshot.DownloadURL = fmt.Sprintf("%s/snapshots/%s/content?replay=%s", draftURL(in), snapshot.ID, replay.ID)
-	result.UpdatesURL = draftURL(in) + "/draft/updates?cursor=" + draftCursor(replay, replay.Base)
+	result.UpdatesURL = draftURL(in) + "/draft/updates?cursor=" + draftCursor(replay, after)
 	if err = tx.Commit(ctx); err != nil {
 		return result, err
 	}

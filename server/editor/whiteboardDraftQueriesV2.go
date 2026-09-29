@@ -1,6 +1,12 @@
 package editor
 
 const (
+	whiteboardV2DraftStatus = `SELECT d.head_sequence, d.restore_generation, s.archived_at IS NOT NULL
+ FROM whiteboard.whiteboard w
+ JOIN core.page p ON p.id=w.page_id
+ JOIN core.space s ON s.id=p.space_id
+ LEFT JOIN whiteboard.whiteboard_draft d ON d.page_id=w.page_id
+ WHERE w.page_id=$1 AND s.id=$2 AND s.deleted_at IS NULL`
 	whiteboardV2DraftLock = `SELECT base_snapshot_id, head_sequence, updated_by, updated_at, restore_generation
  FROM whiteboard.whiteboard_draft WHERE page_id = $1 FOR SHARE`
 	whiteboardV2DraftSnapshot = `SELECT through_sequence, title, octet_length(state_bytes)::bigint, state_digest

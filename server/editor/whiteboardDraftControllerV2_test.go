@@ -3,6 +3,7 @@ package editor
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -30,10 +31,15 @@ type draftTestService struct {
 	input  whiteboardDraftInput
 }
 
+func (s *draftTestService) GetDraftStatus(_ context.Context, in whiteboardDraftInput) (whiteboardDraftStatus, error) {
+	s.calls++
+	s.input = in
+	return whiteboardDraftStatus{HeadSequence: 9007199254740993, RestoreGeneration: 2, ReadOnly: true}, s.err
+}
 func (s *draftTestService) GetDraft(_ context.Context, in whiteboardDraftInput) (whiteboardDraftManifest, error) {
 	s.calls++
 	s.input = in
-	return whiteboardDraftManifest{PageID: in.PageID, HeadSequence: 9007199254740993}, s.err
+	return whiteboardDraftManifest{PageID: in.PageID, HeadSequence: 9007199254740993, UpdatesURL: "updates?cursor=signed"}, s.err
 }
 func (s *draftTestService) GetDraftUpdates(_ context.Context, in whiteboardDraftInput, _ string) (whiteboardDraftPage, error) {
 	s.calls++
@@ -66,7 +72,7 @@ const draftTestPath = "/space/c7022348-1bb3-4e52-8403-17786e15e035/whiteboard/42
 const draftTestContentPath = draftTestPath + "/snapshots/0195ad23-831a-7000-8000-000000000002/content?replay=0195ad23-831a-7000-8000-000000000003"
 
 func TestDraftV2AuthorizationAndValidation(t *testing.T) {
-	for _, suffix := range []string{"/draft", "/draft/updates?cursor=x", "/snapshots/0195ad23-831a-7000-8000-000000000002/content?replay=0195ad23-831a-7000-8000-000000000003"} {
+	for _, suffix := range []string{"/draft", "/draft/status", "/draft?afterSequence=0&restoreGeneration=0", "/draft/updates?cursor=x", "/snapshots/0195ad23-831a-7000-8000-000000000002/content?replay=0195ad23-831a-7000-8000-000000000003"} {
 		for _, tc := range []struct {
 			auth, allow bool
 			code        int
@@ -185,5 +191,80 @@ func TestDraftV2SnapshotPreconditions(t *testing.T) {
 		if w.Code != tc.status || w.Body.Len() != 0 || !stream.closed || w.Header().Get("Cache-Control") != "no-store" {
 			t.Fatalf("%s: status=%d body=%s headers=%v", tc.header, w.Code, w.Body.String(), w.Header())
 		}
+	}
+}
+
+func TestDraftV2IncrementalRequests(t *testing.T) {
+	for _, query := range []string{
+		"afterSequence=0", "restoreGeneration=0", "afterSequence=&restoreGeneration=0",
+		"afterSequence=-1&restoreGeneration=0", "afterSequence=01&restoreGeneration=0",
+		"afterSequence=+1&restoreGeneration=0", "afterSequence=1.0&restoreGeneration=0",
+		"afterSequence=9223372036854775808&restoreGeneration=0", "afterSequence=1&restoreGeneration=-1",
+		"afterSequence=1&restoreGeneration=00", "afterSequence=1&restoreGeneration=0&extra=1",
+		"afterSequence=1&afterSequence=2&restoreGeneration=0", "afterSequence=1&restoreGeneration=0&restoreGeneration=0",
+		"afterSequence=%ZZ&restoreGeneration=0",
+	} {
+		service := &draftTestService{}
+		w := httptest.NewRecorder()
+		draftTestRouter(service, true, true).ServeHTTP(w, httptest.NewRequest("GET", draftTestPath+"/draft?"+query, nil))
+		if w.Code != 400 || service.calls != 0 {
+			t.Fatalf("%s: %d calls=%d", query, w.Code, service.calls)
+		}
+	}
+	for _, after := range []string{"0", "9007199254740992", "9007199254740993"} {
+		service := &draftTestService{}
+		w := httptest.NewRecorder()
+		draftTestRouter(service, true, true).ServeHTTP(w, httptest.NewRequest("GET", draftTestPath+"/draft?afterSequence="+after+"&restoreGeneration=2", nil))
+		var response struct {
+			Data map[string]any `json:"data"`
+		}
+		if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+			t.Fatal(err)
+		}
+		data := response.Data
+		complete := after == "9007199254740993"
+		if w.Code != 200 || data["afterSequence"] != after || data["restoreGeneration"] != "2" || data["complete"] != complete || data["headSequence"] != "9007199254740993" {
+			t.Fatalf("%d %s", w.Code, w.Body.String())
+		}
+		if _, exists := data["baseSnapshot"]; exists {
+			t.Fatal("incremental response includes full snapshot")
+		}
+		if complete && (data["updatesUrl"] != nil || data["expiresAt"] != nil) {
+			t.Fatal("unchanged response should not need a replay")
+		}
+		if !complete && data["updatesUrl"] != "updates?cursor=signed" {
+			t.Fatal("missing cursor")
+		}
+		expected, _ := draftDecimal(after)
+		if service.input.Incremental == nil || service.input.Incremental.AfterSequence != expected || service.input.Incremental.RestoreGeneration != 2 {
+			t.Fatal("lost incremental position")
+		}
+	}
+	for _, tc := range []struct {
+		err    error
+		status int
+		code   string
+	}{
+		{errWhiteboardDraftReset, 409, "DRAFT_RESET_REQUIRED"}, {errWhiteboardDraftPosition, 400, "INVALID_REQUEST"},
+	} {
+		w := httptest.NewRecorder()
+		draftTestRouter(&draftTestService{err: tc.err}, true, true).ServeHTTP(w, httptest.NewRequest("GET", draftTestPath+"/draft?afterSequence=0&restoreGeneration=0", nil))
+		if w.Code != tc.status || !strings.Contains(w.Body.String(), tc.code) {
+			t.Fatalf("%d %s", w.Code, w.Body.String())
+		}
+	}
+}
+func TestDraftV2Status(t *testing.T) {
+	service := &draftTestService{}
+	w := httptest.NewRecorder()
+	draftTestRouter(service, true, true).ServeHTTP(w, httptest.NewRequest("GET", draftTestPath+"/draft/status", nil))
+	if w.Code != 200 || w.Header().Get("Cache-Control") != "no-store" || !strings.Contains(w.Body.String(), `"headSequence":"9007199254740993"`) || !strings.Contains(w.Body.String(), `"restoreGeneration":"2"`) || !strings.Contains(w.Body.String(), `"readOnly":true`) {
+		t.Fatalf("%d %s", w.Code, w.Body.String())
+	}
+	service.calls = 0
+	w = httptest.NewRecorder()
+	draftTestRouter(service, true, true).ServeHTTP(w, httptest.NewRequest("GET", draftTestPath+"/draft/status?extra=1", nil))
+	if w.Code != 400 || service.calls != 0 {
+		t.Fatal("status accepted query parameters")
 	}
 }

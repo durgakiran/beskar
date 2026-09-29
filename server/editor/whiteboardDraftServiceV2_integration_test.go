@@ -56,7 +56,7 @@ func TestDraftV2Postgres(t *testing.T) {
  CREATE TABLE core.page(id bigint PRIMARY KEY,space_id uuid NOT NULL REFERENCES core.space(id));
  CREATE TABLE whiteboard.whiteboard(page_id bigint PRIMARY KEY REFERENCES core.page(id));
  CREATE TABLE whiteboard.whiteboard_snapshot(id uuid PRIMARY KEY,page_id bigint NOT NULL REFERENCES whiteboard.whiteboard(page_id) ON DELETE CASCADE,through_sequence bigint NOT NULL,title text NOT NULL,state_bytes bytea NOT NULL,state_digest text NOT NULL,UNIQUE(page_id,id));
- CREATE TABLE whiteboard.whiteboard_draft(page_id bigint PRIMARY KEY REFERENCES whiteboard.whiteboard(page_id) ON DELETE CASCADE,base_snapshot_id uuid NOT NULL REFERENCES whiteboard.whiteboard_snapshot(id),head_sequence bigint NOT NULL,updated_by uuid NOT NULL,updated_at timestamptz NOT NULL DEFAULT now());
+ CREATE TABLE whiteboard.whiteboard_draft(page_id bigint PRIMARY KEY REFERENCES whiteboard.whiteboard(page_id) ON DELETE CASCADE,base_snapshot_id uuid NOT NULL REFERENCES whiteboard.whiteboard_snapshot(id),head_sequence bigint NOT NULL,restore_generation bigint NOT NULL DEFAULT 0,updated_by uuid NOT NULL,updated_at timestamptz NOT NULL DEFAULT now());
  CREATE TABLE whiteboard.whiteboard_update(id uuid PRIMARY KEY,page_id bigint NOT NULL REFERENCES whiteboard.whiteboard(page_id) ON DELETE CASCADE,sequence bigint NOT NULL,update_encoding text NOT NULL,update_bytes bytea NOT NULL,actor_id uuid NOT NULL,idempotency_key uuid NOT NULL,request_hash text NOT NULL,UNIQUE(page_id,sequence),UNIQUE(page_id,actor_id,idempotency_key));`)
 	// Run Liquibase itself so XML changes and SQL functions are both applied.
 	liquibase, err := osexec.LookPath("liquibase")
@@ -108,6 +108,45 @@ func TestDraftV2Postgres(t *testing.T) {
 	if manifest.HeadSequence != 6 || manifest.BaseSnapshot.ByteLength != int64(len(state)) || time.Until(manifest.ExpiresAt) < 59*time.Minute {
 		t.Fatalf("bad manifest %+v", manifest)
 	}
+	status, err := service.GetDraftStatus(ctx, in)
+	if err != nil || status.HeadSequence != 6 || status.RestoreGeneration != 0 || status.ReadOnly {
+		t.Fatalf("status %+v: %v", status, err)
+	}
+	var beforeLeases, afterLeases int
+	if err = pool.QueryRow(ctx, `SELECT count(*) FROM whiteboard.whiteboard_draft_replay`).Scan(&beforeLeases); err != nil {
+		t.Fatal(err)
+	}
+	incremental := in
+	incremental.Incremental = &whiteboardDraftPosition{AfterSequence: 6, RestoreGeneration: 0}
+	unchanged, err := service.GetDraft(ctx, incremental)
+	if err != nil || unchanged.HeadSequence != 6 || unchanged.UpdatesURL != "" {
+		t.Fatalf("unchanged %+v: %v", unchanged, err)
+	}
+	if err = pool.QueryRow(ctx, `SELECT count(*) FROM whiteboard.whiteboard_draft_replay`).Scan(&afterLeases); err != nil {
+		t.Fatal(err)
+	}
+	if beforeLeases != afterLeases {
+		t.Fatal("unchanged draft created a lease")
+	}
+	incremental.Incremental.AfterSequence = 7
+	if _, err = service.GetDraft(ctx, incremental); !errors.Is(err, errWhiteboardDraftPosition) {
+		t.Fatal("ahead accepted", err)
+	}
+	incremental.Incremental = &whiteboardDraftPosition{AfterSequence: 4, RestoreGeneration: 1}
+	if _, err = service.GetDraft(ctx, incremental); !errors.Is(err, errWhiteboardDraftReset) {
+		t.Fatal("stale generation accepted", err)
+	}
+	incremental.Incremental.RestoreGeneration = 0
+	delta, err := service.GetDraft(ctx, incremental)
+	if err != nil {
+		t.Fatal(err)
+	}
+	deltaURL, _ := url.Parse(delta.UpdatesURL)
+	deltaCursor := deltaURL.Query().Get("cursor")
+	_, position, _, err := parseDraftCursor(deltaCursor)
+	if err != nil || position != 4 {
+		t.Fatal("incorrect incremental cursor", position, err)
+	}
 	download, _ := url.Parse(manifest.BaseSnapshot.DownloadURL)
 	replayID := uuid.MustParse(download.Query().Get("replay"))
 	updatesURL, _ := url.Parse(manifest.UpdatesURL)
@@ -120,6 +159,10 @@ func TestDraftV2Postgres(t *testing.T) {
 	_, err = service.CheckpointWhiteboard(ctx, whiteboardCheckpointV2Input{PageID: in.PageID, SpaceID: in.SpaceID, ActorID: in.ActorID, IdempotencyKey: uuid.New(), UpdateEncoding: whiteboardUpdateEncodingV1, UpdateBytes: []byte{0, 0}})
 	if err != nil {
 		t.Fatal(err)
+	}
+	deltaPage, err := service.GetDraftUpdates(ctx, in, deltaCursor)
+	if err != nil || len(deltaPage.Updates) != 2 || deltaPage.Updates[0].Sequence != 5 || deltaPage.Updates[1].Sequence != 6 || !deltaPage.Complete || deltaPage.HeadSequence != 6 {
+		t.Fatalf("delta page count=%d err=%v", len(deltaPage.Updates), err)
 	}
 	second, err := service.GetDraftUpdates(ctx, in, *first.NextCursor)
 	if err != nil || len(second.Updates) != 2 || !second.Complete || second.HeadSequence != 6 || second.NextCursor != nil {
@@ -191,6 +234,17 @@ func TestDraftV2Postgres(t *testing.T) {
 	stream.Content.Close()
 	// Archived spaces permit reads. A compacted draft needs no incremental rows.
 	exec(`UPDATE core.space SET archived_at=now() WHERE id=$1`, in.SpaceID)
+	status, err = service.GetDraftStatus(ctx, in)
+	if err != nil || !status.ReadOnly || status.HeadSequence != 7 {
+		t.Fatalf("archived status %+v: %v", status, err)
+	}
+	if _, err = service.GetDraft(ctx, incremental); !errors.Is(err, errWhiteboardDraftReset) {
+		t.Fatal("compacted history accepted", err)
+	}
+	incremental.Incremental.AfterSequence = 7
+	if _, err = service.GetDraft(ctx, incremental); err != nil {
+		t.Fatal("snapshot boundary rejected", err)
+	}
 	compact, err := service.GetDraft(ctx, in)
 	if err != nil {
 		t.Fatal(err)
@@ -215,6 +269,46 @@ func TestDraftV2Postgres(t *testing.T) {
 	if err != nil || len(page.Updates) != 64 || page.Complete {
 		t.Fatal("count limit", len(page.Updates), err)
 	}
+
+	// Incremental pagination starts at the requested sequence and remains bounded.
+	incremental.Incremental.AfterSequence = 10
+	partial, err := service.GetDraft(ctx, incremental)
+	if err != nil {
+		t.Fatal(err)
+	}
+	partialURL, _ := url.Parse(partial.UpdatesURL)
+	partialPage, err := service.GetDraftUpdates(ctx, in, partialURL.Query().Get("cursor"))
+	if err != nil || len(partialPage.Updates) != 64 || partialPage.Updates[0].Sequence != 11 || partialPage.Updates[63].Sequence != 74 || partialPage.Complete || partialPage.NextCursor == nil {
+		t.Fatalf("incremental pagination count=%d err=%v", len(partialPage.Updates), err)
+	}
+	tail, err := service.GetDraftUpdates(ctx, in, *partialPage.NextCursor)
+	if err != nil || len(tail.Updates) != 3 || tail.Updates[0].Sequence != 75 || !tail.Complete || tail.NextCursor != nil {
+		t.Fatalf("incremental tail count=%d err=%v", len(tail.Updates), err)
+	}
+	// A generation change invalidates incremental requests, including no-op requests.
+	exec(`UPDATE whiteboard.whiteboard_draft SET restore_generation=1 WHERE page_id=$1`, in.PageID)
+	incremental.Incremental.AfterSequence = 77
+	if _, err = service.GetDraft(ctx, incremental); !errors.Is(err, errWhiteboardDraftReset) {
+		t.Fatal("old generation accepted at head", err)
+	}
+	status, err = service.GetDraftStatus(ctx, in)
+	if err != nil || status.RestoreGeneration != 1 {
+		t.Fatalf("generation status %+v: %v", status, err)
+	}
+	incremental.Incremental.RestoreGeneration = 1
+	if _, err = service.GetDraft(ctx, incremental); err != nil {
+		t.Fatal("current generation rejected", err)
+	}
+	otherStatus := in
+	otherStatus.SpaceID = uuid.New()
+	if _, err = service.GetDraftStatus(ctx, otherStatus); !errors.Is(err, errWhiteboardV2BoardNotFound) {
+		t.Fatal("status escaped space scope", err)
+	}
+	otherStatus = in
+	otherStatus.PageID++
+	if _, err = service.GetDraftStatus(ctx, otherStatus); !errors.Is(err, errWhiteboardV2BoardNotFound) {
+		t.Fatal("status accepted missing board", err)
+	}
 	// Corrupt stored sequence coverage must fail closed, never claim completion.
 	exec(`UPDATE whiteboard.whiteboard_update SET sequence=100 WHERE page_id=$1 AND sequence=74`, in.PageID)
 	if _, err = service.GetDraftUpdates(ctx, in, *page.NextCursor); !errors.Is(err, errWhiteboardDraftIntegrity) {
@@ -223,6 +317,9 @@ func TestDraftV2Postgres(t *testing.T) {
 	exec(`UPDATE core.space SET deleted_at=now() WHERE id=$1`, in.SpaceID)
 	if _, err = service.GetDraft(ctx, in); !errors.Is(err, errWhiteboardV2BoardNotFound) {
 		t.Fatal("deleted space exposed", err)
+	}
+	if _, err = service.GetDraftStatus(ctx, in); !errors.Is(err, errWhiteboardV2BoardNotFound) {
+		t.Fatal("status exposed deleted space", err)
 	}
 	// Verify the shipped XML/SQL rollback through Liquibase too.
 	migrate("rollback-count", "--count=2")

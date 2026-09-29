@@ -1,6 +1,6 @@
 import WhiteboardHistoryV2 from './WhiteboardHistoryV2';
 import "@durgakiran/glideboard/styles.css";
-import { loadDraft } from 'app/core/whiteboard/v2/replay';
+import { loadDraft, syncDraft } from 'app/core/whiteboard/v2/replay';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button, Flex, Spinner, Text } from '@radix-ui/themes';
 import { useNavigate } from 'react-router-dom';
@@ -26,7 +26,7 @@ interface Session {
     collaboration: GlideboardCollaborationConfig;
     assetStorage: WhiteboardAssetHttpAdapterV2;
     assetResolutionContext: { documentId: string };
-    sync: () => ReturnType<typeof loadDraft>;
+    sync: () => ReturnType<typeof syncDraft>;
     saveTitle: () => Promise<void>;
 }
 
@@ -63,6 +63,8 @@ export default function WhiteboardEditorV2({ slug }: { slug: string[] }) {
         let doc: Y.Doc | null = null;
         let timer: ReturnType<typeof setInterval> | undefined;
         let unsubscribe: (() => void) | undefined;
+        let notificationTimer: ReturnType<typeof setTimeout> | undefined;
+        let titleTimer: ReturnType<typeof setInterval> | undefined;
         activeSession.current = null; pendingPublish.current = null; busyRef.current = false;
         setSession(null); setBoard(null); setBusy(false); setError(''); setSyncError(''); setAccessDenied(false);
         const start = async () => {
@@ -93,16 +95,23 @@ export default function WhiteboardEditorV2({ slug }: { slug: string[] }) {
             if (!active) return;
             const acknowledgedStateDigest = await digest(loaded.state);
             if (!active || abort.signal.aborted) return;
-            const durability = new YjsDurabilityCoordinator({ sessionKey, draftId: page, clientId: tabId,
-                durableRevision: loaded.manifest.headSequence, acknowledgedStateDigest,
-                persistence: new CheckpointAdapter(base, loaded.state, generation), recovery });
             const provider = new WebrtcProvider(room, doc, { signaling: [getSignalingUrl()], filterBcConns: false });
+            let announcedSequence = sequence(loaded.manifest.headSequence);
+            const announceSaved = (saved: string) => {
+                if (!active) return;
+                announcedSequence = sequence(saved) > announcedSequence ? sequence(saved) : announcedSequence;
+                provider.awareness.setLocalStateField('savedSequence', announcedSequence.toString());
+            };
+            const durability = new YjsDurabilityCoordinator({ sessionKey, draftId: page, clientId: tabId, debounceMs: 5000,
+                durableRevision: loaded.manifest.headSequence, acknowledgedStateDigest,
+                persistence: new CheckpointAdapter(base, loaded.state, generation, announceSaved), recovery });
+
             let archived = Boolean(spaceDetails.archivedAt);
             let paused = archived;
             if (archived) { provider.disconnect(); setAccessDenied(true); setSyncError('This space is archived and read-only.'); }
             let titleSequence = sequence(loaded.manifest.headSequence);
-            let cache = loaded.cache;
-            let syncing: ReturnType<typeof loadDraft> | null = null;
+            let verified = loaded;
+            let syncing: ReturnType<typeof syncDraft> | null = null;
             let renaming: Promise<void> | null = null;
             const saveTitle = (): Promise<void> => {
                 if (renaming) return renaming.then(() => saveTitle());
@@ -119,15 +128,13 @@ export default function WhiteboardEditorV2({ slug }: { slug: string[] }) {
                         if (active) { setTitle(normalized); setTitlePending(false); }
                     }
                     provider.awareness.setLocalStateField('titleSequence', receipt.sequence);
+                    announceSaved(receipt.sequence);
                 }).finally(() => { renaming = null; });
                 return renaming;
             };
             const sync = () => {
                 if (syncing) return syncing;
-                syncing = Promise.all([
-                    loadDraft(base, abort.signal, cache),
-                    jsonRequest<{ archivedAt?: string | null }>(spaceUrl, { signal: abort.signal }),
-                ]).then(([next, details]) => {
+                syncing = syncDraft(base, verified, abort.signal).then(next => {
                     if (!active) throw new Error('Editor closed');
                     if ((next.manifest.restoreGeneration ?? '0') !== generation) {
                         provider.disconnect(); setAccessDenied(true);
@@ -136,7 +143,7 @@ export default function WhiteboardEditorV2({ slug }: { slug: string[] }) {
                         setLoadAttempt(n => n + 1);
                         throw new WhiteboardApiError(409, 'WHITEBOARD_RESTORED', 'The draft was restored. Reloading…');
                     }
-                    const nextArchived = Boolean(details.archivedAt);
+                    const nextArchived = next.readOnly;
                     archived = nextArchived;
                     if (archived !== paused) {
                         paused = archived;
@@ -145,14 +152,19 @@ export default function WhiteboardEditorV2({ slug }: { slug: string[] }) {
                         else { provider.connect(); void durability.retryPending().catch(() => {}); }
                     }
                     setSyncError(archived ? 'This space is archived and read-only.' : '');
-                    cache = next.cache;
-                    Y.applyUpdate(doc!, next.state, 'v2-server-replay');
+                    if (next.state !== verified.state) Y.applyUpdate(doc!, next.state, 'v2-server-replay');
+                    verified = next;
                     if (sequence(next.manifest.headSequence) >= titleSequence && !pendingTitle.current && !titleInputFocused.current) {
                         titleSequence = sequence(next.manifest.headSequence);
                         titleRef.current = next.manifest.title;
                         setTitle(next.manifest.title);
                     }
                     return next;
+                }).catch(e => {
+                    if (active && e instanceof WhiteboardApiError && ([401, 403, 404].includes(e.status) || ['SPACE_ARCHIVED', 'WHITEBOARD_RESTORED'].includes(e.code))) {
+                        paused = true; provider.disconnect(); setAccessDenied(true);
+                    }
+                    throw e;
                 }).finally(() => { syncing = null; });
                 return syncing;
             };
@@ -185,28 +197,51 @@ export default function WhiteboardEditorV2({ slug }: { slug: string[] }) {
                     paused = true; provider.disconnect(); setAccessDenied(true);
                 }
             });
-            const updatePeers = () => {
-                if (!active) return;
-                setPeers(safeAwarenessEntries(provider.awareness.getStates()).map(({ user }) => user.name));
-                const newerTitle = [...provider.awareness.getStates().values()].some(value => typeof value.titleSequence === 'string' && /^\d+$/.test(value.titleSequence) && BigInt(value.titleSequence) > titleSequence);
-                if (newerTitle && !busyRef.current) void sync().catch(() => {});
-            };
-            provider.awareness.on('change', updatePeers);
-            timer = setInterval(() => {
-                if (!navigator.onLine || busyRef.current) return;
-                void Promise.all([saveTitle(), sync()]).catch(e => {
+            const backgroundSync = () => {
+                if (!active || !navigator.onLine || busyRef.current) return;
+                void sync().catch(e => {
                     if (!active) return;
                     setSyncError(e.message);
                     if (e instanceof WhiteboardApiError && ([401, 403, 404].includes(e.status) || ['SPACE_ARCHIVED', 'WHITEBOARD_RESTORED'].includes(e.code))) {
                         paused = true; provider.disconnect(); setAccessDenied(true);
                     }
                 });
+            };
+            const updatePeers = () => {
+                if (!active) return;
+                setPeers(safeAwarenessEntries(provider.awareness.getStates()).map(({ user }) => user.name));
+                const newer = [...provider.awareness.getStates().values()].some(value => {
+                    const saved = value.savedSequence ?? value.titleSequence;
+                    if (typeof saved !== 'string') return false;
+                    try { return sequence(saved) > sequence(verified.manifest.headSequence); } catch { return false; }
+                });
+                if (newer && !notificationTimer) notificationTimer = setTimeout(() => {
+                    if (syncing) {
+                        // A notification may refer to a save newer than this replay's fixed head.
+                        void syncing.then(() => {
+                            notificationTimer = undefined;
+                            updatePeers();
+                        }, () => { notificationTimer = undefined; });
+                    } else {
+                        notificationTimer = undefined;
+                        backgroundSync();
+                    }
+                }, 300);
+            };
+            provider.awareness.on('change', updatePeers);
+            // Keep title autosave independent of the infrequent server status check.
+            titleTimer = setInterval(() => {
+                if (!navigator.onLine || busyRef.current || paused) return;
+                void saveTitle().catch(e => { if (active) setSyncError(e.message); });
             }, 10000);
+            timer = setInterval(() => {
+                if (document.visibilityState === 'visible') backgroundSync();
+            }, 60000);
             if (active) { activeSession.current = owned; setSession(owned); setStatus(durability.getSnapshot()); }
         };
         void start().catch(e => { if (active) setError(e.message); });
         return () => {
-            active = false; abort.abort(); clearInterval(timer); unsubscribe?.();
+            active = false; abort.abort(); clearInterval(timer); clearInterval(titleTimer); clearTimeout(notificationTimer); unsubscribe?.();
             if (activeSession.current === owned) activeSession.current = null;
             void owned?.assetStorage.dispose();
             owned?.provider.destroy();
@@ -223,11 +258,18 @@ export default function WhiteboardEditorV2({ slug }: { slug: string[] }) {
         const unload = (event: BeforeUnloadEvent) => {
             if (status?.phase !== 'clean' || pendingTitle.current || (board?.getPendingAssetCount() ?? 0) > 0) { event.preventDefault(); event.returnValue = ''; }
         };
-        const reconnect = () => { if (session && !busyRef.current) void Promise.all([session.saveTitle(), session.sync()]).catch(e => setSyncError(e.message)); };
+        const reconnect = () => {
+            if (!session || session.signal.aborted || activeSession.current !== session || !navigator.onLine || busyRef.current) return;
+            void Promise.all([session.saveTitle(), session.sync()]).catch(e => {
+                if (!session.signal.aborted && activeSession.current === session) setSyncError(e.message);
+            });
+        };
+        const visible = () => { if (document.visibilityState === 'visible') reconnect(); };
         window.addEventListener('beforeunload', unload);
         window.addEventListener('online', reconnect);
         window.addEventListener('focus', reconnect);
-        return () => { window.removeEventListener('beforeunload', unload); window.removeEventListener('online', reconnect); window.removeEventListener('focus', reconnect); };
+        document.addEventListener('visibilitychange', visible);
+        return () => { window.removeEventListener('beforeunload', unload); window.removeEventListener('online', reconnect); window.removeEventListener('focus', reconnect); document.removeEventListener('visibilitychange', visible); };
     }, [status, session, board]);
 
     const rename = (value: string) => {
@@ -255,6 +297,12 @@ export default function WhiteboardEditorV2({ slug }: { slug: string[] }) {
                 setNotice('Published successfully.');
                 return;
             }
+            // Finish network reconciliation while canvas edits are still permitted.
+            if (publish) {
+                const current = await session.sync();
+                requireCurrentSession();
+                if (current.readOnly) throw new Error('This space is archived and read-only.');
+            }
             // Upload completion needs to insert records before the mutation fence is acquired.
             fence = await board.prepareForCapture(publish ? 'publish' : 'close', { signal: session.signal });
             requireCurrentSession();
@@ -265,18 +313,21 @@ export default function WhiteboardEditorV2({ slug }: { slug: string[] }) {
             requireCurrentSession();
             if (!publish) { navigate(`/space/${space}/view/${page}`); return; }
             // Other editors may have saved changes this tab has not seen yet. Preview a verified server boundary.
+            let publishMismatch: 'server' | 'preview' = 'server';
             for (let attempt = 0; attempt < 3; attempt++) {
                 const server = await session.sync();
+                if (server.readOnly) throw new Error('This space is archived and read-only.');
                 const target = await board.captureProjectionTarget();
                 requireCurrentSession();
                 if (target.yjs.stateDigest !== await digest(server.state)) {
+                    publishMismatch = 'server';
                     await session.durability.flush(target);
                     continue;
                 }
                 const preview = await createPublishPreview(board, { target });
                 const after = await board.captureProjectionTarget();
                 requireCurrentSession();
-                if (after.yjs.stateDigest !== target.yjs.stateDigest) continue;
+                if (after.yjs.stateDigest !== target.yjs.stateDigest) { publishMismatch = 'preview'; continue; }
                 pendingPublish.current = { key: crypto.randomUUID(), body: { sequence: server.manifest.headSequence, preview } };
                 await post<PublishedBoard>(`${base}/publish`, pendingPublish.current.body, pendingPublish.current.key, session.signal);
                 requireCurrentSession();
@@ -284,7 +335,7 @@ export default function WhiteboardEditorV2({ slug }: { slug: string[] }) {
                 setNotice('Published successfully.');
                 return;
             }
-            throw new Error('The board changed while preparing the preview. Please publish again once edits settle.');
+            throw new Error(publishMismatch === 'server' ? 'The editor state does not match the saved draft after synchronization. Please retry publishing.' : 'The board changed while generating the preview. Please retry publishing once edits settle.');
         } catch (e) { if (isCurrentSession()) setError(e instanceof Error ? e.message : 'Unable to save whiteboard'); }
         finally { fence?.release(); if (isCurrentSession()) { busyRef.current = false; setBusy(false); } }
     };
