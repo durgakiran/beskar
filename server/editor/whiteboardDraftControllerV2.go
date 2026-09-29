@@ -24,6 +24,7 @@ type whiteboardDraftControllerV2 struct {
 
 func (deps whiteboardDraftControllerV2) register(r chi.Router) {
 	r.Get("/space/{spaceId}/whiteboard/{pageId}/draft", deps.handleManifest)
+	r.Get("/space/{spaceId}/whiteboard/{pageId}/draft/status", deps.handleStatus)
 	r.Get("/space/{spaceId}/whiteboard/{pageId}/draft/updates", deps.handleUpdates)
 	r.Get("/space/{spaceId}/whiteboard/{pageId}/snapshots/{snapshotId}/content", deps.handleSnapshot)
 	r.Head("/space/{spaceId}/whiteboard/{pageId}/snapshots/{snapshotId}/content", deps.handleSnapshot)
@@ -52,6 +53,10 @@ func (deps whiteboardDraftControllerV2) identity(w http.ResponseWriter, r *http.
 func draftHTTPError(w http.ResponseWriter, r *http.Request, err error) {
 	var pgErr *pgconn.PgError
 	switch {
+	case errors.Is(err, errWhiteboardDraftReset):
+		whiteboardV2Error(w, r, 409, "DRAFT_RESET_REQUIRED", "Draft restored or history compacted. Load a fresh full draft.")
+	case errors.Is(err, errWhiteboardDraftPosition):
+		whiteboardV2Error(w, r, 400, "INVALID_REQUEST", "Invalid draft sequence or restore generation.")
 	case errors.Is(err, errWhiteboardDraftCursor):
 		whiteboardV2Error(w, r, 400, "INVALID_REQUEST", "Invalid draft cursor.")
 	case errors.Is(err, errWhiteboardV2BoardNotFound):
@@ -72,10 +77,51 @@ func (deps whiteboardDraftControllerV2) handleManifest(w http.ResponseWriter, r 
 		return
 	}
 	if r.URL.RawQuery != "" {
-		whiteboardV2Error(w, r, 400, "INVALID_REQUEST", "Draft manifest does not accept query parameters.")
-		return
+		query, err := url.ParseQuery(r.URL.RawQuery)
+		if err != nil || len(query) != 2 || len(query["afterSequence"]) != 1 || len(query["restoreGeneration"]) != 1 {
+			draftHTTPError(w, r, errWhiteboardDraftPosition)
+			return
+		}
+		after, afterOK := draftDecimal(query.Get("afterSequence"))
+		generation, generationOK := draftDecimal(query.Get("restoreGeneration"))
+		if !afterOK || !generationOK {
+			draftHTTPError(w, r, errWhiteboardDraftPosition)
+			return
+		}
+		in.Incremental = &whiteboardDraftPosition{AfterSequence: after, RestoreGeneration: generation}
 	}
 	result, err := deps.service.GetDraft(r.Context(), in)
+	if err != nil {
+		draftHTTPError(w, r, err)
+		return
+	}
+	if in.Incremental != nil {
+		out := whiteboardDraftIncremental{whiteboardDraftPosition: *in.Incremental,
+			HeadSequence: result.HeadSequence, Title: result.Title, ReadOnly: result.ReadOnly,
+			Complete: in.Incremental.AfterSequence == result.HeadSequence}
+		if !out.Complete {
+			out.UpdatesURL = &result.UpdatesURL
+			out.ExpiresAt = &result.ExpiresAt
+		}
+		core.SendSuccessResponse(w, r, http.StatusOK, out)
+		return
+	}
+	core.SendSuccessResponse(w, r, http.StatusOK, result)
+}
+func draftDecimal(raw string) (int64, bool) {
+	value, err := strconv.ParseInt(raw, 10, 64)
+	return value, err == nil && value >= 0 && strconv.FormatInt(value, 10) == raw
+}
+func (deps whiteboardDraftControllerV2) handleStatus(w http.ResponseWriter, r *http.Request) {
+	in, ok := deps.identity(w, r)
+	if !ok {
+		return
+	}
+	if r.URL.RawQuery != "" {
+		whiteboardV2Error(w, r, 400, "INVALID_REQUEST", "Draft status does not accept query parameters.")
+		return
+	}
+	result, err := deps.service.GetDraftStatus(r.Context(), in)
 	if err != nil {
 		draftHTTPError(w, r, err)
 		return

@@ -1,7 +1,7 @@
 import { beforeEach, afterEach, expect, it, vi } from 'vitest';
 import { webcrypto } from 'node:crypto';
 import * as Y from 'yjs';
-import { loadDraft } from './replay';
+import { loadDraft, syncDraft } from './replay';
 import { CheckpointAdapter } from './CheckpointAdapter';
 import { digest, sequence } from './api';
 import { base64ToUint8Array, uint8ArrayToBase64 } from 'app/core/utils/base64';
@@ -15,7 +15,7 @@ async function fixture() {
     const vector = Y.encodeStateVector(doc);
     doc.getMap('records').set('box', { x: 20 });
     const update = Y.encodeStateAsUpdate(doc, vector);
-    const manifest = { pageId: 42, spaceId: 'space', title: 'Board', headSequence: '1', baseSnapshot: { id: 'snapshot', throughSequence: '0', updateEncoding: 'yjs-update-v1', byteLength: initial.length, stateDigest: await digest(initial), downloadUrl: base + '/snapshots/s/content' }, updatesUrl: base + '/draft/updates?cursor=first' };
+    const manifest = { pageId: 42, spaceId: 'space', title: 'Board', headSequence: '1', baseSnapshot: { title: 'Board', id: 'snapshot', throughSequence: '0', updateEncoding: 'yjs-update-v1', byteLength: initial.length, stateDigest: await digest(initial), downloadUrl: base + '/snapshots/s/content' }, updatesUrl: base + '/draft/updates?cursor=first' };
     return { doc, initial, update, manifest };
 }
 it('verifies and replays the complete draft', async () => {
@@ -37,13 +37,15 @@ it('rejects sequence gaps and truncated replay', async () => {
     await expect(loadDraft(base)).rejects.toThrow('Incomplete'); f.doc.destroy();
 });
 it('retains the exact checkpoint body and key after a lost acknowledgement, then sends an incremental edit', async () => {
-    const f = await fixture(); const adapter = new CheckpointAdapter(base, f.initial, '7');
+    const f = await fixture(); const onSaved = vi.fn(); const adapter = new CheckpointAdapter(base, f.initial, '7', onSaved);
     const state = Y.encodeStateAsUpdate(f.doc);
     const request = { sessionKey: 's', draftId: '42', generation: 1, clientId: 'c', expectedDurableRevision: '0', requestId: 'key1', signal: new AbortController().signal, encodedState: state, target: { storeRevision: 1, yjs: { transactionSequence: 1, stateDigest: await digest(state) } } };
     const fetcher = vi.fn().mockRejectedValueOnce(new TypeError('connection lost')).mockResolvedValueOnce(response({ pageId: 42, sequence: '9007199254740993' })).mockResolvedValueOnce(response({ pageId: 42, sequence: '9007199254740994' }));
     vi.stubGlobal('fetch', fetcher);
     await expect(adapter.save(request)).rejects.toThrow('connection lost');
+    expect(onSaved).not.toHaveBeenCalled();
     expect((await adapter.save(request)).durableRevision).toBe('9007199254740993');
+    expect(onSaved).toHaveBeenCalledExactlyOnceWith('9007199254740993');
     expect(JSON.parse(fetcher.mock.calls[0][1].body).restoreGeneration).toBe('7');
     expect(fetcher.mock.calls[0][1].body).toBe(fetcher.mock.calls[1][1].body);
     expect(fetcher.mock.calls[0][1].headers).toEqual(fetcher.mock.calls[1][1].headers);
@@ -54,4 +56,65 @@ it('retains the exact checkpoint body and key after a lost acknowledgement, then
     expect(server.getMap('records').has('box')).toBe(false);
     expect(sequence('9007199254740994')).toBe(9007199254740994n);
     server.destroy(); f.doc.destroy();
+});
+
+async function savedFixture() {
+    const f = await fixture();
+    return { ...f, saved: { manifest: { ...f.manifest, restoreGeneration: '0' }, state: Y.encodeStateAsUpdate(f.doc), cache: { snapshot: f.manifest.baseSnapshot, bytes: f.initial } } };
+}
+it('checks only status when the saved head is unchanged', async () => {
+    const f = await savedFixture();
+    const fetcher = vi.fn().mockResolvedValue(response({ headSequence: '1', restoreGeneration: '0', readOnly: true }));
+    vi.stubGlobal('fetch', fetcher);
+    const next = await syncDraft(base, f.saved);
+    expect(next.state).toBe(f.saved.state);
+    expect(next.readOnly).toBe(true);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(fetcher.mock.calls[0][0]).toBe(base + '/draft/status');
+    f.doc.destroy();
+});
+it('fetches only the missing range and safely merges updates already received from peers', async () => {
+    const f = await savedFixture();
+    const vector = Y.encodeStateVector(f.doc);
+    f.doc.getMap('records').set('circle', { x: 30 });
+    const delta = Y.encodeStateAsUpdate(f.doc, vector);
+    const fetcher = vi.fn()
+        .mockResolvedValueOnce(response({ headSequence: '2', restoreGeneration: '0', readOnly: false }))
+        .mockResolvedValueOnce(response({ afterSequence: '1', headSequence: '2', restoreGeneration: '0', title: 'Renamed', readOnly: false, complete: false, updatesUrl: base + '/draft/updates?cursor=delta' }))
+        .mockResolvedValueOnce(response({ headSequence: '2', updates: [{ sequence: '2', updateEncoding: 'yjs-update-v1', update: uint8ArrayToBase64(delta) }], complete: true, nextCursor: null }));
+    vi.stubGlobal('fetch', fetcher);
+    const next = await syncDraft(base, f.saved);
+    expect(fetcher.mock.calls[1][0]).toBe(base + '/draft?afterSequence=1&restoreGeneration=0');
+    expect(next.manifest.headSequence).toBe('2');
+    expect(next.manifest.title).toBe('Renamed');
+    expect(f.saved.manifest.headSequence).toBe('1');
+    const updateListener = vi.fn(); f.doc.on('update', updateListener);
+    Y.applyUpdate(f.doc, next.state);
+    expect(updateListener).not.toHaveBeenCalled();
+    f.doc.destroy();
+});
+it('does not advance verified state when an incremental replay has a sequence gap', async () => {
+    const f = await savedFixture();
+    vi.stubGlobal('fetch', vi.fn()
+        .mockResolvedValueOnce(response({ headSequence: '3', restoreGeneration: '0', readOnly: false }))
+        .mockResolvedValueOnce(response({ afterSequence: '1', headSequence: '3', restoreGeneration: '0', complete: false, updatesUrl: base + '/draft/updates?cursor=delta' }))
+        .mockResolvedValueOnce(response({ headSequence: '3', updates: [{ sequence: '3', updateEncoding: 'yjs-update-v1', update: 'AAA=' }], complete: true, nextCursor: null })));
+    const before = f.saved.state.slice();
+    await expect(syncDraft(base, f.saved)).rejects.toThrow('Incomplete');
+    expect(f.saved.state).toEqual(before);
+    expect(f.saved.manifest.headSequence).toBe('1');
+    f.doc.destroy();
+});
+it.each(['restore', 'compaction'])('loads a fresh verified draft after %s', async reason => {
+    const f = await savedFixture();
+    const fetcher = vi.fn().mockResolvedValueOnce(response({ headSequence: '2', restoreGeneration: reason === 'restore' ? '1' : '0', readOnly: false }));
+    if (reason === 'compaction') fetcher.mockResolvedValueOnce(new Response(JSON.stringify({ error: { code: 'DRAFT_RESET_REQUIRED' } }), { status: 409 }));
+    fetcher.mockResolvedValueOnce(response({ ...f.manifest, restoreGeneration: reason === 'restore' ? '1' : '0', headSequence: '2' }))
+        .mockResolvedValueOnce(response({ headSequence: '2', updates: [{ sequence: '1', updateEncoding: 'yjs-update-v1', update: uint8ArrayToBase64(f.update) }, { sequence: '2', updateEncoding: 'yjs-update-v1', update: 'AAA=' }], complete: true, nextCursor: null }));
+    vi.stubGlobal('fetch', fetcher);
+    const next = await syncDraft(base, f.saved);
+    expect(next.manifest.headSequence).toBe('2');
+    expect(next.manifest.restoreGeneration).toBe(reason === 'restore' ? '1' : '0');
+    expect(fetcher.mock.calls.some(([url]) => url === base + '/draft')).toBe(true);
+    f.doc.destroy();
 });

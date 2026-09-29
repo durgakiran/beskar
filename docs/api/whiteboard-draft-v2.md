@@ -8,7 +8,7 @@ All requests require the application's authenticated cookie/bearer session and c
 
 `GET /api/v2/editor/space/{spaceId}/whiteboard/{pageId}/draft`
 
-No body, query parameters, or idempotency key. HTTP 200:
+Without query parameters this returns the original full-load manifest. No body or idempotency key. HTTP 200:
 
 ```json
 {
@@ -39,6 +39,55 @@ All sequence fields are decimal strings, matching checkpoint acknowledgements an
 The manifest creates an actor-scoped, one-hour replay lease. It changes no document content, draft head, or publication state. Repeating the manifest request creates another lease and may capture a newer head. Retry an individual page/download using its original URL while its lease remains valid.
 
 For a newly created board, base and head are both `"0"`, the snapshot download contains the two bytes `00 00`, and the update endpoint returns an empty, complete page.
+
+## Lightweight status
+
+`GET /api/v2/editor/space/{spaceId}/whiteboard/{pageId}/draft/status`
+
+No query parameters. Returns the standard success envelope with:
+
+```json
+{
+  "headSequence": "403",
+  "restoreGeneration": "0",
+  "readOnly": false
+}
+```
+
+This reads draft and space metadata in one database statement. It does not load snapshot/update bytes or create a replay lease. Current edit permission is required: revoked permission returns 403, rather than a successful read-only response. `readOnly` indicates an archived space. Deleted or mismatched boards/spaces return 404. A missing draft is an integrity error.
+
+Status is an observation, not a lock or a publish authorization. When the head and restore generation match the client's verified server state, no replay is necessary; later saves can still advance the head.
+
+## Incremental manifest
+
+`GET /api/v2/editor/space/{spaceId}/whiteboard/{pageId}/draft?afterSequence=400&restoreGeneration=0`
+
+Both parameters are required together, exactly once. Values must be canonical nonnegative decimal BIGINT strings (`0` or a nonzero digit followed by digits, at most 9223372036854775807). Unknown parameters, signs, leading zeroes, empty values, malformed encoding, and duplicates return 400.
+
+HTTP 200 uses the standard success envelope with this data (no base snapshot):
+
+```json
+{
+  "afterSequence": "400",
+  "headSequence": "403",
+  "restoreGeneration": "0",
+  "title": "Architecture discussion",
+  "readOnly": false,
+  "complete": false,
+  "updatesUrl": "/api/v2/editor/space/c7022348-1bb3-4e52-8403-17786e15e035/whiteboard/42/draft/updates?cursor=<opaque cursor>",
+  "expiresAt": "2026-09-29T11:00:00Z"
+}
+```
+
+Follow `updatesUrl` and the existing update-page pagination until complete. This example returns only sequences 401–403. The captured head remains fixed even if later saves occur. Title and read-only metadata belong to the manifest capture; the title is the title at the captured head.
+
+When `afterSequence == headSequence`, the response has `complete: true`, `updatesUrl: null`, and `expiresAt: null`; no lease or updates request is needed.
+
+A restore generation mismatch returns 409 `DRAFT_RESET_REQUIRED`. An `afterSequence` below the current snapshot boundary also returns 409: load a fresh full manifest and snapshot. This conservative rule applies even when old rows still exist. An ahead-of-head sequence in the current generation returns 400 `INVALID_REQUEST`. Generation mismatch is checked first. Missing rows within an otherwise valid replay still fail closed as integrity errors.
+
+The client must supply its last **contiguous applied server sequence**, not its latest save acknowledgement. Keep verified server state separate from unsaved local edits. Reconcile restored drafts using the existing restore-generation isolation; do not merge old-generation recovery into a fresh restored document.
+
+No schema migration is required for these additions. Incremental cursors start at `afterSequence`, while the existing lease still retains the snapshot and the full `(base_sequence, head_sequence]` interval. Snapshot download validation and cursor signing remain unchanged.
 
 ## Snapshot download
 
@@ -111,7 +160,8 @@ JSON errors use `{"status":"FAILED","error":{"code":"...","message":"..."}}`.
 
 | HTTP | Code | Meaning |
 | --- | --- | --- |
-| 400 | `INVALID_REQUEST` | Invalid IDs, missing/duplicate/unknown query parameters, malformed or tampered cursor |
+| 400 | `INVALID_REQUEST` | Invalid IDs, missing/duplicate/unknown query parameters, invalid or ahead-of-head sequence, malformed or tampered cursor |
+| 409 | `DRAFT_RESET_REQUIRED` | Restore generation changed or requested position precedes current snapshot; load a fresh full draft |
 | 401 | `UNAUTHENTICATED` | Missing or invalid application identity |
 | 403 | `DRAFT_FORBIDDEN` | Current page edit permission denied |
 | 404 | `WHITEBOARD_NOT_FOUND` | Missing/deleted/mismatched board or snapshot does not belong to this replay |
@@ -135,3 +185,11 @@ WHITEBOARD_DRAFT_TEST_DSN='postgres://postgres@127.0.0.1:5432/whiteboard_draft_t
 ```
 
 The integration test requires Liquibase on PATH and a **disposable** database named `whiteboard_draft_test` and replaces its `core` and `whiteboard` schemas and public Liquibase tracking tables. Without that environment variable, it is skipped.
+
+## Editor synchronization
+
+The editor retains a verified server state and its contiguous sequence separately from local edits. After initial loading, synchronization checks `/draft/status` and only requests an incremental manifest when the head advances. Compaction triggers a verified full reload; a changed restore generation replaces the editor session using its existing recovery isolation.
+
+Successful checkpoints and title saves announce a monotonic `savedSequence` through WebRTC awareness. Newer notifications are debounced for 300 ms; concurrent requests share one replay. Notifications arriving during a replay are checked again after its fixed head is applied. Reconnect and focus also reconcile. A visible tab checks status every 60 seconds as a fallback; title autosave keeps its separate 10-second timer.
+
+Publishing reconciles before taking the edit fence, then saves and verifies the publish boundary under the fence. Server/editor digest mismatch and a state change during preview generation have distinct errors. Incremental synchronization does not by itself establish the cause of a persistent digest mismatch.
