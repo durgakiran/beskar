@@ -102,7 +102,7 @@ export default function WhiteboardEditorV2({ slug }: { slug: string[] }) {
                 announcedSequence = sequence(saved) > announcedSequence ? sequence(saved) : announcedSequence;
                 provider.awareness.setLocalStateField('savedSequence', announcedSequence.toString());
             };
-            const durability = new YjsDurabilityCoordinator({ sessionKey, draftId: page, clientId: tabId,
+            const durability = new YjsDurabilityCoordinator({ sessionKey, draftId: page, clientId: tabId, debounceMs: 5000,
                 durableRevision: loaded.manifest.headSequence, acknowledgedStateDigest,
                 persistence: new CheckpointAdapter(base, loaded.state, generation, announceSaved), recovery });
 
@@ -258,11 +258,18 @@ export default function WhiteboardEditorV2({ slug }: { slug: string[] }) {
         const unload = (event: BeforeUnloadEvent) => {
             if (status?.phase !== 'clean' || pendingTitle.current || (board?.getPendingAssetCount() ?? 0) > 0) { event.preventDefault(); event.returnValue = ''; }
         };
-        const reconnect = () => { if (session && !busyRef.current) void Promise.all([session.saveTitle(), session.sync()]).catch(e => setSyncError(e.message)); };
+        const reconnect = () => {
+            if (!session || session.signal.aborted || activeSession.current !== session || !navigator.onLine || busyRef.current) return;
+            void Promise.all([session.saveTitle(), session.sync()]).catch(e => {
+                if (!session.signal.aborted && activeSession.current === session) setSyncError(e.message);
+            });
+        };
+        const visible = () => { if (document.visibilityState === 'visible') reconnect(); };
         window.addEventListener('beforeunload', unload);
         window.addEventListener('online', reconnect);
         window.addEventListener('focus', reconnect);
-        return () => { window.removeEventListener('beforeunload', unload); window.removeEventListener('online', reconnect); window.removeEventListener('focus', reconnect); };
+        document.addEventListener('visibilitychange', visible);
+        return () => { window.removeEventListener('beforeunload', unload); window.removeEventListener('online', reconnect); window.removeEventListener('focus', reconnect); document.removeEventListener('visibilitychange', visible); };
     }, [status, session, board]);
 
     const rename = (value: string) => {

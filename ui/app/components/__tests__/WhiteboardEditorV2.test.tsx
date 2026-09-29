@@ -135,6 +135,45 @@ describe('WhiteboardEditorV2 capture preparation', () => {
         expect(mocks.loadDraft).toHaveBeenCalledTimes(1);
     });
 
+    it.each(['hidden', 'offline'])('skips periodic fallback checks while %s', async condition => {
+        vi.useFakeTimers();
+        vi.spyOn(document, 'visibilityState', 'get').mockReturnValue(condition === 'hidden' ? 'hidden' : 'visible');
+        vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(condition !== 'offline');
+        await act(async () => { render(<WhiteboardEditorV2 slug={['space-1', 'page-1']} />); });
+        await act(async () => { await vi.advanceTimersByTimeAsync(120000); });
+        expect(mocks.syncDraft).not.toHaveBeenCalled();
+    });
+
+    it('checks when a tab becomes visible, but skips focus checks while offline', async () => {
+        await renderEditor();
+        const visibility = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
+        const online = vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
+        await act(async () => {
+            document.dispatchEvent(new Event('visibilitychange'));
+            window.dispatchEvent(new Event('focus'));
+        });
+        expect(mocks.syncDraft).not.toHaveBeenCalled();
+        online.mockReturnValue(true);
+        visibility.mockReturnValue('visible');
+        await act(async () => { document.dispatchEvent(new Event('visibilitychange')); });
+        expect(mocks.syncDraft).toHaveBeenCalledTimes(1);
+    });
+
+    it('removes fallback listeners and timers when the editor closes', async () => {
+        vi.useFakeTimers();
+        vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
+        let editor!: ReturnType<typeof render>;
+        await act(async () => { editor = render(<WhiteboardEditorV2 slug={['space-1', 'page-1']} />); });
+        await act(async () => { editor.unmount(); });
+        await act(async () => {
+            window.dispatchEvent(new Event('online'));
+            window.dispatchEvent(new Event('focus'));
+            document.dispatchEvent(new Event('visibilitychange'));
+            await vi.advanceTimersByTimeAsync(120000);
+        });
+        expect(mocks.syncDraft).not.toHaveBeenCalled();
+    });
+
     it('debounces newer peer save notifications and ignores already applied sequences', async () => {
         await renderEditor();
         vi.useFakeTimers();
