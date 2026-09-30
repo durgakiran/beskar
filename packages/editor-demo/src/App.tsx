@@ -361,7 +361,7 @@ function App() {
         const CONTEXT_CHARS = 32;
         const { doc } = state;
 
-        pluginState.threads.forEach((thread) => {
+        pluginState.threads.forEach((thread: CommentThread) => {
           if (thread.orphaned || thread.resolvedAt) return;
 
           // Find the current decoration for this thread
@@ -456,7 +456,7 @@ function App() {
     };
     checkOrphans();
     editor.on('transaction', checkOrphans);
-    return () => editor.off('transaction', checkOrphans);
+    return () => { editor.off('transaction', checkOrphans); };
   }, [editor, threads]);
 
   const derivedThreads = useMemo(() => {

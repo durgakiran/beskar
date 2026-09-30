@@ -33,11 +33,10 @@ export const MenuList = forwardRef<any, MenuListProps>((props, ref) => {
   useImperativeHandle(ref, () => ({
     onKeyDown: ({ event }: { event: KeyboardEvent }) => {
       if (event.key === 'ArrowDown') {
-        event.preventDefault();
-        
         if (!props.items.length) {
           return false;
         }
+        event.preventDefault();
 
         const commands = props.items[selectedGroupIndex].commands;
         let newCommandIndex = selectedCommandIndex + 1;
@@ -59,11 +58,10 @@ export const MenuList = forwardRef<any, MenuListProps>((props, ref) => {
       }
 
       if (event.key === 'ArrowUp') {
-        event.preventDefault();
-        
         if (!props.items.length) {
           return false;
         }
+        event.preventDefault();
 
         let newCommandIndex = selectedCommandIndex - 1;
         let newGroupIndex = selectedGroupIndex;
@@ -85,11 +83,10 @@ export const MenuList = forwardRef<any, MenuListProps>((props, ref) => {
       }
 
       if (event.key === 'Enter') {
-        event.preventDefault();
-        
         if (!props.items.length || selectedGroupIndex === -1 || selectedCommandIndex === -1) {
           return false;
         }
+        event.preventDefault();
 
         selectItem(selectedGroupIndex, selectedCommandIndex);
 
@@ -120,11 +117,7 @@ export const MenuList = forwardRef<any, MenuListProps>((props, ref) => {
   );
 
   if (!props.items.length) {
-    return (
-      <div className="slash-command-menu">
-        <div className="slash-command-empty">No commands found</div>
-      </div>
-    );
+    return null;
   }
 
   return (
@@ -162,4 +155,3 @@ export const MenuList = forwardRef<any, MenuListProps>((props, ref) => {
 MenuList.displayName = 'MenuList';
 
 export default MenuList;
-
