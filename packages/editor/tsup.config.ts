@@ -29,6 +29,8 @@ export default defineConfig({
     'y-protocols',
     'y-prosemirror',
     '@hocuspocus/provider',
+    // Keep the preview renderer in a separate, on-demand host-app chunk.
+    'mermaid',
   ],
   // Force-bundle all TipTap extension packages and other deps so they are inlined
   // into this dist rather than left as external imports pointing at
@@ -66,4 +68,3 @@ export default defineConfig({
     }
   },
 });
-

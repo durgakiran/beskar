@@ -4,6 +4,7 @@ import * as Popover from '@radix-ui/react-popover';
 import * as Menu from '@radix-ui/react-dropdown-menu';
 import { FiChevronDown, FiCopy, FiMoreHorizontal } from 'react-icons/fi';
 import { copyCodeText, filterLanguages, htmlPreview, languageLabel, normalizeLanguage } from './codeBlockUtils';
+import { MermaidPreview } from './MermaidPreview';
 
 const RECENTS_KEY = 'beskar:code-languages';
 function recentLanguages(): string[] {
@@ -27,13 +28,14 @@ export function CodeBlockView({ editor, node, getPos, updateAttributes, deleteNo
   const listId = useId();
   const captionId = useId();
   const language = normalizeLanguage(node.attrs.language);
+  const previousLanguage = useRef(language);
   const matches = filterLanguages(query, recent);
   const option = (key: string) => !editable && key in readerOptions ? readerOptions[key] : !!node.attrs[key];
   const wrap = option('wrap');
   const lineNumbers = option('lineNumbers');
   const collapsed = option('collapsed');
-  const canPreview = language === 'xml';
-  const showPreview = canPreview && preview;
+  const previewType = language === 'xml' ? 'html' : language === 'mermaid' ? 'mermaid' : null;
+  const showPreview = !!previewType && preview;
   const setOption = (key: string, value: boolean) => editor.isEditable ? updateAttributes({ [key]: value }) : setReaderOptions(old => ({ ...old, [key]: value }));
 
   useEffect(() => {
@@ -48,6 +50,12 @@ export function CodeBlockView({ editor, node, getPos, updateAttributes, deleteNo
   useEffect(() => { if (!status) return; const timer = setTimeout(() => setStatus(''), 3000); return () => clearTimeout(timer); }, [status]);
   useEffect(() => { setActive(0); }, [query]);
   useEffect(() => {
+    if (previousLanguage.current !== language) {
+      previousLanguage.current = language;
+      setPreview(false);
+    }
+  }, [language]);
+  useEffect(() => {
     root.current?.querySelector(`#${CSS.escape(listId)} [aria-selected="true"]`)?.scrollIntoView({ block: 'nearest' });
   }, [active, listId]);
   useEffect(() => {
@@ -56,9 +64,9 @@ export function CodeBlockView({ editor, node, getPos, updateAttributes, deleteNo
   useEffect(() => {
     const reveal = () => {
       const pos = getPos();
-      if (editable && editor.isFocused && typeof pos === 'number' && editor.state.selection.from > pos && editor.state.selection.to < pos + node.nodeSize) {
+      const sourceHasFocus = root.current?.querySelector('.code-block-source')?.contains(document.activeElement);
+      if (editable && sourceHasFocus && editor.isFocused && typeof pos === 'number' && editor.state.selection.from > pos && editor.state.selection.to < pos + node.nodeSize) {
         if (node.attrs.collapsed) updateAttributes({ collapsed: false });
-        setPreview(false);
       }
     };
     editor.on('selectionUpdate', reveal);
@@ -68,6 +76,7 @@ export function CodeBlockView({ editor, node, getPos, updateAttributes, deleteNo
   const chooseLanguage = (value: string) => {
     if (!editor.isEditable) return;
     updateAttributes({ language: value });
+    setPreview(false);
     const next = [value, ...recent.filter(l => l !== value)].slice(0, 5);
     setRecent(next);
     try { localStorage.setItem(RECENTS_KEY, JSON.stringify(next)); } catch { /* Storage is optional. */ }
@@ -101,7 +110,7 @@ export function CodeBlockView({ editor, node, getPos, updateAttributes, deleteNo
         </Popover.Content></Popover.Portal>
       </Popover.Root>
       <div className="code-block-actions">
-        {canPreview && <button type="button" className="code-block-control" aria-pressed={showPreview} onClick={() => setPreview(!preview)}>{showPreview ? 'Code' : 'Preview'}</button>}
+        {previewType && <button type="button" className="code-block-control" aria-pressed={showPreview} onClick={() => setPreview(value => !value)}>{showPreview ? 'Code' : 'Preview'}</button>}
         <button type="button" className="code-block-control" onClick={copy} aria-label="Copy code"><FiCopy aria-hidden="true" />{status === 'Copied' ? 'Copied' : 'Copy'}</button>
         <button type="button" className="code-block-control" aria-expanded={!collapsed} onClick={() => setOption('collapsed', !collapsed)}>{collapsed ? 'Expand' : 'Collapse'}</button>
         <Menu.Root modal={false}><Menu.Trigger asChild><button type="button" className="code-block-control" aria-label="Code block options"><FiMoreHorizontal aria-hidden="true" /></button></Menu.Trigger>
@@ -130,7 +139,11 @@ export function CodeBlockView({ editor, node, getPos, updateAttributes, deleteNo
     <div className="code-block-source" hidden={showPreview}>
       <pre spellCheck={false}><NodeViewContent<'code'> as="code" style={{ whiteSpace: wrap ? 'pre-wrap' : 'pre' }} /></pre>
     </div>
-    {showPreview && <div contentEditable={false} className="code-block-preview"><iframe title="HTML code preview" sandbox="" referrerPolicy="no-referrer" srcDoc={htmlPreview(node.textContent)} /><span>Static HTML preview · scripts and external resources are disabled</span></div>}
+    {showPreview && <div contentEditable={false} className="code-block-preview">
+      {previewType === 'html'
+        ? <><iframe title="HTML code preview" sandbox="" referrerPolicy="no-referrer" srcDoc={htmlPreview(node.textContent)} /><span>Static HTML preview · scripts and external resources are disabled</span></>
+        : <MermaidPreview source={node.textContent} />}
+    </div>}
     {collapsed && !showPreview && <button type="button" contentEditable={false} className="code-block-expand" onClick={() => setOption('collapsed', false)}>Show all {node.textContent.split('\n').length} lines</button>}
     {node.attrs.caption && <div contentEditable={false} className="code-block-caption">{node.attrs.caption}</div>}
     <span contentEditable={false} role="status" className={status && status !== 'Copied' ? 'code-block-status' : 'code-block-sr-only'}>{status}</span>

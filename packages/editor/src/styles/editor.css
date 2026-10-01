@@ -4151,6 +4151,9 @@ td.selectedCell {
 .code-block-preview { padding: 8px; }
 .code-block-preview iframe { display: block; box-sizing: border-box; width: 100%; height: 240px; border: 1px solid var(--editor-border-subtle); border-radius: 4px; background: white; }
 .code-block-preview > span, .code-block-status { display: block; padding: 6px 8px; color: var(--editor-text-secondary); font: 400 12px/1.5 var(--editor-font-family); }
+.code-block-mermaid-preview { min-height: 80px; display: grid; place-items: center; overflow: auto; color: var(--editor-text-secondary); font: 400 12px/1.5 var(--editor-font-family); }
+.code-block-mermaid-preview > span { padding: 16px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.code-block-mermaid-preview > img { display: block; max-width: 100%; height: auto; }
 .code-block-sr-only { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .beskar-editor :is(td,th) .code-block-view { contain: inline-size; }
 @media (pointer: coarse) { .code-block-control { min-height: 40px; } }
