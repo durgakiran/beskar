@@ -4,6 +4,7 @@ import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import { closeHistory } from '@tiptap/pm/history';
 import { yUndoPluginKey } from '@tiptap/y-tiptap';
 import { BLOCK_TYPES, BLOCK_MOVED, canMoveBlock, documentBlocks, selectedBlock, siblingDestination, moveBlockTransaction } from './block-movement';
+import { convertListBlockTransaction, type ListType } from './list-conversion';
 import { BlockDragController } from './block-drag-controller';
 
 export interface BlockDragDropOptions { types: string[] }
@@ -22,6 +23,7 @@ declare module '@tiptap/core' {
     blockDragDrop: {
       moveBlockUp: (blockId?: string) => ReturnType;
       moveBlockDown: (blockId?: string) => ReturnType;
+      convertListBlock: (type: ListType, blockId?: string) => ReturnType;
       openBlockMenu: () => ReturnType;
     };
   }
@@ -45,6 +47,15 @@ export const BlockDragDrop = Extension.create<BlockDragDropOptions>({
     return {
       moveBlockUp: id => move(-1, id),
       moveBlockDown: id => move(1, id),
+      convertListBlock: (type, id) => ({ state, dispatch }) => {
+        if (!this.editor.isEditable) return false;
+        const sourceId = id ?? selectedBlock(state, this.options.types)?.id;
+        if (!sourceId) return false;
+        const tr = convertListBlockTransaction(state, sourceId, type);
+        if (!tr) return false;
+        if (dispatch) dispatch(tr);
+        return true;
+      },
       openBlockMenu: () => ({ state, dispatch }) => {
         if (!this.editor.isEditable || !selectedBlock(state, this.options.types)) return false;
         if (dispatch) this.editor.view.dom.dispatchEvent(new CustomEvent('beskar:block-menu'));

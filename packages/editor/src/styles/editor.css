@@ -119,6 +119,7 @@
 .block-action-menu button { display: block; width: 100%; padding: 8px 12px; border: 0; border-radius: 4px; background: transparent; color: inherit; text-align: left; font: inherit; font-size: 13px; cursor: pointer; }
 .block-action-menu button:hover:not(:disabled), .block-action-menu button:focus-visible { background: var(--editor-bg-hover, #eee); }
 .block-action-menu button:disabled { opacity: .4; cursor: default; }
+.block-action-menu-label { margin-top: 4px; padding: 9px 12px 3px; border-top: 1px solid var(--editor-border-subtle, #e8e8e8); color: var(--editor-text-secondary, #646464); font-size: 11px; font-weight: 600; }
 .block-controls .block-drag-drop-indicator {
   position: fixed; height: 3px; border-radius: 2px; background: var(--editor-accent, #0ea5e9);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--editor-accent, #0ea5e9) 20%, transparent); pointer-events: none;
