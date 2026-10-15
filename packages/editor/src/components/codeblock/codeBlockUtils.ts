@@ -7,9 +7,10 @@ const labels: Record<string, string> = {
   javascript: 'JavaScript', typescript: 'TypeScript', cpp: 'C++', csharp: 'C#',
   plaintext: 'Plain Text', xml: 'HTML / XML', bash: 'Bash', objectivec: 'Objective-C',
   css: 'CSS', scss: 'SCSS', json: 'JSON', sql: 'SQL', yaml: 'YAML', php: 'PHP',
+  mermaid: 'Mermaid',
 };
 export const languageLabel = (language: string) => labels[language] || language[0]?.toUpperCase() + language.slice(1);
-export const codeLanguages = codeLowlight.listLanguages().sort();
+export const codeLanguages = [...new Set([...codeLowlight.listLanguages(), 'mermaid'])].sort();
 const aliases: Record<string, string> = { js: 'javascript', ts: 'typescript', html: 'xml', htm: 'xml', sh: 'bash', py: 'python', yml: 'yaml', text: 'plaintext', txt: 'plaintext', 'c++': 'cpp', 'c#': 'csharp' };
 export const normalizeLanguage = (language: string | null) => aliases[language || ''] || language || 'plaintext';
 export function filterLanguages(query: string, recent: string[]) {

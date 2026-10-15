@@ -4,6 +4,7 @@ import { Editor, Extension, flattenExtensions, getSchema } from '@tiptap/core';
 import { getExtensions } from '../src/extensions';
 import { EDITOR_FEATURE_EXTENSIONS, MANDATORY_EDITOR_EXTENSIONS, type EditorFeature } from '../src/extensions/features';
 import { GROUPS } from '../src/extensions/slash-command/groups';
+import { convertListBlockTransaction } from '../src/extensions/list-conversion';
 import { normalizeHyperlink } from '../src/utils/hyperlink';
 
 test('hyperlinks normalize destinations and reject unsafe or malformed URLs', () => {
@@ -104,6 +105,38 @@ test('document lists carry style scope independently of block IDs', () => {
     const dom = schema.nodes[name].spec.toDOM!(node) as any[];
     assert.equal(dom[1]['data-editor-list'], 'true', name);
   }
+});
+
+test('block list conversion preserves content, nested lists, block ID, and cursor', () => {
+  const schema = getSchema(getExtensions());
+  const paragraph = (text: string) => schema.nodes.paragraph.create(null, schema.text(text));
+  const nested = schema.nodes.bulletList.create(null, [
+    schema.nodes.listItem.create(null, [paragraph('nested')]),
+  ]);
+  const source = schema.nodes.bulletList.create({ blockId: 'list-1' }, [
+    schema.nodes.listItem.create(null, [paragraph('first'), nested]),
+    schema.nodes.listItem.create(null, [paragraph('second')]),
+  ]);
+  const doc = schema.nodes.doc.create(null, [paragraph('before'), source, paragraph('after')]);
+  const listPos = doc.child(0).nodeSize;
+  let state = EditorState.create({ doc, selection: TextSelection.create(doc, listPos + 3) });
+
+  for (const target of ['orderedList', 'taskList', 'bulletList'] as const) {
+    const tr = convertListBlockTransaction(state, 'list-1', target);
+    assert.ok(tr, target);
+    state = state.apply(tr);
+    state.doc.check();
+    const converted = state.doc.child(1);
+    assert.equal(converted.type.name, target);
+    assert.equal(converted.attrs.blockId, 'list-1');
+    assert.equal(converted.childCount, 2);
+    assert.equal(converted.child(0).type.name, target === 'taskList' ? 'taskItem' : 'listItem');
+    assert.equal(converted.child(0).child(1).type.name, 'bulletList');
+    assert.equal(converted.textContent, 'firstnestedsecond');
+    assert.equal(state.selection.from, listPos + 3);
+  }
+  assert.equal(convertListBlockTransaction(state, 'list-1', 'bulletList'), null);
+  assert.equal(convertListBlockTransaction(state, 'missing', 'orderedList'), null);
 });
 
 // Exercise the actual shared resolver used by all external-link node views.
@@ -325,6 +358,7 @@ test('collaboration supplied by a UI integration disables competing StarterKit h
 
 // Code editing regressions: selections span logical lines, not arbitrary text fragments.
 import { indentCode, filterLanguages, htmlPreview } from '../src/components/codeblock/codeBlockUtils';
+import { MAX_MERMAID_SOURCE_LENGTH, renderMermaid } from '../src/components/codeblock/mermaidRenderer';
 import { EditorState as CodeEditorState, TextSelection as CodeTextSelection } from '@tiptap/pm/state';
 const codeState = (text: string, from: number, to = from) => {
   const schema = getSchema(getExtensions());
@@ -353,6 +387,7 @@ test('code indentation handles empty first lines, blank blocks, tabs and reverse
 test('language search resolves common aliases and ignores invalid recent values', () => {
   assert.ok(filterLanguages('html', []).includes('xml'));
   assert.ok(filterLanguages('js', []).includes('javascript'));
+  assert.ok(filterLanguages('mermaid', []).includes('mermaid'));
   assert.equal(filterLanguages('', ['python', 'invalid', 'python'])[0], 'python');
   assert.ok(!filterLanguages('', ['invalid']).includes('invalid'));
   assert.deepEqual(filterLanguages('no-such-language', []), []);
@@ -370,6 +405,12 @@ test('HTML preview establishes restrictive CSP before user markup', () => {
   assert.ok(preview.includes("script-src 'none'"));
   assert.ok(preview.includes("form-action 'none'"));
   assert.ok(preview.indexOf('Content-Security-Policy') < preview.indexOf('<script>'));
+});
+test('oversized Mermaid source is rejected before the renderer loads', async () => {
+  await assert.rejects(
+    renderMermaid(' '.repeat(MAX_MERMAID_SOURCE_LENGTH + 1), 'default', new AbortController().signal),
+    /too large to preview/,
+  );
 });
 
 test('code keyboard priority does not change the default paragraph schema', () => {

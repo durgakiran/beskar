@@ -119,6 +119,7 @@
 .block-action-menu button { display: block; width: 100%; padding: 8px 12px; border: 0; border-radius: 4px; background: transparent; color: inherit; text-align: left; font: inherit; font-size: 13px; cursor: pointer; }
 .block-action-menu button:hover:not(:disabled), .block-action-menu button:focus-visible { background: var(--editor-bg-hover, #eee); }
 .block-action-menu button:disabled { opacity: .4; cursor: default; }
+.block-action-menu-label { margin-top: 4px; padding: 9px 12px 3px; border-top: 1px solid var(--editor-border-subtle, #e8e8e8); color: var(--editor-text-secondary, #646464); font-size: 11px; font-weight: 600; }
 .block-controls .block-drag-drop-indicator {
   position: fixed; height: 3px; border-radius: 2px; background: var(--editor-accent, #0ea5e9);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--editor-accent, #0ea5e9) 20%, transparent); pointer-events: none;
@@ -214,8 +215,8 @@
 }
 
 /* Lists */
-.beskar-editor .ProseMirror ol[data-editor-list],
-.beskar-editor .ProseMirror ul[data-editor-list] {
+.beskar-editor .ProseMirror ol:is([data-editor-list], .block-node),
+.beskar-editor .ProseMirror ul:is([data-editor-list], .block-node) {
   margin-top: var(--editor-block-gap);
   margin-bottom: 0;
   padding-left: 0;
@@ -223,16 +224,16 @@
   list-style-position: outside;
 }
 
-.beskar-editor .ProseMirror ol[data-editor-list] {
+.beskar-editor .ProseMirror ol:is([data-editor-list], .block-node) {
   list-style-type: decimal;
 }
 
-.beskar-editor .ProseMirror ul[data-editor-list] {
+.beskar-editor .ProseMirror ul:is([data-editor-list], .block-node):not([data-type="taskList"]) {
   list-style-type: disc;
 }
 
-.beskar-editor .ProseMirror ol[data-editor-list] > li,
-.beskar-editor .ProseMirror ul[data-editor-list] > li {
+.beskar-editor .ProseMirror ol:is([data-editor-list], .block-node) > li,
+.beskar-editor .ProseMirror ul:is([data-editor-list], .block-node) > li {
   margin-top: 0.25rem;
   margin-bottom: 0.25rem;
   padding-left: 0.5rem;
@@ -249,8 +250,8 @@
 }
 
 /* Nested lists - align bullet with parent text */
-.beskar-editor .ProseMirror li>ol[data-editor-list],
-.beskar-editor .ProseMirror li>ul[data-editor-list] {
+.beskar-editor .ProseMirror li>ol:is([data-editor-list], .block-node),
+.beskar-editor .ProseMirror li>ul:is([data-editor-list], .block-node) {
   margin-top: 0.5rem;
   margin-bottom: 0.25rem;
   margin-left: 0;
@@ -258,49 +259,49 @@
 }
 
 /* Different bullet styles for nested unordered lists */
-.beskar-editor .ProseMirror ul[data-editor-list] ul[data-editor-list] {
+.beskar-editor .ProseMirror ul:is([data-editor-list], .block-node) ul:is([data-editor-list], .block-node) {
   list-style-type: circle;
   margin-left: 1rem !important;
   box-sizing: border-box;
 }
 
-.beskar-editor .ProseMirror ul[data-editor-list] ul[data-editor-list] ul[data-editor-list] {
+.beskar-editor .ProseMirror ul:is([data-editor-list], .block-node) ul:is([data-editor-list], .block-node) ul:is([data-editor-list], .block-node) {
   list-style-type: square;
   margin-left: 1rem !important;
   box-sizing: border-box;
 }
 
 /* Different number styles for nested ordered lists */
-.beskar-editor .ProseMirror ol[data-editor-list] ol[data-editor-list] {
+.beskar-editor .ProseMirror ol:is([data-editor-list], .block-node) ol:is([data-editor-list], .block-node) {
   list-style-type: lower-alpha;
   margin-left: 1rem !important;
   box-sizing: border-box;
 }
 
-.beskar-editor .ProseMirror ol[data-editor-list] ol[data-editor-list] ol[data-editor-list] {
+.beskar-editor .ProseMirror ol:is([data-editor-list], .block-node) ol:is([data-editor-list], .block-node) ol:is([data-editor-list], .block-node) {
   list-style-type: lower-roman;
   margin-left: 1rem !important;
   box-sizing: border-box;
 }
 
 /* Task Lists */
-.beskar-editor .ProseMirror ul[data-editor-list][data-type="taskList"] {
+.beskar-editor .ProseMirror ul[data-type="taskList"] {
   list-style: none;
   padding: 0;
   margin: var(--editor-block-gap) 0 0;
 }
 
-.beskar-editor .ProseMirror ul[data-editor-list][data-type="taskList"] > li {
+.beskar-editor .ProseMirror ul[data-type="taskList"] > li {
   display: flex;
   align-items: flex-start;
   gap: 0.5rem;
   margin: 0.25rem 0;
 }
 
-.beskar-editor .ProseMirror ul[data-editor-list][data-type="taskList"] > li>label {
+.beskar-editor .ProseMirror ul[data-type="taskList"] > li>label {
   flex: 0 0 auto;
   margin-right: 0;
-  margin-top: 0.425rem;
+  margin-top: 0.25rem;
   user-select: none;
   line-height: 1.4;
   cursor: pointer;
@@ -309,7 +310,7 @@
   justify-content: center;
 }
 
-.beskar-editor .ProseMirror ul[data-editor-list][data-type="taskList"] > li>label input[type="checkbox"] {
+.beskar-editor .ProseMirror ul[data-type="taskList"] > li>label input[type="checkbox"] {
   width: 1.125rem;
   height: 1.125rem;
   min-width: 1.125rem;
@@ -327,17 +328,17 @@
   transition: all 0.15s ease;
 }
 
-.beskar-editor .ProseMirror ul[data-editor-list][data-type="taskList"] > li>label input[type="checkbox"]:hover {
+.beskar-editor .ProseMirror ul[data-type="taskList"] > li>label input[type="checkbox"]:hover {
   border-color: var(--editor-accent, #0ea5e9);
   background-color: var(--editor-bg-hover, rgba(0, 0, 0, 0.02));
 }
 
-.beskar-editor .ProseMirror ul[data-editor-list][data-type="taskList"] > li>label input[type="checkbox"]:checked {
+.beskar-editor .ProseMirror ul[data-type="taskList"] > li>label input[type="checkbox"]:checked {
   background-color: var(--editor-accent, #0ea5e9);
   border-color: var(--editor-accent, #0ea5e9);
 }
 
-.beskar-editor .ProseMirror ul[data-editor-list][data-type="taskList"] > li>label input[type="checkbox"]:checked::before {
+.beskar-editor .ProseMirror ul[data-type="taskList"] > li>label input[type="checkbox"]:checked::before {
   content: '';
   position: absolute;
   left: 50%;
@@ -350,27 +351,27 @@
   box-sizing: border-box;
 }
 
-.beskar-editor:is(.dark, .dark *, [data-theme="dark"], [data-theme="dark"] *) .ProseMirror ul[data-editor-list][data-type="taskList"] > li>label input[type="checkbox"] {
+.beskar-editor:is(.dark, .dark *, [data-theme="dark"], [data-theme="dark"] *) .ProseMirror ul[data-type="taskList"] > li>label input[type="checkbox"] {
   border-color: var(--editor-border-default, #525252);
 }
 
-.beskar-editor:is(.dark, .dark *, [data-theme="dark"], [data-theme="dark"] *) .ProseMirror ul[data-editor-list][data-type="taskList"] > li>label input[type="checkbox"]:hover {
+.beskar-editor:is(.dark, .dark *, [data-theme="dark"], [data-theme="dark"] *) .ProseMirror ul[data-type="taskList"] > li>label input[type="checkbox"]:hover {
   border-color: var(--editor-accent, #0ea5e9);
   background-color: var(--editor-bg-hover, rgba(255, 255, 255, 0.02));
 }
 
-.beskar-editor .ProseMirror ul[data-editor-list][data-type="taskList"] > li>div {
+.beskar-editor .ProseMirror ul[data-type="taskList"] > li>div {
   flex: 1 1 auto;
   min-width: 0;
 }
 
-.beskar-editor .ProseMirror ul[data-editor-list][data-type="taskList"] > li[data-checked="true"]>div {
+.beskar-editor .ProseMirror ul[data-type="taskList"] > li[data-checked="true"]>div {
   text-decoration-line: line-through;
   color: var(--editor-text-tertiary, rgba(0, 0, 0, 0.5));
   opacity: 0.7;
 }
 
-.beskar-editor:is(.dark, .dark *, [data-theme="dark"], [data-theme="dark"] *) .ProseMirror ul[data-editor-list][data-type="taskList"] > li[data-checked="true"]>div {
+.beskar-editor:is(.dark, .dark *, [data-theme="dark"], [data-theme="dark"] *) .ProseMirror ul[data-type="taskList"] > li[data-checked="true"]>div {
   color: var(--editor-text-tertiary, rgba(255, 255, 255, 0.5));
 }
 
@@ -4150,6 +4151,9 @@ td.selectedCell {
 .code-block-preview { padding: 8px; }
 .code-block-preview iframe { display: block; box-sizing: border-box; width: 100%; height: 240px; border: 1px solid var(--editor-border-subtle); border-radius: 4px; background: white; }
 .code-block-preview > span, .code-block-status { display: block; padding: 6px 8px; color: var(--editor-text-secondary); font: 400 12px/1.5 var(--editor-font-family); }
+.code-block-mermaid-preview { min-height: 80px; display: grid; place-items: center; overflow: auto; color: var(--editor-text-secondary); font: 400 12px/1.5 var(--editor-font-family); }
+.code-block-mermaid-preview > span { padding: 16px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.code-block-mermaid-preview > img { display: block; max-width: 100%; height: auto; }
 .code-block-sr-only { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .beskar-editor :is(td,th) .code-block-view { contain: inline-size; }
 @media (pointer: coarse) { .code-block-control { min-height: 40px; } }

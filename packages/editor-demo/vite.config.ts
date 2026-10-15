@@ -14,6 +14,6 @@ export default defineConfig({
     dedupe: ['react', 'react-dom', '@radix-ui/themes'],
   },
   optimizeDeps: {
-    include: ['@beskar/editor', '@radix-ui/themes'],
+    include: ['@beskar/editor', '@radix-ui/themes', '@beskar/editor > mermaid'],
   },
 })

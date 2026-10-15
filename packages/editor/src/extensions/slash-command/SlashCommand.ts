@@ -125,7 +125,7 @@ export const SlashCommand = Extension.create<SlashCommandOptions>({
                 getReferenceClientRect: props.clientRect,
                 appendTo: () => document.body,
                 content: component.element,
-                showOnCreate: true,
+                showOnCreate: props.items.length > 0,
                 interactive: true,
                 trigger: 'manual',
                 placement: 'bottom-start',
@@ -159,6 +159,11 @@ export const SlashCommand = Extension.create<SlashCommandOptions>({
             onUpdate(props: any) {
               component?.updateProps(props);
 
+              if (!props.items.length) {
+                popup?.[0]?.hide();
+                return;
+              }
+
               if (!props.clientRect) {
                 return;
               }
@@ -166,6 +171,7 @@ export const SlashCommand = Extension.create<SlashCommandOptions>({
               popup?.[0]?.setProps({
                 getReferenceClientRect: props.clientRect,
               });
+              popup?.[0]?.show();
             },
 
             onKeyDown(props: any) {
@@ -198,4 +204,3 @@ export const SlashCommand = Extension.create<SlashCommandOptions>({
 });
 
 export default SlashCommand;
-

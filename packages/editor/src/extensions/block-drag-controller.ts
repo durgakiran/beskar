@@ -2,6 +2,7 @@ import type { Editor } from '@tiptap/core';
 import type { EditorView } from '@tiptap/pm/view';
 import { blockDragDropKey, type BlockDragDropState } from './block-drag-drop';
 import { canMoveBlock, documentBlocks, moveBlockTransaction, selectedBlock, siblingDestination, type BlockDestination, type DocumentBlock } from './block-movement';
+import { LIST_TYPES, type ListType } from './list-conversion';
 
 type BlockRect = DocumentBlock & { dom: HTMLElement; rect: DOMRect };
 /** Editor chrome owns input/geometry; ProseMirror owns all content and decorations. */
@@ -9,6 +10,7 @@ export class BlockDragController {
   private readonly root = document.createElement('div');
   private readonly handle = document.createElement('button');
   private readonly menu = document.createElement('div');
+  private readonly listHeading = document.createElement('div');
   private readonly indicator = document.createElement('div');
   private readonly live = document.createElement('div');
   private host: HTMLElement;
@@ -51,6 +53,19 @@ export class BlockDragController {
       const mac = /Mac|iPhone|iPad/.test(navigator.platform);
       item.textContent = `${label}    ${mac ? '⌘⌥' : 'Ctrl+Alt+'}${shortcut}`;
       item.addEventListener('click', () => this.move(direction));
+      this.menu.append(item);
+    }
+    this.listHeading.className = 'block-action-menu-label';
+    this.listHeading.textContent = 'Convert list to';
+    this.listHeading.hidden = true;
+    this.menu.append(this.listHeading);
+    for (const [type, label] of [['bulletList', 'Bulleted list'], ['orderedList', 'Numbered list'], ['taskList', 'To-do list']] as const) {
+      const item = document.createElement('button');
+      item.type = 'button';
+      item.setAttribute('role', 'menuitem');
+      item.dataset.listType = type;
+      item.textContent = label;
+      item.addEventListener('click', () => this.convertList(type));
       this.menu.append(item);
     }
     this.indicator.className = 'block-drag-drop-indicator';
@@ -196,11 +211,18 @@ export class BlockDragController {
     this.menu.hidden = false;
     this.handle.setAttribute('aria-expanded', 'true');
     this.position();
-    this.menu.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus();
+    Array.from(this.menu.querySelectorAll<HTMLButtonElement>('button:not(:disabled)')).find(item => item.getClientRects().length)?.focus();
   }
   private updateMenu() {
-    for (const item of Array.from(this.menu.querySelectorAll<HTMLButtonElement>('button'))) {
+    for (const item of Array.from(this.menu.querySelectorAll<HTMLButtonElement>('button[data-direction]'))) {
       item.disabled = !this.activeId || !siblingDestination(this.view.state, this.activeId, Number(item.dataset.direction) as -1 | 1, this.types);
+    }
+    const block = this.blocks().find(candidate => candidate.id === this.activeId);
+    const currentType = block?.node.type.name;
+    this.listHeading.hidden = !LIST_TYPES.includes(currentType as ListType);
+    for (const item of Array.from(this.menu.querySelectorAll<HTMLButtonElement>('button[data-list-type]'))) {
+      const type = item.dataset.listType as ListType;
+      item.hidden = type === currentType || !this.view.state.schema.nodes[type] || !this.view.state.schema.nodes[type === 'taskList' ? 'taskItem' : 'listItem'];
     }
   }
   private closeMenu(focus: boolean) {
@@ -218,6 +240,12 @@ export class BlockDragController {
     this.view.focus();
     this.announce(direction < 0 ? 'Block moved up.' : 'Block moved down.');
   }
+  private convertList(type: ListType) {
+    if (!this.activeId || !this.editor.commands.convertListBlock(type, this.activeId)) return;
+    this.closeMenu(false);
+    this.view.focus();
+    this.announce(`List converted to ${type === 'bulletList' ? 'bulleted' : type === 'orderedList' ? 'numbered' : 'to-do'} list.`);
+  }
   private announce(message: string) {
     this.live.textContent = '';
     queueMicrotask(() => { if (!this.destroyed) this.live.textContent = message; });
@@ -230,7 +258,7 @@ export class BlockDragController {
       return;
     }
     if (!this.menu.hidden && this.root.contains(event.target as Node)) {
-      const items = Array.from(this.menu.querySelectorAll<HTMLButtonElement>('button:not(:disabled)'));
+      const items = Array.from(this.menu.querySelectorAll<HTMLButtonElement>('button:not(:disabled)')).filter(item => item.getClientRects().length);
       const index = items.indexOf(document.activeElement as HTMLButtonElement);
       if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
         event.preventDefault();

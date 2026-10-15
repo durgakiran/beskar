@@ -132,6 +132,11 @@ const initialContent = {
       attrs: { language: 'typescript', blockId: 'init-cb' },
       content: [{ type: 'text', text: 'const greeting = (name: string) => `Hello, ${name}!`;\nconsole.log(greeting("World"));' }],
     },
+    {
+      type: 'codeBlock',
+      attrs: { language: 'mermaid', blockId: 'init-mermaid' },
+      content: [{ type: 'text', text: 'flowchart LR\n  Idea[Idea] --> Code[Mermaid source]\n  Code --> Preview[Diagram preview]' }],
+    },
 
     // ── Horizontal rule ───────────────────────────────────────────────────────
     { type: 'horizontalRule', attrs: { blockId: 'init-hr' } },
@@ -361,7 +366,7 @@ function App() {
         const CONTEXT_CHARS = 32;
         const { doc } = state;
 
-        pluginState.threads.forEach((thread) => {
+        pluginState.threads.forEach((thread: CommentThread) => {
           if (thread.orphaned || thread.resolvedAt) return;
 
           // Find the current decoration for this thread
@@ -456,7 +461,7 @@ function App() {
     };
     checkOrphans();
     editor.on('transaction', checkOrphans);
-    return () => editor.off('transaction', checkOrphans);
+    return () => { editor.off('transaction', checkOrphans); };
   }, [editor, threads]);
 
   const derivedThreads = useMemo(() => {
