@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+    <changeSet id="document-mention-notification-templates" author="Kiran Kumar">
+        <insert schemaName="notifications_v2" tableName="notification_topics">
+            <column name="id" valueNumeric="20" />
+            <column name="notification_type_id" valueNumeric="1" />
+            <column name="code" value="document_mention" />
+            <column name="description" value="Mentioned in a published document" />
+            <column name="default_opt_in" valueBoolean="true" />
+            <column name="active" valueBoolean="true" />
+        </insert>
+        <insert schemaName="notifications_v2" tableName="notification_templates">
+            <column name="id" value="355875f4-59fd-4a41-a3ad-ac9bd2acda26" />
+            <column name="version" valueNumeric="1" />
+            <column name="name" value="Document mention 1" />
+            <column name="mode_id" valueNumeric="1" />
+            <column name="ideal_type_id" valueNumeric="1" />
+            <column name="details" value='{"subject": "{{.actor_name}} mentioned you in {{.document_title}}", "text_body": "{{.actor_name}} mentioned you in {{.document_title}}.\n\nOpen document: {{.url}}", "html_body": "&lt;p&gt;{{.actor_name}} mentioned you in &lt;strong&gt;{{.document_title}}&lt;/strong&gt;.&lt;/p&gt;&lt;p&gt;&lt;a href=\"{{.url}}\"&gt;Open document&lt;/a&gt;&lt;/p&gt;"}' />
+            <column name="variable_schema" value='{"type": "object", "required": ["actor_user_id", "actor_name", "space_id", "page_id", "document_title", "href", "url"], "properties": {"actor_user_id": {"type": "string"}, "actor_name": {"type": "string"}, "space_id": {"type": "string"}, "page_id": {"type": "string"}, "document_title": {"type": "string"}, "href": {"type": "string"}, "url": {"type": "string"}}, "additionalProperties": false}' />
+            <column name="locale" value="en" />
+            <column name="created_by" value="ec33010e-3884-42c3-ad0e-f1d1dbd43b6c" />
+            <column name="created_at" valueComputed="now()" />
+        </insert>
+        <insert schemaName="notifications_v2" tableName="notification_templates">
+            <column name="id" value="a1a899bf-9006-4fb8-a2f7-2a994f660206" />
+            <column name="version" valueNumeric="1" />
+            <column name="name" value="Document mention 2" />
+            <column name="mode_id" valueNumeric="2" />
+            <column name="ideal_type_id" valueNumeric="1" />
+            <column name="details" value='{"title": "{{.actor_name}} mentioned you", "body": "You were mentioned in {{.document_title}}.", "target_type": "page", "target_id": "{{.page_id}}", "space_id": "{{.space_id}}", "page_id": "{{.page_id}}", "actor_user_id": "{{.actor_user_id}}", "actor_name": "{{.actor_name}}", "data": {"href": "{{.href}}"}, "category": "document_mention", "action_required": false, "actions": []}' />
+            <column name="variable_schema" value='{"type": "object", "required": ["actor_user_id", "actor_name", "space_id", "page_id", "document_title", "href", "url"], "properties": {"actor_user_id": {"type": "string"}, "actor_name": {"type": "string"}, "space_id": {"type": "string"}, "page_id": {"type": "string"}, "document_title": {"type": "string"}, "href": {"type": "string"}, "url": {"type": "string"}}, "additionalProperties": false}' />
+            <column name="locale" value="en" />
+            <column name="created_by" value="ec33010e-3884-42c3-ad0e-f1d1dbd43b6c" />
+            <column name="created_at" valueComputed="now()" />
+        </insert>
+        <rollback>
+            <delete schemaName="notifications_v2" tableName="notification_templates"><where>id IN ('355875f4-59fd-4a41-a3ad-ac9bd2acda26','a1a899bf-9006-4fb8-a2f7-2a994f660206') AND version=1</where></delete>
+            <delete schemaName="notifications_v2" tableName="notification_topics"><where>id=20 AND code='document_mention'</where></delete>
+        </rollback>
+    </changeSet>
+</databaseChangeLog>

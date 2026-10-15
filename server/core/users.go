@@ -94,6 +94,7 @@ type Profile struct {
 	FamilyName  string `json:"familyName"`
 	DisplayName string `json:"displayName"`
 	Gender      string `json:"gender"`
+	AvatarURL   string `json:"avatarUrl"`
 }
 
 type EmailAddress struct {
@@ -102,12 +103,14 @@ type EmailAddress struct {
 }
 
 type Human struct {
+	State   string       `json:"state"`
 	UserId  string       `json:"userId"`
 	Profile Profile      `json:"profile"`
 	Email   EmailAddress `json:"email"`
 }
 
 type User struct {
+	State  string `json:"state"`
 	UserId string `json:"userId"`
 	Id     string `json:"id"`
 	Human  Human  `json:"human"`
@@ -281,12 +284,16 @@ func SearchUsers(search string, limit uint32, offset uint64) (UserSearchResponse
 }
 
 func runUserSearch(providerURL string, query UserSearchQuery) (UserSearchResponse, error) {
+	return runUserSearchContext(context.Background(), providerURL, query)
+}
+
+func runUserSearchContext(ctx context.Context, providerURL string, query UserSearchQuery) (UserSearchResponse, error) {
 	jsonData, err := json.Marshal(query)
 	if err != nil {
 		Logger.Error(err.Error())
 		return UserSearchResponse{}, err
 	}
-	req, err := http.NewRequest(http.MethodPost, providerURL+"/v2/users", bytes.NewReader(jsonData))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, providerURL+"/v2/users", bytes.NewReader(jsonData))
 	if err != nil {
 		Logger.Error(err.Error())
 		return UserSearchResponse{}, err
@@ -301,7 +308,7 @@ func runUserSearch(providerURL string, query UserSearchQuery) (UserSearchRespons
 		return UserSearchResponse{}, err
 	}
 	defer resp.Body.Close()
-	var users UserSearchResponse
+	var users *UserSearchResponse
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
 		Logger.Error(err.Error())
@@ -321,7 +328,10 @@ func runUserSearch(providerURL string, query UserSearchQuery) (UserSearchRespons
 		Logger.Error(err.Error())
 		return UserSearchResponse{}, err
 	}
-	return users, nil
+	if users == nil {
+		return UserSearchResponse{}, errors.New("empty zitadel user search response")
+	}
+	return *users, nil
 }
 
 func parseZitadelError(statusCode int, data []byte) error {
@@ -426,9 +436,12 @@ func GetUserInfo(ctx context.Context) (UserInfo, error) {
 }
 
 func GetZitaIds(userIds []string) ([]ZitaUser, error) {
+	return GetZitaIdsContext(context.Background(), userIds)
+}
+
+func GetZitaIdsContext(ctx context.Context, userIds []string) ([]ZitaUser, error) {
 	var zitaIds []ZitaUser
 	connPool := GetPool()
-	ctx := context.Background()
 	conn, err := connPool.Acquire(ctx)
 	if err != nil {
 		Logger.Error("Unable to acquire a connection: " + err.Error())

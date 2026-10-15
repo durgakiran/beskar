@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 
 	permify_payload "buf.build/gen/go/permifyco/permify/protocolbuffers/go/base/v1"
 	"github.com/durgakiran/beskar/core"
@@ -15,7 +14,7 @@ func ValidateNewDraftDoc(data []byte) (InputDraftDocument, error) {
 	var inputDoc InputDraftDocument
 	err := json.Unmarshal(data, &inputDoc)
 	if err != nil {
-		logger().Error(fmt.Sprintf(err.Error()))
+		logger().Error(err.Error())
 		return InputDraftDocument{}, err
 	}
 

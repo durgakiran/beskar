@@ -92,6 +92,7 @@ type EditDocumentMeta struct {
 }
 
 type InputDocument struct {
+	MentionActorName string `json:"-"`
 	Document
 	Nodes           NodeData                    `json:"nodeData"`
 	AssetReferences *assetref.PayloadReferences `json:"assetReferences,omitempty"`

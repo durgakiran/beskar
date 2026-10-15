@@ -17,6 +17,10 @@
   ],
   "tags": [
     {
+      "name": "Mentions",
+      "description": "Space-scoped member search and user details for document mentions."
+    },
+    {
       "name": "Authentication",
       "description": "Sign-in flows, provider discovery and identity checks."
     },
@@ -42,6 +46,186 @@
     }
   ],
   "paths": {
+    "/api/v1/space/{spaceId}/mentions/users": {
+      "get": {
+        "tags": [
+          "Mentions"
+        ],
+        "operationId": "searchSpaceMentionUsers",
+        "summary": "Search current space members for mentions",
+        "description": "Requires an authenticated current member with space view permission. Responses use Cache-Control: private, no-store. Read-only members can use these endpoints. All upstream work for membership and profile retrieval has a 15-second request deadline.",
+        "parameters": [
+          {
+            "name": "spaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "query",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 200,
+              "default": ""
+            },
+            "description": "Trimmed, case-insensitive substring of display name or email. Supports full names with spaces. Empty lists members alphabetically; ties use the user UUID. Membership, account status and search filtering precede pagination."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 4294967295,
+              "default": 10
+            },
+            "description": "Maximum users per page. Values greater than 50 are clamped to 50."
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 18446744073709551615,
+              "default": 0
+            },
+            "description": "Offset into the filtered, sorted results. An offset beyond the results returns an empty users array."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success, using the standard API envelope.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "private, no-store"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "status",
+                    "data"
+                  ],
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "const": "success"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/MentionUserSearch"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid UUID or query parameters."
+          },
+          "401": {
+            "description": "Authentication required."
+          },
+          "403": {
+            "description": "Caller cannot view the space or is no longer a space member."
+          },
+          "404": {
+            "description": "Space unavailable; for detail requests the user may also be missing, inactive, deleted, or outside this space."
+          },
+          "503": {
+            "description": "Membership or identity directory temporarily unavailable. No partial results are returned."
+          }
+        }
+      }
+    },
+    "/api/v1/space/{spaceId}/mentions/users/{userId}": {
+      "get": {
+        "tags": [
+          "Mentions"
+        ],
+        "operationId": "getSpaceMentionUser",
+        "summary": "Resolve a mention or load hover details",
+        "description": "Requires an authenticated current member with space view permission. Responses use Cache-Control: private, no-store. Read-only members can use these endpoints. All upstream work for membership and profile retrieval has a 15-second request deadline.",
+        "parameters": [
+          {
+            "name": "spaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "userId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Beskar user UUID, not the identity-provider user ID."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success, using the standard API envelope.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "private, no-store"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "status",
+                    "data"
+                  ],
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "const": "success"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/MentionUserDetails"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid UUID or query parameters."
+          },
+          "401": {
+            "description": "Authentication required."
+          },
+          "403": {
+            "description": "Caller cannot view the space or is no longer a space member."
+          },
+          "404": {
+            "description": "Space unavailable; for detail requests the user may also be missing, inactive, deleted, or outside this space."
+          },
+          "503": {
+            "description": "Membership or identity directory temporarily unavailable. No partial results are returned."
+          }
+        }
+      }
+    },
     "/auth/login": {
       "get": {
         "tags": [
@@ -6371,6 +6555,78 @@
       }
     },
     "schemas": {
+      "MentionUser": {
+        "type": "object",
+        "required": [
+          "id",
+          "label",
+          "email",
+          "avatarUrl"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "label": {
+            "type": "string",
+            "description": "Display name, falling back to full name then email."
+          },
+          "email": {
+            "type": "string"
+          },
+          "avatarUrl": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "HTTP(S) profile image URL when available; otherwise null."
+          }
+        }
+      },
+      "MentionUserDetails": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/MentionUser"
+          },
+          {
+            "type": "object",
+            "required": [
+              "spaceRole"
+            ],
+            "properties": {
+              "spaceRole": {
+                "type": "string",
+                "enum": [
+                  "owner",
+                  "admin",
+                  "editor",
+                  "commenter",
+                  "viewer"
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "MentionUserSearch": {
+        "type": "object",
+        "required": [
+          "users",
+          "hasMore"
+        ],
+        "properties": {
+          "users": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MentionUser"
+            }
+          },
+          "hasMore": {
+            "type": "boolean"
+          }
+        }
+      },
       "CreateWhiteboardRequest": {
         "type": "object",
         "additionalProperties": false,

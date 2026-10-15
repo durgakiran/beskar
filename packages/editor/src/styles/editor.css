@@ -4207,3 +4207,94 @@ td.selectedCell {
 /* Shares the image toolbar surface, buttons, separators and keyboard behavior. */
 .attachment-inline-toolbar-container { z-index: 1000; max-width: calc(100vw - 16px); }
 .attachment-inline-toolbar { flex-wrap: wrap; }
+
+/* User mentions */
+.mention-chip {
+  display: inline;
+  padding: 1px 5px;
+  border-radius: 4px;
+  color: var(--accent-11, #3949ab);
+  background: var(--accent-3, #eef0ff);
+  box-decoration-break: clone;
+}
+.mention-menu {
+  min-width: 200px;
+  padding: 6px;
+  border: 1px solid var(--gray-6, #ddd);
+  border-radius: 8px;
+  background: var(--color-panel-solid, white);
+  color: var(--gray-12, #222);
+  box-shadow: 0 4px 16px #0002;
+}
+.mention-menu button {
+  display: block;
+  width: 100%;
+  border: 0;
+  border-radius: 4px;
+  padding: 8px;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.mention-menu button[aria-selected="true"], .mention-menu button:hover {
+  background: var(--accent-3, #eef0ff);
+}
+
+.mention-profile-trigger {
+  border: 0;
+  font: inherit;
+  line-height: inherit;
+  cursor: pointer;
+  text-align: inherit;
+}
+.mention-profile-trigger:focus-visible {
+  outline: 2px solid var(--accent-8, #8c9eff);
+  outline-offset: 2px;
+}
+.mention-profile-card {
+  z-index: 80;
+  box-sizing: border-box;
+  width: max-content;
+  min-width: min(240px, calc(100vw - 24px));
+  max-width: min(340px, calc(100vw - 24px));
+  padding: 16px;
+  border: 1px solid var(--gray-6, #ddd);
+  border-radius: 10px;
+  background: var(--color-panel-solid, #fff);
+  color: var(--gray-12, #222);
+  box-shadow: 0 6px 24px #0002;
+  font-family: var(--default-font-family, system-ui, sans-serif);
+  font-size: 14px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.mention-profile-content { display: flex; gap: 12px; align-items: flex-start; }
+.mention-profile-avatar {
+  display: flex;
+  flex: 0 0 44px;
+  width: 44px;
+  height: 44px;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: 50%;
+  background: var(--accent-3, #eef0ff);
+  color: var(--accent-11, #3949ab);
+  font-weight: 600;
+}
+.mention-profile-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.mention-profile-info { display: flex; min-width: 0; flex-direction: column; gap: 2px; }
+.mention-profile-email, .mention-profile-message { color: var(--gray-11, #666); }
+.mention-profile-message { margin: 0; }
+.mention-profile-role { text-transform: capitalize; color: var(--gray-11, #666); font-size: 12px; }
+.mention-profile-retry {
+  margin-top: 8px;
+  padding: 4px 10px;
+  border: 1px solid var(--gray-7, #ccc);
+  border-radius: 4px;
+  background: var(--gray-2, #f8f8f8);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}

@@ -83,3 +83,26 @@ func TestSpecificationReferencesAndOperations(t *testing.T) {
 		}
 	}
 }
+
+func TestMentionOperationsDocumented(t *testing.T) {
+	var doc struct {
+		Paths map[string]map[string]struct {
+			OperationID string                     `json:"operationId"`
+			Responses   map[string]json.RawMessage `json:"responses"`
+		} `json:"paths"`
+	}
+	if err := json.Unmarshal(specification, &doc); err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{"/api/v1/space/{spaceId}/mentions/users", "/api/v1/space/{spaceId}/mentions/users/{userId}"} {
+		operation, ok := doc.Paths[path]["get"]
+		if !ok || operation.OperationID == "" {
+			t.Fatalf("mention endpoint undocumented: %s", path)
+		}
+		for _, code := range []string{"200", "400", "401", "403", "404", "503"} {
+			if _, ok := operation.Responses[code]; !ok {
+				t.Fatalf("%s missing status %s", path, code)
+			}
+		}
+	}
+}

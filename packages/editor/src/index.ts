@@ -49,10 +49,16 @@ export { InternalLinkBlock } from './nodes/InternalLinkBlock';
 export { ChildPagesList } from './nodes/ChildPagesList';
 export type { StatusBadgeColor } from './nodes/statusBadgeConstants';
 
+export { Mention } from './nodes/Mention';
+
 // Types
 export type {
   Editor as TiptapEditor,
   UserInfo,
+  MentionUser,
+  MentionUserDetails,
+  MentionDetailsOptions,
+  MentionHandler,
   CollaborationConfig,
   EditorProps,
   EditorContentProps,

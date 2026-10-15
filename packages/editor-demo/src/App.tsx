@@ -13,6 +13,7 @@ import {
 import type { TiptapEditor, ImageAPIHandler, CommentThread } from '@beskar/editor';
 import { commentDecorationKey } from '@beskar/editor';
 import { mockCommentHandler, resetMockCommentStorage } from './mockCommentHandler';
+import { mockMentionHandler } from './mockMentionHandler';
 import { mockAttachmentHandler } from './mockAttachmentHandler';
 // Import Radix UI styles first, then editor styles so editor can use Radix variables
 import '@beskar/editor/styles.css';
@@ -23,6 +24,20 @@ import { Button } from '@radix-ui/themes';
 const initialContent = {
   type: 'doc',
   content: [
+    {
+      type: 'paragraph',
+      content: [
+        { type: 'text', text: 'Mention demo: ' },
+        { type: 'mention', attrs: { id: 'user-alex', label: 'Alex (stored label)' } },
+        { type: 'text', text: ' and unavailable user ' },
+        { type: 'mention', attrs: { id: 'deleted-user', label: 'Former teammate' } },
+        { type: 'text', text: ', initials fallback ' },
+        { type: 'mention', attrs: { id: 'user-priya', label: 'Priya Shah' } },
+        { type: 'text', text: ', and retry example ' },
+        { type: 'mention', attrs: { id: 'user-sam', label: 'Sam Lee' } },
+        { type: 'text', text: '. Hover, focus, or tap a mention for details. Sam fails once: use Retry. Type @ to search. Switch to View Mode to check read-only mentions.' },
+      ],
+    },
     // ── Headings ──────────────────────────────────────────────────────────────
     {
       type: 'heading',
@@ -625,6 +640,7 @@ function App() {
           maxAttachmentBytes={maxAttachmentBytes}
           onAttachmentRejected={onAttachmentRejected}
           allowedMimeAccept="image/*,audio/*,video/*,text/*,application/pdf,application/json,application/xml,application/zip,application/x-zip-compressed,application/x-7z-compressed,application/vnd.rar,application/gzip,application/x-tar,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation,.pdf,.json,.xml,.zip,.7z,.rar,.gz,.tar,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.csv,.txt,.md,.png,.jpg,.jpeg,.webp,.gif,.mp3,.wav,.mp4,.mov"
+          mentionHandler={mockMentionHandler}
           commentHandler={mockCommentHandler}
         />
 
