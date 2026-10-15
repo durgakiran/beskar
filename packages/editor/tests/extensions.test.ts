@@ -485,3 +485,22 @@ test('relative date labels follow the current calendar day without changing the 
   assert.equal(formatRelativeDateLabel('2026-03-09', '2026-03-08'), 'Tomorrow');
   assert.equal(formatRelativeDateLabel('invalid', '2026-09-20'), 'Invalid date');
 });
+
+test('mentions retain durable references without a handler and gate insertion by editability', () => {
+  const user = { id: 'user-1', label: 'Mock User' };
+  const mentionHandler = { searchUsers: async () => [user], resolveUser: async () => user };
+  const content = { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'mention', attrs: user }] }] };
+  for (const editable of [true, false]) {
+    const editor = new Editor({ element: null, editable, extensions: getExtensions({ mentionHandler }), content });
+    assert.equal(editor.getJSON().content![0].content![0].attrs!.id, user.id);
+    assert.equal(editor.getText(), '@Mock User');
+    const before = editor.getJSON();
+    assert.equal(editor.commands.insertMention(user), editable);
+    if (!editable) assert.deepEqual(editor.getJSON(), before);
+    editor.destroy();
+  }
+  const editor = new Editor({ element: null, extensions: getExtensions(), content });
+  assert.equal(editor.getText(), '@Mock User');
+  assert.equal(editor.commands.insertMention(user), false);
+  editor.destroy();
+});

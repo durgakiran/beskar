@@ -392,6 +392,7 @@ func Router() *chi.Mux {
 	r.Get("/{spaceId}/page/list", getPageList)
 	r.Get("/{spaceId}/page/{pageId}/descendants", getPageDescendantsController)
 	r.Get("/{spaceId}/users", listUsers)
+	registerMentionRoutes(r)
 	r.Get("/{spaceId}/details", getSpaceDetailsController)
 	r.Get("/{spaceId}/settings", getSpaceSettingsController)
 	r.Post("/{spaceId}/members/candidates/search", searchMemberCandidatesController)

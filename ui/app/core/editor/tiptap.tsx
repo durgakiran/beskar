@@ -34,6 +34,7 @@ import {
 import { uploadAttachmentData, downloadAttachmentBlob } from "../http/uploadAttachmentData";
 import { WebrtcProvider } from "y-webrtc";
 import * as Y from "yjs";
+import { makeMentionApiHandler } from "../http/mentionApiHandler";
 import { makeCommentApiHandler } from "../http/commentApiHandler";
 import { useCommentEvents } from "../hooks/useCommentEvents";
 import { mapUploadErrorMessage } from "../queries/quota";
@@ -130,6 +131,7 @@ export function TipTap({
     countRenderRef.current += 1;
 
     // ─── Inline Comments State ───
+    const mentionHandler = useMemo(() => makeMentionApiHandler(spaceId), [spaceId]);
     const commentApiHandler = useMemo(() => makeCommentApiHandler(pageId), [pageId]);
     const [threads, setThreads] = useState<CommentThread[]>([]);
     const [showCommentPopover, setShowCommentPopover] = useState(false);
@@ -517,6 +519,7 @@ export function TipTap({
         const baseExtensions = getExtensions({
             placeholder: "Write something ....",
             imageHandler,
+            mentionHandler,
         });
 
         if (editable) {
@@ -524,7 +527,7 @@ export function TipTap({
         } else {
             return baseExtensions;
         }
-    }, [editable]);
+    }, [editable, mentionHandler]);
 
     // const editor = useEditor({
     //     immediatelyRender: true,
@@ -583,6 +586,8 @@ export function TipTap({
             )} */}
                 {editable ? (
                     <EditorBeskar
+                        key={`${spaceId}:${pageId}:${editable ? 'edit' : 'view'}`}
+                        mentionHandler={mentionHandler}
                         initialContent={sanitizedContent}
                         imageHandler={imageHandler}
                         attachmentHandler={attachmentHandler}
@@ -602,6 +607,8 @@ export function TipTap({
                     />
                 ) : (
                     <EditorBeskar
+                        key={`${spaceId}:${pageId}:${editable ? 'edit' : 'view'}`}
+                        mentionHandler={mentionHandler}
                         initialContent={sanitizedContent}
                         imageHandler={imageHandler}
                         attachmentHandler={attachmentHandler}

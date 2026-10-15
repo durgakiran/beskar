@@ -11,6 +11,34 @@ export interface UserInfo {
   color?: string;
 }
 
+/** Durable user reference stored in mention nodes. Labels remain available offline. */
+export interface MentionUser {
+  id: string;
+  label: string;
+}
+
+/** Live profile fields for the mention card; never stored in document content. */
+export interface MentionUserDetails extends MentionUser {
+  email?: string;
+  avatarUrl?: string | null;
+  spaceRole: string;
+}
+
+export interface MentionDetailsOptions {
+  signal?: AbortSignal;
+}
+
+export interface MentionHandler {
+  searchUsers: (query: string) => Promise<MentionUser[]>;
+  /** Return null for unavailable/deleted users; the stored label is retained. */
+  resolveUser: (id: string) => Promise<MentionUser | null>;
+  /** Optional: enables hover/focus/tap details in edit and read-only modes.
+   * Bind space context in the host. Return null only for unavailable users;
+   * reject for temporary failures. Honor signal when supported.
+   */
+  getUserDetails?: (id: string, options?: MentionDetailsOptions) => Promise<MentionUserDetails | null>;
+}
+
 export interface CollaborationConfig {
   provider: HocuspocusProvider;
   user: UserInfo;
@@ -265,6 +293,8 @@ export interface EditorProps {
   internalResourceHandler?: InternalResourceHandler;
   externalLinkHandler?: ExternalLinkHandler;
   childPagesHandler?: ChildPagesHandler;
+  /** Enables @ user search. Existing mentions render even when omitted. */
+  mentionHandler?: MentionHandler;
   commentHandler?: CommentAPIHandler;
 }
 

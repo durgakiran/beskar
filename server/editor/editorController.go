@@ -196,6 +196,7 @@ func publishDoc(w http.ResponseWriter, r *http.Request) {
 	if !ensureMutableSpace(w, r, inputDoc.SpaceId) {
 		return
 	}
+	inputDoc.MentionActorName = user.Name
 	pageId, publishedDocId, err := inputDoc.Publish()
 	if legacyMigrationHTTPError(w, r, err) {
 		return
