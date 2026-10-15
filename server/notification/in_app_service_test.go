@@ -1,6 +1,7 @@
 package notification
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -66,5 +67,17 @@ func TestNotificationCursorRoundTrip(t *testing.T) {
 	}
 	if gotID != id {
 		t.Fatalf("id = %s, want %s", gotID, id)
+	}
+}
+
+func TestResolveByTargetRequiresRecipientAndTarget(t *testing.T) {
+	s := &Service{}
+	for _, tc := range []struct {
+		kind, id string
+		user     uuid.UUID
+	}{{"", "token", uuid.New()}, {"invite", " ", uuid.New()}, {"invite", "token", uuid.Nil}} {
+		if err := s.ResolveByTarget(context.Background(), tc.kind, tc.id, tc.user); err == nil {
+			t.Fatal("invalid resolution accepted")
+		}
 	}
 }

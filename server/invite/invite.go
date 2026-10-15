@@ -39,6 +39,8 @@ func sendInviteActionError(w http.ResponseWriter, r *http.Request, err error) {
 		sendFailedReponse(w, r, http.StatusNotFound, "Invitation not found")
 	case errors.Is(err, errInviteWrongAccount):
 		sendFailedReponse(w, r, http.StatusForbidden, "This invitation was sent to a different email address")
+	case errors.Is(err, errInviteDecisionConflict):
+		sendFailedReponse(w, r, http.StatusConflict, "Invitation already completed with a different decision")
 	case errors.Is(err, errInviteInvalidDecision):
 		sendFailedReponse(w, r, http.StatusBadRequest, "Decision must be accept or reject")
 	case errors.Is(err, quota.ErrCollaboratorLimitExceeded):

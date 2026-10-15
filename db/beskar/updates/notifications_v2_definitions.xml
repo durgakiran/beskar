@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+    <changeSet id="notifications-v2-definition-topic" author="Kiran Kumar" dbms="postgresql">
+        <preConditions onFail="HALT" onFailMessage="Existing notification definitions need an explicitly reviewed topic backfill before this changeset can run.">
+            <sqlCheck expectedResult="0">SELECT count(*) FROM notifications_v2.notifications</sqlCheck>
+        </preConditions>
+        <comment>Require a topic on definitions and enforce its parent type. No inferred topic backfill.</comment>
+        <addUniqueConstraint schemaName="notifications_v2" tableName="notification_topics"
+            columnNames="id,notification_type_id" constraintName="notification_topics_id_type_key" />
+        <addColumn schemaName="notifications_v2" tableName="notifications">
+            <column name="notification_topic_id" type="SMALLINT" remarks="Topic must belong to the selected notification type.">
+                <constraints nullable="false" />
+            </column>
+        </addColumn>
+        <addForeignKeyConstraint baseTableSchemaName="notifications_v2" baseTableName="notifications"
+            baseColumnNames="notification_topic_id,notification_type_id"
+            referencedTableSchemaName="notifications_v2" referencedTableName="notification_topics"
+            referencedColumnNames="id,notification_type_id" constraintName="notifications_topic_type_fk" onDelete="RESTRICT" />
+        <rollback>
+            <dropForeignKeyConstraint baseTableSchemaName="notifications_v2" baseTableName="notifications" constraintName="notifications_topic_type_fk" />
+            <dropColumn schemaName="notifications_v2" tableName="notifications" columnName="notification_topic_id" />
+            <dropUniqueConstraint schemaName="notifications_v2" tableName="notification_topics" constraintName="notification_topics_id_type_key" />
+        </rollback>
+    </changeSet>
+    <changeSet id="notifications-v2-definition-producer-list-index" author="Kiran Kumar" dbms="postgresql">
+        <createIndex schemaName="notifications_v2" tableName="notifications" indexName="notifications_producer_created_idx">
+            <column name="source_service" />
+            <column name="created_at" descending="true" />
+            <column name="id" descending="true" />
+        </createIndex>
+    </changeSet>
+</databaseChangeLog>

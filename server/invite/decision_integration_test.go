@@ -81,7 +81,7 @@ func TestInvitationDecisionIntegration(t *testing.T) {
 		}
 		for _, decision := range []string{"accept", "reject"} {
 			r, err := decide(token, decision)
-			if err != nil || r.Status != "accepted" {
+			if (decision == "accept" && err != nil) || (decision == "reject" && !errors.Is(err, errInviteDecisionConflict)) || r.Status != "accepted" {
 				t.Fatalf("%+v %v", r, err)
 			}
 		}
@@ -94,6 +94,20 @@ func TestInvitationDecisionIntegration(t *testing.T) {
 		before := grants.Load()
 		r, err := decide(token, "reject")
 		if err != nil || r.Status != "rejected" || grants.Load() != before {
+			t.Fatalf("%+v %v", r, err)
+		}
+	})
+	t.Run("repeated rejection succeeds and acceptance conflicts", func(t *testing.T) {
+		token := seed(time.Hour, nil)
+		before := grants.Load()
+		for i := 0; i < 2; i++ {
+			r, err := decide(token, "reject")
+			if err != nil || r.Status != "rejected" {
+				t.Fatalf("%+v %v", r, err)
+			}
+		}
+		r, err := decide(token, "accept")
+		if !errors.Is(err, errInviteDecisionConflict) || r.Status != "rejected" || grants.Load() != before {
 			t.Fatalf("%+v %v", r, err)
 		}
 	})
@@ -119,7 +133,7 @@ func TestInvitationDecisionIntegration(t *testing.T) {
 			token := seed(tc.age, tc.status)
 			before := grants.Load()
 			r, err := decide(token, "accept")
-			if err != nil || r.Status != tc.want || grants.Load() != before {
+			if (tc.want == "rejected" && !errors.Is(err, errInviteDecisionConflict)) || (tc.want != "rejected" && err != nil) || r.Status != tc.want || grants.Load() != before {
 				t.Fatalf("%+v %v", r, err)
 			}
 		}
@@ -149,10 +163,11 @@ func TestInvitationDecisionIntegration(t *testing.T) {
 		<-entered
 		go func() {
 			r, err := decide(token, "reject")
-			if err == nil && r.Status != "accepted" {
-				err = errors.New("decline overwrote acceptance")
+			if !errors.Is(err, errInviteDecisionConflict) || r.Status != "accepted" {
+				result <- errors.New("opposite concurrent decision did not conflict")
+				return
 			}
-			result <- err
+			result <- nil
 		}()
 		close(release)
 		for i := 0; i < 2; i++ {

@@ -1,0 +1,829 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+    <changeSet id="notifications-v2-schema" author="Kiran Kumar" dbms="postgresql">
+        <comment>Full schema from docs/notification-service-schema-design.md, isolated from the existing notifications schema. No application flow changes or catalog/provider/template seeds. Schema DDL, CHECK constraints and grants use SQL because Liquibase Community has no equivalent native changes.</comment>
+        <sql splitStatements="true">
+CREATE SCHEMA notifications_v2;
+</sql>
+        <rollback>
+            <sql splitStatements="true">
+DROP SCHEMA notifications_v2;
+</sql>
+        </rollback>
+    </changeSet>
+    <changeSet id="notifications-v2-table-notifications" author="Kiran Kumar" dbms="postgresql">
+        <createTable schemaName="notifications_v2" tableName="notifications">
+            <column name="id" type="UUID" remarks="PK. Notification definition ID.">
+                <constraints nullable="false" />
+            </column>
+            <column name="source_service" type="TEXT" remarks="Authenticated caller identity, assigned by the service rather than trusted from arbitrary input.">
+                <constraints nullable="false" />
+            </column>
+            <column name="idempotency_key" type="TEXT" remarks="Caller-supplied submission key. UQ with source_service.">
+                <constraints nullable="false" />
+            </column>
+            <column name="request_hash" type="TEXT" remarks="Hash of canonical original submission; reject reuse of a key with different content.">
+                <constraints nullable="false" />
+            </column>
+            <column name="correlation_id" type="TEXT" remarks="Links related notifications to an upstream business event." />
+            <column name="notification_type_id" type="SMALLINT" remarks="FK to notification_types.id; update, promotion, alert, event, or security.">
+                <constraints nullable="false" />
+            </column>
+            <column name="mode_id" type="SMALLINT" remarks="FK to notification_modes.id; email, SMS, or in-app.">
+                <constraints nullable="false" />
+            </column>
+            <column name="template_id" type="UUID" remarks="Part of composite FK to notification_templates(id, version).">
+                <constraints nullable="false" />
+            </column>
+            <column name="template_version" type="INTEGER" remarks="Positive pinned version; do not resolve “latest” when sending.">
+                <constraints nullable="false" />
+            </column>
+            <column name="message_details" type="JSONB" remarks="Template variables; validate against the template's input schema.">
+                <constraints nullable="false" />
+            </column>
+            <column name="priority" type="SMALLINT" remarks="Bounded priority, for example 0–100; higher values run first among due deliveries.">
+                <constraints nullable="false" />
+            </column>
+            <column name="schedule_kind" type="TEXT" remarks="immediate, once, or cron.">
+                <constraints nullable="false" />
+            </column>
+            <column name="scheduled_at" type="TIMESTAMP WITH TIME ZONE" remarks="Required for once; absent for immediate and cron." />
+            <column name="cron_expression" type="TEXT" remarks="Required only for cron; validated five-field minute/hour/day/month/weekday expression." />
+            <column name="timezone" type="TEXT" remarks="Valid IANA timezone for cron evaluation; default UTC." defaultValue="UTC">
+                <constraints nullable="false" />
+            </column>
+            <column name="starts_at" type="TIMESTAMP WITH TIME ZONE" remarks="Inclusive lower bound for recurring occurrences." />
+            <column name="ends_at" type="TIMESTAMP WITH TIME ZONE" remarks="Exclusive upper bound for recurring occurrences." />
+            <column name="next_run_at" type="TIMESTAMP WITH TIME ZONE" remarks="Indexed scheduler cursor; null when no occurrence remains to be created." />
+            <column name="misfire_policy" type="TEXT" remarks="skip or fire_once; defines what happens to overdue occurrences after downtime.">
+                <constraints nullable="false" />
+            </column>
+            <column name="delivery_ttl_seconds" type="INTEGER" remarks="Positive lifetime measured from each occurrence's original scheduled time." />
+            <column name="status" type="TEXT" remarks="active, paused, completed, or cancelled; describes scheduling, not delivery success.">
+                <constraints nullable="false" />
+            </column>
+            <column name="revision" type="BIGINT" remarks="Positive counter, starts at 1; increment on content, target, schedule, or policy changes." defaultValueNumeric="1">
+                <constraints nullable="false" />
+            </column>
+            <column name="created_at" type="TIMESTAMP WITH TIME ZONE" remarks="Creation time; default now()." defaultValueComputed="now()">
+                <constraints nullable="false" />
+            </column>
+            <column name="updated_at" type="TIMESTAMP WITH TIME ZONE" remarks="Last definition change; application or trigger maintains it.">
+                <constraints nullable="false" />
+            </column>
+            <column name="created_by" type="UUID" remarks="Creating user or service principal.">
+                <constraints nullable="false" />
+            </column>
+            <column name="updated_by" type="UUID" remarks="Last modifying user or service principal.">
+                <constraints nullable="false" />
+            </column>
+            <column name="deleted_at" type="TIMESTAMP WITH TIME ZONE" remarks="Soft deletion time; must stop scheduling." />
+        </createTable>
+        <addPrimaryKey schemaName="notifications_v2" tableName="notifications" columnNames="id" constraintName="notifications_pkey" />
+        <rollback>
+            <dropTable schemaName="notifications_v2" tableName="notifications" />
+        </rollback>
+    </changeSet>
+    <changeSet id="notifications-v2-table-notification_target_users" author="Kiran Kumar" dbms="postgresql">
+        <createTable schemaName="notifications_v2" tableName="notification_target_users">
+            <column name="notification_id" type="UUID" remarks="FK to notifications.id; part of composite PK.">
+                <constraints nullable="false" />
+            </column>
+            <column name="user_id" type="UUID" remarks="Upstream user ID; remaining part of composite PK.">
+                <constraints nullable="false" />
+            </column>
+            <column name="created_at" type="TIMESTAMP WITH TIME ZONE" remarks="Time this target was added.">
+                <constraints nullable="false" />
+            </column>
+        </createTable>
+        <addPrimaryKey schemaName="notifications_v2" tableName="notification_target_users" columnNames="notification_id,user_id" constraintName="notification_target_users_pkey" />
+        <rollback>
+            <dropTable schemaName="notifications_v2" tableName="notification_target_users" />
+        </rollback>
+    </changeSet>
+    <changeSet id="notifications-v2-table-notification_target_segments" author="Kiran Kumar" dbms="postgresql">
+        <createTable schemaName="notifications_v2" tableName="notification_target_segments">
+            <column name="notification_id" type="UUID" remarks="FK to notifications.id; part of composite PK.">
+                <constraints nullable="false" />
+            </column>
+            <column name="segment_id" type="UUID" remarks="FK to segments.id; remaining part of composite PK.">
+                <constraints nullable="false" />
+            </column>
+            <column name="created_at" type="TIMESTAMP WITH TIME ZONE" remarks="Time this segment was added.">
+                <constraints nullable="false" />
+            </column>
+        </createTable>
+        <addPrimaryKey schemaName="notifications_v2" tableName="notification_target_segments" columnNames="notification_id,segment_id" constraintName="notification_target_segments_pkey" />
+        <rollback>
+            <dropTable schemaName="notifications_v2" tableName="notification_target_segments" />
+        </rollback>
+    </changeSet>
+    <changeSet id="notifications-v2-table-notification_events" author="Kiran Kumar" dbms="postgresql">
+        <createTable schemaName="notifications_v2" tableName="notification_events">
+            <column name="id" type="UUID" remarks="PK. Occurrence ID.">
+                <constraints nullable="false" />
+            </column>
+            <column name="notification_id" type="UUID" remarks="FK to notifications.id.">
+                <constraints nullable="false" />
+            </column>
+            <column name="revision" type="BIGINT" remarks="Definition revision copied when the occurrence is created.">
+                <constraints nullable="false" />
+            </column>
+            <column name="scheduled_at" type="TIMESTAMP WITH TIME ZONE" remarks="Original occurrence time; never overwritten by retries or quiet hours.">
+                <constraints nullable="false" />
+            </column>
+            <column name="expires_at" type="TIMESTAMP WITH TIME ZONE" remarks="scheduled_at + delivery_ttl_seconds, if a TTL is configured." />
+            <column name="template_id" type="UUID" remarks="Part of composite FK to the pinned template row.">
+                <constraints nullable="false" />
+            </column>
+            <column name="template_version" type="INTEGER" remarks="Immutable template version for this occurrence.">
+                <constraints nullable="false" />
+            </column>
+            <column name="definition_snapshot" type="JSONB" remarks="Frozen category, channel, payload, priority, selected targets, and effective delivery policy.">
+                <constraints nullable="false" />
+            </column>
+            <column name="status" type="TEXT" remarks="pending, expanding, ready, failed, or cancelled; audience-expansion state only.">
+                <constraints nullable="false" />
+            </column>
+            <column name="audience_resolved_at" type="TIMESTAMP WITH TIME ZONE" remarks="Time recipient membership was snapshotted." />
+            <column name="expansion_available_at" type="TIMESTAMP WITH TIME ZONE" remarks="Next time audience expansion may run; initially the creation time.">
+                <constraints nullable="false" />
+            </column>
+            <column name="expansion_attempt_count" type="INTEGER" remarks="Nonnegative expansion attempt counter for bounded retries.">
+                <constraints nullable="false" />
+            </column>
+            <column name="lease_token" type="UUID" remarks="Ownership token for the current expansion claim." />
+            <column name="lease_expires_at" type="TIMESTAMP WITH TIME ZONE" remarks="Allows recovery if the audience-expansion worker stops." />
+            <column name="last_error_code" type="TEXT" remarks="Sanitized reason for the latest expansion failure." />
+            <column name="created_at" type="TIMESTAMP WITH TIME ZONE" remarks="Occurrence creation time.">
+                <constraints nullable="false" />
+            </column>
+            <column name="updated_at" type="TIMESTAMP WITH TIME ZONE" remarks="Last expansion-state change.">
+                <constraints nullable="false" />
+            </column>
+        </createTable>
+        <addPrimaryKey schemaName="notifications_v2" tableName="notification_events" columnNames="id" constraintName="notification_events_pkey" />
+        <rollback>
+            <dropTable schemaName="notifications_v2" tableName="notification_events" />
+        </rollback>
+    </changeSet>
+    <changeSet id="notifications-v2-table-notification_deliveries" author="Kiran Kumar" dbms="postgresql">
+        <createTable schemaName="notifications_v2" tableName="notification_deliveries">
+            <column name="id" type="UUID" remarks="PK; stable provider idempotency key where supported.">
+                <constraints nullable="false" />
+            </column>
+            <column name="event_id" type="UUID" remarks="FK to notification_events.id; required for recurring delivery history.">
+                <constraints nullable="false" />
+            </column>
+            <column name="user_id" type="UUID" remarks="Recipient's upstream user ID.">
+                <constraints nullable="false" />
+            </column>
+            <column name="notification_type_id" type="SMALLINT" remarks="Category copied from the frozen event for routing and queue filtering.">
+                <constraints nullable="false" />
+            </column>
+            <column name="mode_id" type="SMALLINT" remarks="Channel copied from the frozen event.">
+                <constraints nullable="false" />
+            </column>
+            <column name="provider_id" type="UUID" remarks="FK to a configured provider; resolved during expansion.">
+                <constraints nullable="false" />
+            </column>
+            <column name="destination_snapshot" type="JSONB" remarks="Protected email address, E.164 phone number, or in-app recipient address resolved from the user directory.">
+                <constraints nullable="false" />
+            </column>
+            <column name="message_details_snapshot" type="JSONB" remarks="Final variables including any recipient-specific personalization.">
+                <constraints nullable="false" />
+            </column>
+            <column name="policy_snapshot" type="JSONB" remarks="Effective retry limit, backoff limits, and any authorized quiet-hour bypass.">
+                <constraints nullable="false" />
+            </column>
+            <column name="priority" type="SMALLINT" remarks="Frozen queue priority.">
+                <constraints nullable="false" />
+            </column>
+            <column name="status" type="TEXT" remarks="pending, processing, retrying, accepted, delivered, failed, dead_lettered, suppressed, expired, or cancelled.">
+                <constraints nullable="false" />
+            </column>
+            <column name="eligible_at" type="TIMESTAMP WITH TIME ZONE" remarks="Earliest allowed send time after applying quiet hours; initially the occurrence time.">
+                <constraints nullable="false" />
+            </column>
+            <column name="available_at" type="TIMESTAMP WITH TIME ZONE" remarks="Next claim time including quiet hours, retries, and provider throttling.">
+                <constraints nullable="false" />
+            </column>
+            <column name="attempt_count" type="INTEGER" remarks="Nonnegative number of provider attempts started.">
+                <constraints nullable="false" />
+            </column>
+            <column name="lease_token" type="UUID" remarks="Fresh ownership token for each worker claim." />
+            <column name="lease_expires_at" type="TIMESTAMP WITH TIME ZONE" remarks="Time an abandoned processing claim becomes recoverable." />
+            <column name="provider_message_id" type="TEXT" remarks="Latest accepted provider message identifier, when supplied." />
+            <column name="accepted_at" type="TIMESTAMP WITH TIME ZONE" remarks="Provider accepted the message; this does not prove recipient delivery." />
+            <column name="delivered_at" type="TIMESTAMP WITH TIME ZONE" remarks="Confirmed delivery time, if the provider supports receipts." />
+            <column name="last_error_code" type="TEXT" remarks="Machine-readable failure, suppression, or deferral reason." />
+            <column name="last_error_message" type="TEXT" remarks="Short sanitized diagnostic without credentials or sensitive message content." />
+            <column name="created_at" type="TIMESTAMP WITH TIME ZONE" remarks="Recipient delivery creation time.">
+                <constraints nullable="false" />
+            </column>
+            <column name="updated_at" type="TIMESTAMP WITH TIME ZONE" remarks="Last delivery-state change.">
+                <constraints nullable="false" />
+            </column>
+        </createTable>
+        <addPrimaryKey schemaName="notifications_v2" tableName="notification_deliveries" columnNames="id" constraintName="notification_deliveries_pkey" />
+        <rollback>
+            <dropTable schemaName="notifications_v2" tableName="notification_deliveries" />
+        </rollback>
+    </changeSet>
+    <changeSet id="notifications-v2-table-notification_delivery_attempts" author="Kiran Kumar" dbms="postgresql">
+        <createTable schemaName="notifications_v2" tableName="notification_delivery_attempts">
+            <column name="id" type="UUID" remarks="PK. Attempt ID.">
+                <constraints nullable="false" />
+            </column>
+            <column name="delivery_id" type="UUID" remarks="FK to notification_deliveries.id.">
+                <constraints nullable="false" />
+            </column>
+            <column name="attempt_number" type="INTEGER" remarks="Positive sequence number; UQ with delivery_id.">
+                <constraints nullable="false" />
+            </column>
+            <column name="provider_id" type="UUID" remarks="FK to provider used for this attempt.">
+                <constraints nullable="false" />
+            </column>
+            <column name="lease_token" type="UUID" remarks="Claim token responsible for the attempt.">
+                <constraints nullable="false" />
+            </column>
+            <column name="status" type="TEXT" remarks="started, accepted, transient_failure, permanent_failure, or unknown.">
+                <constraints nullable="false" />
+            </column>
+            <column name="provider_message_id" type="TEXT" remarks="Provider identifier returned for this specific attempt." />
+            <column name="error_code" type="TEXT" remarks="Normalized error code for retry classification." />
+            <column name="error_message" type="TEXT" remarks="Sanitized diagnostic." />
+            <column name="retry_after_at" type="TIMESTAMP WITH TIME ZONE" remarks="Provider-requested retry time when available." />
+            <column name="started_at" type="TIMESTAMP WITH TIME ZONE" remarks="Call start time.">
+                <constraints nullable="false" />
+            </column>
+            <column name="finished_at" type="TIMESTAMP WITH TIME ZONE" remarks="Completion time; null while running or until reconciled." />
+        </createTable>
+        <addPrimaryKey schemaName="notifications_v2" tableName="notification_delivery_attempts" columnNames="id" constraintName="notification_delivery_attempts_pkey" />
+        <rollback>
+            <dropTable schemaName="notifications_v2" tableName="notification_delivery_attempts" />
+        </rollback>
+    </changeSet>
+    <changeSet id="notifications-v2-table-notification_templates" author="Kiran Kumar" dbms="postgresql">
+        <createTable schemaName="notifications_v2" tableName="notification_templates">
+            <column name="id" type="UUID" remarks="Logical template ID; part of composite PK.">
+                <constraints nullable="false" />
+            </column>
+            <column name="version" type="INTEGER" remarks="Positive version; remaining part of composite PK.">
+                <constraints nullable="false" />
+            </column>
+            <column name="name" type="TEXT" remarks="Human-readable template name.">
+                <constraints nullable="false" />
+            </column>
+            <column name="mode_id" type="SMALLINT" remarks="FK to notification_modes; an enforced channel, replacing advisory ideal_mode.">
+                <constraints nullable="false" />
+            </column>
+            <column name="ideal_type_id" type="SMALLINT" remarks="FK to notification_types; optional suggested category, not a routing rule." />
+            <column name="details" type="JSONB" remarks="Channel-specific template content: subject/text/HTML for email, text for SMS, feed payload for in-app.">
+                <constraints nullable="false" />
+            </column>
+            <column name="variable_schema" type="JSONB" remarks="Validation schema for required and optional message variables.">
+                <constraints nullable="false" />
+            </column>
+            <column name="comment" type="TEXT" remarks="Purpose, usage notes, or version change explanation." />
+            <column name="locale" type="TEXT" remarks="Locale such as en; baseline notifications pin one locale.">
+                <constraints nullable="false" />
+            </column>
+            <column name="created_at" type="TIMESTAMP WITH TIME ZONE" remarks="Version publication time.">
+                <constraints nullable="false" />
+            </column>
+            <column name="created_by" type="UUID" remarks="Publishing user or service principal.">
+                <constraints nullable="false" />
+            </column>
+            <column name="retired_at" type="TIMESTAMP WITH TIME ZONE" remarks="Prevents new definitions from selecting this version; existing references remain valid." />
+        </createTable>
+        <addPrimaryKey schemaName="notifications_v2" tableName="notification_templates" columnNames="id,version" constraintName="notification_templates_pkey" />
+        <rollback>
+            <dropTable schemaName="notifications_v2" tableName="notification_templates" />
+        </rollback>
+    </changeSet>
+    <changeSet id="notifications-v2-table-notification_types" author="Kiran Kumar" dbms="postgresql">
+        <createTable schemaName="notifications_v2" tableName="notification_types">
+            <column name="id" type="SMALLINT" remarks="PK. Stable category ID.">
+                <constraints nullable="false" />
+            </column>
+            <column name="code" type="TEXT" remarks="UQ: update, promotion, alert, event, or security.">
+                <constraints nullable="false" />
+            </column>
+            <column name="description" type="TEXT" remarks="Human-readable meaning and intended use.">
+                <constraints nullable="false" />
+            </column>
+            <column name="default_opt_in" type="BOOLEAN" remarks="Product-defined default when a user has no explicit preference.">
+                <constraints nullable="false" />
+            </column>
+            <column name="active" type="BOOLEAN" remarks="Whether new requests may use this category.">
+                <constraints nullable="false" />
+            </column>
+        </createTable>
+        <addPrimaryKey schemaName="notifications_v2" tableName="notification_types" columnNames="id" constraintName="notification_types_pkey" />
+        <rollback>
+            <dropTable schemaName="notifications_v2" tableName="notification_types" />
+        </rollback>
+    </changeSet>
+    <changeSet id="notifications-v2-table-notification_modes" author="Kiran Kumar" dbms="postgresql">
+        <createTable schemaName="notifications_v2" tableName="notification_modes">
+            <column name="id" type="SMALLINT" remarks="PK. Stable channel ID.">
+                <constraints nullable="false" />
+            </column>
+            <column name="code" type="TEXT" remarks="UQ: sms, email, or in_app.">
+                <constraints nullable="false" />
+            </column>
+            <column name="description" type="TEXT" remarks="Meaning of the channel.">
+                <constraints nullable="false" />
+            </column>
+            <column name="active" type="BOOLEAN" remarks="Whether the channel accepts new work.">
+                <constraints nullable="false" />
+            </column>
+        </createTable>
+        <addPrimaryKey schemaName="notifications_v2" tableName="notification_modes" columnNames="id" constraintName="notification_modes_pkey" />
+        <rollback>
+            <dropTable schemaName="notifications_v2" tableName="notification_modes" />
+        </rollback>
+    </changeSet>
+    <changeSet id="notifications-v2-table-notification_providers" author="Kiran Kumar" dbms="postgresql">
+        <createTable schemaName="notifications_v2" tableName="notification_providers">
+            <column name="id" type="UUID" remarks="PK. Provider configuration ID.">
+                <constraints nullable="false" />
+            </column>
+            <column name="code" type="TEXT" remarks="UQ internal name, such as primary_email.">
+                <constraints nullable="false" />
+            </column>
+            <column name="mode_id" type="SMALLINT" remarks="FK to supported delivery channel.">
+                <constraints nullable="false" />
+            </column>
+            <column name="adapter_key" type="TEXT" remarks="Registered adapter implementation, such as smtp or in_app_http.">
+                <constraints nullable="false" />
+            </column>
+            <column name="config" type="JSONB" remarks="Non-secret settings, such as endpoint, sender identity, and timeout.">
+                <constraints nullable="false" />
+            </column>
+            <column name="credentials_ref" type="TEXT" remarks="Secret-manager reference; never store plaintext credentials here." />
+            <column name="requests_per_second" type="INTEGER" remarks="Positive provider/account rate limit enforced across workers." />
+            <column name="max_concurrency" type="INTEGER" remarks="Positive limit on simultaneous provider calls.">
+                <constraints nullable="false" />
+            </column>
+            <column name="enabled" type="BOOLEAN" remarks="Whether workers may start new sends through this provider.">
+                <constraints nullable="false" />
+            </column>
+            <column name="created_at" type="TIMESTAMP WITH TIME ZONE" remarks="Creation time.">
+                <constraints nullable="false" />
+            </column>
+            <column name="updated_at" type="TIMESTAMP WITH TIME ZONE" remarks="Last configuration change.">
+                <constraints nullable="false" />
+            </column>
+        </createTable>
+        <addPrimaryKey schemaName="notifications_v2" tableName="notification_providers" columnNames="id" constraintName="notification_providers_pkey" />
+        <rollback>
+            <dropTable schemaName="notifications_v2" tableName="notification_providers" />
+        </rollback>
+    </changeSet>
+    <changeSet id="notifications-v2-table-notification_routes" author="Kiran Kumar" dbms="postgresql">
+        <createTable schemaName="notifications_v2" tableName="notification_routes">
+            <column name="notification_type_id" type="SMALLINT" remarks="FK to category; part of composite PK.">
+                <constraints nullable="false" />
+            </column>
+            <column name="mode_id" type="SMALLINT" remarks="FK to channel; remaining part of composite PK.">
+                <constraints nullable="false" />
+            </column>
+            <column name="provider_id" type="UUID" remarks="FK to provider supporting the same channel.">
+                <constraints nullable="false" />
+            </column>
+            <column name="max_attempts" type="INTEGER" remarks="Positive maximum number of provider attempts per delivery.">
+                <constraints nullable="false" />
+            </column>
+            <column name="retry_initial_seconds" type="INTEGER" remarks="Positive initial retry delay.">
+                <constraints nullable="false" />
+            </column>
+            <column name="retry_max_seconds" type="INTEGER" remarks="Maximum backoff delay, at least the initial delay.">
+                <constraints nullable="false" />
+            </column>
+            <column name="enabled" type="BOOLEAN" remarks="Whether new deliveries may select this route.">
+                <constraints nullable="false" />
+            </column>
+            <column name="updated_at" type="TIMESTAMP WITH TIME ZONE" remarks="Last routing-policy change.">
+                <constraints nullable="false" />
+            </column>
+        </createTable>
+        <addPrimaryKey schemaName="notifications_v2" tableName="notification_routes" columnNames="notification_type_id,mode_id" constraintName="notification_routes_pkey" />
+        <rollback>
+            <dropTable schemaName="notifications_v2" tableName="notification_routes" />
+        </rollback>
+    </changeSet>
+    <changeSet id="notifications-v2-table-segments" author="Kiran Kumar" dbms="postgresql">
+        <createTable schemaName="notifications_v2" tableName="segments">
+            <column name="id" type="UUID" remarks="PK. Segment ID.">
+                <constraints nullable="false" />
+            </column>
+            <column name="name" type="TEXT" remarks="UQ within the application or tenant.">
+                <constraints nullable="false" />
+            </column>
+            <column name="details" type="TEXT" remarks="Description of who belongs to the segment." />
+            <column name="created_at" type="TIMESTAMP WITH TIME ZONE" remarks="Creation time.">
+                <constraints nullable="false" />
+            </column>
+            <column name="updated_at" type="TIMESTAMP WITH TIME ZONE" remarks="Last metadata or membership change.">
+                <constraints nullable="false" />
+            </column>
+            <column name="deleted_at" type="TIMESTAMP WITH TIME ZONE" remarks="Disables future audience resolution without deleting delivery history." />
+        </createTable>
+        <addPrimaryKey schemaName="notifications_v2" tableName="segments" columnNames="id" constraintName="segments_pkey" />
+        <rollback>
+            <dropTable schemaName="notifications_v2" tableName="segments" />
+        </rollback>
+    </changeSet>
+    <changeSet id="notifications-v2-table-segment_users" author="Kiran Kumar" dbms="postgresql">
+        <createTable schemaName="notifications_v2" tableName="segment_users">
+            <column name="segment_id" type="UUID" remarks="FK to segments.id; part of composite PK.">
+                <constraints nullable="false" />
+            </column>
+            <column name="user_id" type="UUID" remarks="Upstream user ID; remaining part of composite PK.">
+                <constraints nullable="false" />
+            </column>
+            <column name="created_at" type="TIMESTAMP WITH TIME ZONE" remarks="Membership creation time.">
+                <constraints nullable="false" />
+            </column>
+        </createTable>
+        <addPrimaryKey schemaName="notifications_v2" tableName="segment_users" columnNames="segment_id,user_id" constraintName="segment_users_pkey" />
+        <rollback>
+            <dropTable schemaName="notifications_v2" tableName="segment_users" />
+        </rollback>
+    </changeSet>
+    <changeSet id="notifications-v2-table-user_preferences" author="Kiran Kumar" dbms="postgresql">
+        <createTable schemaName="notifications_v2" tableName="user_preferences">
+            <column name="id" type="UUID" remarks="PK. Preference ID.">
+                <constraints nullable="false" />
+            </column>
+            <column name="user_id" type="UUID" remarks="Required user identity; missing from the original proposal.">
+                <constraints nullable="false" />
+            </column>
+            <column name="notification_type_id" type="SMALLINT" remarks="FK to category.">
+                <constraints nullable="false" />
+            </column>
+            <column name="mode_id" type="SMALLINT" remarks="FK to channel.">
+                <constraints nullable="false" />
+            </column>
+            <column name="opt_in" type="BOOLEAN" remarks="Explicit allow or deny for this category/channel.">
+                <constraints nullable="false" />
+            </column>
+            <column name="created_at" type="TIMESTAMP WITH TIME ZONE" remarks="Creation time.">
+                <constraints nullable="false" />
+            </column>
+            <column name="updated_at" type="TIMESTAMP WITH TIME ZONE" remarks="Last preference change.">
+                <constraints nullable="false" />
+            </column>
+        </createTable>
+        <addPrimaryKey schemaName="notifications_v2" tableName="user_preferences" columnNames="id" constraintName="user_preferences_pkey" />
+        <rollback>
+            <dropTable schemaName="notifications_v2" tableName="user_preferences" />
+        </rollback>
+    </changeSet>
+    <changeSet id="notifications-v2-table-user_quiet_hours" author="Kiran Kumar" dbms="postgresql">
+        <createTable schemaName="notifications_v2" tableName="user_quiet_hours">
+            <column name="id" type="UUID" remarks="PK. Quiet-hour rule ID.">
+                <constraints nullable="false" />
+            </column>
+            <column name="user_id" type="UUID" remarks="User to whom this rule applies.">
+                <constraints nullable="false" />
+            </column>
+            <column name="mode_id" type="SMALLINT" remarks="FK to channel; permits email and in-app to behave differently.">
+                <constraints nullable="false" />
+            </column>
+            <column name="enabled" type="BOOLEAN" remarks="Whether the quiet window applies.">
+                <constraints nullable="false" />
+            </column>
+            <column name="timezone" type="TEXT" remarks="Valid IANA timezone used to interpret local times.">
+                <constraints nullable="false" />
+            </column>
+            <column name="start_time" type="TIME WITHOUT TIME ZONE" remarks="Local quiet-window start, inclusive.">
+                <constraints nullable="false" />
+            </column>
+            <column name="end_time" type="TIME WITHOUT TIME ZONE" remarks="Local quiet-window end, exclusive.">
+                <constraints nullable="false" />
+            </column>
+            <column name="created_at" type="TIMESTAMP WITH TIME ZONE" remarks="Creation time.">
+                <constraints nullable="false" />
+            </column>
+            <column name="updated_at" type="TIMESTAMP WITH TIME ZONE" remarks="Last timing-policy change.">
+                <constraints nullable="false" />
+            </column>
+        </createTable>
+        <addPrimaryKey schemaName="notifications_v2" tableName="user_quiet_hours" columnNames="id" constraintName="user_quiet_hours_pkey" />
+        <rollback>
+            <dropTable schemaName="notifications_v2" tableName="user_quiet_hours" />
+        </rollback>
+    </changeSet>
+    <changeSet id="notifications-v2-table-notification_suppressions" author="Kiran Kumar" dbms="postgresql">
+        <createTable schemaName="notifications_v2" tableName="notification_suppressions">
+            <column name="id" type="UUID" remarks="PK. Suppression record ID.">
+                <constraints nullable="false" />
+            </column>
+            <column name="mode_id" type="SMALLINT" remarks="FK to channel.">
+                <constraints nullable="false" />
+            </column>
+            <column name="destination_hash" type="TEXT" remarks="Keyed hash of the normalized destination; avoids storing its plaintext here.">
+                <constraints nullable="false" />
+            </column>
+            <column name="reason" type="TEXT" remarks="Such as invalid_destination, hard_bounce, or complaint.">
+                <constraints nullable="false" />
+            </column>
+            <column name="source" type="TEXT" remarks="Provider callback, administrator, or automated validation.">
+                <constraints nullable="false" />
+            </column>
+            <column name="expires_at" type="TIMESTAMP WITH TIME ZONE" remarks="Optional suppression expiry; null means indefinite." />
+            <column name="created_at" type="TIMESTAMP WITH TIME ZONE" remarks="Creation time.">
+                <constraints nullable="false" />
+            </column>
+            <column name="updated_at" type="TIMESTAMP WITH TIME ZONE" remarks="Last change.">
+                <constraints nullable="false" />
+            </column>
+        </createTable>
+        <addPrimaryKey schemaName="notifications_v2" tableName="notification_suppressions" columnNames="id" constraintName="notification_suppressions_pkey" />
+        <rollback>
+            <dropTable schemaName="notifications_v2" tableName="notification_suppressions" />
+        </rollback>
+    </changeSet>
+    <changeSet id="notifications-v2-table-notification_provider_events" author="Kiran Kumar" dbms="postgresql">
+        <createTable schemaName="notifications_v2" tableName="notification_provider_events">
+            <column name="id" type="UUID" remarks="PK. Locally stored receipt ID.">
+                <constraints nullable="false" />
+            </column>
+            <column name="provider_id" type="UUID" remarks="FK to provider.">
+                <constraints nullable="false" />
+            </column>
+            <column name="provider_event_id" type="TEXT" remarks="Stable provider event ID or adapter-generated deduplication key.">
+                <constraints nullable="false" />
+            </column>
+            <column name="provider_message_id" type="TEXT" remarks="Provider message identifier used to match an attempt.">
+                <constraints nullable="false" />
+            </column>
+            <column name="delivery_id" type="UUID" remarks="Matched delivery; nullable when a callback arrives before the send result is stored." />
+            <column name="event_type" type="TEXT" remarks="Normalized event such as delivered, bounced, or complaint.">
+                <constraints nullable="false" />
+            </column>
+            <column name="payload" type="JSONB" remarks="Minimal sanitized receipt metadata.">
+                <constraints nullable="false" />
+            </column>
+            <column name="occurred_at" type="TIMESTAMP WITH TIME ZONE" remarks="Provider event time, if supplied." />
+            <column name="received_at" type="TIMESTAMP WITH TIME ZONE" remarks="Local receipt time.">
+                <constraints nullable="false" />
+            </column>
+            <column name="processed_at" type="TIMESTAMP WITH TIME ZONE" remarks="Null until reconciliation succeeds." />
+        </createTable>
+        <addPrimaryKey schemaName="notifications_v2" tableName="notification_provider_events" columnNames="id" constraintName="notification_provider_events_pkey" />
+        <rollback>
+            <dropTable schemaName="notifications_v2" tableName="notification_provider_events" />
+        </rollback>
+    </changeSet>
+    <changeSet id="notifications-v2-unique-constraints" author="Kiran Kumar" dbms="postgresql">
+        <addUniqueConstraint schemaName="notifications_v2" tableName="notifications" columnNames="source_service,idempotency_key" constraintName="notifications_uq_1" />
+        <addUniqueConstraint schemaName="notifications_v2" tableName="notification_events" columnNames="notification_id,revision,scheduled_at" constraintName="notification_events_uq_1" />
+        <addUniqueConstraint schemaName="notifications_v2" tableName="notification_deliveries" columnNames="event_id,user_id,mode_id" constraintName="notification_deliveries_uq_1" />
+        <addUniqueConstraint schemaName="notifications_v2" tableName="notification_delivery_attempts" columnNames="delivery_id,attempt_number" constraintName="notification_delivery_attempts_uq_1" />
+        <addUniqueConstraint schemaName="notifications_v2" tableName="notification_templates" columnNames="id,version,mode_id" constraintName="notification_templates_uq_1" />
+        <addUniqueConstraint schemaName="notifications_v2" tableName="notification_types" columnNames="code" constraintName="notification_types_uq_1" />
+        <addUniqueConstraint schemaName="notifications_v2" tableName="notification_modes" columnNames="code" constraintName="notification_modes_uq_1" />
+        <addUniqueConstraint schemaName="notifications_v2" tableName="notification_providers" columnNames="code" constraintName="notification_providers_uq_1" />
+        <addUniqueConstraint schemaName="notifications_v2" tableName="notification_providers" columnNames="id,mode_id" constraintName="notification_providers_uq_2" />
+        <addUniqueConstraint schemaName="notifications_v2" tableName="segments" columnNames="name" constraintName="segments_uq_1" />
+        <addUniqueConstraint schemaName="notifications_v2" tableName="user_preferences" columnNames="user_id,notification_type_id,mode_id" constraintName="user_preferences_uq_1" />
+        <addUniqueConstraint schemaName="notifications_v2" tableName="user_quiet_hours" columnNames="user_id,mode_id" constraintName="user_quiet_hours_uq_1" />
+        <addUniqueConstraint schemaName="notifications_v2" tableName="notification_suppressions" columnNames="mode_id,destination_hash" constraintName="notification_suppressions_uq_1" />
+        <addUniqueConstraint schemaName="notifications_v2" tableName="notification_provider_events" columnNames="provider_id,provider_event_id" constraintName="notification_provider_events_uq_1" />
+    </changeSet>
+    <changeSet id="notifications-v2-foreign-keys" author="Kiran Kumar" dbms="postgresql">
+        <addForeignKeyConstraint baseTableSchemaName="notifications_v2" baseTableName="notifications" baseColumnNames="notification_type_id" referencedTableSchemaName="notifications_v2" referencedTableName="notification_types" referencedColumnNames="id" constraintName="notifications_notification_type_id_fk" onDelete="RESTRICT" />
+        <addForeignKeyConstraint baseTableSchemaName="notifications_v2" baseTableName="notifications" baseColumnNames="mode_id" referencedTableSchemaName="notifications_v2" referencedTableName="notification_modes" referencedColumnNames="id" constraintName="notifications_mode_id_fk" onDelete="RESTRICT" />
+        <addForeignKeyConstraint baseTableSchemaName="notifications_v2" baseTableName="notifications" baseColumnNames="template_id,template_version,mode_id" referencedTableSchemaName="notifications_v2" referencedTableName="notification_templates" referencedColumnNames="id,version,mode_id" constraintName="notifications_template_id_template_version_mode_id_fk" onDelete="RESTRICT" />
+        <addForeignKeyConstraint baseTableSchemaName="notifications_v2" baseTableName="notification_target_users" baseColumnNames="notification_id" referencedTableSchemaName="notifications_v2" referencedTableName="notifications" referencedColumnNames="id" constraintName="notification_target_users_notification_id_fk" onDelete="CASCADE" />
+        <addForeignKeyConstraint baseTableSchemaName="notifications_v2" baseTableName="notification_target_segments" baseColumnNames="notification_id" referencedTableSchemaName="notifications_v2" referencedTableName="notifications" referencedColumnNames="id" constraintName="notification_target_segments_notification_id_fk" onDelete="CASCADE" />
+        <addForeignKeyConstraint baseTableSchemaName="notifications_v2" baseTableName="notification_target_segments" baseColumnNames="segment_id" referencedTableSchemaName="notifications_v2" referencedTableName="segments" referencedColumnNames="id" constraintName="notification_target_segments_segment_id_fk" onDelete="CASCADE" />
+        <addForeignKeyConstraint baseTableSchemaName="notifications_v2" baseTableName="notification_events" baseColumnNames="notification_id" referencedTableSchemaName="notifications_v2" referencedTableName="notifications" referencedColumnNames="id" constraintName="notification_events_notification_id_fk" onDelete="RESTRICT" />
+        <addForeignKeyConstraint baseTableSchemaName="notifications_v2" baseTableName="notification_events" baseColumnNames="template_id,template_version" referencedTableSchemaName="notifications_v2" referencedTableName="notification_templates" referencedColumnNames="id,version" constraintName="notification_events_template_id_template_version_fk" onDelete="RESTRICT" />
+        <addForeignKeyConstraint baseTableSchemaName="notifications_v2" baseTableName="notification_deliveries" baseColumnNames="notification_type_id" referencedTableSchemaName="notifications_v2" referencedTableName="notification_types" referencedColumnNames="id" constraintName="notification_deliveries_notification_type_id_fk" onDelete="RESTRICT" />
+        <addForeignKeyConstraint baseTableSchemaName="notifications_v2" baseTableName="notification_deliveries" baseColumnNames="mode_id" referencedTableSchemaName="notifications_v2" referencedTableName="notification_modes" referencedColumnNames="id" constraintName="notification_deliveries_mode_id_fk" onDelete="RESTRICT" />
+        <addForeignKeyConstraint baseTableSchemaName="notifications_v2" baseTableName="notification_deliveries" baseColumnNames="provider_id,mode_id" referencedTableSchemaName="notifications_v2" referencedTableName="notification_providers" referencedColumnNames="id,mode_id" constraintName="notification_deliveries_provider_id_mode_id_fk" onDelete="RESTRICT" />
+        <addForeignKeyConstraint baseTableSchemaName="notifications_v2" baseTableName="notification_deliveries" baseColumnNames="event_id" referencedTableSchemaName="notifications_v2" referencedTableName="notification_events" referencedColumnNames="id" constraintName="notification_deliveries_event_id_fk" onDelete="RESTRICT" />
+        <addForeignKeyConstraint baseTableSchemaName="notifications_v2" baseTableName="notification_delivery_attempts" baseColumnNames="provider_id" referencedTableSchemaName="notifications_v2" referencedTableName="notification_providers" referencedColumnNames="id" constraintName="notification_delivery_attempts_provider_id_fk" onDelete="RESTRICT" />
+        <addForeignKeyConstraint baseTableSchemaName="notifications_v2" baseTableName="notification_delivery_attempts" baseColumnNames="delivery_id" referencedTableSchemaName="notifications_v2" referencedTableName="notification_deliveries" referencedColumnNames="id" constraintName="notification_delivery_attempts_delivery_id_fk" onDelete="RESTRICT" />
+        <addForeignKeyConstraint baseTableSchemaName="notifications_v2" baseTableName="notification_templates" baseColumnNames="ideal_type_id" referencedTableSchemaName="notifications_v2" referencedTableName="notification_types" referencedColumnNames="id" constraintName="notification_templates_ideal_type_id_fk" onDelete="RESTRICT" />
+        <addForeignKeyConstraint baseTableSchemaName="notifications_v2" baseTableName="notification_templates" baseColumnNames="mode_id" referencedTableSchemaName="notifications_v2" referencedTableName="notification_modes" referencedColumnNames="id" constraintName="notification_templates_mode_id_fk" onDelete="RESTRICT" />
+        <addForeignKeyConstraint baseTableSchemaName="notifications_v2" baseTableName="notification_providers" baseColumnNames="mode_id" referencedTableSchemaName="notifications_v2" referencedTableName="notification_modes" referencedColumnNames="id" constraintName="notification_providers_mode_id_fk" onDelete="RESTRICT" />
+        <addForeignKeyConstraint baseTableSchemaName="notifications_v2" baseTableName="notification_routes" baseColumnNames="notification_type_id" referencedTableSchemaName="notifications_v2" referencedTableName="notification_types" referencedColumnNames="id" constraintName="notification_routes_notification_type_id_fk" onDelete="RESTRICT" />
+        <addForeignKeyConstraint baseTableSchemaName="notifications_v2" baseTableName="notification_routes" baseColumnNames="mode_id" referencedTableSchemaName="notifications_v2" referencedTableName="notification_modes" referencedColumnNames="id" constraintName="notification_routes_mode_id_fk" onDelete="RESTRICT" />
+        <addForeignKeyConstraint baseTableSchemaName="notifications_v2" baseTableName="notification_routes" baseColumnNames="provider_id,mode_id" referencedTableSchemaName="notifications_v2" referencedTableName="notification_providers" referencedColumnNames="id,mode_id" constraintName="notification_routes_provider_id_mode_id_fk" onDelete="RESTRICT" />
+        <addForeignKeyConstraint baseTableSchemaName="notifications_v2" baseTableName="segment_users" baseColumnNames="segment_id" referencedTableSchemaName="notifications_v2" referencedTableName="segments" referencedColumnNames="id" constraintName="segment_users_segment_id_fk" onDelete="CASCADE" />
+        <addForeignKeyConstraint baseTableSchemaName="notifications_v2" baseTableName="user_preferences" baseColumnNames="notification_type_id" referencedTableSchemaName="notifications_v2" referencedTableName="notification_types" referencedColumnNames="id" constraintName="user_preferences_notification_type_id_fk" onDelete="RESTRICT" />
+        <addForeignKeyConstraint baseTableSchemaName="notifications_v2" baseTableName="user_preferences" baseColumnNames="mode_id" referencedTableSchemaName="notifications_v2" referencedTableName="notification_modes" referencedColumnNames="id" constraintName="user_preferences_mode_id_fk" onDelete="RESTRICT" />
+        <addForeignKeyConstraint baseTableSchemaName="notifications_v2" baseTableName="user_quiet_hours" baseColumnNames="mode_id" referencedTableSchemaName="notifications_v2" referencedTableName="notification_modes" referencedColumnNames="id" constraintName="user_quiet_hours_mode_id_fk" onDelete="RESTRICT" />
+        <addForeignKeyConstraint baseTableSchemaName="notifications_v2" baseTableName="notification_suppressions" baseColumnNames="mode_id" referencedTableSchemaName="notifications_v2" referencedTableName="notification_modes" referencedColumnNames="id" constraintName="notification_suppressions_mode_id_fk" onDelete="RESTRICT" />
+        <addForeignKeyConstraint baseTableSchemaName="notifications_v2" baseTableName="notification_provider_events" baseColumnNames="provider_id" referencedTableSchemaName="notifications_v2" referencedTableName="notification_providers" referencedColumnNames="id" constraintName="notification_provider_events_provider_id_fk" onDelete="RESTRICT" />
+        <addForeignKeyConstraint baseTableSchemaName="notifications_v2" baseTableName="notification_provider_events" baseColumnNames="delivery_id" referencedTableSchemaName="notifications_v2" referencedTableName="notification_deliveries" referencedColumnNames="id" constraintName="notification_provider_events_delivery_id_fk" onDelete="RESTRICT" />
+    </changeSet>
+    <changeSet id="notifications-v2-checks" author="Kiran Kumar" dbms="postgresql">
+        <comment>Row-local invariants from the design. Priority uses the documented 0-100 range. Cross-row scheduling/target rules, snapshot matching, immutable content, cron/timezone validation and revision increments remain responsibilities of the future service transactions; this migration does not add workers or triggers.</comment>
+        <sql splitStatements="true">
+ALTER TABLE notifications_v2.notifications ADD CONSTRAINT notifications_priority_check CHECK (priority BETWEEN 0 AND 100);
+ALTER TABLE notifications_v2.notifications ADD CONSTRAINT notifications_revision_check CHECK (revision &gt; 0);
+ALTER TABLE notifications_v2.notifications ADD CONSTRAINT notifications_template_version_check CHECK (template_version &gt; 0);
+ALTER TABLE notifications_v2.notifications ADD CONSTRAINT notifications_schedule_check CHECK ((schedule_kind = 'immediate' AND scheduled_at IS NULL AND cron_expression IS NULL) OR (schedule_kind = 'once' AND scheduled_at IS NOT NULL AND cron_expression IS NULL) OR (schedule_kind = 'cron' AND scheduled_at IS NULL AND cron_expression IS NOT NULL));
+ALTER TABLE notifications_v2.notifications ADD CONSTRAINT notifications_cron_bounds_check CHECK (schedule_kind = 'cron' OR (starts_at IS NULL AND ends_at IS NULL));
+ALTER TABLE notifications_v2.notifications ADD CONSTRAINT notifications_bounds_check CHECK (ends_at IS NULL OR starts_at IS NULL OR ends_at &gt; starts_at);
+ALTER TABLE notifications_v2.notifications ADD CONSTRAINT notifications_ttl_check CHECK (delivery_ttl_seconds IS NULL OR delivery_ttl_seconds &gt; 0);
+ALTER TABLE notifications_v2.notifications ADD CONSTRAINT notifications_misfire_check CHECK (misfire_policy IN ('skip','fire_once'));
+ALTER TABLE notifications_v2.notifications ADD CONSTRAINT notifications_status_check CHECK (status IN ('active','paused','completed','cancelled'));
+ALTER TABLE notifications_v2.notification_events ADD CONSTRAINT notification_events_revision_check CHECK (revision &gt; 0);
+ALTER TABLE notifications_v2.notification_events ADD CONSTRAINT notification_events_template_version_check CHECK (template_version &gt; 0);
+ALTER TABLE notifications_v2.notification_events ADD CONSTRAINT notification_events_attempts_check CHECK (expansion_attempt_count &gt;= 0);
+ALTER TABLE notifications_v2.notification_events ADD CONSTRAINT notification_events_expiry_check CHECK (expires_at IS NULL OR expires_at &gt; scheduled_at);
+ALTER TABLE notifications_v2.notification_events ADD CONSTRAINT notification_events_status_check CHECK (status IN ('pending','expanding','ready','failed','cancelled'));
+ALTER TABLE notifications_v2.notification_events ADD CONSTRAINT notification_events_lease_check CHECK ((status = 'expanding' AND lease_token IS NOT NULL AND lease_expires_at IS NOT NULL) OR (status &lt;&gt; 'expanding' AND lease_token IS NULL AND lease_expires_at IS NULL));
+ALTER TABLE notifications_v2.notification_deliveries ADD CONSTRAINT notification_deliveries_priority_check CHECK (priority BETWEEN 0 AND 100);
+ALTER TABLE notifications_v2.notification_deliveries ADD CONSTRAINT notification_deliveries_attempts_check CHECK (attempt_count &gt;= 0);
+ALTER TABLE notifications_v2.notification_deliveries ADD CONSTRAINT notification_deliveries_availability_check CHECK (available_at &gt;= eligible_at);
+ALTER TABLE notifications_v2.notification_deliveries ADD CONSTRAINT notification_deliveries_status_check CHECK (status IN ('pending','processing','retrying','accepted','delivered','failed','dead_lettered','suppressed','expired','cancelled'));
+ALTER TABLE notifications_v2.notification_deliveries ADD CONSTRAINT notification_deliveries_lease_check CHECK ((status = 'processing' AND lease_token IS NOT NULL AND lease_expires_at IS NOT NULL) OR (status &lt;&gt; 'processing' AND lease_token IS NULL AND lease_expires_at IS NULL));
+ALTER TABLE notifications_v2.notification_delivery_attempts ADD CONSTRAINT notification_delivery_attempts_number_check CHECK (attempt_number &gt; 0);
+ALTER TABLE notifications_v2.notification_delivery_attempts ADD CONSTRAINT notification_delivery_attempts_status_check CHECK (status IN ('started','accepted','transient_failure','permanent_failure','unknown'));
+ALTER TABLE notifications_v2.notification_templates ADD CONSTRAINT notification_templates_version_check CHECK (version &gt; 0);
+ALTER TABLE notifications_v2.notification_types ADD CONSTRAINT notification_types_code_check CHECK (code IN ('update','promotion','alert','event','security'));
+ALTER TABLE notifications_v2.notification_modes ADD CONSTRAINT notification_modes_code_check CHECK (code IN ('sms','email','in_app'));
+ALTER TABLE notifications_v2.notification_providers ADD CONSTRAINT notification_providers_rate_check CHECK (requests_per_second IS NULL OR requests_per_second &gt; 0);
+ALTER TABLE notifications_v2.notification_providers ADD CONSTRAINT notification_providers_concurrency_check CHECK (max_concurrency &gt; 0);
+ALTER TABLE notifications_v2.notification_routes ADD CONSTRAINT notification_routes_attempts_check CHECK (max_attempts &gt; 0);
+ALTER TABLE notifications_v2.notification_routes ADD CONSTRAINT notification_routes_retry_check CHECK (retry_initial_seconds &gt; 0 AND retry_max_seconds &gt;= retry_initial_seconds);
+ALTER TABLE notifications_v2.user_quiet_hours ADD CONSTRAINT user_quiet_hours_window_check CHECK (start_time &lt;&gt; end_time);
+</sql>
+        <rollback>
+            <sql splitStatements="true">
+ALTER TABLE notifications_v2.user_quiet_hours DROP CONSTRAINT user_quiet_hours_window_check;
+ALTER TABLE notifications_v2.notification_routes DROP CONSTRAINT notification_routes_retry_check;
+ALTER TABLE notifications_v2.notification_routes DROP CONSTRAINT notification_routes_attempts_check;
+ALTER TABLE notifications_v2.notification_providers DROP CONSTRAINT notification_providers_concurrency_check;
+ALTER TABLE notifications_v2.notification_providers DROP CONSTRAINT notification_providers_rate_check;
+ALTER TABLE notifications_v2.notification_modes DROP CONSTRAINT notification_modes_code_check;
+ALTER TABLE notifications_v2.notification_types DROP CONSTRAINT notification_types_code_check;
+ALTER TABLE notifications_v2.notification_templates DROP CONSTRAINT notification_templates_version_check;
+ALTER TABLE notifications_v2.notification_delivery_attempts DROP CONSTRAINT notification_delivery_attempts_status_check;
+ALTER TABLE notifications_v2.notification_delivery_attempts DROP CONSTRAINT notification_delivery_attempts_number_check;
+ALTER TABLE notifications_v2.notification_deliveries DROP CONSTRAINT notification_deliveries_lease_check;
+ALTER TABLE notifications_v2.notification_deliveries DROP CONSTRAINT notification_deliveries_status_check;
+ALTER TABLE notifications_v2.notification_deliveries DROP CONSTRAINT notification_deliveries_availability_check;
+ALTER TABLE notifications_v2.notification_deliveries DROP CONSTRAINT notification_deliveries_attempts_check;
+ALTER TABLE notifications_v2.notification_deliveries DROP CONSTRAINT notification_deliveries_priority_check;
+ALTER TABLE notifications_v2.notification_events DROP CONSTRAINT notification_events_lease_check;
+ALTER TABLE notifications_v2.notification_events DROP CONSTRAINT notification_events_status_check;
+ALTER TABLE notifications_v2.notification_events DROP CONSTRAINT notification_events_expiry_check;
+ALTER TABLE notifications_v2.notification_events DROP CONSTRAINT notification_events_attempts_check;
+ALTER TABLE notifications_v2.notification_events DROP CONSTRAINT notification_events_template_version_check;
+ALTER TABLE notifications_v2.notification_events DROP CONSTRAINT notification_events_revision_check;
+ALTER TABLE notifications_v2.notifications DROP CONSTRAINT notifications_status_check;
+ALTER TABLE notifications_v2.notifications DROP CONSTRAINT notifications_misfire_check;
+ALTER TABLE notifications_v2.notifications DROP CONSTRAINT notifications_ttl_check;
+ALTER TABLE notifications_v2.notifications DROP CONSTRAINT notifications_bounds_check;
+ALTER TABLE notifications_v2.notifications DROP CONSTRAINT notifications_cron_bounds_check;
+ALTER TABLE notifications_v2.notifications DROP CONSTRAINT notifications_schedule_check;
+ALTER TABLE notifications_v2.notifications DROP CONSTRAINT notifications_template_version_check;
+ALTER TABLE notifications_v2.notifications DROP CONSTRAINT notifications_revision_check;
+ALTER TABLE notifications_v2.notifications DROP CONSTRAINT notifications_priority_check;
+</sql>
+        </rollback>
+    </changeSet>
+    <changeSet id="notifications-v2-index-notifications_due_idx" author="Kiran Kumar" dbms="postgresql">
+        <createIndex schemaName="notifications_v2" tableName="notifications" indexName="notifications_due_idx">
+            <column name="next_run_at" />
+        </createIndex>
+        <modifySql dbms="postgresql" applyToRollback="false">
+            <append value=" WHERE status = 'active' AND deleted_at IS NULL" />
+        </modifySql>
+    </changeSet>
+    <changeSet id="notifications-v2-index-notification_events_expansion_due_idx" author="Kiran Kumar" dbms="postgresql">
+        <createIndex schemaName="notifications_v2" tableName="notification_events" indexName="notification_events_expansion_due_idx">
+            <column name="expansion_available_at" />
+        </createIndex>
+        <modifySql dbms="postgresql" applyToRollback="false">
+            <append value=" WHERE status = 'pending'" />
+        </modifySql>
+    </changeSet>
+    <changeSet id="notifications-v2-index-notification_events_expansion_lease_idx" author="Kiran Kumar" dbms="postgresql">
+        <createIndex schemaName="notifications_v2" tableName="notification_events" indexName="notification_events_expansion_lease_idx">
+            <column name="lease_expires_at" />
+        </createIndex>
+        <modifySql dbms="postgresql" applyToRollback="false">
+            <append value=" WHERE status = 'expanding'" />
+        </modifySql>
+    </changeSet>
+    <changeSet id="notifications-v2-index-notification_deliveries_due_idx" author="Kiran Kumar" dbms="postgresql">
+        <createIndex schemaName="notifications_v2" tableName="notification_deliveries" indexName="notification_deliveries_due_idx">
+            <column name="provider_id" />
+            <column name="available_at" />
+            <column name="priority" descending="true" />
+            <column name="id" />
+        </createIndex>
+        <modifySql dbms="postgresql" applyToRollback="false">
+            <append value=" WHERE status IN ('pending','retrying')" />
+        </modifySql>
+    </changeSet>
+    <changeSet id="notifications-v2-index-notification_deliveries_lease_idx" author="Kiran Kumar" dbms="postgresql">
+        <createIndex schemaName="notifications_v2" tableName="notification_deliveries" indexName="notification_deliveries_lease_idx">
+            <column name="lease_expires_at" />
+        </createIndex>
+        <modifySql dbms="postgresql" applyToRollback="false">
+            <append value=" WHERE status = 'processing'" />
+        </modifySql>
+    </changeSet>
+    <changeSet id="notifications-v2-index-notification_deliveries_user_history_idx" author="Kiran Kumar" dbms="postgresql">
+        <createIndex schemaName="notifications_v2" tableName="notification_deliveries" indexName="notification_deliveries_user_history_idx">
+            <column name="user_id" />
+            <column name="created_at" descending="true" />
+        </createIndex>
+    </changeSet>
+    <changeSet id="notifications-v2-index-notification_delivery_attempts_provider_message_idx" author="Kiran Kumar" dbms="postgresql">
+        <createIndex schemaName="notifications_v2" tableName="notification_delivery_attempts" indexName="notification_delivery_attempts_provider_message_idx">
+            <column name="provider_id" />
+            <column name="provider_message_id" />
+        </createIndex>
+    </changeSet>
+    <changeSet id="notifications-v2-index-segment_users_user_idx" author="Kiran Kumar" dbms="postgresql">
+        <createIndex schemaName="notifications_v2" tableName="segment_users" indexName="segment_users_user_idx">
+            <column name="user_id" />
+            <column name="segment_id" />
+        </createIndex>
+    </changeSet>
+    <changeSet id="notifications-v2-app-grants" author="Kiran Kumar" dbms="postgresql">
+        <sql splitStatements="true">
+GRANT USAGE ON SCHEMA notifications_v2 TO ${app_user};
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA notifications_v2 TO ${app_user};
+</sql>
+        <rollback>
+            <sql splitStatements="true">
+REVOKE SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA notifications_v2 FROM ${app_user};
+REVOKE USAGE ON SCHEMA notifications_v2 FROM ${app_user};
+</sql>
+        </rollback>
+    </changeSet>
+    <changeSet id="notifications-v2-table-notification_target_emails" author="Kiran Kumar" dbms="postgresql">
+        <comment>Direct email targets for invitees without user accounts. The producer must validate and normalize email addresses and allow these targets only for email definitions.</comment>
+        <createTable schemaName="notifications_v2" tableName="notification_target_emails">
+            <column name="notification_id" type="UUID" remarks="FK to notifications.id; part of composite PK.">
+                <constraints nullable="false" />
+            </column>
+            <column name="email" type="TEXT" remarks="Validated, normalized recipient email address; remaining part of composite PK.">
+                <constraints nullable="false" />
+            </column>
+            <column name="created_at" type="TIMESTAMP WITH TIME ZONE" remarks="Time this target was added.">
+                <constraints nullable="false" />
+            </column>
+        </createTable>
+        <addPrimaryKey schemaName="notifications_v2" tableName="notification_target_emails"
+            columnNames="notification_id,email" constraintName="notification_target_emails_pkey" />
+        <addForeignKeyConstraint baseTableSchemaName="notifications_v2" baseTableName="notification_target_emails"
+            baseColumnNames="notification_id" referencedTableSchemaName="notifications_v2" referencedTableName="notifications"
+            referencedColumnNames="id" constraintName="notification_target_emails_notification_id_fk" onDelete="CASCADE" />
+        <sql>GRANT SELECT, INSERT, UPDATE, DELETE ON notifications_v2.notification_target_emails TO ${app_user};</sql>
+        <rollback>
+            <dropTable schemaName="notifications_v2" tableName="notification_target_emails" />
+        </rollback>
+    </changeSet>
+    <changeSet id="notifications-v2-table-notification_topics" author="Kiran Kumar" dbms="postgresql">
+        <comment>Topic catalog: each topic belongs to one notification type. Topic links on definitions, deliveries and preferences, and catalog seed data are separate changes.</comment>
+        <createTable schemaName="notifications_v2" tableName="notification_topics">
+            <column name="id" type="SMALLINT" remarks="Stable topic ID.">
+                <constraints nullable="false" />
+            </column>
+            <column name="notification_type_id" type="SMALLINT" remarks="Parent notification type; many topics belong to one type.">
+                <constraints nullable="false" />
+            </column>
+            <column name="code" type="TEXT" remarks="Unique topic code, such as document_invitation or comment_mention.">
+                <constraints nullable="false" />
+            </column>
+            <column name="description" type="TEXT" remarks="Human-readable meaning and intended use.">
+                <constraints nullable="false" />
+            </column>
+            <column name="default_opt_in" type="BOOLEAN" remarks="Explicitly configured topic default for future topic-level preference evaluation.">
+                <constraints nullable="false" />
+            </column>
+            <column name="active" type="BOOLEAN" remarks="Whether new requests may use this topic.">
+                <constraints nullable="false" />
+            </column>
+        </createTable>
+        <addPrimaryKey schemaName="notifications_v2" tableName="notification_topics"
+            columnNames="id" constraintName="notification_topics_pkey" />
+        <addUniqueConstraint schemaName="notifications_v2" tableName="notification_topics"
+            columnNames="code" constraintName="notification_topics_code_key" />
+        <addForeignKeyConstraint baseTableSchemaName="notifications_v2" baseTableName="notification_topics"
+            baseColumnNames="notification_type_id" referencedTableSchemaName="notifications_v2" referencedTableName="notification_types"
+            referencedColumnNames="id" constraintName="notification_topics_notification_type_id_fk" onDelete="RESTRICT" />
+        <createIndex schemaName="notifications_v2" tableName="notification_topics" indexName="notification_topics_type_idx">
+            <column name="notification_type_id" />
+        </createIndex>
+        <sql>GRANT SELECT, INSERT, UPDATE, DELETE ON notifications_v2.notification_topics TO ${app_user};</sql>
+        <rollback>
+            <dropTable schemaName="notifications_v2" tableName="notification_topics" />
+        </rollback>
+    </changeSet>
+</databaseChangeLog>

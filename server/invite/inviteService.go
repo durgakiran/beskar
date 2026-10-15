@@ -18,9 +18,10 @@ import (
 )
 
 var (
-	errInviteNotFound        = errors.New("invite not found")
-	errInviteWrongAccount    = errors.New("invite belongs to another account")
-	errInviteInvalidDecision = errors.New("invalid invite decision")
+	errInviteNotFound         = errors.New("invite not found")
+	errInviteWrongAccount     = errors.New("invite belongs to another account")
+	errInviteInvalidDecision  = errors.New("invalid invite decision")
+	errInviteDecisionConflict = errors.New("invitation already completed with a different decision")
 )
 
 func normalizeInviteStatus(status sql.NullString) *string {
@@ -222,6 +223,9 @@ func decideInvite(ctx context.Context, pool *pgxpool.Pool, userID, email, token,
 	result := InviteDecisionResponse{Entity: invite.Entity, EntityId: invite.EntityId}
 	if current := effectiveInviteStatus(invite, time.Now()); current != nil {
 		result.Status = *current
+		if (*current == "accepted" || *current == "rejected") && *current != strings.ToLower(status) {
+			return result, nil, errInviteDecisionConflict
+		}
 		return result, nil, nil
 	}
 	if status == STATUS_ACCEPTED {
@@ -249,7 +253,7 @@ func processInviteDecision(userId, emailId, token, decision string) (InviteDecis
 	result, changed, err := decideInvite(ctx, core.GetPool(), userId, emailId, token, decision, grantInviteAccess)
 	if err == nil && changed != nil {
 		emitSpaceInviteDecisionInApp(ctx, inviteDetailsResponse(*changed), userId, emailId, result.Status)
-	} else if err == nil {
+	} else if err == nil || errors.Is(err, errInviteDecisionConflict) {
 		resolveSpaceInviteNotification(ctx, token, userId)
 	}
 	return result, err

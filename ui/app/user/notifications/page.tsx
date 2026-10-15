@@ -63,7 +63,7 @@ async function apiPost(path: string, body: any) {
         body: JSON.stringify(body),
     });
     if (!res.ok) {
-        throw new Error(`Request failed with status ${res.status}`);
+        throw Object.assign(new Error(`Request failed with status ${res.status}`), { status: res.status });
     }
     return res.json().catch(() => null);
 }
@@ -148,8 +148,14 @@ function NotificationItem({
             setDeclineOpen(false);
             window.dispatchEvent(new CustomEvent("beskar:notifications-changed"));
             onChanged();
-        } catch {
-            onToast({ type: "warning", message: "Could not update this invite. Try again." });
+        } catch (error) {
+            if (error instanceof Error && "status" in error && error.status === 409) {
+                onToast({ type: "warning", message: "This invitation was already completed with a different decision." });
+                window.dispatchEvent(new CustomEvent("beskar:notifications-changed"));
+                onChanged();
+            } else {
+                onToast({ type: "warning", message: "Could not update this invite. Try again." });
+            }
         } finally {
             setPendingAction(null);
         }
@@ -220,7 +226,7 @@ function NotificationItem({
                             )}
                         </Flex>
 
-                        {notification.type === "space_invite_created" && actionPending ? (
+                        {(notification.type === "space_invite_created" || notification.target?.type === "invite") && actionPending ? (
                             <div className="flex w-full flex-col gap-2 md:w-[176px] md:flex-row md:justify-end">
                                 <Button
                                     variant="outline"
