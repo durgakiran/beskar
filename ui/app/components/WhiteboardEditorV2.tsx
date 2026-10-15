@@ -1,5 +1,6 @@
 import WhiteboardHistoryV2 from './WhiteboardHistoryV2';
 import "@durgakiran/glideboard/styles.css";
+import { matchesPublishedState } from 'app/core/whiteboard/v2/publishState';
 import { loadDraft, syncDraft } from 'app/core/whiteboard/v2/replay';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button, Flex, Spinner, Text } from '@radix-ui/themes';
@@ -319,7 +320,10 @@ export default function WhiteboardEditorV2({ slug }: { slug: string[] }) {
                 if (server.readOnly) throw new Error('This space is archived and read-only.');
                 const target = await board.captureProjectionTarget();
                 requireCurrentSession();
-                if (target.yjs.stateDigest !== await digest(server.state)) {
+                const capturedState = await session.durability.getCapturedState(target);
+                const matchesServer = await matchesPublishedState(capturedState, server.state);
+                requireCurrentSession();
+                if (!matchesServer) {
                     publishMismatch = 'server';
                     await session.durability.flush(target);
                     continue;

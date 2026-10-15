@@ -6,7 +6,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/durgakiran/beskar/core"
 	"github.com/durgakiran/beskar/notification"
+	"github.com/durgakiran/beskar/notificationv2"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 )
@@ -16,7 +18,7 @@ func emitSpaceMemberAddedNotification(ctx context.Context, space Space, actor Us
 		return
 	}
 	recipientID := recipient.Id
-	if err := notification.NewService().Emit(ctx, notification.EmitNotificationRequest{
+	if err := notificationv2.NewBusinessProducer(core.GetPool(), "beskar.space").Emit(ctx, notification.EmitNotificationRequest{
 		EventKey: fmt.Sprintf("%s:%s:%s", notification.NotificationTypeSpaceMemberAdded, space.Id.String(), recipientID.String()),
 		Type:     notification.NotificationTypeSpaceMemberAdded,
 		Category: notification.NotificationCategorySpaceMembership,
@@ -47,7 +49,7 @@ func emitSpaceMemberAddedNotification(ctx context.Context, space Space, actor Us
 
 func emitSpaceMemberRoleChangedNotification(ctx context.Context, space Space, actor User, recipient User, oldRole string, newRole string, changedAt time.Time) {
 	recipientID := recipient.Id
-	if err := notification.NewService().Emit(ctx, notification.EmitNotificationRequest{
+	if err := notificationv2.NewBusinessProducer(core.GetPool(), "beskar.space").Emit(ctx, notification.EmitNotificationRequest{
 		EventKey: fmt.Sprintf("%s:%s:%s:%s:%d", notification.NotificationTypeSpaceMemberRoleChanged, space.Id.String(), recipientID.String(), normalizeRole(newRole), changedAt.UnixNano()),
 		Type:     notification.NotificationTypeSpaceMemberRoleChanged,
 		Category: notification.NotificationCategorySpaceMembership,
@@ -80,7 +82,7 @@ func emitSpaceMemberRoleChangedNotification(ctx context.Context, space Space, ac
 
 func emitSpaceMemberRemovedNotification(ctx context.Context, space Space, actor User, recipient User, removedAt time.Time) {
 	recipientID := recipient.Id
-	if err := notification.NewService().Emit(ctx, notification.EmitNotificationRequest{
+	if err := notificationv2.NewBusinessProducer(core.GetPool(), "beskar.space").Emit(ctx, notification.EmitNotificationRequest{
 		EventKey: fmt.Sprintf("%s:%s:%s:%d", notification.NotificationTypeSpaceMemberRemoved, space.Id.String(), recipientID.String(), removedAt.UnixNano()),
 		Type:     notification.NotificationTypeSpaceMemberRemoved,
 		Category: notification.NotificationCategorySpaceMembership,
@@ -139,7 +141,7 @@ func emitSpaceLifecycleNotification(ctx context.Context, notificationType string
 		if notificationType == notification.NotificationTypeSpaceDeleted {
 			key = fmt.Sprintf("%s:%s", eventKey, recipientID.String())
 		}
-		if err := notification.NewService().Emit(ctx, notification.EmitNotificationRequest{
+		if err := notificationv2.NewBusinessProducer(core.GetPool(), "beskar.space").Emit(ctx, notification.EmitNotificationRequest{
 			EventKey: key,
 			Type:     notificationType,
 			Category: notification.NotificationCategorySpaceLifecycle,

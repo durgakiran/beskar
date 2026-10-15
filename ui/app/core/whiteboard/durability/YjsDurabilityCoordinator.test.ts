@@ -34,6 +34,25 @@ function createRecovery() {
 describe("YjsDurabilityCoordinator", () => {
     beforeEach(() => vi.useFakeTimers());
 
+    it("returns detached bytes for the exact target without saving or selecting a newer projection", async () => {
+        const { recovery } = createRecovery();
+        const save = vi.fn();
+        const coordinator = new YjsDurabilityCoordinator({ sessionKey: "session", draftId: "draft", clientId: "client", durableRevision: "0", persistence: { save }, recovery });
+        const first = await projectedState(1, 1, 4);
+        const newer = await projectedState(2, 2, 5);
+        const accepting = coordinator.acceptProjectedState(first);
+        const reading = coordinator.getCapturedState(first.target);
+        await accepting;
+        await coordinator.acceptProjectedState(newer);
+        const bytes = await reading;
+        expect(bytes).toEqual(first.encodedState);
+        bytes[0] = 99;
+        expect(await coordinator.getCapturedState(first.target)).toEqual(first.encodedState);
+        expect(save).not.toHaveBeenCalled();
+        await expect(coordinator.getCapturedState({ ...first.target, storeRevision: 999 })).rejects.toThrow("not captured");
+        await coordinator.dispose("cancel");
+    });
+
     it("finishes an already captured local write before closing recovery on navigation", async () => {
         const { recovery, writes } = createRecovery();
         const coordinator = new YjsDurabilityCoordinator({ sessionKey: "session", draftId: "draft", clientId: "client", durableRevision: "0", persistence: { save: vi.fn() }, recovery });

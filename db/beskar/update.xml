@@ -20,6 +20,11 @@
     <!-- <include file="updates/auth.xml" /> -->
     <include file="updates/notifications.xml" />
     <include file="updates/email_notifications.xml" />
+    <include file="updates/notifications_v2.xml" relativeToChangelogFile="true" />
+    <include file="updates/notifications_v2_seed.xml" relativeToChangelogFile="true" />
+    <include file="updates/notifications_v2_definitions.xml" relativeToChangelogFile="true" />
+    <include file="updates/notifications_v2_email_recipients.xml" relativeToChangelogFile="true" />
+    <include file="updates/notifications_v2_business.xml" relativeToChangelogFile="true" />
     <include file="updates/user.xml" />
     <include file="updates/comments.xml" />
     <include file="updates/whiteboard_versioning.xml" />

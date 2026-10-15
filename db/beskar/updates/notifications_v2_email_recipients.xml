@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+    <changeSet id="notifications-v2-email-only-deliveries" author="Kiran Kumar" dbms="postgresql">
+        <preConditions onFail="HALT">
+            <sqlCheck expectedResult="1">SELECT count(*) FROM notifications_v2.notification_modes WHERE id=1 AND code='email'</sqlCheck>
+        </preConditions>
+        <comment>Reuse notification_target_emails. Only email deliveries may omit user_id; keep registered-user uniqueness and add address uniqueness for email-only recipients. Mode 1 is the seeded email mode.</comment>
+        <dropNotNullConstraint schemaName="notifications_v2" tableName="notification_deliveries" columnName="user_id" columnDataType="UUID"/>
+        <sql><![CDATA[
+ALTER TABLE notifications_v2.notification_deliveries
+ ADD CONSTRAINT notification_deliveries_external_email_check
+ CHECK (user_id IS NOT NULL OR
+   (mode_id=1 AND jsonb_typeof(destination_snapshot->'email')='string'
+    AND length(btrim(destination_snapshot->>'email'))>0) IS TRUE);
+CREATE UNIQUE INDEX notification_deliveries_external_email_key
+ ON notifications_v2.notification_deliveries(event_id,mode_id,(destination_snapshot->>'email'))
+ WHERE user_id IS NULL;
+        ]]></sql>
+        <rollback>
+            <!-- Fails safely if external deliveries exist; never deletes history. -->
+            <addNotNullConstraint schemaName="notifications_v2" tableName="notification_deliveries" columnName="user_id" columnDataType="UUID"/>
+            <sql>DROP INDEX notifications_v2.notification_deliveries_external_email_key; ALTER TABLE notifications_v2.notification_deliveries DROP CONSTRAINT notification_deliveries_external_email_check;</sql>
+        </rollback>
+    </changeSet>
+</databaseChangeLog>

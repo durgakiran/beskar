@@ -70,6 +70,20 @@ func (s *Service) EnqueueEmail(ctx context.Context, req EnqueueEmailRequest) (uu
 }
 
 func (s *Service) Emit(ctx context.Context, req EmitNotificationRequest) error {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	if err = s.EmitTx(ctx, tx, req); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
+// EmitTx writes an inbox event and its recipients using the caller's transaction.
+// The caller owns commit/rollback; this does not send emails or external messages.
+func (s *Service) EmitTx(ctx context.Context, tx pgx.Tx, req EmitNotificationRequest) error {
 	req, err := validateEmitNotificationRequest(req)
 	if err != nil {
 		return err
@@ -102,12 +116,6 @@ func (s *Service) Emit(ctx context.Context, req EmitNotificationRequest) error {
 	if req.Actor.UserID != uuid.Nil {
 		actorUserID = req.Actor.UserID
 	}
-
-	tx, err := s.pool.Begin(ctx)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback(ctx)
 
 	var eventID uuid.UUID
 	if err := tx.QueryRow(ctx, upsertNotificationEvent,
@@ -153,7 +161,7 @@ func (s *Service) Emit(ctx context.Context, req EmitNotificationRequest) error {
 		}
 	}
 
-	return tx.Commit(ctx)
+	return nil
 }
 
 func (s *Service) ResolveByEventKey(ctx context.Context, eventKey string, recipientUserID *uuid.UUID) error {
@@ -166,6 +174,17 @@ func (s *Service) ResolveByEventKey(ctx context.Context, eventKey string, recipi
 		recipient = *recipientUserID
 	}
 	_, err := s.pool.Exec(ctx, resolveInAppNotificationByEventKey, eventKey, recipient)
+	return err
+}
+
+// ResolveByTarget resolves all inbox representations of the same business object
+// for one recipient, including legacy and v2 events with different event keys.
+func (s *Service) ResolveByTarget(ctx context.Context, targetType, targetID string, recipientUserID uuid.UUID) error {
+	targetType, targetID = strings.TrimSpace(targetType), strings.TrimSpace(targetID)
+	if targetType == "" || targetID == "" || recipientUserID == uuid.Nil {
+		return errors.New("target type, target ID and recipient are required")
+	}
+	_, err := s.pool.Exec(ctx, resolveInAppNotificationByTarget, targetType, targetID, recipientUserID)
 	return err
 }
 

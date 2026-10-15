@@ -25,6 +25,7 @@ import (
 	media "github.com/durgakiran/beskar/media/controller"
 	mediaservice "github.com/durgakiran/beskar/media/services"
 	"github.com/durgakiran/beskar/notification"
+	"github.com/durgakiran/beskar/notificationv2"
 	page "github.com/durgakiran/beskar/page"
 	profile "github.com/durgakiran/beskar/profile/controller"
 	"github.com/durgakiran/beskar/quota"
@@ -73,9 +74,9 @@ func addCorsMiddleWare(r *chi.Mux) {
 		cors.Options{
 			AllowedOrigins: core.AllowedOriginsFromEnv(),
 			// AllowOriginFunc:  func(r *http.Request, origin string) bool { return true },
-			AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-			AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token", "Idempotency-Key"},
-			ExposedHeaders:   []string{"Link"},
+			AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
+			AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token", "Idempotency-Key", "If-Match"},
+			ExposedHeaders:   []string{"Link", "ETag", "Location"},
 			AllowCredentials: false,
 			MaxAge:           300, // Maximum value not ignored by any of major browsers
 		}),
@@ -158,6 +159,62 @@ func main() {
 	pageevents.Init(context.Background())
 
 	notificationConfig := notification.LoadConfig()
+	notificationProducerResolver, err := notificationv2.LoadProducerResolver()
+	if err != nil {
+		logger().Error(err.Error())
+		os.Exit(1)
+	}
+	notificationSchedulerConfig, err := notificationv2.LoadSchedulerConfig()
+	if err != nil {
+		logger().Error(err.Error())
+		os.Exit(1)
+	}
+	notificationScheduler, err := notificationv2.NewScheduler(core.GetPool(), notificationSchedulerConfig, logger())
+	if err != nil {
+		logger().Error(err.Error())
+		os.Exit(1)
+	}
+	notificationSchedulerDone := notificationScheduler.Start(appContext)
+	audienceConfig, err := notificationv2.LoadAudienceConfig()
+	if err != nil {
+		logger().Error(err.Error())
+		os.Exit(1)
+	}
+	audienceDirectory := &notificationv2.ZitadelAudienceDirectory{
+		IssuerURL: strings.TrimSpace(os.Getenv("ISSUER_URL")),
+		Token:     os.Getenv("SERVER_PAT"),
+		Client:    &http.Client{Timeout: 15 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }},
+	}
+	audienceExpander, err := notificationv2.NewAudienceExpander(core.GetPool(), audienceConfig, audienceDirectory, logger())
+	if err != nil {
+		logger().Error(err.Error())
+		os.Exit(1)
+	}
+	audienceDone := audienceExpander.Start(appContext)
+	deliveryConfig, err := notificationv2.LoadDeliveryConfig()
+	if err != nil {
+		logger().Fatal(err.Error())
+	}
+	if deliveryConfig.EmailEnabled && (!notificationConfig.NotificationsEnabled || notificationConfig.Provider != "smtp") {
+		logger().Fatal("v2 email delivery requires EMAIL_NOTIFICATIONS_ENABLED=true and EMAIL_PROVIDER=smtp")
+	}
+	if deliveryConfig.EmailEnabled && (notificationConfig.SMTPHost == "" || notificationConfig.SMTPPort < 1 || notificationConfig.SMTPPort > 65535) {
+		logger().Fatal("v2 email delivery requires SMTP_HOST and a valid SMTP_PORT")
+	}
+	deliveryWorker, err := notificationv2.NewDeliveryWorker(core.GetPool(), deliveryConfig, notification.NewSMTPProvider(notificationConfig), notificationConfig.FromAddress, notificationConfig.FromName, logger())
+	if err != nil {
+		logger().Fatal(err.Error())
+	}
+	deliveryDone := deliveryWorker.Start(appContext)
+	recoveryConfig, err := notificationv2.LoadRecoveryConfig()
+	if err != nil {
+		logger().Fatal(err.Error())
+	}
+	recoveryWorker, err := notificationv2.NewRecoveryWorker(core.GetPool(), recoveryConfig, audienceConfig, logger())
+	if err != nil {
+		logger().Fatal(err.Error())
+	}
+	recoveryDone := recoveryWorker.Start(appContext)
 	quotaConfig := quota.LoadConfig()
 	assetCleanupConfig := assetcleanup.LoadConfig()
 	documentVersionCleanupConfig := docversioncleanup.LoadConfig()
@@ -220,6 +277,8 @@ func main() {
 	r.Mount("/api/v1/page", authChain(false)(page.Router()))
 	r.Mount("/api/v1/comment", authChain(false)(comment.Router()))
 	r.Mount("/api/v1/notifications", authChain(false)(notification.NewController().Router()))
+	// V2 definitions use dedicated producer credentials, independent of user sessions.
+	r.Mount("/api/v2/notifications", notificationv2.NewController(notificationv2.NewService(core.GetPool()), notificationProducerResolver).Router())
 	r.Mount("/api/v1/user", authChain(false)(user.Router()))
 	if notificationConfig.AdminEnabled && notificationConfig.AdminToken != "" {
 		r.Mount("/api/v1/admin/email", authChain(false)(notification.NewAdminController(notificationConfig).Router()))
@@ -252,6 +311,10 @@ func main() {
 		}
 	}
 	stopApplication()
+	<-notificationSchedulerDone
+	<-audienceDone
+	<-deliveryDone
+	<-recoveryDone
 	<-whiteboardStagingCleanupDone
 	<-whiteboardAssetV2CleanupDone
 }

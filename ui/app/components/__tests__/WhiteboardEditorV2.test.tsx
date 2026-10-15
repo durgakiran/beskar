@@ -1,4 +1,5 @@
 import React from 'react';
+import { createHash } from 'node:crypto';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as Y from 'yjs';
@@ -11,6 +12,7 @@ const mocks = vi.hoisted(() => ({
     captureProjectionTarget: vi.fn(),
     createPublishPreview: vi.fn(),
     flush: vi.fn(),
+    getCapturedState: vi.fn(),
     loadDraft: vi.fn(),
     syncDraft: vi.fn(),
     jsonRequest: vi.fn(),
@@ -79,6 +81,7 @@ vi.mock('app/core/whiteboard/durability/YjsDurabilityCoordinator', () => ({
     YjsDurabilityCoordinator: class {
         constructor(options: unknown) { mocks.durabilityConstruct(options); }
         flush = mocks.flush;
+        getCapturedState = mocks.getCapturedState;
         getSnapshot() { return { phase: 'clean' }; }
         subscribeStatus() { return () => {}; }
         attach() { return () => {}; }
@@ -117,6 +120,7 @@ describe('WhiteboardEditorV2 capture preparation', () => {
         mocks.captureProjectionTarget.mockResolvedValue(target);
         mocks.createPublishPreview.mockResolvedValue({ svg: '<svg />' });
         mocks.flush.mockResolvedValue(undefined);
+        mocks.getCapturedState.mockResolvedValue(state);
         mocks.post.mockResolvedValue({});
         mocks.assetDispose.mockResolvedValue(undefined);
         mocks.digest.mockResolvedValue('sha256:state');
@@ -244,6 +248,59 @@ describe('WhiteboardEditorV2 capture preparation', () => {
         expect(mocks.prepareForCapture).not.toHaveBeenCalled();
         await act(async () => finish());
         await waitFor(() => expect(mocks.post).toHaveBeenCalledTimes(1));
+        expect(mocks.release).toHaveBeenCalledTimes(1);
+    });
+
+    it('publishes identical content despite observer-time cleanup byte differences', async () => {
+        const doc = new Y.Doc();
+        const records = doc.getMap('records');
+        let captured: Uint8Array = new Uint8Array();
+        records.observeDeep(() => { captured = Y.encodeStateAsUpdate(doc); });
+        records.set('shape', new Y.Map([['x', 1]]));
+        records.delete('shape');
+        const serverState = Y.encodeStateAsUpdate(doc);
+        const hash = (bytes: Uint8Array) => 'sha256:' + createHash('sha256').update(bytes).digest('hex');
+        expect(hash(captured)).not.toBe(hash(serverState));
+        mocks.digest.mockImplementation(async bytes => hash(bytes));
+        const capturedTarget = { ...target, yjs: { ...target.yjs, stateDigest: hash(captured) } };
+        mocks.captureProjectionTarget.mockResolvedValue(capturedTarget);
+        mocks.getCapturedState.mockResolvedValue(captured);
+        mocks.loadDraft.mockResolvedValue({ state: serverState, cache: {}, manifest: { title: 'Board', headSequence: '662', restoreGeneration: '0' } });
+        await renderEditor();
+        fireEvent.click(screen.getByRole('button', { name: 'Publish' }));
+        await waitFor(() => expect(mocks.post).toHaveBeenCalledTimes(1));
+        expect(mocks.post.mock.calls[0][1].sequence).toBe('662');
+        expect(mocks.getCapturedState).toHaveBeenCalledWith(capturedTarget);
+        expect(mocks.createPublishPreview).toHaveBeenCalledTimes(1);
+        expect(mocks.release).toHaveBeenCalledTimes(1);
+        doc.destroy();
+    });
+
+    it('still blocks publishing when captured content is missing from the saved draft', async () => {
+        const doc = new Y.Doc(); doc.getMap('records').set('unsaved', true);
+        mocks.getCapturedState.mockResolvedValue(Y.encodeStateAsUpdate(doc));
+        mocks.digest.mockImplementation(async bytes => 'sha256:' + createHash('sha256').update(bytes).digest('hex'));
+        await renderEditor();
+        fireEvent.click(screen.getByRole('button', { name: 'Publish' }));
+        await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('does not match the saved draft'));
+        expect(mocks.post).not.toHaveBeenCalled();
+        expect(mocks.createPublishPreview).not.toHaveBeenCalled();
+        expect(mocks.release).toHaveBeenCalledTimes(1);
+        doc.destroy();
+    });
+
+    it('still blocks when the checkpoint changes during every preview capture', async () => {
+        let revision = 1;
+        mocks.createPublishPreview.mockImplementation(async () => {
+            revision++;
+            mocks.captureProjectionTarget.mockResolvedValue({ storeRevision: revision, yjs: { transactionSequence: revision, stateDigest: `sha256:changed-${revision}` } });
+            return { svg: '<svg />' };
+        });
+        await renderEditor();
+        fireEvent.click(screen.getByRole('button', { name: 'Publish' }));
+        await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('changed while generating the preview'));
+        expect(mocks.post).not.toHaveBeenCalled();
+        expect(mocks.createPublishPreview).toHaveBeenCalledTimes(3);
         expect(mocks.release).toHaveBeenCalledTimes(1);
     });
 

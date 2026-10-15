@@ -254,6 +254,12 @@ const (
 		AND (action_required = false OR resolved_at IS NOT NULL)
 	RETURNING id`
 
+	resolveInAppNotificationByTarget = `UPDATE notifications.in_app_notifications
+ SET resolved_at = COALESCE(resolved_at, now()),
+     read_at = COALESCE(read_at, now()),
+     updated_at = now()
+ WHERE target_type = $1 AND target_id = $2 AND recipient_user_id = $3`
+
 	resolveInAppNotificationByEventKey = `UPDATE notifications.in_app_notifications n
 	SET resolved_at = COALESCE(n.resolved_at, now()),
 		read_at = COALESCE(n.read_at, now()),

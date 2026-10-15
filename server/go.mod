@@ -17,6 +17,8 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.5.5
 	github.com/joho/godotenv v1.5.1
+	github.com/robfig/cron/v3 v3.0.1
+	github.com/santhosh-tekuri/jsonschema/v5 v5.3.1
 	github.com/wneessen/go-mail v0.6.2
 	github.com/zitadel/oidc/v3 v3.30.0
 	github.com/zitadel/zitadel-go/v3 v3.3.0

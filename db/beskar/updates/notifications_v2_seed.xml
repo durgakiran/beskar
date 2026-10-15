@@ -1,0 +1,194 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+    <changeSet id="notifications-v2-seed-types-v1" author="Kiran Kumar" dbms="postgresql">
+        <comment>Stable type IDs. All types active; promotion defaults to opted out, all other types to opted in.</comment>
+        <insert schemaName="notifications_v2" tableName="notification_types">
+            <column name="id" valueNumeric="1" />
+            <column name="code" value="event" />
+            <column name="description" value="Application events and activity" />
+            <column name="default_opt_in" valueBoolean="true" />
+            <column name="active" valueBoolean="true" />
+        </insert>
+        <insert schemaName="notifications_v2" tableName="notification_types">
+            <column name="id" valueNumeric="2" />
+            <column name="code" value="security" />
+            <column name="description" value="Account and security events" />
+            <column name="default_opt_in" valueBoolean="true" />
+            <column name="active" valueBoolean="true" />
+        </insert>
+        <insert schemaName="notifications_v2" tableName="notification_types">
+            <column name="id" valueNumeric="3" />
+            <column name="code" value="update" />
+            <column name="description" value="Product and service updates" />
+            <column name="default_opt_in" valueBoolean="true" />
+            <column name="active" valueBoolean="true" />
+        </insert>
+        <insert schemaName="notifications_v2" tableName="notification_types">
+            <column name="id" valueNumeric="4" />
+            <column name="code" value="promotion" />
+            <column name="description" value="Promotional communications" />
+            <column name="default_opt_in" valueBoolean="false" />
+            <column name="active" valueBoolean="true" />
+        </insert>
+        <insert schemaName="notifications_v2" tableName="notification_types">
+            <column name="id" valueNumeric="5" />
+            <column name="code" value="alert" />
+            <column name="description" value="Operational alerts" />
+            <column name="default_opt_in" valueBoolean="true" />
+            <column name="active" valueBoolean="true" />
+        </insert>
+        <rollback>
+            <delete schemaName="notifications_v2" tableName="notification_types">
+                <where>id = 5 AND code = 'alert'</where>
+            </delete>
+            <delete schemaName="notifications_v2" tableName="notification_types">
+                <where>id = 4 AND code = 'promotion'</where>
+            </delete>
+            <delete schemaName="notifications_v2" tableName="notification_types">
+                <where>id = 3 AND code = 'update'</where>
+            </delete>
+            <delete schemaName="notifications_v2" tableName="notification_types">
+                <where>id = 2 AND code = 'security'</where>
+            </delete>
+            <delete schemaName="notifications_v2" tableName="notification_types">
+                <where>id = 1 AND code = 'event'</where>
+            </delete>
+        </rollback>
+    </changeSet>
+    <changeSet id="notifications-v2-seed-modes-v1" author="Kiran Kumar" dbms="postgresql">
+        <comment>Stable mode IDs. Email and in-app active; SMS inactive.</comment>
+        <insert schemaName="notifications_v2" tableName="notification_modes">
+            <column name="id" valueNumeric="1" />
+            <column name="code" value="email" />
+            <column name="description" value="Email delivery" />
+            <column name="active" valueBoolean="true" />
+        </insert>
+        <insert schemaName="notifications_v2" tableName="notification_modes">
+            <column name="id" valueNumeric="2" />
+            <column name="code" value="in_app" />
+            <column name="description" value="In-app notification feed" />
+            <column name="active" valueBoolean="true" />
+        </insert>
+        <insert schemaName="notifications_v2" tableName="notification_modes">
+            <column name="id" valueNumeric="3" />
+            <column name="code" value="sms" />
+            <column name="description" value="SMS delivery" />
+            <column name="active" valueBoolean="false" />
+        </insert>
+        <rollback>
+            <delete schemaName="notifications_v2" tableName="notification_modes">
+                <where>id = 3 AND code = 'sms'</where>
+            </delete>
+            <delete schemaName="notifications_v2" tableName="notification_modes">
+                <where>id = 2 AND code = 'in_app'</where>
+            </delete>
+            <delete schemaName="notifications_v2" tableName="notification_modes">
+                <where>id = 1 AND code = 'email'</where>
+            </delete>
+        </rollback>
+    </changeSet>
+    <changeSet id="notifications-v2-seed-topics-v1" author="Kiran Kumar" dbms="postgresql">
+        <comment>Stable topic IDs and approved parent types. All nine topics active and opted in by default.</comment>
+        <insert schemaName="notifications_v2" tableName="notification_topics">
+            <column name="id" valueNumeric="1" />
+            <column name="notification_type_id" valueNumeric="1" />
+            <column name="code" value="document_invitation" />
+            <column name="description" value="Invitation to a document" />
+            <column name="default_opt_in" valueBoolean="true" />
+            <column name="active" valueBoolean="true" />
+        </insert>
+        <insert schemaName="notifications_v2" tableName="notification_topics">
+            <column name="id" valueNumeric="2" />
+            <column name="notification_type_id" valueNumeric="1" />
+            <column name="code" value="comment_mention" />
+            <column name="description" value="Mention in a comment" />
+            <column name="default_opt_in" valueBoolean="true" />
+            <column name="active" valueBoolean="true" />
+        </insert>
+        <insert schemaName="notifications_v2" tableName="notification_topics">
+            <column name="id" valueNumeric="3" />
+            <column name="notification_type_id" valueNumeric="1" />
+            <column name="code" value="comment_reply" />
+            <column name="description" value="Reply to a comment" />
+            <column name="default_opt_in" valueBoolean="true" />
+            <column name="active" valueBoolean="true" />
+        </insert>
+        <insert schemaName="notifications_v2" tableName="notification_topics">
+            <column name="id" valueNumeric="4" />
+            <column name="notification_type_id" valueNumeric="1" />
+            <column name="code" value="document_shared" />
+            <column name="description" value="Document shared with a recipient" />
+            <column name="default_opt_in" valueBoolean="true" />
+            <column name="active" valueBoolean="true" />
+        </insert>
+        <insert schemaName="notifications_v2" tableName="notification_topics">
+            <column name="id" valueNumeric="5" />
+            <column name="notification_type_id" valueNumeric="1" />
+            <column name="code" value="daily_document_digest" />
+            <column name="description" value="Daily document activity digest" />
+            <column name="default_opt_in" valueBoolean="true" />
+            <column name="active" valueBoolean="true" />
+        </insert>
+        <insert schemaName="notifications_v2" tableName="notification_topics">
+            <column name="id" valueNumeric="6" />
+            <column name="notification_type_id" valueNumeric="2" />
+            <column name="code" value="password_changed" />
+            <column name="description" value="Account password changed" />
+            <column name="default_opt_in" valueBoolean="true" />
+            <column name="active" valueBoolean="true" />
+        </insert>
+        <insert schemaName="notifications_v2" tableName="notification_topics">
+            <column name="id" valueNumeric="7" />
+            <column name="notification_type_id" valueNumeric="2" />
+            <column name="code" value="suspicious_login" />
+            <column name="description" value="Suspicious account login" />
+            <column name="default_opt_in" valueBoolean="true" />
+            <column name="active" valueBoolean="true" />
+        </insert>
+        <insert schemaName="notifications_v2" tableName="notification_topics">
+            <column name="id" valueNumeric="8" />
+            <column name="notification_type_id" valueNumeric="3" />
+            <column name="code" value="product_update" />
+            <column name="description" value="Product changes and announcements" />
+            <column name="default_opt_in" valueBoolean="true" />
+            <column name="active" valueBoolean="true" />
+        </insert>
+        <insert schemaName="notifications_v2" tableName="notification_topics">
+            <column name="id" valueNumeric="9" />
+            <column name="notification_type_id" valueNumeric="3" />
+            <column name="code" value="maintenance_notice" />
+            <column name="description" value="Planned maintenance notice" />
+            <column name="default_opt_in" valueBoolean="true" />
+            <column name="active" valueBoolean="true" />
+        </insert>
+        <rollback>
+            <delete schemaName="notifications_v2" tableName="notification_topics">
+                <where>id = 9 AND code = 'maintenance_notice'</where>
+            </delete>
+            <delete schemaName="notifications_v2" tableName="notification_topics">
+                <where>id = 8 AND code = 'product_update'</where>
+            </delete>
+            <delete schemaName="notifications_v2" tableName="notification_topics">
+                <where>id = 7 AND code = 'suspicious_login'</where>
+            </delete>
+            <delete schemaName="notifications_v2" tableName="notification_topics">
+                <where>id = 6 AND code = 'password_changed'</where>
+            </delete>
+            <delete schemaName="notifications_v2" tableName="notification_topics">
+                <where>id = 5 AND code = 'daily_document_digest'</where>
+            </delete>
+            <delete schemaName="notifications_v2" tableName="notification_topics">
+                <where>id = 4 AND code = 'document_shared'</where>
+            </delete>
+            <delete schemaName="notifications_v2" tableName="notification_topics">
+                <where>id = 3 AND code = 'comment_reply'</where>
+            </delete>
+            <delete schemaName="notifications_v2" tableName="notification_topics">
+                <where>id = 2 AND code = 'comment_mention'</where>
+            </delete>
+            <delete schemaName="notifications_v2" tableName="notification_topics">
+                <where>id = 1 AND code = 'document_invitation'</where>
+            </delete>
+        </rollback>
+    </changeSet>
+</databaseChangeLog>

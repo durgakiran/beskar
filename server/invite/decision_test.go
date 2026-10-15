@@ -79,3 +79,11 @@ func TestLegacyLinksOnlyRedirect(t *testing.T) {
 		}
 	}
 }
+
+func TestOppositeDecisionReturnsConflict(t *testing.T) {
+	response := httptest.NewRecorder()
+	sendInviteActionError(response, httptest.NewRequest("POST", "/user/decision", nil), errInviteDecisionConflict)
+	if response.Code != 409 {
+		t.Fatalf("status=%d", response.Code)
+	}
+}

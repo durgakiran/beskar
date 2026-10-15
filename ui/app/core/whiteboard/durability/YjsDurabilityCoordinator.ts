@@ -266,6 +266,17 @@ export class YjsDurabilityCoordinator {
         return this.persistRecord(record);
     }
 
+    /** Return the exact verified bytes for this target, never the latest live document. */
+    async getCapturedState(target: ProjectionTarget): Promise<Uint8Array> {
+        this.assertActive();
+        await this.processing;
+        this.assertActive();
+        if (this.projectionQuarantined) throw new DurabilityTargetError("Cannot read a quarantined Yjs projection.");
+        const record = this.records.get(targetKey(target));
+        if (!record) throw new DurabilityTargetError("The requested projection target was not captured in this session.");
+        return record.encodedState.slice();
+    }
+
     getAcknowledgedState(checkpoint: DurabilityCheckpoint): Uint8Array {
         const state = this.acknowledgedStates.get(targetKey({
             storeRevision: checkpoint.storeRevision,

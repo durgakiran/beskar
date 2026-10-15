@@ -3,7 +3,7 @@
   "info": {
     "title": "Beskar API",
     "version": "1.0.0",
-    "description": "Authentication and implemented whiteboarding v2 APIs.\n\n**Try it:** [Sign in](/auth/login?returnTo=%2Fapi%2Fdocs), then use the browser-session option, or select BearerToken and paste a valid Zitadel JWT (without the Bearer prefix). The server currently verifies bearer JWTs using its OIDC ID-token verifier; opaque access tokens are not supported. Calls run against this origin with your permissions and can create real data.\n\nReplace example space/parent IDs with your own. Generate an Idempotency-Key UUID for each new board or checkpoint batch and keep it with the same payload for retries. Login, registration and logout require browser navigation. Cookie sessions normally require HTTPS.",
+    "description": "Authentication and implemented whiteboarding v2 APIs.\n\n**Try it:** [Sign in](/auth/login?returnTo=%2Fapi%2Fdocs), then use the browser-session option, or select BearerToken and paste a valid Zitadel JWT (without the Bearer prefix). The server currently verifies bearer JWTs using its OIDC ID-token verifier; opaque access tokens are not supported. Calls run against this origin with your permissions and can create real data.\n\nReplace example space/parent IDs with your own. Generate an Idempotency-Key UUID for each new board or checkpoint batch and keep it with the same payload for retries. Login, registration and logout require browser navigation. Cookie sessions normally require HTTPS.\n\nNotifications v2 uses separate opaque producer credentials through NotificationProducer; browser sessions and Zitadel tokens do not authorize these endpoints. These APIs store definitions; an independently enabled v2 scheduler creates occurrences. An independently enabled audience expander prepares registered-user deliveries. Separately enabled email and in-app delivery workers process those deliveries.",
     "license": {
       "name": "Apache 2.0",
       "identifier": "Apache-2.0"
@@ -27,6 +27,10 @@
     {
       "name": "Page navigation",
       "description": "Shared discovery APIs for legacy pages and v2 whiteboards."
+    },
+    {
+      "name": "Notifications v2",
+      "description": "Producer-owned notification definitions and lifecycle operations."
     }
   ],
   "security": [
@@ -5199,6 +5203,1151 @@
           }
         }
       }
+    },
+    "/api/v2/notifications/": {
+      "post": {
+        "tags": [
+          "Notifications v2"
+        ],
+        "operationId": "createNotificationDefinition",
+        "summary": "Create a definition",
+        "description": "Atomically stores the definition and targets. No events or deliveries are generated. Idempotency is scoped to the producer: same normalized original payload returns the current definition (200); different payload is 409; deleted definition is 410.",
+        "security": [
+          {
+            "NotificationProducer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "description": "One nonblank key, maximum 200 bytes, retained for retries."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationDefinitionResponse"
+                }
+              }
+            },
+            "headers": {
+              "ETag": {
+                "description": "Quoted revision, e.g. \"1\".",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Location": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Definition resource path."
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed request, header or ID.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationDefinitionError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid producer bearer token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationDefinitionError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Idempotency conflict or invalid lifecycle transition.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationDefinitionError"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Create key belongs to a deleted definition.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationDefinitionError"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Request exceeds 128 KiB.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationDefinitionError"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Content-Type must be application/json.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationDefinitionError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid fields, targets, catalog references, template variables or schedule.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationDefinitionError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationDefinitionError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Producer HTTP access is not configured.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationDefinitionError"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Created.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationDefinitionResponse"
+                }
+              }
+            },
+            "headers": {
+              "ETag": {
+                "description": "Quoted revision, e.g. \"1\".",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Location": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Definition resource path."
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NotificationDefinitionInput"
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Notifications v2"
+        ],
+        "operationId": "listNotificationDefinitions",
+        "summary": "List producer definitions",
+        "description": "Excludes deleted definitions. Ordered by created_at descending, then ID descending. Reuse the opaque cursor with the same filters.",
+        "security": [
+          {
+            "NotificationProducer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 50,
+              "minimum": 1,
+              "maximum": 100
+            },
+            "description": "Page size."
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Opaque next_cursor from the previous page."
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "Definition scheduling state.",
+              "enum": [
+                "active",
+                "paused",
+                "completed",
+                "cancelled"
+              ]
+            },
+            "description": "Optional state filter."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationDefinitionListResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed request, header or ID.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationDefinitionError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid producer bearer token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationDefinitionError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid fields, targets, catalog references, template variables or schedule.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationDefinitionError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationDefinitionError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Producer HTTP access is not configured.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationDefinitionError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v2/notifications/{id}": {
+      "get": {
+        "tags": [
+          "Notifications v2"
+        ],
+        "operationId": "getNotificationDefinition",
+        "summary": "Read a definition",
+        "description": "Returns current content, targets and revision.",
+        "security": [
+          {
+            "NotificationProducer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Definition owned by the authenticated producer."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationDefinitionResponse"
+                }
+              }
+            },
+            "headers": {
+              "ETag": {
+                "description": "Quoted revision, e.g. \"1\".",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed request, header or ID.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationDefinitionError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid producer bearer token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationDefinitionError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown, deleted or other-producer definition.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationDefinitionError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid fields, targets, catalog references, template variables or schedule.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationDefinitionError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationDefinitionError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Producer HTTP access is not configured.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationDefinitionError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "Notifications v2"
+        ],
+        "operationId": "patchNotificationDefinition",
+        "summary": "Update a definition",
+        "description": "Only active or paused definitions can be edited. Targets and content replace whole fields. Existing occurrence snapshots are not rewritten.",
+        "security": [
+          {
+            "NotificationProducer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Definition owned by the authenticated producer."
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "example": "\"1\""
+            },
+            "description": "Exactly one quoted positive revision ETag. Required for every mutation of an existing definition."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationDefinitionResponse"
+                }
+              }
+            },
+            "headers": {
+              "ETag": {
+                "description": "Quoted revision, e.g. \"1\".",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed request, header or ID.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationDefinitionError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid producer bearer token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationDefinitionError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown, deleted or other-producer definition.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationDefinitionError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Idempotency conflict or invalid lifecycle transition.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationDefinitionError"
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "Revision changed; read again before retrying.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationDefinitionError"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Request exceeds 128 KiB.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationDefinitionError"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Content-Type must be application/json.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationDefinitionError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid fields, targets, catalog references, template variables or schedule.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationDefinitionError"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "If-Match is required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationDefinitionError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationDefinitionError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Producer HTTP access is not configured.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationDefinitionError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NotificationDefinitionPatch"
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Notifications v2"
+        ],
+        "operationId": "deleteNotificationDefinition",
+        "summary": "Delete a definition",
+        "description": "Soft-deletes and cancels unsent work. Subsequent reads are 404; reuse of its create key is 410. Send an empty body (or literal {}). Every successful action increments revision.",
+        "security": [
+          {
+            "NotificationProducer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Definition owned by the authenticated producer."
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "example": "\"1\""
+            },
+            "description": "Exactly one quoted positive revision ETag. Required for every mutation of an existing definition."
+          }
+        ],
+        "responses": {
+          "400": {
+            "description": "Malformed request, header or ID.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationDefinitionError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid producer bearer token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationDefinitionError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown, deleted or other-producer definition.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationDefinitionError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Idempotency conflict or invalid lifecycle transition.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationDefinitionError"
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "Revision changed; read again before retrying.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationDefinitionError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid fields, targets, catalog references, template variables or schedule.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationDefinitionError"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "If-Match is required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationDefinitionError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationDefinitionError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Producer HTTP access is not configured.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationDefinitionError"
+                }
+              }
+            }
+          },
+          "204": {
+            "description": "Soft-deleted; empty response."
+          }
+        }
+      }
+    },
+    "/api/v2/notifications/{id}/pause": {
+      "post": {
+        "tags": [
+          "Notifications v2"
+        ],
+        "operationId": "pauseNotificationDefinition",
+        "summary": "Pause a definition",
+        "description": "Active to paused. Clears next_run_at and stops future occurrence generation; existing work is retained. Send an empty body (or literal {}). Every successful action increments revision.",
+        "security": [
+          {
+            "NotificationProducer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Definition owned by the authenticated producer."
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "example": "\"1\""
+            },
+            "description": "Exactly one quoted positive revision ETag. Required for every mutation of an existing definition."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationDefinitionResponse"
+                }
+              }
+            },
+            "headers": {
+              "ETag": {
+                "description": "Quoted revision, e.g. \"1\".",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed request, header or ID.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationDefinitionError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid producer bearer token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationDefinitionError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown, deleted or other-producer definition.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationDefinitionError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Idempotency conflict or invalid lifecycle transition.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationDefinitionError"
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "Revision changed; read again before retrying.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationDefinitionError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid fields, targets, catalog references, template variables or schedule.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationDefinitionError"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "If-Match is required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationDefinitionError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationDefinitionError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Producer HTTP access is not configured.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationDefinitionError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v2/notifications/{id}/resume": {
+      "post": {
+        "tags": [
+          "Notifications v2"
+        ],
+        "operationId": "resumeNotificationDefinition",
+        "summary": "Resume a definition",
+        "description": "Paused to active with a recalculated future cursor. An elapsed once schedule must first be patched to a future time. Cron past its end becomes completed. Send an empty body (or literal {}). Every successful action increments revision.",
+        "security": [
+          {
+            "NotificationProducer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Definition owned by the authenticated producer."
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "example": "\"1\""
+            },
+            "description": "Exactly one quoted positive revision ETag. Required for every mutation of an existing definition."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationDefinitionResponse"
+                }
+              }
+            },
+            "headers": {
+              "ETag": {
+                "description": "Quoted revision, e.g. \"1\".",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed request, header or ID.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationDefinitionError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid producer bearer token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationDefinitionError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown, deleted or other-producer definition.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationDefinitionError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Idempotency conflict or invalid lifecycle transition.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationDefinitionError"
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "Revision changed; read again before retrying.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationDefinitionError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid fields, targets, catalog references, template variables or schedule.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationDefinitionError"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "If-Match is required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationDefinitionError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationDefinitionError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Producer HTTP access is not configured.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationDefinitionError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v2/notifications/{id}/cancel": {
+      "post": {
+        "tags": [
+          "Notifications v2"
+        ],
+        "operationId": "cancelNotificationDefinition",
+        "summary": "Cancel a definition",
+        "description": "Cancels definition and pending, retrying or processing deliveries; clears relevant leases. Accepted and delivered history remains. A provider call already in progress may still finish. Send an empty body (or literal {}). Every successful action increments revision.",
+        "security": [
+          {
+            "NotificationProducer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Definition owned by the authenticated producer."
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "example": "\"1\""
+            },
+            "description": "Exactly one quoted positive revision ETag. Required for every mutation of an existing definition."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationDefinitionResponse"
+                }
+              }
+            },
+            "headers": {
+              "ETag": {
+                "description": "Quoted revision, e.g. \"1\".",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed request, header or ID.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationDefinitionError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid producer bearer token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationDefinitionError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown, deleted or other-producer definition.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationDefinitionError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Idempotency conflict or invalid lifecycle transition.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationDefinitionError"
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "Revision changed; read again before retrying.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationDefinitionError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid fields, targets, catalog references, template variables or schedule.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationDefinitionError"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "If-Match is required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationDefinitionError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationDefinitionError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Producer HTTP access is not configured.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationDefinitionError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -5214,6 +6363,11 @@
         "in": "cookie",
         "name": "zitadel.session",
         "description": "Sign in using the link above. The browser sends the HttpOnly session cookie automatically; do not paste a cookie value."
+      },
+      "NotificationProducer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Opaque producer token configured through NOTIFICATION_V2_PRODUCERS. Source and audit actor are derived on the server. Empty configuration disables HTTP access (503)."
       }
     },
     "schemas": {
@@ -6232,6 +7386,593 @@
           },
           "data": {
             "$ref": "#/components/schemas/WhiteboardAssetUpload"
+          }
+        }
+      },
+      "NotificationDefinitionInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "notification_type_id",
+          "notification_topic_id",
+          "mode_id",
+          "template_id",
+          "template_version",
+          "message_details",
+          "priority",
+          "schedule_kind",
+          "misfire_policy"
+        ],
+        "properties": {
+          "notification_type_id": {
+            "type": "integer",
+            "description": "Active notification type ID.",
+            "format": "int16"
+          },
+          "notification_topic_id": {
+            "type": "integer",
+            "description": "Active topic ID belonging to notification_type_id.",
+            "format": "int16"
+          },
+          "mode_id": {
+            "type": "integer",
+            "description": "Active mode ID matching the template channel.",
+            "format": "int16"
+          },
+          "correlation_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Optional tracing identifier; at most 500 UTF-8 bytes."
+          },
+          "template_id": {
+            "type": "string",
+            "description": "Existing template ID.",
+            "format": "uuid"
+          },
+          "template_version": {
+            "type": "integer",
+            "description": "Pinned template version. New selections must not be retired.",
+            "minimum": 1
+          },
+          "message_details": {
+            "type": "object",
+            "description": "Template variables, validated against the template input schema; at most 64 KiB.",
+            "additionalProperties": true
+          },
+          "priority": {
+            "type": "integer",
+            "description": "Priority among due work.",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "schedule_kind": {
+            "type": "string",
+            "description": "Immediate, one future occurrence, or recurring cron.",
+            "enum": [
+              "immediate",
+              "once",
+              "cron"
+            ]
+          },
+          "scheduled_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Required only for once; must be in the future.",
+            "format": "date-time"
+          },
+          "cron_expression": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Required only for cron. Five fields; day-of-month and day-of-week cannot both be restricted."
+          },
+          "timezone": {
+            "type": "string",
+            "description": "IANA timezone; Local is rejected.",
+            "default": "UTC"
+          },
+          "starts_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Inclusive cron lower bound; only for cron.",
+            "format": "date-time"
+          },
+          "ends_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Exclusive cron upper bound; only for cron.",
+            "format": "date-time"
+          },
+          "misfire_policy": {
+            "type": "string",
+            "description": "Policy for future scheduler handling of missed occurrences.",
+            "enum": [
+              "skip",
+              "fire_once"
+            ]
+          },
+          "delivery_ttl_seconds": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Lifetime from each occurrence original scheduled time.",
+            "minimum": 1,
+            "maximum": 2147483647
+          },
+          "target_users": {
+            "type": "array",
+            "description": "Direct user IDs. Producer is responsible for recipient authorization.",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "target_segments": {
+            "type": "array",
+            "description": "Existing non-deleted segment IDs.",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "target_emails": {
+            "type": "array",
+            "description": "Bare email addresses, email mode only; domain is lowercased, local part preserved.",
+            "items": {
+              "type": "string",
+              "format": "email",
+              "maxLength": 254
+            }
+          }
+        },
+        "description": "At least one target across the three arrays; at most 1000 total entries before deduplication. Request limit 128 KiB. Immediate forbids schedule timestamps and cron. Once requires only scheduled_at. Cron requires cron_expression and may have bounds."
+      },
+      "NotificationDefinitionPatch": {
+        "type": "object",
+        "additionalProperties": false,
+        "minProperties": 1,
+        "properties": {
+          "notification_type_id": {
+            "type": "integer",
+            "description": "Active notification type ID.",
+            "format": "int16"
+          },
+          "notification_topic_id": {
+            "type": "integer",
+            "description": "Active topic ID belonging to notification_type_id.",
+            "format": "int16"
+          },
+          "mode_id": {
+            "type": "integer",
+            "description": "Active mode ID matching the template channel.",
+            "format": "int16"
+          },
+          "correlation_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Optional tracing identifier; at most 500 UTF-8 bytes."
+          },
+          "template_id": {
+            "type": "string",
+            "description": "Existing template ID.",
+            "format": "uuid"
+          },
+          "template_version": {
+            "type": "integer",
+            "description": "Pinned template version. New selections must not be retired.",
+            "minimum": 1
+          },
+          "message_details": {
+            "type": "object",
+            "description": "Template variables, validated against the template input schema; at most 64 KiB.",
+            "additionalProperties": true
+          },
+          "priority": {
+            "type": "integer",
+            "description": "Priority among due work.",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "schedule_kind": {
+            "type": "string",
+            "description": "Immediate, one future occurrence, or recurring cron.",
+            "enum": [
+              "immediate",
+              "once",
+              "cron"
+            ]
+          },
+          "scheduled_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Required only for once; must be in the future.",
+            "format": "date-time"
+          },
+          "cron_expression": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Required only for cron. Five fields; day-of-month and day-of-week cannot both be restricted."
+          },
+          "timezone": {
+            "type": "string",
+            "description": "IANA timezone; Local is rejected.",
+            "default": "UTC"
+          },
+          "starts_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Inclusive cron lower bound; only for cron.",
+            "format": "date-time"
+          },
+          "ends_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Exclusive cron upper bound; only for cron.",
+            "format": "date-time"
+          },
+          "misfire_policy": {
+            "type": "string",
+            "description": "Policy for future scheduler handling of missed occurrences.",
+            "enum": [
+              "skip",
+              "fire_once"
+            ]
+          },
+          "delivery_ttl_seconds": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Lifetime from each occurrence original scheduled time.",
+            "minimum": 1,
+            "maximum": 2147483647
+          },
+          "target_users": {
+            "type": "array",
+            "description": "Direct user IDs. Producer is responsible for recipient authorization.",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "target_segments": {
+            "type": "array",
+            "description": "Existing non-deleted segment IDs.",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "target_emails": {
+            "type": "array",
+            "description": "Bare email addresses, email mode only; domain is lowercased, local part preserved.",
+            "items": {
+              "type": "string",
+              "format": "email",
+              "maxLength": 254
+            }
+          }
+        },
+        "description": "Omitted fields stay unchanged. Supplied arrays and message_details replace the entire field. Null clears only nullable fields. Validation applies to the merged definition. Every successful edit increments revision and recalculates the scheduling cursor."
+      },
+      "NotificationDefinition": {
+        "type": "object",
+        "properties": {
+          "notification_type_id": {
+            "type": "integer",
+            "description": "Active notification type ID.",
+            "format": "int16"
+          },
+          "notification_topic_id": {
+            "type": "integer",
+            "description": "Active topic ID belonging to notification_type_id.",
+            "format": "int16"
+          },
+          "mode_id": {
+            "type": "integer",
+            "description": "Active mode ID matching the template channel.",
+            "format": "int16"
+          },
+          "correlation_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Optional tracing identifier; at most 500 UTF-8 bytes."
+          },
+          "template_id": {
+            "type": "string",
+            "description": "Existing template ID.",
+            "format": "uuid"
+          },
+          "template_version": {
+            "type": "integer",
+            "description": "Pinned template version. New selections must not be retired.",
+            "minimum": 1
+          },
+          "message_details": {
+            "type": "object",
+            "description": "Template variables, validated against the template input schema; at most 64 KiB.",
+            "additionalProperties": true
+          },
+          "priority": {
+            "type": "integer",
+            "description": "Priority among due work.",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "schedule_kind": {
+            "type": "string",
+            "description": "Immediate, one future occurrence, or recurring cron.",
+            "enum": [
+              "immediate",
+              "once",
+              "cron"
+            ]
+          },
+          "scheduled_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Required only for once; must be in the future.",
+            "format": "date-time"
+          },
+          "cron_expression": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Required only for cron. Five fields; day-of-month and day-of-week cannot both be restricted."
+          },
+          "timezone": {
+            "type": "string",
+            "description": "IANA timezone; Local is rejected.",
+            "default": "UTC"
+          },
+          "starts_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Inclusive cron lower bound; only for cron.",
+            "format": "date-time"
+          },
+          "ends_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Exclusive cron upper bound; only for cron.",
+            "format": "date-time"
+          },
+          "misfire_policy": {
+            "type": "string",
+            "description": "Policy for future scheduler handling of missed occurrences.",
+            "enum": [
+              "skip",
+              "fire_once"
+            ]
+          },
+          "delivery_ttl_seconds": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Lifetime from each occurrence original scheduled time.",
+            "minimum": 1,
+            "maximum": 2147483647
+          },
+          "target_users": {
+            "type": "array",
+            "description": "Direct user IDs. Producer is responsible for recipient authorization.",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "target_segments": {
+            "type": "array",
+            "description": "Existing non-deleted segment IDs.",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "target_emails": {
+            "type": "array",
+            "description": "Bare email addresses, email mode only; domain is lowercased, local part preserved.",
+            "items": {
+              "type": "string",
+              "format": "email",
+              "maxLength": 254
+            }
+          },
+          "id": {
+            "type": "string",
+            "description": "Definition ID.",
+            "format": "uuid"
+          },
+          "source_service": {
+            "type": "string",
+            "description": "Authenticated producer source."
+          },
+          "idempotency_key": {
+            "type": "string",
+            "description": "Original create key."
+          },
+          "next_run_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Scheduler cursor.",
+            "format": "date-time"
+          },
+          "status": {
+            "type": "string",
+            "description": "Definition scheduling state.",
+            "enum": [
+              "active",
+              "paused",
+              "completed",
+              "cancelled"
+            ]
+          },
+          "revision": {
+            "type": "integer",
+            "description": "Optimistic concurrency revision.",
+            "minimum": 1
+          },
+          "deleted_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Soft deletion timestamp.",
+            "format": "date-time"
+          },
+          "created_at": {
+            "type": "string",
+            "description": "Audit timestamp.",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "description": "Audit timestamp.",
+            "format": "date-time"
+          },
+          "created_by": {
+            "type": "string",
+            "description": "Service audit actor.",
+            "format": "uuid"
+          },
+          "updated_by": {
+            "type": "string",
+            "description": "Service audit actor.",
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "notification_type_id",
+          "notification_topic_id",
+          "mode_id",
+          "correlation_id",
+          "template_id",
+          "template_version",
+          "message_details",
+          "priority",
+          "schedule_kind",
+          "scheduled_at",
+          "cron_expression",
+          "timezone",
+          "starts_at",
+          "ends_at",
+          "misfire_policy",
+          "delivery_ttl_seconds",
+          "target_users",
+          "target_segments",
+          "target_emails",
+          "id",
+          "source_service",
+          "idempotency_key",
+          "next_run_at",
+          "status",
+          "revision",
+          "deleted_at",
+          "created_at",
+          "updated_at",
+          "created_by",
+          "updated_by"
+        ]
+      },
+      "NotificationDefinitionResponse": {
+        "type": "object",
+        "required": [
+          "status",
+          "data"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "const": "success"
+          },
+          "data": {
+            "$ref": "#/components/schemas/NotificationDefinition"
+          }
+        }
+      },
+      "NotificationDefinitionListResponse": {
+        "type": "object",
+        "required": [
+          "status",
+          "data"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "const": "success"
+          },
+          "data": {
+            "type": "object",
+            "required": [
+              "items"
+            ],
+            "properties": {
+              "items": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/NotificationDefinition"
+                }
+              },
+              "next_cursor": {
+                "type": "string",
+                "description": "Absent at end of list."
+              }
+            }
+          }
+        }
+      },
+      "NotificationDefinitionError": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "const": "FAILED"
+          },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "integer"
+              },
+              "message": {
+                "type": "string"
+              },
+              "detail": {
+                "type": "string"
+              }
+            }
           }
         }
       }

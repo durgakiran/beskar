@@ -1,0 +1,256 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+    <changeSet id="notifications-v2-business-topics-templates" author="Kiran Kumar">
+        <insert schemaName="notifications_v2" tableName="notification_topics">
+            <column name="id" valueNumeric="10" />
+            <column name="notification_type_id" valueNumeric="1" />
+            <column name="code" value="space_invite_created" />
+            <column name="description" value="space invite created" />
+            <column name="default_opt_in" valueBoolean="true" />
+            <column name="active" valueBoolean="true" />
+        </insert>
+        <insert schemaName="notifications_v2" tableName="notification_templates">
+            <column name="id" value="70577944-03a0-5fc3-8620-8848a172b09f" />
+            <column name="version" valueNumeric="1" />
+            <column name="name" value="Business space_invite_created" />
+            <column name="mode_id" valueNumeric="2" />
+            <column name="ideal_type_id" valueNumeric="1" />
+            <column name="details" value="{&quot;title&quot;: &quot;{{.title}}&quot;, &quot;body&quot;: &quot;{{.body}}&quot;, &quot;target_type&quot;: &quot;{{.target_type}}&quot;, &quot;target_id&quot;: &quot;{{.target_id}}&quot;, &quot;space_id&quot;: &quot;{{.space_id}}&quot;, &quot;page_id&quot;: &quot;{{.page_id}}&quot;, &quot;actor_user_id&quot;: &quot;{{.actor_user_id}}&quot;, &quot;actor_name&quot;: &quot;{{.actor_name}}&quot;, &quot;data&quot;: {&quot;href&quot;: &quot;{{.href}}&quot;, &quot;role&quot;: &quot;{{.role}}&quot;, &quot;space_name&quot;: &quot;{{.space_name}}&quot;, &quot;old_role&quot;: &quot;{{.old_role}}&quot;, &quot;new_role&quot;: &quot;{{.new_role}}&quot;, &quot;space_id&quot;: &quot;{{.data_space_id}}&quot;, &quot;token&quot;: &quot;{{.token}}&quot;}, &quot;category&quot;: &quot;space_invite&quot;, &quot;action_required&quot;: true, &quot;actions&quot;: [{&quot;key&quot;: &quot;decline&quot;, &quot;label&quot;: &quot;Decline&quot;, &quot;method&quot;: &quot;POST&quot;, &quot;url&quot;: &quot;/api/v1/invite/user/decision&quot;}, {&quot;key&quot;: &quot;accept&quot;, &quot;label&quot;: &quot;Accept&quot;, &quot;method&quot;: &quot;POST&quot;, &quot;url&quot;: &quot;/api/v1/invite/user/decision&quot;}], &quot;created_at&quot;: &quot;{{.occurred_at}}&quot;}" />
+            <column name="variable_schema" value="{&quot;type&quot;: &quot;object&quot;, &quot;required&quot;: [&quot;title&quot;, &quot;body&quot;, &quot;target_type&quot;, &quot;target_id&quot;, &quot;space_id&quot;, &quot;page_id&quot;, &quot;actor_user_id&quot;, &quot;actor_name&quot;, &quot;href&quot;, &quot;role&quot;, &quot;space_name&quot;, &quot;old_role&quot;, &quot;new_role&quot;, &quot;data_space_id&quot;, &quot;token&quot;, &quot;occurred_at&quot;], &quot;properties&quot;: {&quot;title&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;body&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;target_type&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;target_id&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;space_id&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;page_id&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;actor_user_id&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;actor_name&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;href&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;role&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;space_name&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;old_role&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;new_role&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;data_space_id&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;token&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;occurred_at&quot;: {&quot;type&quot;: &quot;string&quot;}}, &quot;additionalProperties&quot;: false}" />
+            <column name="locale" value="en" />
+            <column name="created_by" value="ec33010e-3884-42c3-ad0e-f1d1dbd43b6c" />
+            <column name="created_at" valueComputed="now()" />
+        </insert>
+        <insert schemaName="notifications_v2" tableName="notification_topics">
+            <column name="id" valueNumeric="11" />
+            <column name="notification_type_id" valueNumeric="1" />
+            <column name="code" value="space_invite_accepted" />
+            <column name="description" value="space invite accepted" />
+            <column name="default_opt_in" valueBoolean="true" />
+            <column name="active" valueBoolean="true" />
+        </insert>
+        <insert schemaName="notifications_v2" tableName="notification_templates">
+            <column name="id" value="60d547d1-6137-5aa2-9dea-e95d4cd400b9" />
+            <column name="version" valueNumeric="1" />
+            <column name="name" value="Business space_invite_accepted" />
+            <column name="mode_id" valueNumeric="2" />
+            <column name="ideal_type_id" valueNumeric="1" />
+            <column name="details" value="{&quot;title&quot;: &quot;{{.title}}&quot;, &quot;body&quot;: &quot;{{.body}}&quot;, &quot;target_type&quot;: &quot;{{.target_type}}&quot;, &quot;target_id&quot;: &quot;{{.target_id}}&quot;, &quot;space_id&quot;: &quot;{{.space_id}}&quot;, &quot;page_id&quot;: &quot;{{.page_id}}&quot;, &quot;actor_user_id&quot;: &quot;{{.actor_user_id}}&quot;, &quot;actor_name&quot;: &quot;{{.actor_name}}&quot;, &quot;data&quot;: {&quot;href&quot;: &quot;{{.href}}&quot;, &quot;role&quot;: &quot;{{.role}}&quot;, &quot;space_name&quot;: &quot;{{.space_name}}&quot;, &quot;old_role&quot;: &quot;{{.old_role}}&quot;, &quot;new_role&quot;: &quot;{{.new_role}}&quot;, &quot;space_id&quot;: &quot;{{.data_space_id}}&quot;, &quot;token&quot;: &quot;{{.token}}&quot;}, &quot;category&quot;: &quot;space_membership&quot;, &quot;action_required&quot;: false, &quot;actions&quot;: [], &quot;created_at&quot;: &quot;{{.occurred_at}}&quot;}" />
+            <column name="variable_schema" value="{&quot;type&quot;: &quot;object&quot;, &quot;required&quot;: [&quot;title&quot;, &quot;body&quot;, &quot;target_type&quot;, &quot;target_id&quot;, &quot;space_id&quot;, &quot;page_id&quot;, &quot;actor_user_id&quot;, &quot;actor_name&quot;, &quot;href&quot;, &quot;role&quot;, &quot;space_name&quot;, &quot;old_role&quot;, &quot;new_role&quot;, &quot;data_space_id&quot;, &quot;token&quot;, &quot;occurred_at&quot;], &quot;properties&quot;: {&quot;title&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;body&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;target_type&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;target_id&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;space_id&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;page_id&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;actor_user_id&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;actor_name&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;href&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;role&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;space_name&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;old_role&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;new_role&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;data_space_id&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;token&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;occurred_at&quot;: {&quot;type&quot;: &quot;string&quot;}}, &quot;additionalProperties&quot;: false}" />
+            <column name="locale" value="en" />
+            <column name="created_by" value="ec33010e-3884-42c3-ad0e-f1d1dbd43b6c" />
+            <column name="created_at" valueComputed="now()" />
+        </insert>
+        <insert schemaName="notifications_v2" tableName="notification_topics">
+            <column name="id" valueNumeric="12" />
+            <column name="notification_type_id" valueNumeric="1" />
+            <column name="code" value="space_invite_declined" />
+            <column name="description" value="space invite declined" />
+            <column name="default_opt_in" valueBoolean="true" />
+            <column name="active" valueBoolean="true" />
+        </insert>
+        <insert schemaName="notifications_v2" tableName="notification_templates">
+            <column name="id" value="614c81de-40c0-5103-9ab1-bc14ac1b9518" />
+            <column name="version" valueNumeric="1" />
+            <column name="name" value="Business space_invite_declined" />
+            <column name="mode_id" valueNumeric="2" />
+            <column name="ideal_type_id" valueNumeric="1" />
+            <column name="details" value="{&quot;title&quot;: &quot;{{.title}}&quot;, &quot;body&quot;: &quot;{{.body}}&quot;, &quot;target_type&quot;: &quot;{{.target_type}}&quot;, &quot;target_id&quot;: &quot;{{.target_id}}&quot;, &quot;space_id&quot;: &quot;{{.space_id}}&quot;, &quot;page_id&quot;: &quot;{{.page_id}}&quot;, &quot;actor_user_id&quot;: &quot;{{.actor_user_id}}&quot;, &quot;actor_name&quot;: &quot;{{.actor_name}}&quot;, &quot;data&quot;: {&quot;href&quot;: &quot;{{.href}}&quot;, &quot;role&quot;: &quot;{{.role}}&quot;, &quot;space_name&quot;: &quot;{{.space_name}}&quot;, &quot;old_role&quot;: &quot;{{.old_role}}&quot;, &quot;new_role&quot;: &quot;{{.new_role}}&quot;, &quot;space_id&quot;: &quot;{{.data_space_id}}&quot;, &quot;token&quot;: &quot;{{.token}}&quot;}, &quot;category&quot;: &quot;space_membership&quot;, &quot;action_required&quot;: false, &quot;actions&quot;: [], &quot;created_at&quot;: &quot;{{.occurred_at}}&quot;}" />
+            <column name="variable_schema" value="{&quot;type&quot;: &quot;object&quot;, &quot;required&quot;: [&quot;title&quot;, &quot;body&quot;, &quot;target_type&quot;, &quot;target_id&quot;, &quot;space_id&quot;, &quot;page_id&quot;, &quot;actor_user_id&quot;, &quot;actor_name&quot;, &quot;href&quot;, &quot;role&quot;, &quot;space_name&quot;, &quot;old_role&quot;, &quot;new_role&quot;, &quot;data_space_id&quot;, &quot;token&quot;, &quot;occurred_at&quot;], &quot;properties&quot;: {&quot;title&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;body&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;target_type&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;target_id&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;space_id&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;page_id&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;actor_user_id&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;actor_name&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;href&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;role&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;space_name&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;old_role&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;new_role&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;data_space_id&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;token&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;occurred_at&quot;: {&quot;type&quot;: &quot;string&quot;}}, &quot;additionalProperties&quot;: false}" />
+            <column name="locale" value="en" />
+            <column name="created_by" value="ec33010e-3884-42c3-ad0e-f1d1dbd43b6c" />
+            <column name="created_at" valueComputed="now()" />
+        </insert>
+        <insert schemaName="notifications_v2" tableName="notification_topics">
+            <column name="id" valueNumeric="13" />
+            <column name="notification_type_id" valueNumeric="1" />
+            <column name="code" value="space_member_added" />
+            <column name="description" value="space member added" />
+            <column name="default_opt_in" valueBoolean="true" />
+            <column name="active" valueBoolean="true" />
+        </insert>
+        <insert schemaName="notifications_v2" tableName="notification_templates">
+            <column name="id" value="63b06aa6-0e50-55eb-859d-2ed3af178825" />
+            <column name="version" valueNumeric="1" />
+            <column name="name" value="Business space_member_added" />
+            <column name="mode_id" valueNumeric="2" />
+            <column name="ideal_type_id" valueNumeric="1" />
+            <column name="details" value="{&quot;title&quot;: &quot;{{.title}}&quot;, &quot;body&quot;: &quot;{{.body}}&quot;, &quot;target_type&quot;: &quot;{{.target_type}}&quot;, &quot;target_id&quot;: &quot;{{.target_id}}&quot;, &quot;space_id&quot;: &quot;{{.space_id}}&quot;, &quot;page_id&quot;: &quot;{{.page_id}}&quot;, &quot;actor_user_id&quot;: &quot;{{.actor_user_id}}&quot;, &quot;actor_name&quot;: &quot;{{.actor_name}}&quot;, &quot;data&quot;: {&quot;href&quot;: &quot;{{.href}}&quot;, &quot;role&quot;: &quot;{{.role}}&quot;, &quot;space_name&quot;: &quot;{{.space_name}}&quot;, &quot;old_role&quot;: &quot;{{.old_role}}&quot;, &quot;new_role&quot;: &quot;{{.new_role}}&quot;, &quot;space_id&quot;: &quot;{{.data_space_id}}&quot;, &quot;token&quot;: &quot;{{.token}}&quot;}, &quot;category&quot;: &quot;space_membership&quot;, &quot;action_required&quot;: false, &quot;actions&quot;: [], &quot;created_at&quot;: &quot;{{.occurred_at}}&quot;}" />
+            <column name="variable_schema" value="{&quot;type&quot;: &quot;object&quot;, &quot;required&quot;: [&quot;title&quot;, &quot;body&quot;, &quot;target_type&quot;, &quot;target_id&quot;, &quot;space_id&quot;, &quot;page_id&quot;, &quot;actor_user_id&quot;, &quot;actor_name&quot;, &quot;href&quot;, &quot;role&quot;, &quot;space_name&quot;, &quot;old_role&quot;, &quot;new_role&quot;, &quot;data_space_id&quot;, &quot;token&quot;, &quot;occurred_at&quot;], &quot;properties&quot;: {&quot;title&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;body&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;target_type&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;target_id&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;space_id&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;page_id&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;actor_user_id&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;actor_name&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;href&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;role&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;space_name&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;old_role&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;new_role&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;data_space_id&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;token&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;occurred_at&quot;: {&quot;type&quot;: &quot;string&quot;}}, &quot;additionalProperties&quot;: false}" />
+            <column name="locale" value="en" />
+            <column name="created_by" value="ec33010e-3884-42c3-ad0e-f1d1dbd43b6c" />
+            <column name="created_at" valueComputed="now()" />
+        </insert>
+        <insert schemaName="notifications_v2" tableName="notification_topics">
+            <column name="id" valueNumeric="14" />
+            <column name="notification_type_id" valueNumeric="1" />
+            <column name="code" value="space_member_removed" />
+            <column name="description" value="space member removed" />
+            <column name="default_opt_in" valueBoolean="true" />
+            <column name="active" valueBoolean="true" />
+        </insert>
+        <insert schemaName="notifications_v2" tableName="notification_templates">
+            <column name="id" value="99008bc1-709b-5032-bca6-d05625877392" />
+            <column name="version" valueNumeric="1" />
+            <column name="name" value="Business space_member_removed" />
+            <column name="mode_id" valueNumeric="2" />
+            <column name="ideal_type_id" valueNumeric="1" />
+            <column name="details" value="{&quot;title&quot;: &quot;{{.title}}&quot;, &quot;body&quot;: &quot;{{.body}}&quot;, &quot;target_type&quot;: &quot;{{.target_type}}&quot;, &quot;target_id&quot;: &quot;{{.target_id}}&quot;, &quot;space_id&quot;: &quot;{{.space_id}}&quot;, &quot;page_id&quot;: &quot;{{.page_id}}&quot;, &quot;actor_user_id&quot;: &quot;{{.actor_user_id}}&quot;, &quot;actor_name&quot;: &quot;{{.actor_name}}&quot;, &quot;data&quot;: {&quot;href&quot;: &quot;{{.href}}&quot;, &quot;role&quot;: &quot;{{.role}}&quot;, &quot;space_name&quot;: &quot;{{.space_name}}&quot;, &quot;old_role&quot;: &quot;{{.old_role}}&quot;, &quot;new_role&quot;: &quot;{{.new_role}}&quot;, &quot;space_id&quot;: &quot;{{.data_space_id}}&quot;, &quot;token&quot;: &quot;{{.token}}&quot;}, &quot;category&quot;: &quot;space_membership&quot;, &quot;action_required&quot;: false, &quot;actions&quot;: [], &quot;created_at&quot;: &quot;{{.occurred_at}}&quot;}" />
+            <column name="variable_schema" value="{&quot;type&quot;: &quot;object&quot;, &quot;required&quot;: [&quot;title&quot;, &quot;body&quot;, &quot;target_type&quot;, &quot;target_id&quot;, &quot;space_id&quot;, &quot;page_id&quot;, &quot;actor_user_id&quot;, &quot;actor_name&quot;, &quot;href&quot;, &quot;role&quot;, &quot;space_name&quot;, &quot;old_role&quot;, &quot;new_role&quot;, &quot;data_space_id&quot;, &quot;token&quot;, &quot;occurred_at&quot;], &quot;properties&quot;: {&quot;title&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;body&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;target_type&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;target_id&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;space_id&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;page_id&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;actor_user_id&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;actor_name&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;href&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;role&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;space_name&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;old_role&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;new_role&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;data_space_id&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;token&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;occurred_at&quot;: {&quot;type&quot;: &quot;string&quot;}}, &quot;additionalProperties&quot;: false}" />
+            <column name="locale" value="en" />
+            <column name="created_by" value="ec33010e-3884-42c3-ad0e-f1d1dbd43b6c" />
+            <column name="created_at" valueComputed="now()" />
+        </insert>
+        <insert schemaName="notifications_v2" tableName="notification_topics">
+            <column name="id" valueNumeric="15" />
+            <column name="notification_type_id" valueNumeric="1" />
+            <column name="code" value="space_member_role_changed" />
+            <column name="description" value="space member role changed" />
+            <column name="default_opt_in" valueBoolean="true" />
+            <column name="active" valueBoolean="true" />
+        </insert>
+        <insert schemaName="notifications_v2" tableName="notification_templates">
+            <column name="id" value="ebca3c8f-2eb6-5a14-b67d-918e2ee5193b" />
+            <column name="version" valueNumeric="1" />
+            <column name="name" value="Business space_member_role_changed" />
+            <column name="mode_id" valueNumeric="2" />
+            <column name="ideal_type_id" valueNumeric="1" />
+            <column name="details" value="{&quot;title&quot;: &quot;{{.title}}&quot;, &quot;body&quot;: &quot;{{.body}}&quot;, &quot;target_type&quot;: &quot;{{.target_type}}&quot;, &quot;target_id&quot;: &quot;{{.target_id}}&quot;, &quot;space_id&quot;: &quot;{{.space_id}}&quot;, &quot;page_id&quot;: &quot;{{.page_id}}&quot;, &quot;actor_user_id&quot;: &quot;{{.actor_user_id}}&quot;, &quot;actor_name&quot;: &quot;{{.actor_name}}&quot;, &quot;data&quot;: {&quot;href&quot;: &quot;{{.href}}&quot;, &quot;role&quot;: &quot;{{.role}}&quot;, &quot;space_name&quot;: &quot;{{.space_name}}&quot;, &quot;old_role&quot;: &quot;{{.old_role}}&quot;, &quot;new_role&quot;: &quot;{{.new_role}}&quot;, &quot;space_id&quot;: &quot;{{.data_space_id}}&quot;, &quot;token&quot;: &quot;{{.token}}&quot;}, &quot;category&quot;: &quot;space_membership&quot;, &quot;action_required&quot;: false, &quot;actions&quot;: [], &quot;created_at&quot;: &quot;{{.occurred_at}}&quot;}" />
+            <column name="variable_schema" value="{&quot;type&quot;: &quot;object&quot;, &quot;required&quot;: [&quot;title&quot;, &quot;body&quot;, &quot;target_type&quot;, &quot;target_id&quot;, &quot;space_id&quot;, &quot;page_id&quot;, &quot;actor_user_id&quot;, &quot;actor_name&quot;, &quot;href&quot;, &quot;role&quot;, &quot;space_name&quot;, &quot;old_role&quot;, &quot;new_role&quot;, &quot;data_space_id&quot;, &quot;token&quot;, &quot;occurred_at&quot;], &quot;properties&quot;: {&quot;title&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;body&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;target_type&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;target_id&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;space_id&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;page_id&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;actor_user_id&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;actor_name&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;href&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;role&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;space_name&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;old_role&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;new_role&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;data_space_id&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;token&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;occurred_at&quot;: {&quot;type&quot;: &quot;string&quot;}}, &quot;additionalProperties&quot;: false}" />
+            <column name="locale" value="en" />
+            <column name="created_by" value="ec33010e-3884-42c3-ad0e-f1d1dbd43b6c" />
+            <column name="created_at" valueComputed="now()" />
+        </insert>
+        <insert schemaName="notifications_v2" tableName="notification_topics">
+            <column name="id" valueNumeric="17" />
+            <column name="notification_type_id" valueNumeric="1" />
+            <column name="code" value="space_archived" />
+            <column name="description" value="space archived" />
+            <column name="default_opt_in" valueBoolean="true" />
+            <column name="active" valueBoolean="true" />
+        </insert>
+        <insert schemaName="notifications_v2" tableName="notification_templates">
+            <column name="id" value="74648d9d-2118-5c41-9583-43b559888ac4" />
+            <column name="version" valueNumeric="1" />
+            <column name="name" value="Business space_archived" />
+            <column name="mode_id" valueNumeric="2" />
+            <column name="ideal_type_id" valueNumeric="1" />
+            <column name="details" value="{&quot;title&quot;: &quot;{{.title}}&quot;, &quot;body&quot;: &quot;{{.body}}&quot;, &quot;target_type&quot;: &quot;{{.target_type}}&quot;, &quot;target_id&quot;: &quot;{{.target_id}}&quot;, &quot;space_id&quot;: &quot;{{.space_id}}&quot;, &quot;page_id&quot;: &quot;{{.page_id}}&quot;, &quot;actor_user_id&quot;: &quot;{{.actor_user_id}}&quot;, &quot;actor_name&quot;: &quot;{{.actor_name}}&quot;, &quot;data&quot;: {&quot;href&quot;: &quot;{{.href}}&quot;, &quot;role&quot;: &quot;{{.role}}&quot;, &quot;space_name&quot;: &quot;{{.space_name}}&quot;, &quot;old_role&quot;: &quot;{{.old_role}}&quot;, &quot;new_role&quot;: &quot;{{.new_role}}&quot;, &quot;space_id&quot;: &quot;{{.data_space_id}}&quot;, &quot;token&quot;: &quot;{{.token}}&quot;}, &quot;category&quot;: &quot;space_lifecycle&quot;, &quot;action_required&quot;: false, &quot;actions&quot;: [], &quot;created_at&quot;: &quot;{{.occurred_at}}&quot;}" />
+            <column name="variable_schema" value="{&quot;type&quot;: &quot;object&quot;, &quot;required&quot;: [&quot;title&quot;, &quot;body&quot;, &quot;target_type&quot;, &quot;target_id&quot;, &quot;space_id&quot;, &quot;page_id&quot;, &quot;actor_user_id&quot;, &quot;actor_name&quot;, &quot;href&quot;, &quot;role&quot;, &quot;space_name&quot;, &quot;old_role&quot;, &quot;new_role&quot;, &quot;data_space_id&quot;, &quot;token&quot;, &quot;occurred_at&quot;], &quot;properties&quot;: {&quot;title&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;body&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;target_type&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;target_id&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;space_id&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;page_id&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;actor_user_id&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;actor_name&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;href&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;role&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;space_name&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;old_role&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;new_role&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;data_space_id&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;token&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;occurred_at&quot;: {&quot;type&quot;: &quot;string&quot;}}, &quot;additionalProperties&quot;: false}" />
+            <column name="locale" value="en" />
+            <column name="created_by" value="ec33010e-3884-42c3-ad0e-f1d1dbd43b6c" />
+            <column name="created_at" valueComputed="now()" />
+        </insert>
+        <insert schemaName="notifications_v2" tableName="notification_topics">
+            <column name="id" valueNumeric="18" />
+            <column name="notification_type_id" valueNumeric="1" />
+            <column name="code" value="space_unarchived" />
+            <column name="description" value="space unarchived" />
+            <column name="default_opt_in" valueBoolean="true" />
+            <column name="active" valueBoolean="true" />
+        </insert>
+        <insert schemaName="notifications_v2" tableName="notification_templates">
+            <column name="id" value="44ab226d-6d72-5ec7-a9b6-c677b110027b" />
+            <column name="version" valueNumeric="1" />
+            <column name="name" value="Business space_unarchived" />
+            <column name="mode_id" valueNumeric="2" />
+            <column name="ideal_type_id" valueNumeric="1" />
+            <column name="details" value="{&quot;title&quot;: &quot;{{.title}}&quot;, &quot;body&quot;: &quot;{{.body}}&quot;, &quot;target_type&quot;: &quot;{{.target_type}}&quot;, &quot;target_id&quot;: &quot;{{.target_id}}&quot;, &quot;space_id&quot;: &quot;{{.space_id}}&quot;, &quot;page_id&quot;: &quot;{{.page_id}}&quot;, &quot;actor_user_id&quot;: &quot;{{.actor_user_id}}&quot;, &quot;actor_name&quot;: &quot;{{.actor_name}}&quot;, &quot;data&quot;: {&quot;href&quot;: &quot;{{.href}}&quot;, &quot;role&quot;: &quot;{{.role}}&quot;, &quot;space_name&quot;: &quot;{{.space_name}}&quot;, &quot;old_role&quot;: &quot;{{.old_role}}&quot;, &quot;new_role&quot;: &quot;{{.new_role}}&quot;, &quot;space_id&quot;: &quot;{{.data_space_id}}&quot;, &quot;token&quot;: &quot;{{.token}}&quot;}, &quot;category&quot;: &quot;space_lifecycle&quot;, &quot;action_required&quot;: false, &quot;actions&quot;: [], &quot;created_at&quot;: &quot;{{.occurred_at}}&quot;}" />
+            <column name="variable_schema" value="{&quot;type&quot;: &quot;object&quot;, &quot;required&quot;: [&quot;title&quot;, &quot;body&quot;, &quot;target_type&quot;, &quot;target_id&quot;, &quot;space_id&quot;, &quot;page_id&quot;, &quot;actor_user_id&quot;, &quot;actor_name&quot;, &quot;href&quot;, &quot;role&quot;, &quot;space_name&quot;, &quot;old_role&quot;, &quot;new_role&quot;, &quot;data_space_id&quot;, &quot;token&quot;, &quot;occurred_at&quot;], &quot;properties&quot;: {&quot;title&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;body&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;target_type&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;target_id&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;space_id&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;page_id&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;actor_user_id&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;actor_name&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;href&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;role&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;space_name&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;old_role&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;new_role&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;data_space_id&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;token&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;occurred_at&quot;: {&quot;type&quot;: &quot;string&quot;}}, &quot;additionalProperties&quot;: false}" />
+            <column name="locale" value="en" />
+            <column name="created_by" value="ec33010e-3884-42c3-ad0e-f1d1dbd43b6c" />
+            <column name="created_at" valueComputed="now()" />
+        </insert>
+        <insert schemaName="notifications_v2" tableName="notification_topics">
+            <column name="id" valueNumeric="19" />
+            <column name="notification_type_id" valueNumeric="1" />
+            <column name="code" value="space_deleted" />
+            <column name="description" value="space deleted" />
+            <column name="default_opt_in" valueBoolean="true" />
+            <column name="active" valueBoolean="true" />
+        </insert>
+        <insert schemaName="notifications_v2" tableName="notification_templates">
+            <column name="id" value="a463d51b-6e72-58b9-9f37-61fffa5da056" />
+            <column name="version" valueNumeric="1" />
+            <column name="name" value="Business space_deleted" />
+            <column name="mode_id" valueNumeric="2" />
+            <column name="ideal_type_id" valueNumeric="1" />
+            <column name="details" value="{&quot;title&quot;: &quot;{{.title}}&quot;, &quot;body&quot;: &quot;{{.body}}&quot;, &quot;target_type&quot;: &quot;{{.target_type}}&quot;, &quot;target_id&quot;: &quot;{{.target_id}}&quot;, &quot;space_id&quot;: &quot;{{.space_id}}&quot;, &quot;page_id&quot;: &quot;{{.page_id}}&quot;, &quot;actor_user_id&quot;: &quot;{{.actor_user_id}}&quot;, &quot;actor_name&quot;: &quot;{{.actor_name}}&quot;, &quot;data&quot;: {&quot;href&quot;: &quot;{{.href}}&quot;, &quot;role&quot;: &quot;{{.role}}&quot;, &quot;space_name&quot;: &quot;{{.space_name}}&quot;, &quot;old_role&quot;: &quot;{{.old_role}}&quot;, &quot;new_role&quot;: &quot;{{.new_role}}&quot;, &quot;space_id&quot;: &quot;{{.data_space_id}}&quot;, &quot;token&quot;: &quot;{{.token}}&quot;}, &quot;category&quot;: &quot;space_lifecycle&quot;, &quot;action_required&quot;: false, &quot;actions&quot;: [], &quot;created_at&quot;: &quot;{{.occurred_at}}&quot;}" />
+            <column name="variable_schema" value="{&quot;type&quot;: &quot;object&quot;, &quot;required&quot;: [&quot;title&quot;, &quot;body&quot;, &quot;target_type&quot;, &quot;target_id&quot;, &quot;space_id&quot;, &quot;page_id&quot;, &quot;actor_user_id&quot;, &quot;actor_name&quot;, &quot;href&quot;, &quot;role&quot;, &quot;space_name&quot;, &quot;old_role&quot;, &quot;new_role&quot;, &quot;data_space_id&quot;, &quot;token&quot;, &quot;occurred_at&quot;], &quot;properties&quot;: {&quot;title&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;body&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;target_type&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;target_id&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;space_id&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;page_id&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;actor_user_id&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;actor_name&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;href&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;role&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;space_name&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;old_role&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;new_role&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;data_space_id&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;token&quot;: {&quot;type&quot;: &quot;string&quot;}, &quot;occurred_at&quot;: {&quot;type&quot;: &quot;string&quot;}}, &quot;additionalProperties&quot;: false}" />
+            <column name="locale" value="en" />
+            <column name="created_by" value="ec33010e-3884-42c3-ad0e-f1d1dbd43b6c" />
+            <column name="created_at" valueComputed="now()" />
+        </insert>
+        <insert schemaName="notifications_v2" tableName="notification_templates">
+            <column name="id" value="88826b8f-ac84-544a-9980-3a1ef9410bc1" />
+            <column name="version" valueNumeric="1" />
+            <column name="name" value="Business space invitation email" />
+            <column name="mode_id" valueNumeric="1" />
+            <column name="ideal_type_id" valueNumeric="1" />
+            <column name="details" value="{&quot;subject&quot;: &quot;{{.sender_name}} invited you to {{.space_name}}&quot;, &quot;text_body&quot;: &quot;{{.sender_name}} invited you to join {{.space_name}} as {{.role}}.\n\nThis invitation expires seven days after it was sent.\nAccept: {{.accept_url}}\nReject: {{.reject_url}}\nOpen Teddox: {{.app_url}}&quot;, &quot;html_body&quot;: &quot;&lt;p&gt;{{.sender_name}} invited you to join &lt;strong&gt;{{.space_name}}&lt;/strong&gt; as {{.role}}.&lt;/p&gt;&lt;p&gt;This invitation expires seven days after it was sent.&lt;/p&gt;&lt;p&gt;&lt;a href=\&quot;{{.accept_url}}\&quot;&gt;Accept invitation&lt;/a&gt;&lt;/p&gt;&lt;p&gt;&lt;a href=\&quot;{{.reject_url}}\&quot;&gt;Reject invitation&lt;/a&gt;&lt;/p&gt;&lt;p&gt;&lt;a href=\&quot;{{.app_url}}\&quot;&gt;Open Teddox&lt;/a&gt;&lt;/p&gt;&quot;}" />
+            <column name="variable_schema" value="{&quot;type&quot;: &quot;object&quot;, &quot;required&quot;: [&quot;space_name&quot;, &quot;sender_name&quot;, &quot;role&quot;, &quot;accept_url&quot;, &quot;reject_url&quot;, &quot;app_url&quot;], &quot;properties&quot;: {&quot;space_name&quot;: {&quot;type&quot;: &quot;string&quot;, &quot;minLength&quot;: 1}, &quot;sender_name&quot;: {&quot;type&quot;: &quot;string&quot;, &quot;minLength&quot;: 1}, &quot;role&quot;: {&quot;type&quot;: &quot;string&quot;, &quot;minLength&quot;: 1}, &quot;accept_url&quot;: {&quot;type&quot;: &quot;string&quot;, &quot;minLength&quot;: 1}, &quot;reject_url&quot;: {&quot;type&quot;: &quot;string&quot;, &quot;minLength&quot;: 1}, &quot;app_url&quot;: {&quot;type&quot;: &quot;string&quot;, &quot;minLength&quot;: 1}}, &quot;additionalProperties&quot;: false}" />
+            <column name="locale" value="en" />
+            <column name="created_by" value="ec33010e-3884-42c3-ad0e-f1d1dbd43b6c" />
+            <column name="created_at" valueComputed="now()" />
+        </insert>
+        <rollback>
+            <delete schemaName="notifications_v2" tableName="notification_templates">
+                <where>id = '70577944-03a0-5fc3-8620-8848a172b09f' AND version = 1</where>
+            </delete>
+            <delete schemaName="notifications_v2" tableName="notification_templates">
+                <where>id = '60d547d1-6137-5aa2-9dea-e95d4cd400b9' AND version = 1</where>
+            </delete>
+            <delete schemaName="notifications_v2" tableName="notification_templates">
+                <where>id = '614c81de-40c0-5103-9ab1-bc14ac1b9518' AND version = 1</where>
+            </delete>
+            <delete schemaName="notifications_v2" tableName="notification_templates">
+                <where>id = '63b06aa6-0e50-55eb-859d-2ed3af178825' AND version = 1</where>
+            </delete>
+            <delete schemaName="notifications_v2" tableName="notification_templates">
+                <where>id = '99008bc1-709b-5032-bca6-d05625877392' AND version = 1</where>
+            </delete>
+            <delete schemaName="notifications_v2" tableName="notification_templates">
+                <where>id = 'ebca3c8f-2eb6-5a14-b67d-918e2ee5193b' AND version = 1</where>
+            </delete>
+            <delete schemaName="notifications_v2" tableName="notification_templates">
+                <where>id = '74648d9d-2118-5c41-9583-43b559888ac4' AND version = 1</where>
+            </delete>
+            <delete schemaName="notifications_v2" tableName="notification_templates">
+                <where>id = '44ab226d-6d72-5ec7-a9b6-c677b110027b' AND version = 1</where>
+            </delete>
+            <delete schemaName="notifications_v2" tableName="notification_templates">
+                <where>id = 'a463d51b-6e72-58b9-9f37-61fffa5da056' AND version = 1</where>
+            </delete>
+            <delete schemaName="notifications_v2" tableName="notification_templates">
+                <where>id = '88826b8f-ac84-544a-9980-3a1ef9410bc1' AND version = 1</where>
+            </delete>
+            <delete schemaName="notifications_v2" tableName="notification_topics">
+                <where>id = 10 AND code = 'space_invite_created'</where>
+            </delete>
+            <delete schemaName="notifications_v2" tableName="notification_topics">
+                <where>id = 11 AND code = 'space_invite_accepted'</where>
+            </delete>
+            <delete schemaName="notifications_v2" tableName="notification_topics">
+                <where>id = 12 AND code = 'space_invite_declined'</where>
+            </delete>
+            <delete schemaName="notifications_v2" tableName="notification_topics">
+                <where>id = 13 AND code = 'space_member_added'</where>
+            </delete>
+            <delete schemaName="notifications_v2" tableName="notification_topics">
+                <where>id = 14 AND code = 'space_member_removed'</where>
+            </delete>
+            <delete schemaName="notifications_v2" tableName="notification_topics">
+                <where>id = 15 AND code = 'space_member_role_changed'</where>
+            </delete>
+            <delete schemaName="notifications_v2" tableName="notification_topics">
+                <where>id = 17 AND code = 'space_archived'</where>
+            </delete>
+            <delete schemaName="notifications_v2" tableName="notification_topics">
+                <where>id = 18 AND code = 'space_unarchived'</where>
+            </delete>
+            <delete schemaName="notifications_v2" tableName="notification_topics">
+                <where>id = 19 AND code = 'space_deleted'</where>
+            </delete>
+        </rollback>
+    </changeSet>
+</databaseChangeLog>

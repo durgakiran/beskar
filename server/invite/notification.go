@@ -8,6 +8,7 @@ import (
 
 	"github.com/durgakiran/beskar/core"
 	"github.com/durgakiran/beskar/notification"
+	"github.com/durgakiran/beskar/notificationv2"
 	"github.com/google/uuid"
 )
 
@@ -36,7 +37,11 @@ func (i Invite) enqueueSpaceInviteCreatedEmail(ctx context.Context, token string
 		return err
 	}
 
-	_, err = notification.NewService().EnqueueEmail(ctx, req)
+	actorID, err := uuid.Parse(sender.AId)
+	if err != nil {
+		return err
+	}
+	err = notificationv2.NewBusinessProducer(core.GetPool(), "beskar.invite").EnqueueSpaceInviteEmail(ctx, req, actorID)
 	return err
 }
 

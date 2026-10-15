@@ -7,6 +7,7 @@ import (
 
 	"github.com/durgakiran/beskar/core"
 	"github.com/durgakiran/beskar/notification"
+	"github.com/durgakiran/beskar/notificationv2"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 )
@@ -39,7 +40,7 @@ func (i Invite) emitSpaceInviteCreatedInApp(ctx context.Context, token string, s
 		senderName = "Someone"
 	}
 	recipientID := i.UserId
-	return notification.NewService().Emit(ctx, notification.EmitNotificationRequest{
+	return notificationv2.NewBusinessProducer(core.GetPool(), "beskar.invite").Emit(ctx, notification.EmitNotificationRequest{
 		EventKey: spaceInviteCreatedEventKey(token),
 		Type:     notification.NotificationTypeSpaceInviteCreated,
 		Category: notification.NotificationCategorySpaceInvite,
@@ -93,7 +94,7 @@ func emitSpaceInviteDecisionInApp(ctx context.Context, details InviteDetailsResp
 	}
 
 	service := notification.NewService()
-	if err := service.ResolveByEventKey(ctx, spaceInviteCreatedEventKey(details.Token), &inviteeID); err != nil {
+	if err := service.ResolveByTarget(ctx, notification.NotificationTargetInvite, details.Token, inviteeID); err != nil {
 		logger().Warn("failed to resolve invite notification", zap.Error(err))
 	}
 
@@ -105,7 +106,7 @@ func emitSpaceInviteDecisionInApp(ctx context.Context, details InviteDetailsResp
 	}
 
 	eventKey := fmt.Sprintf("%s:%s:%s", notificationType, details.Token, inviterID.String())
-	if err := service.Emit(ctx, notification.EmitNotificationRequest{
+	if err := notificationv2.NewBusinessProducer(core.GetPool(), "beskar.invite").Emit(ctx, notification.EmitNotificationRequest{
 		EventKey: eventKey,
 		Type:     notificationType,
 		Category: notification.NotificationCategorySpaceMembership,
@@ -141,7 +142,7 @@ func resolveSpaceInviteNotification(ctx context.Context, token, userID string) {
 	if err != nil {
 		return
 	}
-	if err := notification.NewService().ResolveByEventKey(ctx, spaceInviteCreatedEventKey(strings.TrimSpace(token)), &recipient); err != nil {
+	if err := notification.NewService().ResolveByTarget(ctx, notification.NotificationTargetInvite, token, recipient); err != nil {
 		logger().Warn("failed to resolve terminal invite notification", zap.Error(err))
 	}
 }
