@@ -94,8 +94,9 @@ type EditDocumentMeta struct {
 type InputDocument struct {
 	MentionActorName string `json:"-"`
 	Document
-	Nodes           NodeData                    `json:"nodeData"`
-	AssetReferences *assetref.PayloadReferences `json:"assetReferences,omitempty"`
+	ExpectedRevision *DocumentDraftRevision      `json:"expectedRevision,omitempty"`
+	Nodes            NodeData                    `json:"nodeData"`
+	AssetReferences  *assetref.PayloadReferences `json:"assetReferences,omitempty"`
 }
 
 type ContentDraft struct {
@@ -104,11 +105,17 @@ type ContentDraft struct {
 	Data  []byte `json:"data" data:"data"`
 }
 
+type DocumentDraftRevision struct {
+	DocID      int64 `json:"docId"`
+	Generation int64 `json:"generation"`
+	Draft      bool  `json:"draft"`
+}
+
 type InputDraftDocument struct {
 	Document
-	Data            []byte                      `json:"data"`
-	IsDraftLeader   bool                        `json:"isDraftLeader"`
-	AssetReferences *assetref.PayloadReferences `json:"assetReferences,omitempty"`
+	Data             []byte                      `json:"data"`
+	ExpectedRevision *DocumentDraftRevision      `json:"expectedRevision"`
+	AssetReferences  *assetref.PayloadReferences `json:"assetReferences,omitempty"`
 }
 
 type OutputDocument struct {
