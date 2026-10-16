@@ -7,7 +7,10 @@ export function isFreshDocument(doc: Y.Doc): boolean {
     if (fragment.length === 0) return true;
     if (fragment.length !== 1) return false;
     const paragraph = fragment.get(0);
-    if (!(paragraph instanceof Y.XmlElement) || paragraph.nodeName !== 'paragraph' || Object.keys(paragraph.getAttributes()).length) return false;
+    if (!(paragraph instanceof Y.XmlElement) || paragraph.nodeName !== 'paragraph') return false;
+    // BlockId assigns an identity to the temporary paragraph before the snapshot
+    // arrives. That identity alone does not make it user-authored content.
+    if (Object.entries(paragraph.getAttributes()).some(([key, value]) => key !== 'blockId' && value != null)) return false;
     return paragraph.toArray().every(child => child instanceof Y.XmlText && child.toString() === '');
 }
 
