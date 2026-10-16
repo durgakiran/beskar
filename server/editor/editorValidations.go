@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 
 	permify_payload "buf.build/gen/go/permifyco/permify/protocolbuffers/go/base/v1"
 	"github.com/durgakiran/beskar/core"
@@ -15,8 +14,16 @@ func ValidateNewDraftDoc(data []byte) (InputDraftDocument, error) {
 	var inputDoc InputDraftDocument
 	err := json.Unmarshal(data, &inputDoc)
 	if err != nil {
-		logger().Error(fmt.Sprintf(err.Error()))
+		logger().Error(err.Error())
 		return InputDraftDocument{}, err
+	}
+
+	if inputDoc.ExpectedRevision == nil || inputDoc.ExpectedRevision.DocID <= 0 || inputDoc.ExpectedRevision.Generation < 0 {
+		return InputDraftDocument{}, errors.New("invalid document: expected revision required")
+	}
+
+	if validateYjsUpdateV1(inputDoc.Data) != nil {
+		return InputDraftDocument{}, errors.New("invalid document: invalid Yjs state")
 	}
 
 	if inputDoc.Title == "" {

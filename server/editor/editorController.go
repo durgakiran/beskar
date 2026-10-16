@@ -186,6 +186,11 @@ func publishDoc(w http.ResponseWriter, r *http.Request) {
 		render.Render(w, r, core.NewFailedResponse(http.StatusBadRequest, core.FAILURE, core.FAILURE, "Unable to process request body"))
 		return
 	}
+	if inputDoc.ExpectedRevision == nil {
+		render.Status(r, http.StatusBadRequest)
+		render.Render(w, r, core.NewFailedResponse(http.StatusBadRequest, core.FAILURE, core.FAILURE, "Expected document revision required"))
+		return
+	}
 	inputDoc.OwnerId = uuid.MustParse(userId)
 	validSpaceUserPermissions := core.ValidateUserPagePermission(fmt.Sprintf("%v", inputDoc.Id), inputDoc.OwnerId, "edit")
 	if !validSpaceUserPermissions {
@@ -198,6 +203,11 @@ func publishDoc(w http.ResponseWriter, r *http.Request) {
 	}
 	pageId, publishedDocId, err := inputDoc.Publish()
 	if legacyMigrationHTTPError(w, r, err) {
+		return
+	}
+	if errors.Is(err, ErrDocumentDraftConflict) {
+		render.Status(r, http.StatusConflict)
+		render.Render(w, r, core.NewFailedResponse(http.StatusConflict, core.FAILURE, core.FAILURE, "Document changed while publishing. Retry publish."))
 		return
 	}
 	if err != nil && err.Error() == "nothing new to update" {
@@ -265,12 +275,12 @@ func updateDraftDoc(w http.ResponseWriter, r *http.Request) {
 	if !ensureMutableSpace(w, r, inputDoc.SpaceId) {
 		return
 	}
-	pageId, draftGen, err := inputDoc.Update()
+	pageId, revision, err := inputDoc.Update()
 	if legacyMigrationHTTPError(w, r, err) {
 		return
 	}
 	if err != nil {
-		if errors.Is(err, ErrDraftPayloadTooSmall) {
+		if errors.Is(err, ErrDocumentDraftConflict) {
 			render.Status(r, http.StatusConflict)
 			render.Render(w, r, core.NewFailedResponse(http.StatusConflict, core.FAILURE, "Editor not synced with server", err.Error()))
 			return
@@ -279,27 +289,19 @@ func updateDraftDoc(w http.ResponseWriter, r *http.Request) {
 		render.Render(w, r, core.NewFailedResponse(http.StatusInternalServerError, core.FAILURE, core.FAILURE, "Unable to update document"))
 		return
 	}
-	if inputDoc.IsDraftLeader && pageevents.Enabled() {
-		if terr := pageevents.TouchDraftLeaderTs(ctx, inputDoc.SpaceId, pageId, inputDoc.OwnerId); terr != nil {
-			logger().Warn("pageevents: touch draft leader ts", zap.Error(terr))
-		}
-	}
 
-	docID := int64(0)
-	if meta, mErr := GetEditDocumentMeta(ctx, pageId, inputDoc.SpaceId); mErr == nil {
-		docID = meta.DocID
-	}
 	if pageevents.Enabled() {
-		if errPub := pageevents.PublishDraftUpdated(ctx, inputDoc.SpaceId, pageId, docID, draftGen); errPub != nil {
+		if errPub := pageevents.PublishDraftUpdated(ctx, inputDoc.SpaceId, pageId, revision.DocID, revision.Generation); errPub != nil {
 			logger().Warn("pageevents: draft.updated", zap.Error(errPub))
 		}
 	}
 
 	type PageId struct {
-		Page int64 `json:"page"`
+		Page     int64                 `json:"page"`
+		Revision DocumentDraftRevision `json:"revision"`
 	}
 	render.Status(r, http.StatusOK)
-	render.Render(w, r, core.NewSucessResponse(core.SUCCESS, PageId{Page: pageId}))
+	render.Render(w, r, core.NewSucessResponse(core.SUCCESS, PageId{Page: pageId, Revision: revision}))
 }
 
 func deleteDocument(w http.ResponseWriter, r *http.Request) {

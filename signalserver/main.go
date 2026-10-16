@@ -325,6 +325,10 @@ func (c *Client) writePump() {
 // the requester is notified (reduces churn); subscribe/unregister pass requester == nil
 // to always broadcast to everyone in the room.
 func (h *Hub) electLeaderInternal(topicName string, requester *Client) {
+	// Document v2 rooms persist independently; they have no save leader or watchdog.
+	if strings.HasPrefix(topicName, "document-v2:") {
+		return
+	}
 	clients, ok := h.topics[topicName]
 	if !ok || len(clients) == 0 {
 		delete(h.topicLeaderID, topicName)

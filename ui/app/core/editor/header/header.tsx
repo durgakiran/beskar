@@ -4,7 +4,7 @@ import { useContext, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import FixedMenu from "@editor/fixedMenu/FixedMenu";
 import { Avatar, Box, Button, DropdownMenu, Flex, HoverCard, IconButton, Text } from "@radix-ui/themes";
-import { FiCheck, FiFileText, FiMoreHorizontal, FiDownload, FiShare2, FiStar } from "react-icons/fi";
+import { FiCheck, FiFileText, FiMoreHorizontal, FiDownload, FiShare2 } from "react-icons/fi";
 import { copyTextToClipboard } from "../../../lib/clipboard";
 
 interface Collaborator {
@@ -28,11 +28,6 @@ interface EditorHeaderProps {
     pageTitle: string;
     collaborators: Collaborator[];
     canComment: boolean;
-    currentUserId?: string;
-    isLeader: boolean;
-    /** User id of the draft leader from awareness; preferred over isLeader for collaborator star. */
-    leaderUserId?: string;
-    /** Optional M6 notice (e.g. save leader heartbeat stale). */
     presenceNotice?: string | null;
 }
 
@@ -49,21 +44,12 @@ export function Editorheader({
     pageTitle,
     collaborators,
     canComment,
-    currentUserId,
-    isLeader,
-    leaderUserId,
     presenceNotice,
 }: EditorHeaderProps) {
     const editor = useContext(EditorContext);
     const [pdfOpen, setPdfOpen] = useState(false);
     const visibleCollaborators = collaborators.slice(0, 3);
 
-    const showLeaderStar = (collaboratorId: string) => {
-        if (leaderUserId) {
-            return collaboratorId === leaderUserId;
-        }
-        return isLeader && collaboratorId === currentUserId;
-    };
     const [linkCopied, setLinkCopied] = useState(false);
     const resetCopiedTimer = useRef<number | null>(null);
 
@@ -150,26 +136,6 @@ export function Editorheader({
                                                         border: "2px solid white",
                                                     }}
                                                 />
-                                                {showLeaderStar(collaborator.id) ? (
-                                                    <Box
-                                                        style={{
-                                                            position: "absolute",
-                                                            right: -2,
-                                                            bottom: -2,
-                                                            width: 14,
-                                                            height: 14,
-                                                            borderRadius: "999px",
-                                                            backgroundColor: "#7c5a96",
-                                                            border: "2px solid white",
-                                                            display: "flex",
-                                                            alignItems: "center",
-                                                            justifyContent: "center",
-                                                            boxSizing: "content-box",
-                                                        }}
-                                                    >
-                                                        <FiStar size={8} color="white" />
-                                                    </Box>
-                                                ) : null}
                                             </span>
                                         </HoverCard.Trigger>
                                         <HoverCard.Content
