@@ -467,3 +467,73 @@ Attachment actions use the shared image-style floating toolbar. Hover, focus, or
 select the chip to reveal it; clicking the chip selects it instead of downloading.
 Arrow Down moves from the chip into the toolbar, Left/Right moves between actions,
 and Escape dismisses it. Download and supported Preview remain available to readers.
+
+### User mentions
+
+Pass a stable `mentionHandler` to `Editor` or `getExtensions({ mentionHandler })`:
+
+```tsx
+import { Editor, type MentionHandler } from '@durgakiran/editor';
+
+const mentionHandler: MentionHandler = {
+  searchUsers: async query => directory.search(query), // { id, label }[]
+  resolveUser: async id => directory.get(id), // { id, label } or null
+};
+
+<Editor mentionHandler={mentionHandler} initialContent={document} />
+```
+
+Type `@` to search; use Up/Down and Enter or click a result. Escape closes the picker.
+The host owns authentication and user lookup. Search failures show a retry hint;
+unavailable users retain the persisted label. Nodes serialize as
+`{ type: 'mention', attrs: { id: 'user-id', label: 'Display name' } }` and export to
+HTML as `span[data-type="mention"][data-id][data-label]`.
+
+The mention schema is always registered, including with the minimal preset and
+without a handler. `<Editor editable={false} ... />` renders existing mentions
+and optionally resolves current labels without changing document data. Search
+and `editor.commands.insertMention({ id, label })` require a handler and an
+editable editor. For `getExtensions`, set `editable: false` on your TipTap editor.
+
+`packages/editor-demo` includes a mock directory, existing mentions, an unavailable
+user fallback, and a View Mode toggle. Use Reset Demo Data if older local storage
+hides the seeded mention examples.
+
+#### Mention hover details
+
+Supply the optional details callback to enable a profile card on hover (250 ms),
+keyboard focus, or click/tap. It works in edit and read-only modes:
+
+```tsx
+import type { MentionHandler, MentionUserDetails } from '@durgakiran/editor';
+
+const mentionHandler: MentionHandler = {
+  searchUsers: query => directory.search(query),
+  resolveUser: id => directory.resolve(id),
+  getUserDetails: (id, options) => directory.getDetails(id, options?.signal),
+};
+
+// Shape returned by getUserDetails:
+const example: MentionUserDetails = {
+  id: 'user-id',
+  label: 'Alex Morgan',
+  email: 'alex@example.com',
+  avatarUrl: null,
+  spaceRole: 'editor',
+};
+```
+
+The callback receives optional `MentionDetailsOptions` containing an AbortSignal.
+The host binds the current space and authentication into the handler. Return
+`null` for an unavailable user; reject for temporary errors. The card shows a
+loading state, an unavailable message, or an error with Retry. Missing or broken
+avatars use initials. Escape and clicking outside dismiss the card.
+
+Details are fetched lazily on each opening, canceled on close/unmount, and are
+never persisted into document JSON. Late results are ignored. Omitting
+`getUserDetails` preserves plain mention rendering for existing integrations.
+No editing commands are enabled by the profile card in read-only mode.
+
+The demo seeds Alex (avatar), Priya (initials), a former teammate (unavailable),
+and Sam (fails once, then succeeds on Retry). Use Reset Demo Data to load these
+examples if browser storage contains an older document.

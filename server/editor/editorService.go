@@ -320,16 +320,19 @@ func (document InputDocument) Publish() (pageId int64, publishedDocId int64, err
 	ctx := context.Background()
 	conn, err := connPool.Acquire(ctx)
 	if err != nil {
-		logger().Error("Unable to acquire a connection: " + err.Error())
-	}
-	tx, err := conn.Begin(ctx)
-	if err != nil {
-		defer conn.Release()
-		logger().Error("Unable to start transaction" + err.Error())
+		return document.Id, 0, err
 	}
 	defer conn.Release()
+	tx, err := conn.Begin(ctx)
+	if err != nil {
+		return document.Id, 0, err
+	}
 	defer tx.Rollback(ctx)
 	if err := lockLegacyWhiteboardPage(ctx, tx, document.Id); err != nil {
+		return document.Id, 0, err
+	}
+	previousMentions, err := lockPublishedMentionBaseline(ctx, tx, document.Id, document.SpaceId)
+	if err != nil {
 		return document.Id, 0, err
 	}
 	// create or update doc
@@ -421,6 +424,9 @@ func (document InputDocument) Publish() (pageId int64, publishedDocId int64, err
 	// 		return document.Id, err
 	// 	}
 	// }
+	if err := queuePublishedMentionNotifications(ctx, tx, document, docId, previousMentions, defaultMentionDependencies()); err != nil {
+		return document.Id, 0, err
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return document.Id, 0, err
 	}

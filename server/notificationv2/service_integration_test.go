@@ -52,7 +52,7 @@ func TestPostgresDefinitions(t *testing.T) {
 		t.Fatal(err)
 	}
 	run(`DO $$ BEGIN IF NOT EXISTS(SELECT 1 FROM pg_roles WHERE rolname='beskar_admin') THEN CREATE ROLE beskar_admin; END IF; END $$`)
-	for _, file := range []string{"notifications.xml", "email_notifications.xml", "notifications_v2.xml", "notifications_v2_seed.xml", "notifications_v2_definitions.xml", "notifications_v2_email_recipients.xml", "notifications_v2_business.xml"} {
+	for _, file := range []string{"notifications.xml", "email_notifications.xml", "notifications_v2.xml", "notifications_v2_seed.xml", "notifications_v2_definitions.xml", "notifications_v2_email_recipients.xml", "notifications_v2_business.xml", "notifications_document_mentions.xml"} {
 		args := []string{"--defaults-file=/dev/null", "--url=jdbc:postgresql://" + net.JoinHostPort(cfg.ConnConfig.Host, strconv.Itoa(int(cfg.ConnConfig.Port))) + "/notification_v2_test", "--username=" + cfg.ConnConfig.User, "--search-path=" + path, "--changelog-file=" + file, "update", "-Dapp_user=" + pgx.Identifier{cfg.ConnConfig.User}.Sanitize()}
 		cmd := exec.CommandContext(ctx, "liquibase", args...)
 		cmd.Dir = t.TempDir()

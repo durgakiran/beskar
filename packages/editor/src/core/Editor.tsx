@@ -167,6 +167,7 @@ export function Editor({
   internalResourceHandler,
   externalLinkHandler,
   childPagesHandler,
+  mentionHandler,
   commentHandler,
 }: EditorProps) {
   const [content, setContent] = useState<any>(null);
@@ -209,6 +210,7 @@ export function Editor({
         internalResourceHandler,
         externalLinkHandler,
         childPagesHandler,
+        mentionHandler,
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [
@@ -230,6 +232,7 @@ export function Editor({
       internalResourceHandler,
       externalLinkHandler,
       childPagesHandler,
+      mentionHandler,
       commentHandler,
     ],
   );

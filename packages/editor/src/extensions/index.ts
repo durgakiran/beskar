@@ -20,7 +20,10 @@ import type {
   ExternalLinkHandler,
   ImageAPIHandler,
   InternalResourceHandler,
+  MentionHandler,
 } from '../types';
+import { Mention } from '../nodes/Mention';
+export { Mention } from '../nodes/Mention';
 import { CustomAttributes } from './custom-attributes';
 import { ImagePasteDrop } from './image-paste-drop';
 import { AttachmentPasteDrop } from './attachment-paste-drop';
@@ -150,6 +153,7 @@ export interface GetExtensionsOptions {
   internalResourceHandler?: InternalResourceHandler;
   externalLinkHandler?: ExternalLinkHandler;
   childPagesHandler?: ChildPagesHandler;
+  mentionHandler?: MentionHandler;
   onAddCommentShortcut?: () => void;
   onNextCommentShortcut?: () => void;
   onPrevCommentShortcut?: () => void;
@@ -178,6 +182,7 @@ export function getExtensions(options: GetExtensionsOptions = {}): Extensions {
     internalResourceHandler,
     externalLinkHandler,
     childPagesHandler,
+    mentionHandler,
     onAddCommentShortcut,
     onNextCommentShortcut,
     onPrevCommentShortcut,
@@ -265,6 +270,7 @@ export function getExtensions(options: GetExtensionsOptions = {}): Extensions {
     ImageInline, // Inline image that flows within text (like Confluence)
     AttachmentInline, // Non-image file attachments as inline chips
     StatusBadge, // Inline status pill (e.g. IN PROGRESS, DONE)
+    Mention.configure({ mentionHandler }),
     DateInline, // Inline date pill with popover editing
     EmbedInline, // Inline embed chip with provider + resolved title
     ExternalLinkInline.configure({ linkHandler: externalLinkHandler }), // Inline chip for external non-embed links

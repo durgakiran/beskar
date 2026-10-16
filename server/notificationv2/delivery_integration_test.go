@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -174,6 +175,109 @@ func testDeliveryPostgres(t *testing.T, pool *pgxpool.Pool) {
 		}
 		return ids
 	}
+	t.Run("published document mentions deliver both channels atomically without duplicates", func(t *testing.T) {
+		t.Setenv("EMAIL_APP_BASE_URL", "https://app.example")
+		defer exec(`DELETE FROM notifications.in_app_notifications WHERE type='document_mention'`)
+		event := DocumentMentionEvent{EventKey: "document-mention:123:456", ActorID: actor, ActorName: "Alice <Admin>", SpaceID: uuid.New(), PageID: 123, DocumentTitle: "Plan <script>alert(1)</script>"}
+		count := func() int {
+			t.Helper()
+			var n int
+			if err := pool.QueryRow(ctx, `SELECT count(*) FROM notifications_v2.notifications WHERE correlation_id=$1`, event.EventKey).Scan(&n); err != nil {
+				t.Fatal(err)
+			}
+			return n
+		}
+		queue := func(commit bool) {
+			t.Helper()
+			tx, err := pool.Begin(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer tx.Rollback(ctx)
+			if err := QueueDocumentMention(ctx, tx, event, []uuid.UUID{recipient, recipient, actor, uuid.Nil}); err != nil {
+				t.Fatal(err)
+			}
+			if commit {
+				if err := tx.Commit(ctx); err != nil {
+					t.Fatal(err)
+				}
+			}
+		}
+		queue(false)
+		if count() != 0 {
+			t.Fatal("failed publication left notification definitions")
+		}
+		queue(true)
+		queue(true)
+		if count() != 2 {
+			t.Fatal("expected one definition per channel, deduplicated by publication")
+		}
+		expand := func() {
+			t.Helper()
+			if _, err := scheduler.ProcessBatch(ctx); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := expander.ProcessBatch(ctx); err != nil {
+				t.Fatal(err)
+			}
+		}
+		expand()
+		worker.mentionAccess = func(context.Context, pgx.Tx, deliveryRecord) (bool, error) { return true, nil }
+		defer func() { worker.mentionAccess = nil }()
+		before := sender.count()
+		run("email")
+		run("in_app")
+		run("email")
+		run("in_app")
+		if sender.count() != before+1 {
+			t.Fatal("email missing or duplicated")
+		}
+		sender.mu.Lock()
+		message := sender.messages[len(sender.messages)-1]
+		sender.mu.Unlock()
+		if message.ToAddress != "recipient@example.com" || !strings.Contains(message.TextBody, event.DocumentTitle) || !strings.Contains(message.TextBody, "https://app.example/space/"+event.SpaceID.String()+"/view/123") || strings.Contains(message.HTMLBody, "<script>") || !strings.Contains(message.HTMLBody, "&lt;script&gt;") {
+			t.Fatalf("incorrect or unsafe email: %+v", message)
+		}
+		var n int
+		var title, href string
+		if err := pool.QueryRow(ctx, `SELECT count(*),min(title),min(data->>'href') FROM notifications.in_app_notifications WHERE type='document_mention' AND recipient_user_id=$1`, recipient).Scan(&n, &title, &href); err != nil {
+			t.Fatal(err)
+		}
+		if n != 1 || title != event.ActorName+" mentioned you" || href != "/space/"+event.SpaceID.String()+"/view/123" {
+			t.Fatalf("incorrect inbox: %d %q %q", n, title, href)
+		}
+		// Losing access while queued suppresses both channels.
+		event.EventKey = "document-mention:123:457"
+		queue(true)
+		expand()
+		worker.mentionAccess = func(context.Context, pgx.Tx, deliveryRecord) (bool, error) { return false, nil }
+		run("email")
+		run("in_app")
+		if err := pool.QueryRow(ctx, `SELECT count(*) FROM notifications_v2.notification_deliveries d JOIN notifications_v2.notification_events e ON e.id=d.event_id JOIN notifications_v2.notifications n ON n.id=e.notification_id WHERE n.correlation_id=$1 AND d.status='suppressed' AND d.last_error_code='document_access_revoked'`, event.EventKey).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		if n != 2 || sender.count() != before+1 {
+			t.Fatal("revoked access did not suppress both channels")
+		}
+		// If either channel cannot be queued, roll back the whole pair.
+		event.EventKey = "document-mention:123:458"
+		exec(`UPDATE notifications_v2.notification_templates SET retired_at=now() WHERE id=$1`, documentMentionInAppTemplate)
+		defer exec(`UPDATE notifications_v2.notification_templates SET retired_at=NULL WHERE id=$1`, documentMentionInAppTemplate)
+		tx, err := pool.Begin(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer tx.Rollback(ctx)
+		if err = QueueDocumentMention(ctx, tx, event, []uuid.UUID{recipient}); err == nil {
+			t.Fatal("retired template accepted")
+		}
+		if err = tx.Commit(ctx); err != nil {
+			t.Fatal(err)
+		}
+		if count() != 0 {
+			t.Fatal("partial notification pair committed")
+		}
+	})
 	t.Run("external emails expand deduplicate and send without a directory identity", func(t *testing.T) {
 		ids := createExternal([]string{"External@EXAMPLE.COM", "External@example.com"}, false)
 		if len(ids) != 1 {

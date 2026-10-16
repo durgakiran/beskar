@@ -34,6 +34,19 @@ func (w *DeliveryWorker) preflight(ctx context.Context, tx pgx.Tx, d deliveryRec
 	if !d.ProviderEnabled {
 		return deferUntil("provider_disabled", now.Add(30*time.Second))
 	}
+	if d.TopicCode == DocumentMentionTopic {
+		check := w.mentionAccess
+		if check == nil {
+			check = w.canDeliverDocumentMention
+		}
+		allowed, err := check(ctx, tx, d)
+		if err != nil {
+			return false, err
+		}
+		if !allowed {
+			return stop("suppressed", "document_access_revoked")
+		}
+	}
 	if d.Mode == "email" && (d.Adapter != "smtp" || d.ProviderID != w.config.SMTPProviderID) {
 		return stop("failed", "smtp_provider_not_bound")
 	}

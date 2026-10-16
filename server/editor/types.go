@@ -92,6 +92,7 @@ type EditDocumentMeta struct {
 }
 
 type InputDocument struct {
+	MentionActorName string `json:"-"`
 	Document
 	ExpectedRevision *DocumentDraftRevision      `json:"expectedRevision,omitempty"`
 	Nodes            NodeData                    `json:"nodeData"`

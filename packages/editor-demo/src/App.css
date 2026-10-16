@@ -155,7 +155,9 @@ body {
 
   .header-controls {
     width: 100%;
-    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    justify-content: flex-start;
   }
 
   .editor-container {

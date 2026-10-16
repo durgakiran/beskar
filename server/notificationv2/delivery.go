@@ -16,6 +16,7 @@ import (
 )
 
 type DeliveryWorker struct {
+	mentionAccess         func(context.Context, pgx.Tx, deliveryRecord) (bool, error)
 	pool                  *pgxpool.Pool
 	config                DeliveryConfig
 	email                 notification.EmailProvider
