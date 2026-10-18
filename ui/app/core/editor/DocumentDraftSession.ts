@@ -36,7 +36,7 @@ export class DocumentDraftSession {
         private editPath: string,
         private payload: () => Record<string, unknown>,
         private status: (saving: boolean, error?: string) => void,
-        private request: typeof fetch = fetch,
+        private request: typeof fetch = (input, init) => globalThis.fetch(input, init),
         private onRemote: (remote: RemoteDraft) => void = () => {},
         private recovery?: { adapter: YjsRecoveryAdapter; sessionKey: string; draftId: string },
     ) {}

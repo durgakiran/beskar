@@ -10,7 +10,7 @@ const (
 	getSpace       = "SELECT id, name, date_created AS dateCreated, date_updated AS dateUpdated, user_id AS userId FROM core.space WHERE id = $1"
 	updateContent  = "UPDATE core.content SET parent_id = $2, \"order\" = $3, type = $4, attrs = $5, marks = $6 WHERE id = $7 AND doc_id = $1"
 	deleteContent  = "DELETE FROM core.content WHERE id = $1 AND doc_id = $2"
-	updateDocQuery = `UPDATE core.page_doc_map SET title = $1, version = $2, draft = $5,
+	updateDocQuery = `UPDATE core.page_doc_map SET title = $1, version = $2, draft = $5, owner_id = $6,
 		draft_generation = CASE WHEN $5::smallint = 1 THEN draft_generation + 1 ELSE draft_generation END
 		WHERE doc_id = $3 AND page_id = $4 RETURNING draft_generation`
 	getDocumentDataToEdit = `SELECT 
@@ -101,7 +101,7 @@ const (
 		WHERE d.page_id = $1 AND d.doc_id = $2 AND d.draft = 1
 		FOR UPDATE OF d`
 	publishCheckedWhiteboardDraft = `UPDATE core.page_doc_map
-		SET draft = 0, version = NOW()
+		SET draft = 0, version = NOW(), owner_id = $3
 		WHERE page_id = $1 AND doc_id = $2 AND draft = 1`
 	updatePublishedWhiteboardPreview = `UPDATE core.whiteboard_data
 		SET preview_asset_name = $2, updated_at = NOW()
@@ -243,11 +243,19 @@ const (
 FROM core.space s
 WHERE s.id = $1`
 
-	getViewDocumentMeta = `SELECT d.version AS published_at
-FROM core.page_doc_map d
-WHERE d.page_id = $1 AND d.draft = 0
-ORDER BY d.version DESC
-LIMIT 1`
+	getViewDocumentMeta = `SELECT COALESCE(creator.zita_id, ''), COALESCE(updater.zita_id, ''), p.date_created,
+ CASE WHEN wb.page_id IS NOT NULL THEN wbv.published_at ELSE d.version END
+ FROM core.page p
+ LEFT JOIN LATERAL (
+   SELECT owner_id, version FROM core.page_doc_map
+   WHERE page_id=p.id AND draft=0 ORDER BY version DESC LIMIT 1
+ ) d ON TRUE
+ LEFT JOIN whiteboard.whiteboard wb ON wb.page_id=p.id
+ LEFT JOIN whiteboard.whiteboard_version wbv ON wbv.page_id=p.id AND wbv.id=wb.published_version_id
+ LEFT JOIN core.user_id_map creator ON creator.user_id=p.owner_id
+ LEFT JOIN core.user_id_map updater ON updater.user_id=
+   CASE WHEN wb.page_id IS NOT NULL THEN wbv.published_by ELSE d.owner_id END
+ WHERE p.id=$1`
 
 	getEditMetaDraft = `SELECT d.doc_id, COALESCE(d.draft_generation, 0), d.version, d.title, p.parent_id
 		FROM core.page p JOIN core.page_doc_map d ON p.id = d.page_id

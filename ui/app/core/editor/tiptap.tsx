@@ -286,6 +286,9 @@ export function TipTap({
 
         return {
             appBaseUrl,
+            getResourceUrl(resourceId, _resourceType, context) {
+                return context?.href || `${appBaseUrl}/space/${encodeURIComponent(context?.spaceId || spaceId)}/view/${encodeURIComponent(resourceId)}`;
+            },
             async searchResources(query: string, resourceType: InternalResourceType): Promise<InternalResourceResult[]> {
                 const pages = await listPages();
                 const normalizedQuery = query.trim().toLowerCase();
@@ -296,15 +299,16 @@ export function TipTap({
                         if (!normalizedQuery) return true;
                         return (page.title || "").toLowerCase().includes(normalizedQuery);
                     })
-                    .slice(0, 20)
                     .map((page) => ({
                         resourceId: String(page.pageId),
+                        spaceId,
+                        href: `${appBaseUrl}/space/${encodeURIComponent(spaceId)}/view/${page.pageId}`,
                         resourceType: page.type,
                         title: page.title || "Untitled",
                         icon: page.type === "whiteboard" ? "▧" : "📄",
                     }));
             },
-            async getResourceMetadata(resourceId: string, resourceType: InternalResourceType): Promise<InternalResourceMetadata | null> {
+            async getResourceMetadata(resourceId: string, resourceType: InternalResourceType, context?: { spaceId?: string; href?: string }): Promise<InternalResourceMetadata | null> {
                 const response = await fetchJson<{
                     data?: {
                         pageId: number;
@@ -313,7 +317,7 @@ export function TipTap({
                         previewAssetName?: string;
                         whiteboard?: { previewUrl?: string };
                     };
-                }>(`editor/space/${spaceId}/page/${resourceId}/inline-link`);
+                }>(`editor/space/${encodeURIComponent(context?.spaceId || spaceId)}/page/${encodeURIComponent(resourceId)}/inline-link`);
                 const metadata = response.data;
                 if (!metadata) return null;
 
@@ -326,9 +330,9 @@ export function TipTap({
                     thumbnailUrl: metadata.whiteboard?.previewUrl ? contentUrl(metadata.whiteboard.previewUrl) : metadata.previewAssetName ? `${baseUrl}/media/image/${metadata.previewAssetName}` : undefined,
                 };
             },
-            navigateToResource(resourceId: string, _resourceType: InternalResourceType) {
+            navigateToResource(resourceId: string, _resourceType: InternalResourceType, context?: { spaceId?: string; href?: string }) {
                 if (typeof window === "undefined") return;
-                window.location.href = `/space/${spaceId}/view/${resourceId}`;
+                window.location.href = context?.href || `/space/${encodeURIComponent(context?.spaceId || spaceId)}/view/${encodeURIComponent(resourceId)}`;
             },
         };
     }, [spaceId]);

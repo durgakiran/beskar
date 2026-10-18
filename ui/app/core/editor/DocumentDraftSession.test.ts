@@ -4,7 +4,7 @@ import { DocumentDraftSession, type DocumentDraftRevision } from './DocumentDraf
 import { base64ToUint8Array, uint8ArrayToBase64 } from 'app/core/utils/base64';
 
 const sessions: DocumentDraftSession[] = [];
-afterEach(() => { sessions.splice(0).forEach(session => session.dispose()); vi.useRealTimers(); });
+afterEach(() => { sessions.splice(0).forEach(session => session.dispose()); vi.useRealTimers(); vi.unstubAllGlobals(); });
 const json = (data: unknown, status = 200) => new Response(JSON.stringify({ data }), { status });
 function server() {
     const doc = new Y.Doc();
@@ -29,6 +29,25 @@ function session(doc: Y.Doc, request: typeof fetch, recovery?: ConstructorParame
 }
 
 describe('independent document persistence', () => {
+    it('calls the default browser fetch with its global receiver for saves and reconciliation', async () => {
+        const remote = server();
+        const browserFetch = vi.fn(function (this: typeof globalThis, input: RequestInfo | URL, init?: RequestInit) {
+            if (this !== globalThis) throw new TypeError('Illegal invocation');
+            return remote.request(input, init);
+        });
+        vi.stubGlobal('fetch', browserFetch);
+        const doc = new Y.Doc();
+        const value = new DocumentDraftSession(doc, '/api', 'edit', () => ({ title: 'Document' }), vi.fn());
+        sessions.push(value);
+        value.initialize({ docId: 1, draftGeneration: 0, draft: true });
+        doc.getText('body').insert(0, 'saved in browser');
+        await value.save();
+        await value.reconcile();
+        expect(remote.doc.getText('body').toString()).toBe('saved in browser');
+        expect(browserFetch).toHaveBeenCalledTimes(2);
+        expect(browserFetch.mock.calls.map(([, init]) => init?.method ?? 'GET')).toEqual(['PUT', 'GET']);
+    });
+
     it('merges disconnected editors through HTTP without losing either edit', async () => {
         const remote = server();
         const a = new Y.Doc(); const b = new Y.Doc();

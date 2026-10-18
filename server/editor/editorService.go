@@ -107,7 +107,7 @@ func (d Doc) Update(conn pgx.Tx, ctx context.Context) (int64, int64, error) {
 		return 0, 0, err
 	}
 	var gen int64
-	err := conn.QueryRow(ctx, updateDocQuery, d.Title, d.Version, d.DocId, d.PageId, d.Draft).Scan(&gen)
+	err := conn.QueryRow(ctx, updateDocQuery, d.Title, d.Version, d.DocId, d.PageId, d.Draft, d.OwnerId).Scan(&gen)
 	if err != nil {
 		fmt.Printf("Error happened while updating doc %v \n", err.Error())
 		return 0, 0, err
@@ -558,7 +558,8 @@ func fetchViewSpaceSummary(conn pgx.Tx, ctx context.Context, spaceId uuid.UUID) 
 
 func fetchViewMeta(conn pgx.Tx, ctx context.Context, pageId int64) (ViewMeta, error) {
 	var meta ViewMeta
-	err := conn.QueryRow(ctx, getViewDocumentMeta, pageId).Scan(&meta.PublishedAt)
+	err := conn.QueryRow(ctx, getViewDocumentMeta, pageId).Scan(&meta.createdByID, &meta.updatedByID, &meta.CreatedAt, &meta.PublishedAt)
+	meta.UpdatedAt = meta.PublishedAt
 	if errors.Is(err, pgx.ErrNoRows) {
 		return meta, nil
 	}
@@ -709,6 +710,7 @@ func GetDocumentView(pageId int64, spaceId uuid.UUID, ownerId uuid.UUID) (Output
 		}
 	}
 	tx.Commit(ctx)
+	resolveViewAuthors(ctx, &output.Meta)
 	return output, nil
 }
 

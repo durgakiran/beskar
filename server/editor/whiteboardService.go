@@ -223,7 +223,7 @@ func PublishWhiteboard(ctx context.Context, d WhiteboardPublishInput) (Whiteboar
 		}, nil
 	}
 
-	if _, err := tx.Exec(ctx, publishCheckedWhiteboardDraft, d.Id, d.DraftId); err != nil {
+	if _, err := tx.Exec(ctx, publishCheckedWhiteboardDraft, d.Id, d.DraftId, d.OwnerId); err != nil {
 		return WhiteboardPublishResult{}, nil, err
 	}
 	if _, err := tx.Exec(ctx, updatePublishedWhiteboardPreview, d.DraftId, d.PreviewAssetName); err != nil {

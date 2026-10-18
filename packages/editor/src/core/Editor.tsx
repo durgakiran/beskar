@@ -88,6 +88,7 @@ function tryHandleUrlPaste(
       const node = view.state.schema.nodes.internalDocInline.create({
         resourceType: internalResource.resourceType,
         resourceId: internalResource.resourceId,
+        spaceId: internalResource.spaceId,
         resourceTitle: '',
         resourceIcon: '',
         href: internalResource.href,

@@ -142,6 +142,9 @@ type ViewCapabilities struct {
 }
 
 type ViewMeta struct {
+	createdByID   string
+	updatedByID   string
+	CreatedAt     *time.Time `json:"createdAt,omitempty"`
 	CreatedByName *string    `json:"createdByName,omitempty"`
 	UpdatedByName *string    `json:"updatedByName,omitempty"`
 	UpdatedAt     *time.Time `json:"updatedAt,omitempty"`

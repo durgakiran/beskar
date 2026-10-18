@@ -3,37 +3,41 @@ import type { InternalResourceType } from '../types';
 export function parseInternalResourceUrl(
   rawUrl: string,
   appBaseUrl: string,
-): { resourceId: string; href: string; resourceType: InternalResourceType } | null {
+): { resourceId: string; href: string; spaceId?: string; resourceType: InternalResourceType } | null {
   try {
     const text = rawUrl.trim();
     const base = new URL(appBaseUrl);
     const pasted = new URL(text, base);
-    if (pasted.origin !== base.origin) return null;
+    if (!['http:', 'https:'].includes(pasted.protocol) || pasted.origin !== base.origin) return null;
 
     const path = pasted.pathname;
-    const whiteboardMatch = path.match(/\/space\/[^/]+\/whiteboard\/([^/?#]+)/);
+    const spaceId = path.match(/^\/space\/([^/]+)\//)?.[1];
+    const whiteboardMatch = path.match(/^\/space\/[^/]+\/whiteboard\/([^/?#]+)\/?$/);
     if (whiteboardMatch) {
       return {
         resourceId: decodeURIComponent(whiteboardMatch[1]),
-        href: text,
+        href: pasted.href,
+        spaceId: spaceId ? decodeURIComponent(spaceId) : undefined,
         resourceType: 'whiteboard',
       };
     }
 
-    const routedMatch = path.match(/\/space\/[^/]+\/(view|edit|page|document|doc)\/([^/?#]+)/);
+    const routedMatch = path.match(/^\/space\/[^/]+\/(view|edit|page|document|doc)\/([^/?#]+)\/?$/);
     if (routedMatch) {
       return {
         resourceId: decodeURIComponent(routedMatch[2]),
-        href: text,
+        href: pasted.href,
+        spaceId: spaceId ? decodeURIComponent(spaceId) : undefined,
         resourceType: 'document',
       };
     }
 
-    const shortMatch = path.match(/\/(doc|docs|document|documents|page|pages)\/([^/?#]+)/);
+    const shortMatch = path.match(/^\/(doc|docs|document|documents|page|pages)\/([^/?#]+)\/?$/);
     if (shortMatch) {
       return {
         resourceId: decodeURIComponent(shortMatch[2]),
-        href: text,
+        href: pasted.href,
+        spaceId: spaceId ? decodeURIComponent(spaceId) : undefined,
         resourceType: 'document',
       };
     }

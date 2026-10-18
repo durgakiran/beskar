@@ -1,12 +1,25 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
+import { existsSync } from 'node:fs';
+
+// Docker's /packages/editor contains the PDF-only build. Its main editor and
+// styles come from node_modules (optionally overlaid by builder-local-packages).
+// Use workspace outputs together, so a partial build cannot split the package.
+const workspaceEditorDist = path.resolve(__dirname, '../packages/editor/dist');
+const hasWorkspaceEditor = ['index.mjs', 'styles.css', 'index.css']
+  .every(file => existsSync(path.join(workspaceEditorDist, file)));
 
 export default defineConfig(({ mode }) => ({
   plugins: [react()],
   resolve: {
     alias: {
       '@durgakiran/editor/pdf': path.resolve(__dirname, '../packages/editor/dist/pdf.mjs'),
+      ...(hasWorkspaceEditor ? {
+        '@durgakiran/editor/styles.css': path.join(workspaceEditorDist, 'styles.css'),
+        '@durgakiran/editor/index.css': path.join(workspaceEditorDist, 'index.css'),
+        '@durgakiran/editor': path.join(workspaceEditorDist, 'index.mjs'),
+      } : {}),
       '@http/hooks':        path.resolve(__dirname, 'app/core/http/hooks'),
       '@http':              path.resolve(__dirname, 'app/core/http'),
       '@editor':            path.resolve(__dirname, 'app/core/editor'),

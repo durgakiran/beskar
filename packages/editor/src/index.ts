@@ -71,6 +71,7 @@ export type {
   AttachmentRef,
   ChildPageResult,
   ChildPagesHandler,
+  InternalResourceContext,
   InternalResourceHandler,
   InternalResourceMetadata,
   InternalResourceResult,

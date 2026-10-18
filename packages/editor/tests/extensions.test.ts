@@ -504,3 +504,37 @@ test('mentions retain durable references without a handler and gate insertion by
   assert.equal(editor.commands.insertMention(user), false);
   editor.destroy();
 });
+
+// Internal references must retain target identity across both representations.
+import { parseInternalResourceUrl } from '../src/nodes/internalDocumentUrl';
+import { resourceContext, resourceHref } from '../src/components/internal-link/useInternalResource';
+
+test('internal URL parsing preserves space, query and fragment and rejects foreign/unsafe origins', () => {
+  const base = 'https://beskar.example';
+  assert.deepEqual(parseInternalResourceUrl('/space/other/view/42?mode=x#section', base), {
+    resourceId: '42', resourceType: 'document', spaceId: 'other', href: `${base}/space/other/view/42?mode=x#section`,
+  });
+  assert.equal(parseInternalResourceUrl('/space/other/whiteboard/7', base)?.resourceType, 'whiteboard');
+  for (const url of ['javascript:alert(1)', 'https://foreign.example/space/other/view/42', '/space/other/view/%']) {
+    assert.equal(parseInternalResourceUrl(url, base), null);
+  }
+});
+
+test('both internal schemas retain canonical context and legacy references remain valid', () => {
+  const schema = getSchema(getExtensions());
+  for (const name of ['internalDocInline', 'internalLinkBlock']) {
+    const attrs = { resourceId: '42', resourceType: 'document', spaceId: 'other', href: 'https://beskar.example/space/other/view/42#anchor' };
+    const node = schema.nodes[name].create(attrs);
+    assert.equal(schema.nodeFromJSON(node.toJSON()).attrs.href, attrs.href);
+    assert.equal(schema.nodeFromJSON(node.toJSON()).attrs.spaceId, 'other');
+    schema.nodes[name].create({ resourceId: '42' }).check();
+  }
+});
+
+test('legacy hrefs supply target space while persisted unsafe URLs cannot become navigation links', () => {
+  const handler = { appBaseUrl: 'https://beskar.example', getResourceUrl: (id: string) => `https://beskar.example/docs/${id}` } as any;
+  const ref = { resourceId: '42', resourceType: 'document' as const, href: 'https://beskar.example/space/other/view/42#anchor' };
+  assert.equal(resourceContext(ref, handler).spaceId, 'other');
+  assert.equal(resourceHref(ref, handler), ref.href);
+  assert.equal(resourceHref({ ...ref, href: 'javascript:alert(1)' }, handler), 'https://beskar.example/docs/42');
+});

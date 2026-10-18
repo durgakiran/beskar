@@ -18,6 +18,7 @@ interface IPageList {
 
 interface SpaceState {
     id: string;
+    name: string;
     archivedAt?: string | null;
 }
 
@@ -211,7 +212,7 @@ export default function Layout() {
                             )}
                         >
                             <FiHome className="h-3.5 w-3.5" />
-                            <span className="text-sm">Overview</span>
+                            <span className="text-sm">{spaceDetails?.data?.name || "Space"}</span>
                         </Link>
                         <Link
                             to={`/space/${spaceId}/settings/users`}

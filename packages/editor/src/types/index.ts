@@ -102,7 +102,12 @@ export interface AttachmentRef {
 
 export type InternalResourceType = 'document' | 'whiteboard';
 
-export interface InternalResourceResult {
+export interface InternalResourceContext {
+  spaceId?: string;
+  href?: string;
+}
+
+export interface InternalResourceResult extends InternalResourceContext {
   resourceId: string;
   resourceType: InternalResourceType;
   title: string;
@@ -119,6 +124,8 @@ export interface InternalResourceMetadata extends InternalResourceResult {
 
 export interface InternalResourceHandler {
   appBaseUrl: string;
+  /** Optional canonical destination for legacy references and search results. */
+  getResourceUrl?: (resourceId: string, resourceType: InternalResourceType, context?: InternalResourceContext) => string;
   searchResources: (
     query: string,
     resourceType: InternalResourceType,
@@ -126,10 +133,12 @@ export interface InternalResourceHandler {
   getResourceMetadata: (
     resourceId: string,
     resourceType: InternalResourceType,
+    context?: InternalResourceContext,
   ) => Promise<InternalResourceMetadata | null>;
   navigateToResource: (
     resourceId: string,
     resourceType: InternalResourceType,
+    context?: InternalResourceContext,
   ) => void;
 }
 
