@@ -1,5 +1,7 @@
 # Document collaboration: leader election, draft sync, and UI awareness
 
+> Historical leader-based design. The current implementation uses independent participant persistence; see [Document collaboration](../../docs/api/document-collaboration.md).
+
 This document captures the **issues** observed when multiple users edit the same document over **Yjs + y-webrtc**, the **root causes** in the Beskar stack (`ui`, `signalserver`, editor APIs), and **recommended fixes** that do **not** require moving document sync onto a dedicated WebSocket document channel (see [§8. Constraints and non-goals](#8-constraints-and-non-goals)). It also specifies **server → client control events** via **SSE (Server-Sent Events)** with **portable fallbacks** for proxies and for **mobile / desktop** shells, plus **client → server heartbeats** for presence and stale-leader detection—without using SSE for Yjs bytes.
 
 **Primary code touchpoints**

@@ -150,7 +150,7 @@ export default function Page() {
                         )}
                     >
                         <FiHome className="h-3 w-3" />
-                        <span className="text-[12px] font-semibold">Overview</span>
+                        <span className="text-[12px] font-semibold">{localName || space?.name || "Space"}</span>
                     </Link>
                     <Link
                         to={`/space/${spaceId}/settings/users`}

@@ -3,7 +3,6 @@ import { getAttachmentPasteStorage } from '../attachment-paste-drop';
 import { insertAttachmentsAt } from '../attachment-upload';
 import { getImagePasteStorage, insertImageAt } from '../image-paste-drop';
 import { getTodayDateValue } from '../../nodes/dateInlineUtils';
-import { getBrowserAppBaseUrl } from '../../nodes/internalDocumentUrl';
 
 export interface Command {
   name: string;
@@ -66,7 +65,7 @@ function getInternalDocResourceHandler(editor: Editor): { appBaseUrl?: string } 
 }
 
 function canResolveInternalDocLinks(editor: Editor): boolean {
-  return Boolean(getInternalDocResourceHandler(editor)?.appBaseUrl ?? getBrowserAppBaseUrl());
+  return Boolean(getInternalDocResourceHandler(editor)?.appBaseUrl);
 }
 
 export const GROUPS: Group[] = [
@@ -367,11 +366,21 @@ export const GROUPS: Group[] = [
     title: 'Inline',
     commands: [
       {
+        name: 'internalLinkBlock',
+        requiredNodes: ['internalLinkBlock'],
+        label: 'Internal Link Card',
+        icon: '📄',
+        description: 'Search for a document or whiteboard to display as a card',
+        aliases: ['document-card', 'whiteboard-card', 'internal-card'],
+        shouldBeHidden: (editor) => !editor.isEditable || !(editor.storage as any).internalLinkBlock?.resourceHandler,
+        action: (editor) => { editor.chain().focus().setInternalLinkBlock().run(); },
+      },
+      {
         name: 'internalDocInline',
         requiredNodes: ['internalDocInline'],
         label: 'Internal Link',
         icon: '📄',
-        description: 'Insert an inline link to another document or whiteboard',
+        description: 'Search for a document or whiteboard, or paste its URL',
         aliases: ['doc', 'document', 'page', 'whiteboard', 'internal', 'internal-link'],
         shouldBeHidden: (editor) =>
           !editor.isEditable || !canResolveInternalDocLinks(editor),

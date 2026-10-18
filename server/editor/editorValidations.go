@@ -18,6 +18,14 @@ func ValidateNewDraftDoc(data []byte) (InputDraftDocument, error) {
 		return InputDraftDocument{}, err
 	}
 
+	if inputDoc.ExpectedRevision == nil || inputDoc.ExpectedRevision.DocID <= 0 || inputDoc.ExpectedRevision.Generation < 0 {
+		return InputDraftDocument{}, errors.New("invalid document: expected revision required")
+	}
+
+	if validateYjsUpdateV1(inputDoc.Data) != nil {
+		return InputDraftDocument{}, errors.New("invalid document: invalid Yjs state")
+	}
+
 	if inputDoc.Title == "" {
 		return InputDraftDocument{}, errors.New("invalid document: No title present")
 	}

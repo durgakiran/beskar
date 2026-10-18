@@ -1,0 +1,100 @@
+async (page) => {
+  const assert = (ok, message) => { if (!ok) throw new Error(message); };
+  await page.goto('http://127.0.0.1:5188/tests/internal-links.html');
+  const tabs = page.context().pages().length;
+  const edit = page.locator('[data-fixture="edit"]');
+  const view = page.locator('[data-fixture="view"]');
+  await edit.getByRole('button', { name: 'Retry', exact: true }).first().waitFor();
+  const saved = await page.evaluate(() => JSON.stringify(window.internalFixture.editors.view.getJSON()));
+  assert(await page.locator('[data-fixture="empty"] button').count() === 0, 'empty readonly reference exposes no mutation controls');
+  const calls = await page.evaluate(() => window.internalFixture.state.calls);
+  await page.evaluate(() => window.internalFixture.state.failure = false);
+  await edit.getByRole('button', { name: 'Retry', exact: true }).first().click();
+  await edit.getByRole('link', { name: /Current title/ }).first().waitFor();
+  assert(await page.evaluate(() => window.internalFixture.state.calls) > calls, 'Retry issues a new metadata request');
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await view.getByRole('link', { name: /Current title/ }).first().waitFor();
+  assert(await page.evaluate(() => JSON.stringify(window.internalFixture.editors.view.getJSON())) === saved, 'metadata loading never changes readonly document JSON');
+  const chip = edit.locator('.internal-doc-inline-chip');
+  await chip.click();
+  await page.getByRole('toolbar', { name: 'Internal link actions' }).waitFor();
+  assert(await page.evaluate(() => window.internalFixture.state.navigations.length) === 0, 'editing click selects without navigating');
+  await page.getByRole('link', { name: 'Open', exact: true }).click();
+  const navigation = await page.evaluate(() => window.internalFixture.state.navigations[0]);
+  assert(navigation[2].spaceId === 'other' && navigation[2].href.endsWith('?mode=x#section'), 'Open preserves original space and deep link');
+  await page.getByRole('button', { name: 'Change target', exact: true }).click();
+  const input = page.getByRole('combobox', { name: 'Search documents and whiteboards or paste an internal URL' });
+  await page.evaluate(() => window.internalFixture.state.searchFailure = true);
+  await input.fill('replacement');
+  await page.getByRole('button', { name: 'Retry search' }).waitFor();
+  await page.evaluate(() => window.internalFixture.state.searchFailure = false);
+  await page.getByRole('button', { name: 'Retry search' }).click();
+  await page.getByRole('listbox').getByRole('option').first().waitFor();
+  assert(await page.getByRole('listbox').getByRole('option').count() === 18, 'all results beyond the old six-item limit are reachable');
+  await input.press('Escape');
+  assert(await page.evaluate(() => window.internalFixture.editors.edit.getJSON().content[0].content[1].attrs.resourceId) === '42', 'cancel keeps old target');
+  await page.getByRole('button', { name: 'Change target', exact: true }).click();
+  await input.fill('slow');
+  await page.waitForTimeout(220);
+  await input.fill('new');
+  await page.getByRole('listbox').getByRole('option', { name: /new document 1/ }).waitFor();
+  await page.waitForTimeout(850);
+  assert(await page.getByRole('listbox').getByRole('option', { name: /slow/ }).count() === 0, 'late search response cannot replace newer results');
+  await input.press('ArrowDown'); await input.press('Enter');
+  await page.getByRole('dialog', { name: 'Choose internal link' }).waitFor({ state: 'detached' });
+  assert(await page.evaluate(() => window.internalFixture.editors.edit.getJSON().content[0].content[1].attrs.resourceId) === '2', 'keyboard selection commits selected result');
+  await chip.click();
+  await page.getByRole('button', { name: 'Display as card' }).click();
+  await page.evaluate(() => {
+    const ed = window.internalFixture.editors.edit;
+    const blocks = [];
+    ed.state.doc.descendants((node, pos) => { if (node.type.name === 'internalLinkBlock') blocks.push({ node, pos }); });
+    const converted = blocks.find(({node}) => node.attrs.resourceId === '2');
+    if (!converted || converted.node.attrs.spaceId !== 'home' || !converted.node.attrs.href.endsWith('/view/2')) throw new Error('conversion lost canonical context');
+    ed.commands.setNodeSelection(converted.pos);
+  });
+  await page.getByRole('button', { name: 'Display as inline' }).click();
+  assert(await page.evaluate(() => {
+    let found = false; window.internalFixture.editors.edit.state.doc.descendants(node => { if (node.type.name === 'internalDocInline' && node.attrs.resourceId === '2') found = node.attrs.spaceId === 'home' && node.attrs.href.endsWith('/view/2'); }); return found;
+  }), 'round-trip conversion preserves canonical target');
+  await page.evaluate(() => { window.internalFixture.state.failure = true; window.internalFixture.state.status = 404; window.dispatchEvent(new Event('focus')); });
+  await view.getByText('Unavailable or you don’t have access', { exact: false }).first().waitFor();
+  assert(await view.getByText('Old cached title', { exact: true }).count() === 0, 'access failure hides cached titles');
+  assert(await view.getByRole('button', { name: 'Change target' }).count() === 0, 'reader has no target mutation controls');
+  await page.evaluate(() => {
+    const ed = window.internalFixture.editors.empty;
+    if (ed.commands.setInternalLinkBlock({ resourceId: 'bad' })) throw new Error('readonly command accepted mutation');
+  });
+  await page.evaluate(() => { window.internalFixture.state.failure = false; window.dispatchEvent(new Event('focus')); });
+  await edit.locator('.internal-link-card a').first().waitFor();
+  await edit.locator('.internal-link-card a').first().click();
+  await page.getByRole('button', { name: 'Change target', exact: true }).click();
+  await input.fill('http://127.0.0.1:5188/space/remote/whiteboard/8?preview=1#shape');
+  await page.getByRole('listbox').getByRole('option').first().waitFor();
+  await input.press('Enter');
+  assert(await page.evaluate(() => {
+    let found = false; window.internalFixture.editors.edit.state.doc.descendants(node => {
+      if (node.type.name === 'internalLinkBlock' && node.attrs.resourceId === '8') found = node.attrs.spaceId === 'remote' && node.attrs.href.endsWith('?preview=1#shape');
+    }); return found;
+  }), 'block Change target accepts URL and retains space and fragment');
+  await page.evaluate(() => {
+    const ed = window.internalFixture.editors.edit;
+    ed.commands.setTextSelection(ed.state.doc.content.size - 1);
+    ed.commands.setInternalLinkBlock();
+  });
+  await input.fill('inserted');
+  await page.getByRole('listbox').getByRole('option').first().waitFor();
+  await input.press('Enter');
+  assert(await page.evaluate(() => {
+    let found = false; window.internalFixture.editors.edit.state.doc.descendants(node => { if (node.type.name === 'internalLinkBlock' && node.attrs.resourceId === '1') found = true; }); return found;
+  }), 'new block uses the shared searchable picker');
+  assert(await page.evaluate(() => window.internalFixture.editors.edit.state.selection.$from.parent.isTextblock), 'card insertion restores a text caret');
+  await view.getByRole('link', { name: /Current title/ }).first().click();
+  assert(await page.evaluate(() => window.internalFixture.state.navigations.length) === 2, 'reader activation navigates once');
+  assert(page.context().pages().length === tabs, 'ordinary selection and Open must not trigger duplicate browser navigation');
+  await edit.locator('.internal-doc-inline-chip').first().click();
+  await page.getByRole('button', { name: 'Change target', exact: true }).click();
+  await page.evaluate(() => window.internalFixture.editors.edit.setEditable(false));
+  await page.getByRole('dialog', { name: 'Choose internal link' }).waitFor({ state: 'detached' });
+  return 'PASS: retry, readonly, metadata refresh, selection/open, target cancel/change, full keyboard search, search races, conversion identity, 404 recovery';
+}

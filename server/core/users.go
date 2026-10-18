@@ -175,6 +175,10 @@ type ZitaUser struct {
 }
 
 func SearchUsersByIds(userIds []string) (UserSearchResponse, error) {
+	return SearchUsersByIdsContext(context.Background(), userIds)
+}
+
+func SearchUsersByIdsContext(ctx context.Context, userIds []string) (UserSearchResponse, error) {
 	if len(userIds) == 0 {
 		return UserSearchResponse{Result: []User{}}, nil
 	}
@@ -196,7 +200,7 @@ func SearchUsersByIds(userIds []string) (UserSearchResponse, error) {
 		SortingColumn: "USER_FIELD_NAME_UNSPECIFIED",
 		Queries:       filters,
 	}
-	return runUserSearch(providerURL, query)
+	return runUserSearchContext(ctx, providerURL, query)
 }
 
 func SearchUserByEmail(search string, limit uint32, offset uint64) (UserSearchResponse, error) {

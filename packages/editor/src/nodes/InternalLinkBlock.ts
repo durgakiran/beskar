@@ -10,6 +10,8 @@ import type { InternalResourceHandler, InternalResourceType } from '../types';
 
 export interface InternalLinkBlockAttributes {
   resourceType: InternalResourceType;
+  spaceId?: string;
+  href?: string;
   resourceId: string;
   resourceTitle: string;
   resourceIcon: string;
@@ -21,6 +23,8 @@ export interface InternalLinkBlockOptions {
 
 const DEFAULT_ATTRS: InternalLinkBlockAttributes = {
   resourceType: 'document',
+  spaceId: '',
+  href: '',
   resourceId: '',
   resourceTitle: '',
   resourceIcon: '',
@@ -51,6 +55,8 @@ export const InternalLinkBlock = Node.create<InternalLinkBlockOptions>({
 
   addAttributes() {
     return {
+      spaceId: { default: '', parseHTML: (element) => element.getAttribute('data-space-id') || '', renderHTML: (attributes) => ({ 'data-space-id': attributes.spaceId }) },
+      href: { default: '', parseHTML: (element) => element.getAttribute('data-href') || '', renderHTML: (attributes) => ({ 'data-href': attributes.href }) },
       resourceType: {
         default: DEFAULT_ATTRS.resourceType,
         parseHTML: (element) => (element.getAttribute('data-resource-type') === 'whiteboard' ? 'whiteboard' : 'document'),
@@ -97,14 +103,21 @@ export const InternalLinkBlock = Node.create<InternalLinkBlockOptions>({
   },
 
   addNodeView() {
-    return ReactNodeViewRenderer(InternalLinkBlockView);
+    return ReactNodeViewRenderer(InternalLinkBlockView, {
+      // Keep the generic hyperlink plugin from also opening internal node links.
+      stopEvent: ({ event }) => event.type === 'click' || (event.target instanceof Element && (
+        Boolean(event.target.closest('button, input, select')) ||
+        (event.type === 'mousedown' && Boolean(event.target.closest('a')))
+      )),
+    });
   },
 
   addCommands() {
     return {
       setInternalLinkBlock:
         (attributes?: Partial<InternalLinkBlockAttributes>) =>
-        ({ commands }) => {
+        ({ commands, editor }) => {
+          if (!editor.isEditable) return false;
           return commands.insertContent({
             type: this.name,
             attrs: {

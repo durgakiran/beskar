@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import { Box, Flex, IconButton, Text } from "@radix-ui/themes";
 import { FiCheck, FiDownload, FiEdit3, FiFileText, FiMessageSquare, FiMoreHorizontal, FiMoreVertical, FiShare2, FiTrash2 } from "react-icons/fi";
 import { copyTextToClipboard } from "../lib/clipboard";
+import ReadOnlyPageInfo from "./ReadOnlyPageInfo";
 
 export interface ReadOnlyBreadcrumb {
     id: number;
@@ -19,6 +20,7 @@ export interface ReadOnlyCapabilities {
 }
 
 export interface ReadOnlyMeta {
+    createdAt?: string | null;
     createdByName?: string | null;
     updatedByName?: string | null;
     updatedAt?: string | null;
@@ -43,13 +45,6 @@ interface ReadOnlyContentMainProps {
     attachments?: ReactNode;
     onExportPdf?: () => void;
     exportDisabled?: boolean;
-}
-
-function formatUpdatedAt(timestamp?: string | null): string | null {
-    if (!timestamp) return null;
-    const date = new Date(timestamp);
-    if (Number.isNaN(date.getTime())) return null;
-    return date.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 }
 
 function KebabMenu({
@@ -288,15 +283,6 @@ export default function ReadOnlyContentMain({
         return [{ id: Number(pageId), title: title || `Page #${pageId}`, href: null }];
     }, [breadcrumbs, pageId, title]);
 
-    const metaLine = useMemo(() => {
-        const parts = [
-            meta.createdByName ? `Created by ${meta.createdByName}` : null,
-            meta.updatedByName ? `Updated by ${meta.updatedByName}` : null,
-            formatUpdatedAt(meta.updatedAt ?? meta.publishedAt),
-        ].filter(Boolean);
-        return parts.join(" · ");
-    }, [meta.createdByName, meta.publishedAt, meta.updatedAt, meta.updatedByName]);
-
     const copyPageLink = async () => {
         const pageUrl = `${window.location.origin}/space/${spaceId}/view/${pageId}`;
 
@@ -398,11 +384,7 @@ export default function ReadOnlyContentMain({
                                             </span>
                                         ) : null}
                                     </Flex>
-                                    {metaLine ? (
-                                        <Text size="2" className="text-[#898492]">
-                                            {metaLine}
-                                        </Text>
-                                    ) : null}
+                                    <ReadOnlyPageInfo key={`${spaceId}:${pageId}`} meta={meta} />
                                 </Flex>
                             </Box>
                         </Flex>

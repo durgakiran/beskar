@@ -34,8 +34,8 @@ export default function PdfExportButton({ editor, title, spaceId, disabled, publ
             const result = await createDocumentPdf(snapshot, {
                 title: exportTitle, pageSize, orientation, baseUrl: window.location.href,
                 resolveImage: resolvePdfImage,
-                resolveDocumentLink: attrs => attrs.resourceId
-                    ? `${window.location.origin}/space/${encodeURIComponent(spaceId)}/view/${encodeURIComponent(String(attrs.resourceId))}` : undefined,
+                resolveDocumentLink: attrs => typeof attrs.href === 'string' && attrs.href ? attrs.href : attrs.resourceId
+                    ? `${window.location.origin}/space/${encodeURIComponent(String(attrs.spaceId || spaceId))}/view/${encodeURIComponent(String(attrs.resourceId))}` : undefined,
             });
             const saved = await downloadPdf(result.blob, result.fileName);
             setWarnings(result.warnings); setComplete(saved);

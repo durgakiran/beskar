@@ -4298,3 +4298,18 @@ td.selectedCell {
   font: inherit;
   cursor: pointer;
 }
+
+/* Internal references share a searchable, keyboard-accessible picker. */
+.internal-link-picker { width: min(420px, calc(100vw - 32px)); display: grid; gap: 10px; }
+.internal-link-picker input, .internal-link-picker select { width: 100%; box-sizing: border-box; padding: 8px; }
+.internal-link-results { max-height: 280px; overflow-y: auto; }
+.internal-link-result[aria-selected="true"] { background: var(--accent-3); outline: 1px solid var(--accent-7); }
+.internal-link-preview-button { display: block; border: 0; padding: 0; background: transparent; width: 100%; cursor: pointer; }
+.internal-link-error { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.internal-doc-inline-chip { text-decoration: none; }
+
+.internal-link-toolbar { box-sizing: border-box; max-width: calc(100vw - 16px); flex-wrap: wrap; font-family: var(--editor-font-family, inherit); }
+.internal-link-toolbar a.editor-floating-toolbar-button { text-decoration: none; }
+.internal-link-toolbar .editor-floating-toolbar-button svg, .internal-link-toolbar .editor-floating-toolbar-separator { flex-shrink: 0; }
+.internal-link-toolbar .editor-floating-toolbar-button:disabled { opacity: 0.45; cursor: not-allowed; }
+.internal-link-toolbar .editor-floating-toolbar-button:focus-visible { outline: 2px solid var(--editor-accent, #0ea5e9); outline-offset: -2px; }

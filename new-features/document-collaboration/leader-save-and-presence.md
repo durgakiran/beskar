@@ -1,5 +1,7 @@
 # Signaling leader, draft saves, and presence
 
+> Historical leader-based design. The current implementation uses independent participant persistence; see [Document collaboration](../../docs/api/document-collaboration.md).
+
 This document is the authoritative reference for **how Beskar decides who persists drafts**, how leader identity propagates from signaling → UI → presence, and every scenario where leadership can change, stall, or silently misbehave.
 
 It complements [implementation-plan.md](./implementation-plan.md) and [design-leader-election-draft-sync.md](./design-leader-election-draft-sync.md).
