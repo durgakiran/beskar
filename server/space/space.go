@@ -1,6 +1,7 @@
 package space
 
 import (
+	"errors"
 	"io"
 	"net/http"
 	"strconv"
@@ -88,6 +89,106 @@ func getPageList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	core.SendSuccessResponse(w, r, http.StatusOK, data)
+}
+
+func movePageController(w http.ResponseWriter, r *http.Request) {
+	_, actor, ok := currentUser(r)
+	if !ok {
+		core.SendFailedReponse(w, r, http.StatusForbidden, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNAUTHORIZED])
+		return
+	}
+	spaceID, err := uuid.Parse(chi.URLParam(r, "spaceId"))
+	pageID, idErr := strconv.ParseInt(chi.URLParam(r, "pageId"), 10, 64)
+	if err != nil || idErr != nil || pageID <= 0 || pageID > 9007199254740991 {
+		core.SendFailedReponse(w, r, http.StatusBadRequest, "Invalid page or space")
+		return
+	}
+	data, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 1024))
+	defer r.Body.Close()
+	if err != nil {
+		core.SendFailedReponse(w, r, http.StatusBadRequest, "Invalid move request")
+		return
+	}
+	req, err := validateMovePageRequest(data)
+	if err != nil {
+		core.SendFailedReponse(w, r, http.StatusBadRequest, "Provide parentId (positive or null) and, optionally, targetPageId with placement before or after")
+		return
+	}
+	parent := req.ParentId
+	if (parent != nil && *parent == pageID) || (req.TargetPageId != nil && *req.TargetPageId == pageID) {
+		core.SendFailedReponse(w, r, http.StatusBadRequest, "A page cannot contain itself")
+		return
+	}
+	if !core.ValidateUserSpacePermissions(spaceID, actor, core.SPACE_VIEW) ||
+		!core.ValidateUserPagePermission(strconv.FormatInt(pageID, 10), actor, core.PAGE_EDIT) ||
+		(parent != nil && !core.ValidateUserPagePermission(strconv.FormatInt(*parent, 10), actor, core.PAGE_EDIT)) ||
+		(parent == nil && !core.ValidateUserSpacePermissions(spaceID, actor, core.SPACE_EDIT_PAGE)) ||
+		(req.TargetPageId != nil && !core.ValidateUserPagePermission(strconv.FormatInt(*req.TargetPageId, 10), actor, core.PAGE_EDIT)) {
+		core.SendFailedReponse(w, r, http.StatusForbidden, "You do not have permission to move this page to that location")
+		return
+	}
+	err = movePage(r.Context(), spaceID, pageID, req)
+	if err != nil {
+		status := http.StatusInternalServerError
+		switch {
+		case errors.Is(err, errMovePageNotFound), errors.Is(err, errMoveSpaceNotFound):
+			status = http.StatusNotFound
+		case errors.Is(err, errMoveSpaceReadOnly):
+			status = http.StatusForbidden
+		case errors.Is(err, errPageChangeConflict), errors.Is(err, errPageRankExhausted), errors.Is(err, errPageOrderSiblings):
+			status = http.StatusConflict
+		case errors.Is(err, errMovePageDestination), errors.Is(err, errMovePageCycle):
+			status = http.StatusBadRequest
+		}
+		core.SendFailedReponse(w, r, status, err.Error())
+		return
+	}
+	core.SendSuccessResponse(w, r, http.StatusOK, MovePageResponse{PageId: pageID, ParentId: parent})
+}
+
+func reorderPageController(w http.ResponseWriter, r *http.Request) {
+	_, actor, ok := currentUser(r)
+	if !ok {
+		core.SendFailedReponse(w, r, http.StatusForbidden, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNAUTHORIZED])
+		return
+	}
+	spaceID, err := uuid.Parse(chi.URLParam(r, "spaceId"))
+	pageID, idErr := strconv.ParseInt(chi.URLParam(r, "pageId"), 10, 64)
+	if err != nil || idErr != nil || pageID <= 0 || pageID > 9007199254740991 {
+		core.SendFailedReponse(w, r, http.StatusBadRequest, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_INVALID_INPUT])
+		return
+	}
+	data, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 1024))
+	defer r.Body.Close()
+	if err != nil {
+		core.SendFailedReponse(w, r, http.StatusBadRequest, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_INVALID_INPUT])
+		return
+	}
+	req, err := validateReorderPageRequest(data)
+	if err != nil || req.TargetPageId == pageID {
+		core.SendFailedReponse(w, r, http.StatusBadRequest, "Choose a different sibling and a placement of before or after")
+		return
+	}
+	if !core.ValidateUserSpacePermissions(spaceID, actor, core.SPACE_EDIT_PAGE) ||
+		!core.ValidateUserPagePermission(strconv.FormatInt(pageID, 10), actor, core.PAGE_EDIT) ||
+		!core.ValidateUserPagePermission(strconv.FormatInt(req.TargetPageId, 10), actor, core.PAGE_EDIT) {
+		core.SendFailedReponse(w, r, http.StatusForbidden, core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNAUTHORIZED])
+		return
+	}
+	if err := reorderPage(r.Context(), spaceID, pageID, req); err != nil {
+		status := http.StatusInternalServerError
+		switch {
+		case errors.Is(err, errMoveSpaceNotFound), errors.Is(err, errMovePageNotFound):
+			status = http.StatusNotFound
+		case errors.Is(err, errMoveSpaceReadOnly):
+			status = http.StatusForbidden
+		case errors.Is(err, errPageOrderSiblings), errors.Is(err, errPageChangeConflict), errors.Is(err, errPageRankExhausted):
+			status = http.StatusConflict
+		}
+		core.SendFailedReponse(w, r, status, err.Error())
+		return
+	}
+	core.SendSuccessResponse(w, r, http.StatusOK, map[string]bool{"reordered": true})
 }
 
 func getPageDescendantsController(w http.ResponseWriter, r *http.Request) {
@@ -390,6 +491,8 @@ func Router() *chi.Mux {
 	r.Get("/list", getSpaces)
 	r.Post("/create", createSpace)
 	r.Get("/{spaceId}/page/list", getPageList)
+	r.Put("/{spaceId}/page/{pageId}/parent", movePageController)
+	r.Put("/{spaceId}/page/{pageId}/order", reorderPageController)
 	r.Get("/{spaceId}/page/{pageId}/descendants", getPageDescendantsController)
 	r.Get("/{spaceId}/users", listUsers)
 	registerMentionRoutes(r)

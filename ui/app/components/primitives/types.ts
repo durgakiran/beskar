@@ -1,5 +1,5 @@
 import { icons } from "lucide-react";
-import { ReactNode } from "react";
+import { ButtonHTMLAttributes, ReactNode } from "react";
 
 export type PrimitiveIconName = keyof typeof icons;
 
@@ -50,6 +50,7 @@ export type SidebarPageItemProps = {
     onToggle?: (id: string) => void;
     onAddChild?: (id: string) => void;
     onSelect?: (id: string) => void;
+    reorderHandle?: ButtonHTMLAttributes<HTMLButtonElement>;
     className?: string;
 };
 
@@ -59,7 +60,10 @@ export type PageTreeNode = {
     href?: string;
     type?: "document" | "whiteboard";
     children?: PageTreeNode[];
+    canEdit?: boolean;
 };
+
+export type PageDropPlacement = "before" | "after" | "inside";
 
 export type PageTreeProps = {
     nodes: PageTreeNode[];
@@ -68,6 +72,9 @@ export type PageTreeProps = {
     onToggle?: (id: string) => void;
     onAddChild?: (id: string) => void;
     onSelect?: (id: string) => void;
+    onReorder?: (id: string, targetId: string, placement: "before" | "after") => void;
+    onDropPage?: (id: string, targetId: string, placement: PageDropPlacement) => void;
+    reorderPending?: boolean;
     className?: string;
 };
 

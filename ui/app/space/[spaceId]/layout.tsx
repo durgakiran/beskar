@@ -3,9 +3,10 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import { useLocation, useNavigate, useParams, Link, Outlet } from "react-router-dom";
 import { FiHome, FiSettings, FiPlus, FiMenu } from "react-icons/fi";
 import { cn } from "@/lib/utils";
-import { PageTree, PageTreeNode } from "@components/primitives";
+import { PageTree, PageTreeNode, PageDropPlacement } from "@components/primitives";
 import AddPage from "@components/addPage";
 import { Response, useGet } from "@http/hooks";
+import { reorderPage, movePage } from "app/core/http/pageApiHandler";
 import { SpaceAddPageProvider } from "./SpaceAddPageContext";
 
 interface IPageList {
@@ -14,6 +15,7 @@ interface IPageList {
     title: string;
     parentId: number;
     type: "document" | "whiteboard";
+    canEdit?: boolean;
 }
 
 interface SpaceState {
@@ -34,6 +36,10 @@ export default function Layout() {
     // Pages State
     const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
     const [pages, setPages] = useState<PageTreeNode[]>([]);
+    const [orderPending, setOrderPending] = useState(false);
+    const [orderError, setOrderError] = useState("");
+    const [pageChangeMessage, setPageChangeMessage] = useState("");
+    const savingOrder = useRef(false);
     const [isAddPageOpen, setIsAddPageOpen] = useState(false);
     const [addPageParentId, setAddPageParentId] = useState<number | undefined>();
     const [expandedIds, setExpandedIds] = useState<string[]>([]);
@@ -58,6 +64,7 @@ export default function Layout() {
                 title: p.title || "Untitled",
                 href: `/space/${spaceId}/view/${p.pageId}`,
                 type: p.type || "document",
+                canEdit: p.canEdit,
                 children: []
             }));
 
@@ -154,6 +161,37 @@ export default function Layout() {
         setIsAddPageOpen(true);
     }, [spaceDetails?.data?.archivedAt]);
 
+    const handleDropPage = async (id: string, targetId: string, placement: PageDropPlacement) => {
+        if (savingOrder.current || pagesLoading || !spaceDetails?.data || spaceDetails.data.archivedAt) return;
+        const source = data?.data?.find(page => String(page.pageId) === id);
+        const target = data?.data?.find(page => String(page.pageId) === targetId);
+        if (!source?.canEdit || !target?.canEdit || id === targetId) return;
+        const destination = placement === "inside" ? target.pageId : Math.max(target.parentId || 0, 0);
+        const sameParent = Math.max(source.parentId || 0, 0) === destination;
+        savingOrder.current = true;
+        setOrderPending(true);
+        setOrderError("");
+        setPageChangeMessage("");
+        try {
+            if (placement !== "inside" && sameParent) {
+                await reorderPage(spaceId, id, targetId, placement);
+            } else {
+                await movePage(spaceId, id, destination > 0 ? String(destination) : null,
+                    placement === "inside" ? undefined : { targetPageId: targetId, placement });
+            }
+            if (destination > 0) setExpandedIds(ids => [...new Set([...ids, String(destination)])]);
+            setPageChangeMessage(`Page moved ${placement === "inside" ? "under" : placement} ${target.title || "Untitled"}`);
+            fetchPages();
+            window.dispatchEvent(new CustomEvent(placement !== "inside" && sameParent ? "pages-reordered" : "pages-moved", { detail: { spaceId } }));
+        } catch (error) {
+            setOrderError(error instanceof Error ? error.message : "Unable to save page changes");
+            fetchPages();
+        } finally {
+            savingOrder.current = false;
+            setOrderPending(false);
+        }
+    };
+
     const handlePageSelect = (id: string) => {
         const node = data?.data.find(p => p.pageId.toString() === id);
         if (node) {
@@ -242,9 +280,14 @@ export default function Layout() {
                         </button>
                     </div>
 
+                    <p role="status" aria-live="polite" className="sr-only">
+                        {orderPending ? "Saving page changes" : pageChangeMessage}
+                    </p>
+                    {orderError && <p role="alert" className="px-3 py-2 text-xs text-red-700">{orderError}</p>}
+
                     {/* Page Tree */}
                     <div className="flex-1 min-h-0 overflow-y-auto">
-                        {pagesLoading ? (
+                        {pagesLoading && pages.length === 0 ? (
                             <div className="flex items-center justify-center py-4">
                                 <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary-600 border-t-transparent" />
                             </div>
@@ -256,6 +299,9 @@ export default function Layout() {
                                 onToggle={handleToggleNode}
                                 onAddChild={handleAddPage}
                                 onSelect={handlePageSelect}
+                                onReorder={spaceDetails?.data && !spaceDetails.data.archivedAt ? handleDropPage : undefined}
+                                onDropPage={spaceDetails?.data && !spaceDetails.data.archivedAt ? handleDropPage : undefined}
+                                reorderPending={orderPending || pagesLoading}
                                 className="w-full"
                             />
                         ) : (

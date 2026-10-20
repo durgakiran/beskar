@@ -61,6 +61,18 @@ export default function Page() {
         fetchPages();
     }, [fetchDetails, fetchPages]);
 
+    useEffect(() => {
+        const refresh = (event: Event) => {
+            if ((event as CustomEvent).detail?.spaceId === spaceId) fetchPages();
+        };
+        window.addEventListener("pages-moved", refresh);
+        window.addEventListener("pages-reordered", refresh);
+        return () => {
+            window.removeEventListener("pages-moved", refresh);
+            window.removeEventListener("pages-reordered", refresh);
+        };
+    }, [fetchPages, spaceId]);
+
     // Sync local state when initial data arrives
     useEffect(() => {
         if (data?.data) {

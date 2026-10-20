@@ -30,7 +30,7 @@
     },
     {
       "name": "Page navigation",
-      "description": "Shared discovery APIs for legacy pages and v2 whiteboards."
+      "description": "Shared discovery, parent moves and sibling ordering for legacy pages and v2 whiteboards."
     },
     {
       "name": "Notifications v2",
@@ -2709,7 +2709,7 @@
         ],
         "operationId": "listSpacePages",
         "summary": "List accessible pages and whiteboards",
-        "description": "Requires page view permission. Unpublished v2 boards are visible only to editors. Editors see current draft titles; other viewers see published titles. Deleted spaces are excluded. Archived spaces remain readable under existing page permissions. These shared endpoints remain v1; use contentApiVersion and whiteboard URLs to select v2 content APIs.",
+        "description": "Requires page view permission. Unpublished v2 boards are visible only to editors. Editors see current draft titles; other viewers see published titles. Deleted spaces are excluded. Archived spaces remain readable under existing page permissions. These shared endpoints remain v1; use contentApiVersion and whiteboard URLs to select v2 content APIs. The flat response follows internal Base62 sort_key order with page ID as a tie-breaker. Preserve relative order within each parent group when building a tree; groups can interleave and the array is not a depth-first traversal. sort_key is not a response field. Order is shared across the space. The normal Liquibase changelog must include page_ordering.xml followed by page_fractional_ordering.xml.",
         "parameters": [
           {
             "name": "spaceId",
@@ -2756,6 +2756,289 @@
           },
           "500": {
             "description": "Permission service or database error."
+          }
+        }
+      }
+    },
+    "/api/v1/space/{spaceId}/page/{pageId}/parent": {
+      "put": {
+        "tags": [
+          "Page navigation"
+        ],
+        "operationId": "moveSpacePage",
+        "summary": "Move a page to another parent or the space root",
+        "description": "Requires space view and source-page edit permission. A non-null destination requires destination-page edit; moving to root requires space edit_page. Source and destination must belong to this space. The page cannot be moved under itself or its descendants. Without an anchor, a parent change appends the page after existing destination children; a same-parent move succeeds without a write. Optional targetPageId and placement must be supplied together to place the page before/after an anchor under the specified destination parent; anchor edit permission is additionally required. If the anchor no longer has that parent, return 409. Anchored same-parent moves can change order. Parent and rank changes are atomic and update only the source page; descendants retain their parents and order. The root response uses parentId: null. One JSON object of at most 1024 bytes; unknown fields and extra JSON values are rejected. No Idempotency-Key is required or stored; client-generated sort keys are rejected as unknown fields. The server uses Base62 fractional ranks in TEXT COLLATE \"C\", changing only the source page when a write is necessary. Transactions are SERIALIZABLE, without explicit space-row/advisory locks. Serialization failures, deadlocks, one-second row-lock timeouts and duplicate sibling ranks return 409 without automatic retry. Refresh the listing before retrying against a changed hierarchy. An exhausted 256-character rank gap also returns 409 and needs maintenance; automatic rebalancing is not implemented. Lifecycle state is checked in the transaction snapshot; a request already in progress may finish during an overlapping archive operation. Apply page_ordering.xml and page_fractional_ordering.xml through the normal Liquibase changelog before starting the updated API.",
+        "parameters": [
+          {
+            "name": "spaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "pageId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MovePageRequest"
+              },
+              "examples": {
+                "underParent": {
+                  "summary": "Move under a page",
+                  "value": {
+                    "parentId": 17
+                  }
+                },
+                "toRoot": {
+                  "summary": "Move to the space root",
+                  "value": {
+                    "parentId": null
+                  }
+                },
+                "besidePage": {
+                  "summary": "Move before a page under another parent",
+                  "value": {
+                    "parentId": 17,
+                    "targetPageId": 51,
+                    "placement": "before"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Move saved, or the page already has the requested parent.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MovePageResponse"
+                },
+                "example": {
+                  "status": "success",
+                  "data": {
+                    "pageId": 42,
+                    "parentId": 17
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid IDs, malformed or oversized JSON, missing/unknown fields, extra JSON values, or self-targeting. Move also rejects an invalid destination or descendant cycle; reorder rejects unsupported placement. The 1024-byte body limit returns 400.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageHierarchyError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication middleware could not obtain a user identity.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageHierarchyError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Required permissions denied, missing actor identity, or an archived/deleted space. Permission checks precede existence checks.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageHierarchyError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Requested space/source or anchor missing from the requested space. Permission checks may instead produce 403.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageHierarchyError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Concurrent hierarchy/rank conflict, deadlock, row-lock timeout, exhausted rank length, or an anchor that no longer belongs to the specified destination parent. Refresh before retrying conflicts; rank exhaustion needs maintenance.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageHierarchyError"
+                },
+                "example": {
+                  "status": "FAILED",
+                  "error": {
+                    "code": 13,
+                    "message": "FAILED",
+                    "detail": "Page hierarchy changed concurrently. Refresh and try again"
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Database or internal error. No success was confirmed; refresh before deciding whether to resubmit.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageHierarchyError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/space/{spaceId}/page/{pageId}/order": {
+      "put": {
+        "tags": [
+          "Page navigation"
+        ],
+        "operationId": "reorderSpacePage",
+        "summary": "Reorder a page before or after a sibling",
+        "description": "Requires space edit_page plus source- and target-page edit permission. Parent relationships do not change. Root pages form one sibling group across existing null/zero/negative root markers. The server reads actual destination neighbours, including siblings omitted by access or draft visibility filters; other siblings retain their relative order. An already satisfied placement succeeds without a row update. Order is shared across the space, not per user. Refresh the page listing after success; this endpoint does not broadcast changes or return ranks. One JSON object of at most 1024 bytes; unknown fields and extra JSON values are rejected. No Idempotency-Key is required or stored; client-generated sort keys are rejected as unknown fields. The server uses Base62 fractional ranks in TEXT COLLATE \"C\", changing only the source page when a write is necessary. Transactions are SERIALIZABLE, without explicit space-row/advisory locks. Serialization failures, deadlocks, one-second row-lock timeouts and duplicate sibling ranks return 409 without automatic retry. Refresh the listing before retrying against a changed hierarchy. An exhausted 256-character rank gap also returns 409 and needs maintenance; automatic rebalancing is not implemented. Lifecycle state is checked in the transaction snapshot; a request already in progress may finish during an overlapping archive operation. Apply page_ordering.xml and page_fractional_ordering.xml through the normal Liquibase changelog before starting the updated API.",
+        "parameters": [
+          {
+            "name": "spaceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "pageId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReorderPageRequest"
+              },
+              "example": {
+                "targetPageId": 51,
+                "placement": "before"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Shared sibling order saved, or the requested placement was already satisfied.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReorderPageResponse"
+                },
+                "example": {
+                  "status": "success",
+                  "data": {
+                    "reordered": true
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid IDs, malformed or oversized JSON, missing/unknown fields, extra JSON values, or self-targeting. Move also rejects an invalid destination or descendant cycle; reorder rejects unsupported placement. The 1024-byte body limit returns 400.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageHierarchyError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication middleware could not obtain a user identity.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageHierarchyError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Required permissions denied, missing actor identity, or an archived/deleted space. Permission checks precede existence checks.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageHierarchyError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Requested space or source page missing; reorder also uses this for a target not found in the requested space. Unauthorized requests may instead receive 403.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageHierarchyError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Concurrent hierarchy/rank conflict, deadlock, row-lock timeout, exhausted rank length, or a reorder target no longer in the same sibling group. Refresh before retrying conflicts; rank exhaustion needs maintenance.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageHierarchyError"
+                },
+                "example": {
+                  "status": "FAILED",
+                  "error": {
+                    "code": 13,
+                    "message": "FAILED",
+                    "detail": "Page hierarchy changed concurrently. Refresh and try again"
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Database or internal error. No success was confirmed; refresh before deciding whether to resubmit.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageHierarchyError"
+                }
+              }
+            }
           }
         }
       }
@@ -7238,7 +7521,7 @@
           "parentId": {
             "type": "integer",
             "format": "int64",
-            "description": "0 for a root page."
+            "description": "Nonpositive values (0 or -1) identify a root page. Use null, rather than either sentinel, when sending a move-to-root request."
           },
           "draft": {
             "type": "integer",
@@ -8227,6 +8510,167 @@
               },
               "detail": {
                 "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "MovePageRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "parentId"
+        ],
+        "properties": {
+          "parentId": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "minimum": 1,
+            "maximum": 9007199254740991,
+            "description": "Destination parent in this space, or null for the space root. The field is required; 0 and -1 are invalid request values."
+          },
+          "targetPageId": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1,
+            "maximum": 9007199254740991,
+            "description": "Optional anchor page in the destination parent. Must differ from the source; requires anchor edit permission. Supply placement with this field."
+          },
+          "placement": {
+            "type": "string",
+            "enum": [
+              "before",
+              "after"
+            ],
+            "description": "Optional sibling placement relative to targetPageId. Must be supplied together with targetPageId. Omit both fields to append under the destination."
+          }
+        },
+        "dependentRequired": {
+          "targetPageId": [
+            "placement"
+          ],
+          "placement": [
+            "targetPageId"
+          ]
+        }
+      },
+      "MovePageResponse": {
+        "type": "object",
+        "required": [
+          "status",
+          "data"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "const": "success"
+          },
+          "data": {
+            "type": "object",
+            "required": [
+              "pageId",
+              "parentId"
+            ],
+            "properties": {
+              "pageId": {
+                "type": "integer",
+                "format": "int64",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "parentId": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "int64",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              }
+            }
+          }
+        }
+      },
+      "ReorderPageRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "targetPageId",
+          "placement"
+        ],
+        "properties": {
+          "targetPageId": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1,
+            "maximum": 9007199254740991,
+            "description": "A different page in the same space with the same normalized parent."
+          },
+          "placement": {
+            "type": "string",
+            "enum": [
+              "before",
+              "after"
+            ]
+          }
+        }
+      },
+      "ReorderPageResponse": {
+        "type": "object",
+        "required": [
+          "status",
+          "data"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "const": "success"
+          },
+          "data": {
+            "type": "object",
+            "required": [
+              "reordered"
+            ],
+            "properties": {
+              "reordered": {
+                "type": "boolean",
+                "const": true
+              }
+            }
+          }
+        }
+      },
+      "PageHierarchyError": {
+        "type": "object",
+        "required": [
+          "status",
+          "error"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "const": "FAILED"
+          },
+          "error": {
+            "type": "object",
+            "required": [
+              "message"
+            ],
+            "properties": {
+              "code": {
+                "type": "integer",
+                "description": "Existing v1 numeric application error classification; use HTTP status to distinguish conflicts."
+              },
+              "message": {
+                "type": "string",
+                "description": "Handler errors use FAILED; authentication middleware may use Not authenticated."
+              },
+              "detail": {
+                "type": "string",
+                "description": "Human-readable failure explanation, when supplied."
               }
             }
           }
