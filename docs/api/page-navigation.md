@@ -28,8 +28,10 @@ This fragment shows the common fields; each endpoint retains its existing fields
 
 `draftUrl` is supplied only to editors. Published URLs and `publishedVersionId` are omitted until publication; `previewUrl` is omitted if that version has no preview. Legacy pages omit the `whiteboard` object. Existing `previewAssetName` retains its legacy meaning; v2 clients should use `whiteboard.previewUrl`.
 
-Listings require page-level view access and are scoped to the requested space. Unpublished v2 boards appear only for editors. Deleted spaces are excluded. Archived spaces remain readable under existing page permissions. Editors see the latest checkpoint title; other viewers see the published title. Existing breadcrumbs use the same title selection. Root pages have `parentId: 0` in listings.
+Listings require page-level view access and are scoped to the requested space. Unpublished v2 boards appear only for editors. Deleted spaces are excluded. Archived spaces remain readable under existing page permissions. Editors see the latest checkpoint title; other viewers see the published title. Existing breadcrumbs use the same title selection. Root pages can have `parentId: 0` or `parentId: -1` in listings; treat nonpositive parent IDs as the space root.
 
-No additional Liquibase changeset is needed for discovery. The existing XML changesets for v2 creation, checkpoints, publication, previews and titles must already be applied. Frontend adoption of the v2 loader is separate from these shared API changes.
+The page listing now follows the saved shared sibling order using internal Base62 ranks. Preserve each sibling group's relative response order when constructing a tree; the flat response may interleave groups. Ranks are not exposed as response fields. See [page moving and shared ordering](page-hierarchy.md) for the write endpoints, permissions, 409 handling, and migration details.
+
+Apply the standard Liquibase changelog before using the updated listing. In addition to the existing v2 creation, checkpoint, publication, preview and title changesets, it includes `updates/page_ordering.xml` followed by `updates/page_fractional_ordering.xml`. The follow-up migration preserves saved order and supports existing page creators. Frontend adoption of the v2 loader is separate from these shared API changes.
 
 For v2 boards, listing `draft: 1` means an editor has unpublished content (no publication or a draft head newer than the published snapshot). `draft: 0` opens the lightweight published view when the current draft is fully published.

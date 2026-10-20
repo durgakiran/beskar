@@ -13,6 +13,8 @@ Login, registration, logout and callback are browser redirect flows, not JSON to
 
 Whiteboard creation, incremental checkpoints, and draft retrieval are implemented under v2. See [creation](whiteboard-create-v2.md), [checkpointing](whiteboard-checkpoint-v2.md), and [draft manifests, snapshot downloads, and update pages](whiteboard-draft-v2.md) for their contracts. See [publishing and previews](whiteboard-publish-v2.md), [title updates](whiteboard-title-v2.md), and [shared page listing and navigation](page-navigation.md).
 
+See [page moving and shared sibling ordering](page-hierarchy.md) for the v1 hierarchy write APIs, Base62 ranks, and concurrent-conflict handling. These operations preserve the shared order returned by the page listing.
+
 See [version history, restore, and deletion](whiteboard-history-v2.md) for the remaining lifecycle APIs.
 
 See [independent asset uploads and authenticated downloads](whiteboard-assets-v2.md)

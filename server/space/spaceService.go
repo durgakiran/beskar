@@ -12,6 +12,8 @@ import (
 	"github.com/durgakiran/beskar/quota"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+	"roci.dev/fracdex"
 )
 
 type pageCountRow struct {
@@ -985,4 +987,222 @@ func ensureSpaceMutableByID(spaceId uuid.UUID) error {
 
 func errorf(format string, args ...any) error {
 	return fmt.Errorf(format, args...)
+}
+
+var (
+	errMoveSpaceNotFound   = errors.New("Space not found")
+	errMovePageNotFound    = errors.New("Page not found")
+	errMoveSpaceReadOnly   = errors.New("Archived or deleted spaces cannot change pages")
+	errMovePageDestination = errors.New("Destination must be a page in the same space")
+	errMovePageCycle       = errors.New("A page cannot be moved into itself or its descendants")
+	errPageOrderSiblings   = errors.New("Pages must be different siblings in the same space")
+	errPageChangeConflict  = errors.New("Page hierarchy changed concurrently. Refresh and try again")
+	errPageRankExhausted   = errors.New("Page ordering gap is exhausted")
+)
+
+// PostgreSQL detects conflicting reads/writes instead of serializing all page
+// changes on a space row. Do not retry: the caller receives a 409 and refreshes.
+func pageChangeTransaction(ctx context.Context, begin func(context.Context, pgx.TxOptions) (pgx.Tx, error), change func(pgx.Tx) error) error {
+	tx, err := begin(ctx, pgx.TxOptions{IsoLevel: pgx.Serializable})
+	if err != nil {
+		return pageChangeError(err)
+	}
+	defer tx.Rollback(ctx)
+	if _, err := tx.Exec(ctx, SET_PAGE_CHANGE_LOCK_TIMEOUT); err != nil {
+		return pageChangeError(err)
+	}
+	if err := change(tx); err != nil {
+		return pageChangeError(err)
+	}
+	return pageChangeError(tx.Commit(ctx))
+}
+
+func pageChangeError(err error) error {
+	if err == nil {
+		return nil
+	}
+	for _, expected := range []error{errMoveSpaceNotFound, errMovePageNotFound, errMoveSpaceReadOnly, errMovePageDestination, errMovePageCycle, errPageOrderSiblings, errPageChangeConflict, errPageRankExhausted} {
+		if errors.Is(err, expected) {
+			return err
+		}
+	}
+	var databaseError *pgconn.PgError
+	if errors.As(err, &databaseError) {
+		switch databaseError.Code {
+		case "40001", "40P01", "55P03":
+			return errPageChangeConflict
+		case "23505":
+			if databaseError.ConstraintName == "page_sibling_sort_key_unique" {
+				return errPageChangeConflict
+			}
+		}
+	}
+	logger().Error(err.Error())
+	return errors.New(core.ErrorCode_name[core.ErrorCode_ERROR_CODE_UNSPECIFIED])
+}
+
+func ensurePageChangeSpace(ctx context.Context, tx pgx.Tx, spaceId uuid.UUID) error {
+	var mutable bool
+	if err := tx.QueryRow(ctx, GET_PAGE_CHANGE_SPACE, spaceId).Scan(&mutable); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return errMoveSpaceNotFound
+		}
+		return err
+	}
+	if !mutable {
+		return errMoveSpaceReadOnly
+	}
+	return nil
+}
+
+func getPageOrderState(ctx context.Context, tx pgx.Tx, spaceId uuid.UUID, pageId int64) (pageOrderState, error) {
+	var state pageOrderState
+	err := tx.QueryRow(ctx, GET_PAGE_ORDER_STATE, pageId, spaceId).Scan(&state.ParentId, &state.SortKey)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return state, errMovePageNotFound
+	}
+	return state, err
+}
+
+func pageSortKeyBetween(lower, upper string) (string, error) {
+	key, err := fracdex.KeyBetween(lower, upper)
+	if err != nil {
+		return "", err
+	}
+	if len(key) > 256 {
+		return "", errPageRankExhausted
+	}
+	return key, nil
+}
+
+func movePage(ctx context.Context, spaceId uuid.UUID, pageId int64, req MovePageRequest) error {
+	return pageChangeTransaction(ctx, core.GetPool().BeginTx, func(tx pgx.Tx) error {
+		return movePageInTransaction(ctx, tx, spaceId, pageId, req)
+	})
+}
+
+func movePageInTransaction(ctx context.Context, tx pgx.Tx, spaceId uuid.UUID, pageId int64, req MovePageRequest) error {
+	if err := ensurePageChangeSpace(ctx, tx, spaceId); err != nil {
+		return err
+	}
+	source, err := getPageOrderState(ctx, tx, spaceId, pageId)
+	if err != nil {
+		return err
+	}
+	destination := int64(0)
+	if req.ParentId != nil {
+		destination = *req.ParentId
+		var valid, cycle bool
+		if err := tx.QueryRow(ctx, GET_PAGE_MOVE_DESTINATION, destination, spaceId, pageId).Scan(&valid, &cycle); err != nil {
+			return err
+		}
+		if !valid {
+			return errMovePageDestination
+		}
+		if cycle {
+			return errMovePageCycle
+		}
+	}
+
+	var lower, upper string
+	if req.TargetPageId != nil {
+		if *req.TargetPageId == pageId {
+			return errPageOrderSiblings
+		}
+		target, err := getPageOrderState(ctx, tx, spaceId, *req.TargetPageId)
+		if err != nil {
+			return err
+		}
+		if target.ParentId != destination {
+			return errPageOrderSiblings
+		}
+		lower, upper, err = getPagePlacementBounds(ctx, tx, spaceId, pageId, target, req.Placement)
+		if err != nil {
+			return err
+		}
+	} else {
+		if source.ParentId == destination {
+			return nil
+		}
+		err = tx.QueryRow(ctx, GET_PAGE_LAST_SORT_KEY, spaceId, destination, pageId).Scan(&lower)
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return err
+		}
+	}
+	if source.ParentId == destination && (lower == "" || lower < source.SortKey) && (upper == "" || source.SortKey < upper) {
+		return nil
+	}
+	key, err := pageSortKeyBetween(lower, upper)
+	if err != nil {
+		return err
+	}
+	// Preserve the existing root sentinel for readers that scan into int64.
+	storedParent := destination
+	if storedParent == 0 {
+		storedParent = -1
+	}
+	tag, err := tx.Exec(ctx, UPDATE_PAGE_PARENT, pageId, spaceId, storedParent, key)
+	if err == nil && tag.RowsAffected() != 1 {
+		return errPageChangeConflict
+	}
+	return err
+}
+
+func reorderPage(ctx context.Context, spaceId uuid.UUID, pageId int64, req ReorderPageRequest) error {
+	return pageChangeTransaction(ctx, core.GetPool().BeginTx, func(tx pgx.Tx) error {
+		return reorderPageInTransaction(ctx, tx, spaceId, pageId, req)
+	})
+}
+
+func reorderPageInTransaction(ctx context.Context, tx pgx.Tx, spaceId uuid.UUID, pageId int64, req ReorderPageRequest) error {
+	if err := ensurePageChangeSpace(ctx, tx, spaceId); err != nil {
+		return err
+	}
+	if pageId == req.TargetPageId {
+		return errPageOrderSiblings
+	}
+	source, err := getPageOrderState(ctx, tx, spaceId, pageId)
+	if err != nil {
+		return err
+	}
+	target, err := getPageOrderState(ctx, tx, spaceId, req.TargetPageId)
+	if err != nil {
+		return err
+	}
+	if source.ParentId != target.ParentId {
+		return errPageOrderSiblings
+	}
+
+	lower, upper, err := getPagePlacementBounds(ctx, tx, spaceId, pageId, target, req.Placement)
+	if err != nil {
+		return err
+	}
+	if (lower == "" || lower < source.SortKey) && (upper == "" || source.SortKey < upper) {
+		return nil
+	}
+	key, err := pageSortKeyBetween(lower, upper)
+	if err != nil {
+		return err
+	}
+	tag, err := tx.Exec(ctx, UPDATE_PAGE_ORDER, pageId, spaceId, key)
+	if err == nil && tag.RowsAffected() != 1 {
+		return errPageChangeConflict
+	}
+	return err
+}
+
+func getPagePlacementBounds(ctx context.Context, tx pgx.Tx, spaceId uuid.UUID, pageId int64, target pageOrderState, placement string) (string, string, error) {
+	neighborQuery := GET_PAGE_PREVIOUS_SORT_KEY
+	if placement == "after" {
+		neighborQuery = GET_PAGE_NEXT_SORT_KEY
+	}
+	var neighbor string
+	err := tx.QueryRow(ctx, neighborQuery, spaceId, target.ParentId, pageId, target.SortKey).Scan(&neighbor)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return "", "", err
+	}
+	if placement == "after" {
+		return target.SortKey, neighbor, nil
+	}
+	return neighbor, target.SortKey, nil
 }

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+    <changeSet id="page_ordering_1" author="Kiran Kumar" dbms="postgresql">
+        <comment>Persist shared sibling order. Unpositioned pages append in creation order.</comment>
+        <addColumn schemaName="core" tableName="page">
+            <column name="sort_position" type="BIGINT" />
+        </addColumn>
+        <sql>CREATE INDEX page_sibling_order_idx ON core.page (space_id, (GREATEST(COALESCE(parent_id, 0), 0)), sort_position, id);</sql>
+        <rollback>
+            <dropIndex schemaName="core" tableName="page" indexName="page_sibling_order_idx" />
+            <dropColumn schemaName="core" tableName="page" columnName="sort_position" />
+        </rollback>
+    </changeSet>
+</databaseChangeLog>

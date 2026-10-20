@@ -138,3 +138,24 @@ type TransferOwnershipRequest struct {
 type DeleteSpaceRequest struct {
 	ConfirmName string `json:"confirmName"`
 }
+
+type MovePageRequest struct {
+	ParentId     *int64 `json:"parentId"`
+	TargetPageId *int64 `json:"targetPageId,omitempty"`
+	Placement    string `json:"placement,omitempty"`
+}
+
+type MovePageResponse struct {
+	PageId   int64  `json:"pageId"`
+	ParentId *int64 `json:"parentId"`
+}
+
+type ReorderPageRequest struct {
+	TargetPageId int64  `json:"targetPageId"`
+	Placement    string `json:"placement"`
+}
+
+type pageOrderState struct {
+	ParentId int64
+	SortKey  string
+}

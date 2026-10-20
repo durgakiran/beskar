@@ -1,0 +1,116 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+    <changeSet id="page_fractional_ordering_1" author="Kiran Kumar" dbms="postgresql">
+        <comment>Replace consecutive positions with Base62 fractional ranks, preserving saved sibling order.</comment>
+        <sql splitStatements="false"><![CDATA[
+ALTER TABLE core.page ADD COLUMN sort_key TEXT COLLATE "C";
+
+-- Positive integer heads follow the fractional-indexing format: a0..az,
+-- b00..bzz, etc. This is also used for the one-time order backfill.
+CREATE FUNCTION core.page_sort_key_from_integer(value BIGINT) RETURNS TEXT
+LANGUAGE plpgsql IMMUTABLE STRICT AS $$
+DECLARE
+    digits CONSTANT TEXT := '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
+    encoded TEXT := '';
+BEGIN
+    IF value < 0 THEN
+        RAISE EXCEPTION 'Page sort integer must be nonnegative';
+    END IF;
+    LOOP
+        encoded := substr(digits, (value % 62)::integer + 1, 1) || encoded;
+        value := value / 62;
+        EXIT WHEN value = 0;
+    END LOOP;
+    RETURN chr(ascii('a') + length(encoded) - 1) || encoded;
+END;
+$$;
+
+-- Append using the next positive integer head, skipping any fractional suffix.
+-- Prepending may create negative heads; a0 sorts after all of those heads.
+CREATE FUNCTION core.page_sort_key_after(previous TEXT) RETURNS TEXT
+LANGUAGE plpgsql IMMUTABLE AS $$
+DECLARE
+    digits CONSTANT TEXT := '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
+    head TEXT;
+    encoded TEXT;
+    digit INTEGER;
+    position INTEGER;
+BEGIN
+    IF previous IS NULL OR previous COLLATE "C" < 'a0' COLLATE "C" THEN
+        RETURN 'a0';
+    END IF;
+    head := substr(previous, 1, 1);
+    encoded := substr(previous, 2, ascii(head) - ascii('a') + 1);
+    position := length(encoded);
+    WHILE position > 0 LOOP
+        digit := strpos(digits, substr(encoded, position, 1));
+        IF digit < 62 THEN
+            RETURN head || substr(encoded, 1, position - 1) || substr(digits, digit + 1, 1) || substr(encoded, position + 1);
+        END IF;
+        encoded := overlay(encoded placing '0' from position for 1);
+        position := position - 1;
+    END LOOP;
+    IF head = 'z' THEN
+        RAISE EXCEPTION 'Page rank range exhausted' USING ERRCODE = '54000';
+    END IF;
+    RETURN chr(ascii(head) + 1) || '0' || encoded;
+END;
+$$;
+
+WITH ordered AS (
+    SELECT id, row_number() OVER (
+        PARTITION BY space_id, GREATEST(COALESCE(parent_id, 0), 0)
+        ORDER BY sort_position NULLS LAST, id
+    ) AS position
+    FROM core.page
+)
+UPDATE core.page p SET sort_key = core.page_sort_key_from_integer(ordered.position)
+FROM ordered WHERE p.id = ordered.id;
+
+-- Cover every existing page creator without locking the space or rewriting
+-- siblings. The ID suffix makes concurrent inserts into the same tail unique.
+CREATE FUNCTION core.assign_new_page_sort_key() RETURNS TRIGGER
+LANGUAGE plpgsql AS $$
+DECLARE
+    previous TEXT;
+BEGIN
+    IF NEW.sort_key IS NULL THEN
+        SELECT sort_key INTO previous FROM core.page
+        WHERE space_id = NEW.space_id
+            AND GREATEST(COALESCE(parent_id, 0), 0) = GREATEST(COALESCE(NEW.parent_id, 0), 0)
+        ORDER BY sort_key DESC LIMIT 1;
+        NEW.sort_key := core.page_sort_key_after(previous) || core.page_sort_key_from_integer(NEW.id) || 'V';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+CREATE TRIGGER assign_new_page_sort_key BEFORE INSERT ON core.page
+FOR EACH ROW EXECUTE FUNCTION core.assign_new_page_sort_key();
+
+ALTER TABLE core.page ALTER COLUMN sort_key SET NOT NULL;
+ALTER TABLE core.page ADD CONSTRAINT page_sort_key_format CHECK (
+    length(sort_key) BETWEEN 2 AND 256 AND sort_key ~ '^[A-Za-z][0-9A-Za-z]+$'
+);
+CREATE UNIQUE INDEX page_sibling_sort_key_unique ON core.page (
+    space_id, (GREATEST(COALESCE(parent_id, 0), 0)), sort_key
+);
+DROP INDEX core.page_sibling_order_idx;
+        ]]></sql>
+        <rollback>
+            <sql splitStatements="false"><![CDATA[
+WITH ordered AS (
+    SELECT id, row_number() OVER (
+        PARTITION BY space_id, GREATEST(COALESCE(parent_id, 0), 0) ORDER BY sort_key
+    ) AS position FROM core.page
+)
+UPDATE core.page p SET sort_position = ordered.position FROM ordered WHERE p.id = ordered.id;
+DROP TRIGGER assign_new_page_sort_key ON core.page;
+DROP FUNCTION core.assign_new_page_sort_key();
+DROP FUNCTION core.page_sort_key_after(TEXT);
+DROP FUNCTION core.page_sort_key_from_integer(BIGINT);
+ALTER TABLE core.page DROP COLUMN sort_key;
+CREATE INDEX page_sibling_order_idx ON core.page (space_id, (GREATEST(COALESCE(parent_id, 0), 0)), sort_position, id);
+            ]]></sql>
+        </rollback>
+    </changeSet>
+</databaseChangeLog>

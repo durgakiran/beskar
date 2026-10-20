@@ -43,4 +43,6 @@
     <include file="updates/whiteboard_assets_v2.xml" relativeToChangelogFile="true"/>
     <include file="updates/whiteboard_assets_v2_legacy_cleanup.xml" relativeToChangelogFile="true"/>
     <include file="updates/document_collaboration.xml" />
+    <include file="updates/page_ordering.xml" relativeToChangelogFile="true" />
+    <include file="updates/page_fractional_ordering.xml" relativeToChangelogFile="true" />
 </databaseChangeLog>

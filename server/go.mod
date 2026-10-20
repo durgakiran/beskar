@@ -27,6 +27,7 @@ require (
 	golang.org/x/image v0.24.0
 	golang.org/x/net v0.29.0
 	google.golang.org/grpc v1.68.0
+	roci.dev/fracdex v0.0.0-20241211175510-82d7df79e312
 )
 
 require (
