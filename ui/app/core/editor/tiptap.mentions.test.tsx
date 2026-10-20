@@ -47,4 +47,13 @@ describe('document mention integration', () => {
         await next.searchUsers('Alex');
         expect(vi.mocked(fetch).mock.calls.at(-1)![0]).toContain('/space/space-b/mentions/users?');
     });
+    it('keeps collaboration extensions stable while title and presence renders change', () => {
+        const provider = { awareness: {} } as any;
+        const ydoc = {} as any;
+        const view = render(<TipTap {...props} provider={provider} ydoc={ydoc} />);
+        const first = mocks.editor.mock.calls.at(-1)![0].extensions;
+        expect(first.map((extension: any) => extension.name)).toEqual(['collaboration', 'collaborationCaret']);
+        view.rerender(<TipTap {...props} provider={provider} ydoc={ydoc} title="Live title" />);
+        expect(mocks.editor.mock.calls.at(-1)![0].extensions).toBe(first);
+    });
 });
