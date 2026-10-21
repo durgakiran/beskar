@@ -1,28 +1,78 @@
-textarea.document-title-textarea {
-    display: block;
-    height: 34px;
-    overflow-y: hidden;
-    overflow-x: hidden;
-    width: 100%;
-    /* letter-spacing: -0.1rem; */
-    line-height: 1.1;
-    outline: none;
-    border: none;
-    /* font-size: 28px; */
+.document-title {
+    position: relative;
+    margin: 24px 0 28px 40px;
+    color: var(--editor-text-primary, var(--gray-12, #202124));
     font-family: inherit;
+    font-size: clamp(32px, 4vw, 40px);
     font-weight: 700;
-    text-align: initial;
-    height: 37px;
+    letter-spacing: -0.035em;
+    line-height: 1.3;
+}
+
+input.document-title-input {
+    display: block;
+    width: 100%;
+    min-width: 0;
+    height: 1.3em;
+    margin: 0;
     padding: 0;
+    border: 0;
+    border-radius: 0;
+    outline: none;
     box-shadow: none;
-    resize: none;
-    white-space: pre-wrap;
-    margin: auto;
-    text-overflow: ellipsis;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    letter-spacing: inherit;
+    line-height: inherit;
     box-sizing: border-box;
-    font-size: 2em;
-    padding-inline-start: 40px;
-    margin-bottom: 1rem;
+    text-overflow: ellipsis;
+}
+
+.document-title-input::placeholder { color: var(--gray-8, #b7b8bd); opacity: 1; }
+.document-title-input:focus { text-overflow: clip; }
+.document-title-input:disabled { cursor: wait; }
+
+.document-title-presence {
+    position: absolute;
+    inset: -22px 0 0;
+    overflow: hidden;
+    pointer-events: none;
+}
+
+.document-title-peer {
+    position: absolute;
+    top: 22px;
+    left: 0;
+    white-space: pre;
+    color: transparent;
+    font: inherit;
+    letter-spacing: inherit;
+    line-height: inherit;
+}
+
+.document-title-caret {
+    position: relative;
+    border-left: 2px solid;
+    margin-left: -1px;
+    margin-right: -1px;
+}
+
+.document-title-caret-label {
+    position: absolute;
+    left: -2px;
+    bottom: 100%;
+    border-radius: 4px 4px 4px 0;
+    padding: 3px 6px;
+    color: #171717;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: normal;
+    line-height: 14px;
+}
+
+@media (max-width: 640px) {
+    .document-title { margin-inline-start: 48px; margin-bottom: 20px; }
 }
 
 .collaboration-carets__caret {
@@ -34,6 +84,9 @@ textarea.document-title-textarea {
     word-break: normal;
     border-right-width: 1px;
     border-left-width: 1px;
+    border-left-style: solid;
+    border-right-style: solid;
+    z-index: 1;
     --tw-border-opacity: 1;
     border-color: rgb(0 0 0 / var(--tw-border-opacity));
 }

@@ -6,6 +6,16 @@ import { materialize } from './materialize.mjs';
 const encode = d => Buffer.from(Y.encodeStateAsUpdate(d)).toString('base64');
 const decode = state => { const doc = new Y.Doc(); Y.applyUpdate(doc, Buffer.from(state, 'base64')); return doc; };
 
+test('preserves a collaborative title nested in whiteboard metadata', () => {
+ const doc = new Y.Doc();
+ doc.getMap('glideboard-meta').set('collaborativeTitleV1', new Y.Text('Shared board'));
+ const result = materialize({ updates: [encode(doc)], title: 'Shared board' });
+ const reopened = decode(result.state);
+ assert.equal(reopened.getMap('glideboard-meta').get('collaborativeTitleV1').toString(), 'Shared board');
+ assert.equal(result.title, 'Shared board');
+ reopened.destroy(); doc.destroy();
+});
+
 test('replays only supplied boundary and captures title', () => {
  const d = new Y.Doc(), updates = [encode(d)];
  d.on('update', u => updates.push(Buffer.from(u).toString('base64')));

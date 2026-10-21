@@ -4,6 +4,9 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as Y from 'yjs';
 import WhiteboardEditorV2 from '../WhiteboardEditorV2';
+import { Awareness, applyAwarenessUpdate, encodeAwarenessUpdate } from 'y-protocols/awareness';
+import { whiteboardTitle, WHITEBOARD_TITLE_KEY } from 'app/core/whiteboard/v2/collaborativeTitle';
+import { base64ToUint8Array } from 'app/core/utils/base64';
 
 const mocks = vi.hoisted(() => ({
     prepareForCapture: vi.fn(),
@@ -55,15 +58,23 @@ vi.mock('app/core/whiteboard/v2/WhiteboardAssetHttpAdapterV2', () => ({
         dispose = mocks.assetDispose;
     },
 }));
-vi.mock('y-webrtc', () => ({
-    WebrtcProvider: class {
-        constructor() { mocks.providerConstruct(); }
-        awareness = { getStates: () => mocks.awarenessStates, setLocalStateField: mocks.awarenessSet, on: (_event: string, callback: () => void) => { mocks.awarenessChange = callback; }, off: vi.fn() };
+vi.mock('y-webrtc', async () => {
+    const { Awareness } = await import('y-protocols/awareness');
+    return { WebrtcProvider: class {
+        awareness: InstanceType<typeof Awareness>;
+        constructor(_room: string, doc: Y.Doc) {
+            this.awareness = new Awareness(doc);
+            mocks.awarenessStates = this.awareness.getStates();
+            const set = this.awareness.setLocalStateField.bind(this.awareness);
+            this.awareness.setLocalStateField = (field, value) => { mocks.awarenessSet(field, value); set(field, value); };
+            mocks.awarenessChange = () => this.awareness.emit('change', [{ added: [], updated: [], removed: [] }, 'test']);
+            mocks.providerConstruct(this);
+        }
         destroy() {}
         disconnect() {}
         connect() {}
-    },
-}));
+    } };
+});
 vi.mock('app/core/whiteboard/v2/replay', () => ({ loadDraft: mocks.loadDraft, syncDraft: mocks.syncDraft }));
 vi.mock('app/core/whiteboard/v2/api', async importOriginal => ({
     ...await importOriginal<Record<string, unknown>>(),
@@ -102,10 +113,7 @@ describe('WhiteboardEditorV2 capture preparation', () => {
         vi.clearAllMocks();
         mocks.awarenessStates.clear();
         mocks.awarenessChange = undefined;
-        mocks.awarenessSet.mockImplementation((field: string, value: unknown) => {
-            mocks.awarenessStates.set(1, { ...mocks.awarenessStates.get(1), [field]: value });
-            mocks.awarenessChange?.();
-        });
+        mocks.awarenessSet.mockReset();
         sessionStorage.clear();
         localStorage.clear();
         const doc = new Y.Doc();
@@ -229,6 +237,83 @@ describe('WhiteboardEditorV2 capture preparation', () => {
         fireEvent.blur(screen.getByLabelText('Whiteboard title'));
         await waitFor(() => expect(mocks.awarenessSet).toHaveBeenCalledWith('savedSequence', '2'));
         expect(mocks.awarenessSet).toHaveBeenCalledWith('titleSequence', '2');
+        const payload = mocks.post.mock.calls.find(call => call[0].endsWith('/checkpoint'))![1];
+        const saved = new Y.Doc();
+        try {
+            Y.applyUpdate(saved, base64ToUint8Array(payload.update));
+            expect(whiteboardTitle(saved, 'Board', 'unused').toString()).toBe('Renamed');
+            expect(payload.title).toBe('Renamed');
+        } finally { saved.destroy(); }
+    });
+
+    it('shows live remote title edits and relative cursors while hiding the local cursor', async () => {
+        await renderEditor();
+        mocks.post.mockResolvedValue({ sequence: '2' });
+        const { doc } = mocks.glideboardProps.mock.lastCall![0].collaboration;
+        const { awareness } = mocks.providerConstruct.mock.lastCall![0];
+        const remote = new Y.Doc();
+        Y.applyUpdate(remote, Y.encodeStateAsUpdate(doc));
+        const remoteText = whiteboardTitle(remote, 'Board', 'unused');
+        const remoteAwareness = new Awareness(remote);
+        try {
+            act(() => {
+                remoteText.insert(0, 'Remote ');
+                Y.applyUpdate(doc, Y.encodeStateAsUpdate(remote));
+            });
+            const input = screen.getByLabelText('Whiteboard title') as HTMLInputElement;
+            expect(input.value).toBe('Remote Board');
+            act(() => {
+                remoteAwareness.setLocalState({ user: { id: 'remote', name: 'Remote editor', color: '#aabbcc' }, titleSelection: {
+                    anchor: Y.createRelativePositionFromTypeIndex(remoteText, 1),
+                    head: Y.createRelativePositionFromTypeIndex(remoteText, 4),
+                } });
+                applyAwarenessUpdate(awareness, encodeAwarenessUpdate(remoteAwareness, [remoteAwareness.clientID]), 'remote');
+                awareness.setLocalStateField('canvasCursor', { x: 10, y: 20 });
+                input.focus(); input.setSelectionRange(2, 2); fireEvent.select(input);
+            });
+            expect(document.querySelector('.document-title-caret-label')?.textContent).toBe('Remote editor');
+            expect(document.querySelectorAll('.document-title-caret-label')).toHaveLength(1);
+            expect(awareness.getLocalState().canvasCursor).toBeNull();
+            expect(awareness.getLocalState().titleSelection).toBeTruthy();
+            fireEvent.blur(input);
+            expect(awareness.getLocalState().titleSelection).toBeNull();
+        } finally { remoteAwareness.destroy(); remote.destroy(); }
+    });
+
+    it('rebinds the title input and cursors when peer synchronization replaces its nested Y.Text', async () => {
+        await renderEditor();
+        mocks.post.mockResolvedValue({ sequence: '2' });
+        const { doc } = mocks.glideboardProps.mock.lastCall![0].collaboration;
+        const { awareness } = mocks.providerConstruct.mock.lastCall![0];
+        const previous = doc.getMap('glideboard-meta').get(WHITEBOARD_TITLE_KEY);
+        const remote = new Y.Doc();
+        Y.applyUpdate(remote, Y.encodeStateAsUpdate(doc));
+        remote.getMap('glideboard-meta').set(WHITEBOARD_TITLE_KEY, new Y.Text('Peer title'));
+        const remoteText = remote.getMap('glideboard-meta').get(WHITEBOARD_TITLE_KEY) as Y.Text;
+        const remoteAwareness = new Awareness(remote);
+        try {
+            act(() => { Y.applyUpdate(doc, Y.encodeStateAsUpdate(remote)); });
+            expect(doc.getMap('glideboard-meta').get(WHITEBOARD_TITLE_KEY)).not.toBe(previous);
+            const input = screen.getByLabelText('Whiteboard title') as HTMLInputElement;
+            expect(input.value).toBe('Peer title');
+            act(() => {
+                remoteText.insert(remoteText.length, '!');
+                Y.applyUpdate(doc, Y.encodeStateAsUpdate(remote));
+                remoteAwareness.setLocalState({ user: { name: 'Remote peer', color: '#aabbcc' }, titleSelection: {
+                    anchor: Y.createRelativePositionFromTypeIndex(remoteText, 2),
+                    head: Y.createRelativePositionFromTypeIndex(remoteText, 4),
+                } });
+                applyAwarenessUpdate(awareness, encodeAwarenessUpdate(remoteAwareness, [remoteAwareness.clientID]), 'remote');
+            });
+            expect(input.value).toBe('Peer title!');
+            expect(document.querySelector('.document-title-caret-label')?.textContent).toBe('Remote peer');
+            fireEvent.change(input, { target: { value: 'Our peer title!' } });
+            Y.applyUpdate(remote, Y.encodeStateAsUpdate(doc));
+            expect(remoteText.toString()).toBe('Our peer title!');
+            fireEvent.blur(input);
+            await waitFor(() => expect(mocks.post).toHaveBeenCalledWith(expect.stringContaining('/checkpoint'),
+                expect.objectContaining({ title: 'Our peer title!' }), expect.any(String), expect.any(AbortSignal)));
+        } finally { remoteAwareness.destroy(); remote.destroy(); }
     });
 
     it('shares an in-flight reconciliation across reconnect events', async () => {

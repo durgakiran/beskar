@@ -4,7 +4,7 @@ import type { AttachmentRef } from "@durgakiran/editor";
 import type { JSONContent } from "@tiptap/core";
 import { EditorContext } from "@editor/context/editorContext";
 import { Editorheader } from "@editor/header";
-import TextArea from "@editor/textarea/TextArea";
+import { DocumentTitle } from "@editor/textarea/DocumentTitle";
 import { Response, useGet } from "@http/hooks";
 import { Editor } from "@tiptap/react";
 import { Spinner } from "@radix-ui/themes";
@@ -14,14 +14,12 @@ import "./documentEditor.css";
 import { usePUT } from "app/core/http/hooks/usePut";
 import { base64ToUint8Array } from "app/core/utils/base64";
 import { useNavigate } from "react-router-dom";
-import { WebrtcProvider } from "y-webrtc";
 import { isFreshDocument, publishedDocumentSeed, mergeDocumentState } from "app/core/editor/documentYjs";
-import { getSignalingUrl } from "app/core/signaling";
 import { extractAssetReferences, type AssetReferencesPayload } from "app/core/editor/extractAssetReferences";
 import { useEditorPageEvents, type PageEventV1 } from "app/core/editor/useEditorPageEvents";
 import { IndexedDbYjsRecoveryAdapter } from "app/core/whiteboard/durability/IndexedDbYjsRecoveryAdapter";
 import { DocumentDraftSession } from "app/core/editor/DocumentDraftSession";
-import { isDesktop } from "app/core/desktop/isDesktop";
+import { useDocumentCollaboration } from "app/core/editor/useDocumentCollaboration";
 
 interface User {
     name: string;
@@ -88,7 +86,6 @@ export default function DocumentEditor({ slug }: { slug: string[] }) {
 }
 
 function DocumentEditorSession({ slug }: { slug: string[] }) {
-    const [provider, setProvider] = useState<WebrtcProvider>();
     const navigate = useNavigate();
 
     // profile of the current user
@@ -142,6 +139,8 @@ function DocumentEditorSession({ slug }: { slug: string[] }) {
     const ydoc = useMemo(() => {
         return new y.Doc();
     }, []);
+
+    const { provider, notice: collaborationNotice } = useDocumentCollaboration(ydoc, slug[0], slug[1]);
 
     const pageIdNum = useMemo(() => {
         const n = parseInt(slug[1], 10);
@@ -393,42 +392,6 @@ function DocumentEditorSession({ slug }: { slug: string[] }) {
     }, [publishing]);
 
     useEffect(() => {
-        let active = true;
-        
-        const initProvider = async () => {
-            let signalingUrl = getSignalingUrl();
-            if (isDesktop) {
-                const { GetAccessToken } = await import("../../wailsjs/beskar/desktop/auth/authservice");
-                const token = await GetAccessToken();
-                if (token) {
-                    const separator = signalingUrl.includes("?") ? "&" : "?";
-                    signalingUrl = `${signalingUrl}${separator}token=${encodeURIComponent(token)}`;
-                }
-            }
-            if (!active) return;
-
-            const _provider = new WebrtcProvider(`document-v2:${slug[0]}:${slug[1]}`, ydoc, {
-                signaling: [signalingUrl],
-                filterBcConns: false
-            });
-            setProvider(_provider);
-        };
-
-        initProvider();
-
-        return () => {
-            active = false;
-            setProvider(current => {
-                if (current) {
-                    current.disconnect();
-                    current.destroy();
-                }
-                return null;
-            });
-        };
-    }, [ydoc, slug[0], slug[1]]);
-
-    useEffect(() => {
         if (!ydoc) return;
         handleObservers();
     }, [ydoc]);
@@ -461,7 +424,10 @@ function DocumentEditorSession({ slug }: { slug: string[] }) {
                 new Map(nextCollaborators.map((candidate) => [candidate.id, candidate])).values(),
             );
 
-            setActiveCollaborators(deduped);
+            setActiveCollaborators(previous => previous.length === deduped.length && previous.every((peer, index) => {
+                const next = deduped[index];
+                return peer.id === next.id && peer.name === next.name && peer.email === next.email && peer.color === next.color;
+            }) ? previous : deduped);
         };
 
         syncCollaborators();
@@ -569,6 +535,10 @@ function DocumentEditorSession({ slug }: { slug: string[] }) {
         };
     }, []);
 
+    if (!provider && collaborationNotice) {
+        return <div role="alert">{collaborationNotice}</div>;
+    }
+
     if (profileLoading || !provider || !ydoc) {
         return (
             <div className="text-center">
@@ -619,7 +589,7 @@ function DocumentEditorSession({ slug }: { slug: string[] }) {
                                     pageTitle={title || "Untitled"}
                                     collaborators={activeCollaborators}
                                     canComment={canComment}
-                                    presenceNotice={saveNotice}
+                                    presenceNotice={saveNotice || collaborationNotice}
                                 />
                             </EditorContext.Provider>
                         </div>
@@ -638,22 +608,15 @@ function DocumentEditorSession({ slug }: { slug: string[] }) {
                                         }}
                                     />
                                 )}
-                                <div>
-                                    <TextArea
-                                        value={title || ""}
-                                        handleInput={(value: string) => {
-                                            setTitle(value);
-                                            // Update the shared title when user edits
-                                            if (titleTextProvider) {
-                                                titleTextProvider.delete(0, titleTextProvider.length);
-                                                titleTextProvider.insert(0, value);
-                                            }
-                                        }}
-                                    />
-                                </div>
+                                {titleTextProvider && <DocumentTitle
+                                    text={titleTextProvider}
+                                    awareness={provider.awareness}
+                                    editor={editorContext}
+                                    disabled={!isEditorReady}
+                                />}
                                 <TipTap
                                     title={title || ""}
-                                    setEditorContext={(editorContext: Editor) => setEditorContext(editorContext)}
+                                    setEditorContext={setEditorContext}
                                     content={""}
                                     pageId={slug[1]}
                                     spaceId={slug[0]}

@@ -1,4 +1,9 @@
 import WhiteboardHistoryV2 from './WhiteboardHistoryV2';
+import { DocumentTitle, updateTitle } from 'app/core/editor/textarea/DocumentTitle';
+import { whiteboardTitle, WHITEBOARD_TITLE_KEY } from 'app/core/whiteboard/v2/collaborativeTitle';
+import { uint8ArrayToBase64 } from 'app/core/utils/base64';
+import './documentEditor.css';
+import './whiteboardTitle.css';
 import "@durgakiran/glideboard/styles.css";
 import { matchesPublishedState } from 'app/core/whiteboard/v2/publishState';
 import { loadDraft, syncDraft } from 'app/core/whiteboard/v2/replay';
@@ -17,7 +22,7 @@ import { CheckpointAdapter } from 'app/core/whiteboard/v2/CheckpointAdapter';
 import { WhiteboardAssetHttpAdapterV2 } from 'app/core/whiteboard/v2/WhiteboardAssetHttpAdapterV2';
 import { boardUrl, digest, jsonRequest, post, sequence, WhiteboardApiError, type PublishedBoard } from 'app/core/whiteboard/v2/api';
 
-type Rename = { title: string; key: string };
+type Rename = { title: string; key: string; update?: string; vector?: Uint8Array };
 interface Session {
     doc: Y.Doc;
     signal: AbortSignal;
@@ -36,11 +41,10 @@ export default function WhiteboardEditorV2({ slug }: { slug: string[] }) {
     const base = boardUrl(space, page);
     const navigate = useNavigate();
     const [session, setSession] = useState<Session | null>(null);
+    const [titleText, setTitleText] = useState<Y.Text | null>(null);
     const activeSession = useRef<Session | null>(null);
     const [board, setBoard] = useState<GlideboardHandle | null>(null);
     const [status, setStatus] = useState<DurabilityStatus | null>(null);
-    const [title, setTitle] = useState('');
-    const titleRef = useRef('');
     const pendingTitle = useRef<Rename | null>(null);
     const [titlePending, setTitlePending] = useState(false);
     const [error, setError] = useState('');
@@ -53,7 +57,6 @@ export default function WhiteboardEditorV2({ slug }: { slug: string[] }) {
     const [peers, setPeers] = useState<string[]>([]);
     const pendingPublish = useRef<{ key: string; body: unknown } | null>(null);
     const titleStorage = useRef('');
-    const titleInputFocused = useRef(false);
     const boardRef = useCallback((handle: GlideboardHandle | null) => setBoard(handle), []);
 
     useEffect(() => {
@@ -66,6 +69,7 @@ export default function WhiteboardEditorV2({ slug }: { slug: string[] }) {
         let unsubscribe: (() => void) | undefined;
         let notificationTimer: ReturnType<typeof setTimeout> | undefined;
         let titleTimer: ReturnType<typeof setInterval> | undefined;
+        let stopTitle: (() => void) | undefined;
         activeSession.current = null; pendingPublish.current = null; busyRef.current = false;
         setSession(null); setBoard(null); setBusy(false); setError(''); setSyncError(''); setAccessDenied(false);
         const start = async () => {
@@ -88,12 +92,44 @@ export default function WhiteboardEditorV2({ slug }: { slug: string[] }) {
             const sessionKey = `${base}:${user.id}:${tabId}${generationSuffix}`;
             titleStorage.current = `${sessionKey}:title`;
             const storedTitle = localStorage.getItem(titleStorage.current);
-            pendingTitle.current = storedTitle ? JSON.parse(storedTitle) : null;
-            titleRef.current = pendingTitle.current?.title ?? loaded.manifest.title;
-            setTitle(titleRef.current); setTitlePending(Boolean(pendingTitle.current));
+            pendingTitle.current = storedTitle ? { title: JSON.parse(storedTitle).title, key: crypto.randomUUID() } : null;
+            setTitlePending(Boolean(pendingTitle.current));
             recovery = new IndexedDbYjsRecoveryAdapter(sessionKey, page);
             await recovery.hydrate(doc);
             if (!active) return;
+            const metadata = doc.getMap('glideboard-meta');
+            let sharedTitle = whiteboardTitle(doc, loaded.manifest.title, `${room}:${loaded.manifest.baseSnapshot?.id ?? loaded.manifest.headSequence}`);
+            if (pendingTitle.current) updateTitle(sharedTitle, pendingTitle.current.title, 'whiteboard-title-recovery');
+            setTitleText(sharedTitle);
+            let titleVector = Y.encodeStateVectorFromUpdate(loaded.state);
+            const onTitleChange = () => {
+                // A peer's bootstrap may replace the nested map entry. Never
+                // save edits/removal events from the superseded text object.
+                if (!active || metadata.get(WHITEBOARD_TITLE_KEY) !== sharedTitle) return;
+                const title = sharedTitle.toString();
+                pendingTitle.current = { title, key: crypto.randomUUID() };
+                setTitlePending(true);
+                try { localStorage.setItem(titleStorage.current, JSON.stringify(pendingTitle.current)); }
+                catch { setError('Local title recovery is unavailable. Keep this tab open until the title is saved.'); }
+            };
+            const rebindTitle = () => {
+                const next = metadata.get(WHITEBOARD_TITLE_KEY);
+                if (!(next instanceof Y.Text) || next === sharedTitle) return;
+                sharedTitle.unobserve(onTitleChange);
+                sharedTitle = next;
+                sharedTitle.observe(onTitleChange);
+                setTitleText(sharedTitle);
+                onTitleChange();
+            };
+            sharedTitle.observe(onTitleChange);
+            metadata.observe(rebindTitle);
+            stopTitle = () => {
+                metadata.unobserve(rebindTitle);
+                sharedTitle.unobserve(onTitleChange);
+            };
+            // Canvas autosave may have persisted the CRDT before the separate
+            // title metadata request completed in a tab that subsequently closed.
+            if (sharedTitle.toString().trim() !== loaded.manifest.title) onTitleChange();
             const acknowledgedStateDigest = await digest(loaded.state);
             if (!active || abort.signal.aborted) return;
             const provider = new WebrtcProvider(room, doc, { signaling: [getSignalingUrl()], filterBcConns: false });
@@ -110,7 +146,6 @@ export default function WhiteboardEditorV2({ slug }: { slug: string[] }) {
             let archived = Boolean(spaceDetails.archivedAt);
             let paused = archived;
             if (archived) { provider.disconnect(); setAccessDenied(true); setSyncError('This space is archived and read-only.'); }
-            let titleSequence = sequence(loaded.manifest.headSequence);
             let verified = loaded;
             let syncing: ReturnType<typeof syncDraft> | null = null;
             let renaming: Promise<void> | null = null;
@@ -120,18 +155,23 @@ export default function WhiteboardEditorV2({ slug }: { slug: string[] }) {
                 if (!change) return Promise.resolve();
                 const normalized = change.title.trim();
                 if (!normalized || [...normalized].length > 255 || normalized.includes('\0')) return Promise.reject(new Error('Title must contain 1–255 characters.'));
-                renaming = post<{ sequence: string }>(`${base}/checkpoint`, { updateEncoding: 'yjs-update-v1', update: 'AAA=', title: normalized, restoreGeneration: generation }, change.key, abort.signal).then(receipt => {
-                    titleSequence = sequence(receipt.sequence) > titleSequence ? sequence(receipt.sequence) : titleSequence;
+                if (!change.update) {
+                    const update = Y.encodeStateAsUpdate(doc!, titleVector);
+                    if (update.length > 1024 * 1024) return Promise.reject(new Error('Title checkpoint exceeds the 1 MiB limit. Keep this tab open until the board is saved.'));
+                    change.update = uint8ArrayToBase64(update);
+                    change.vector = Y.encodeStateVector(doc!);
+                }
+                renaming = post<{ sequence: string }>(`${base}/checkpoint`, { updateEncoding: 'yjs-update-v1', update: change.update, title: normalized, restoreGeneration: generation }, change.key, abort.signal).then(receipt => {
+                    titleVector = change.vector!;
                     if (pendingTitle.current === change) {
                         pendingTitle.current = null;
                         localStorage.removeItem(titleStorage.current);
-                        titleRef.current = normalized;
-                        if (active) { setTitle(normalized); setTitlePending(false); }
+                        if (active) setTitlePending(false);
                     }
                     provider.awareness.setLocalStateField('titleSequence', receipt.sequence);
                     announceSaved(receipt.sequence);
                 }).finally(() => { renaming = null; });
-                return renaming;
+                return renaming.then(() => pendingTitle.current ? saveTitle() : undefined);
             };
             const sync = () => {
                 if (syncing) return syncing;
@@ -154,12 +194,8 @@ export default function WhiteboardEditorV2({ slug }: { slug: string[] }) {
                     }
                     setSyncError(archived ? 'This space is archived and read-only.' : '');
                     if (next.state !== verified.state) Y.applyUpdate(doc!, next.state, 'v2-server-replay');
+                    titleVector = Y.encodeStateVectorFromUpdate(next.state);
                     verified = next;
-                    if (sequence(next.manifest.headSequence) >= titleSequence && !pendingTitle.current && !titleInputFocused.current) {
-                        titleSequence = sequence(next.manifest.headSequence);
-                        titleRef.current = next.manifest.title;
-                        setTitle(next.manifest.title);
-                    }
                     return next;
                 }).catch(e => {
                     if (active && e instanceof WhiteboardApiError && ([401, 403, 404].includes(e.status) || ['SPACE_ARCHIVED', 'WHITEBOARD_RESTORED'].includes(e.code))) {
@@ -185,6 +221,7 @@ export default function WhiteboardEditorV2({ slug }: { slug: string[] }) {
                 },
             };
             const collaborationUser = { ...user, color: '#7c6ee6' };
+            provider.awareness.setLocalStateField('user', collaborationUser);
             const boardIdentity = `v2:${space}:${page}`;
             const assetStorage = new WhiteboardAssetHttpAdapterV2({ spaceId: space, pageId: page, signal: abort.signal });
             owned = { doc, signal: abort.signal, provider, durability, user: collaborationUser, sync, saveTitle,
@@ -242,10 +279,12 @@ export default function WhiteboardEditorV2({ slug }: { slug: string[] }) {
         };
         void start().catch(e => { if (active) setError(e.message); });
         return () => {
-            active = false; abort.abort(); clearInterval(timer); clearInterval(titleTimer); clearTimeout(notificationTimer); unsubscribe?.();
+            active = false; stopTitle?.(); abort.abort(); clearInterval(timer); clearInterval(titleTimer); clearTimeout(notificationTimer); unsubscribe?.();
             if (activeSession.current === owned) activeSession.current = null;
             void owned?.assetStorage.dispose();
+            owned?.provider.disconnect();
             owned?.provider.destroy();
+            owned?.provider.awareness.destroy();
             void (owned ? owned.durability.dispose('cancel') : recovery?.dispose());
             doc?.destroy();
         };
@@ -273,13 +312,6 @@ export default function WhiteboardEditorV2({ slug }: { slug: string[] }) {
         return () => { window.removeEventListener('beforeunload', unload); window.removeEventListener('online', reconnect); window.removeEventListener('focus', reconnect); document.removeEventListener('visibilitychange', visible); };
     }, [status, session, board]);
 
-    const rename = (value: string) => {
-        setTitle(value); titleRef.current = value;
-        pendingTitle.current = { title: value, key: crypto.randomUUID() };
-        setTitlePending(true);
-        try { localStorage.setItem(titleStorage.current, JSON.stringify(pendingTitle.current)); }
-        catch { setError('Local title recovery is unavailable. Keep this tab open until the title is saved.'); }
-    };
     const run = async (publish: boolean) => {
         if (!session || !board || busyRef.current) return;
         if (accessDenied) { if (!publish) navigate(`/space/${space}/view/${page}`); return; }
@@ -347,9 +379,9 @@ export default function WhiteboardEditorV2({ slug }: { slug: string[] }) {
     if (!session) return <Flex direction="column" align="center" gap="3" p="5">{error ? <><Text role="alert">{error}</Text><Button onClick={() => setLoadAttempt(n => n + 1)}>Retry</Button></> : <Spinner />}</Flex>;
     return <div style={{ height: 'calc(100vh - 57px)', marginTop: -17, display: 'flex', flexDirection: 'column' }}>
         <Flex align="center" gap="3" px="4" py="3" style={{ borderBottom: '1px solid #ddd' }}>
-            <input aria-label="Whiteboard title" value={title} disabled={busy || accessDenied} onFocus={() => { titleInputFocused.current = true; }}
-                onChange={e => rename(e.target.value)} onBlur={() => { titleInputFocused.current = false; void session.saveTitle().catch(e => setError(e.message)); }}
-                onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }} style={{ flex: 1, minWidth: 100, padding: 6 }} />
+            {titleText && <DocumentTitle text={titleText} awareness={session.provider.awareness} label="Whiteboard title" cursorField="canvasCursor"
+                className="whiteboard-title" disabled={busy || accessDenied}
+                onBlur={() => { void session.saveTitle().catch(e => setError(e.message)); }} />}
             <Text size="1" role="status">{titlePending ? 'Title unsaved' : status?.phase === 'clean' ? 'Saved' : status?.phase === 'saving' ? 'Saving…' : status?.phase === 'offline' ? 'Saved locally' : status?.phase === 'dirty' ? 'Unsaved' : 'Save error'}</Text>
             <Text size="1" title={peers.join(', ')}>{Math.max(1, peers.length)} editing</Text>
             <WhiteboardHistoryV2 key={session.doc.guid} spaceId={space} pageId={page} signal={session.signal} canRestore={!accessDenied && !busy}

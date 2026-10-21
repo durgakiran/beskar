@@ -1,0 +1,9 @@
+.document-title.whiteboard-title {
+    flex: 1;
+    min-width: 100px;
+    margin: 0;
+    font-size: 16px;
+    font-weight: 500;
+    letter-spacing: normal;
+    line-height: 1.5;
+}

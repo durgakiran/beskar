@@ -11,8 +11,7 @@ import ToastComponent from "@components/ui/ToastComponent";
 import { uploadImageData } from "../http/uploadImageData";
 import { getApiV1Base } from "../http/apiBase";
 import Collaboration from "@tiptap/extension-collaboration";
-import CollaborationCursor from "@tiptap/extension-collaboration-caret";
-import { HocuspocusProvider } from "@hocuspocus/provider";
+import { DocumentCollaborationCaret } from "./DocumentCollaborationCaret";
 import {
     getExtensions,
     Editor as EditorBeskar,
@@ -388,18 +387,19 @@ export function TipTap({
         };
     }, [spaceId, id]);
 
-    const collaborationExtensions = () => {
+    const collaborationExtensions = useMemo(() => {
+        if (!provider || !ydoc) return [];
         return [
             Collaboration.configure({
                 document: ydoc,
                 field: "default",
             }),
-            CollaborationCursor.configure({
+            DocumentCollaborationCaret.configure({
                 provider: provider,
                 user: user,
             }),
         ];
-    };
+    }, [provider, ydoc, user]);
 
     const manageContent = useMemo(() => {
         if (editable) {
@@ -527,11 +527,11 @@ export function TipTap({
         });
 
         if (editable) {
-            return [...baseExtensions, ...collaborationExtensions()];
+            return [...baseExtensions, ...collaborationExtensions];
         } else {
             return baseExtensions;
         }
-    }, [editable, mentionHandler]);
+    }, [editable, mentionHandler, collaborationExtensions]);
 
     // const editor = useEditor({
     //     immediatelyRender: true,
@@ -603,7 +603,7 @@ export function TipTap({
                         onAttachmentRejected={handleAttachmentRejected}
                         allowedMimeAccept={ATTACHMENT_ACCEPT}
                         onAttachmentsChange={onDocAttachmentsChange}
-                        extensions={collaborationExtensions()}
+                        extensions={collaborationExtensions}
                         editable={editable}
                         placeholder={EDITOR_PLACEHOLDER}
                         onUpdate={editedDataFn}
