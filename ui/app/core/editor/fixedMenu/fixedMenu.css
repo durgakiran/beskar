@@ -1,0 +1,57 @@
+.document-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 0;
+    padding: 10px 16px;
+    min-height: 58px;
+    background: var(--color-panel-solid, #fff);
+    border-bottom: 1px solid var(--gray-5);
+    color: var(--gray-11);
+}
+.document-tool-group { display: flex; align-items: center; gap: 3px; padding: 0 10px; border-right: 1px solid var(--gray-5); }
+.document-tool-group:first-child { padding-left: 0; }
+.document-tool-group:last-child { border-right: 0; }
+.document-tool-group--comments { margin-left: auto; }
+.document-tool {
+    position: relative; display: inline-flex; align-items: center; justify-content: center;
+    gap: 7px; min-width: 32px; height: 34px; padding: 0 8px; border: 1px solid transparent;
+    border-radius: 6px; background: transparent; color: inherit; font: inherit; font-size: 13px;
+    font-weight: 500; white-space: nowrap; cursor: pointer;
+}
+.document-tool:hover:not(:disabled) { background: var(--gray-3); color: var(--gray-12); }
+.document-tool[aria-pressed="true"] { background: var(--accent-3); color: var(--accent-11); border-color: var(--accent-5); }
+.document-tool:focus-visible, .document-insert-item:focus-visible, .document-color-menu button:focus-visible {
+    outline: 2px solid var(--accent-9); outline-offset: 2px;
+}
+.document-tool:disabled { opacity: .35; cursor: not-allowed; }
+.document-tool--style { min-width: 126px; justify-content: space-between; color: var(--gray-12); }
+.document-tool--insert { color: var(--accent-11); background: var(--accent-3); padding: 0 11px; }
+.document-tool--table { color: var(--accent-11); }
+.document-tool--comments { border-color: var(--gray-6); padding: 0 10px; }
+.document-color-indicator { position: absolute; width: 17px; height: 3px; bottom: 3px; border-radius: 2px; }
+.document-toolbar-loading { padding: 16px; color: var(--gray-10); font-size: 13px; }
+.document-insert-menu { width: 370px; max-width: calc(100vw - 24px); padding: 0 !important; overflow: hidden; }
+.document-insert-search { display: flex; align-items: center; gap: 10px; padding: 14px; border-bottom: 1px solid var(--gray-5); color: var(--gray-10); }
+.document-insert-search input { width: 100%; min-width: 0; background: transparent; border: 0; outline: none; font: inherit; font-size: 13px; color: var(--gray-12); }
+.document-insert-search:focus-within { box-shadow: inset 0 -2px var(--accent-8); }
+.document-insert-results { max-height: min(470px, 60vh); overflow-y: auto; padding: 6px; }
+.document-insert-results h3 { margin: 12px 10px 6px; font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--gray-10); }
+.document-insert-item { display: flex; align-items: center; gap: 12px; width: 100%; padding: 9px; border: 0; border-radius: 6px; background: transparent; color: var(--gray-12); text-align: left; cursor: pointer; }
+.document-insert-item:hover, .document-insert-item:focus-visible { background: var(--accent-3); }
+.document-insert-icon { display: grid; place-items: center; flex: 0 0 32px; height: 32px; border: 1px solid var(--gray-5); border-radius: 6px; background: var(--gray-2); font-size: 15px; }
+.document-insert-item strong { display: block; font-size: 13px; font-weight: 500; }
+.document-insert-item small { display: block; margin-top: 2px; font-size: 11px; line-height: 1.5; color: var(--gray-11); }
+.document-insert-empty { padding: 16px; font-size: 13px; color: var(--gray-11); }
+.document-color-menu { width: 180px; font-size: 12px; }
+.document-color-menu strong { font-weight: 500; color: var(--gray-12); }
+.document-color-grid { display: grid; grid-template-columns: repeat(5, 28px); gap: 8px; margin: 14px 0; }
+.document-color-grid button { width: 28px; height: 28px; border: 1px solid var(--gray-6); border-radius: 5px; cursor: pointer; }
+.document-color-grid button[aria-pressed="true"] { outline: 2px solid var(--accent-9); outline-offset: 2px; }
+.document-color-reset { background: var(--gray-3); border: 0; border-radius: 5px; padding: 7px 10px; color: var(--gray-12); cursor: pointer; }
+@media (max-width: 700px) {
+    .document-toolbar { padding: 8px; gap: 8px 0; }
+    .document-tool-group { padding: 0 6px; }
+    .document-tool-group--comments { margin-left: 0; }
+    .document-tool { min-width: 34px; height: 36px; }
+}

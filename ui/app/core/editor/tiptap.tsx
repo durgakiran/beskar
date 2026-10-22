@@ -143,6 +143,19 @@ export function TipTap({
     const [resolvedCount, setResolvedCount] = useState(0);
     const [uploadToast, setUploadToast] = useState<{ type: "warning"; message: string } | null>(null);
 
+    useEffect(() => {
+        if (!editor) return;
+        const openComment = () => {
+            const { selection, doc } = editor.state;
+            if (!selection.empty && doc.textBetween(selection.from, selection.to, ' ').trim()) {
+                setShowCommentPopover(true);
+            }
+        };
+        const dom = editor.view.dom;
+        dom.addEventListener('beskar:add-comment', openComment);
+        return () => dom.removeEventListener('beskar:add-comment', openComment);
+    }, [editor]);
+
     const reloadThreads = useCallback(async () => {
         try {
             const data = await commentApiHandler.getThreads(pageId);

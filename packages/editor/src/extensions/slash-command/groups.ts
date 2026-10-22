@@ -170,6 +170,17 @@ export const GROUPS: Group[] = [
         },
       },
       {
+        name: 'inlineMath',
+        requiredNodes: ['inlineMath'],
+        label: 'Inline Math',
+        icon: '∑',
+        description: 'Insert an inline equation · Mod+Shift+M',
+        aliases: ['inline', 'latex', 'equation', 'formula', 'math'],
+        action: (editor) => {
+          editor.chain().focus().insertInlineMath().run();
+        },
+      },
+      {
         name: 'mathBlock',
         requiredNodes: ['mathBlock'],
         label: 'Math Formula',
