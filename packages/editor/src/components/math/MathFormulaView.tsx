@@ -5,19 +5,20 @@ import { highlightMath, renderMath } from './mathRendering';
 import 'katex/dist/katex.min.css';
 
 /** Shared block/inline source editor. Persist once on close, preview every keystroke. */
-export function MathFormulaView({ node, editor, updateAttributes, selected, inline = false }: NodeViewProps & { inline?: boolean }) {
+export function MathFormulaView({ node, editor, updateAttributes, selected, getPos, inline = false }: NodeViewProps & { inline?: boolean }) {
   const saved = String(node.attrs.latex ?? '');
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState(saved);
   const baseline = useRef(saved);
-  const autoOpened = useRef(false);
+  const wasSelected = useRef(false);
+  const resumeAfterClose = useRef(false);
   const textarea = useRef<HTMLTextAreaElement>(null);
   const highlight = useRef<HTMLPreElement>(null);
   const source = open && editor.isEditable ? draft : saved;
   const rendered = useMemo(() => renderMath(source, !inline && node.attrs.displayMode !== false, !inline), [source, inline, node.attrs.displayMode]);
   const tokens = useMemo(() => highlightMath(draft), [draft]);
 
-  function changeOpen(next: boolean) {
+  function changeOpen(next: boolean, resumeTyping = false) {
     if (next) {
       if (!editor.isEditable) return;
       baseline.current = saved;
@@ -26,16 +27,35 @@ export function MathFormulaView({ node, editor, updateAttributes, selected, inli
       updateAttributes({ latex: draft });
     }
     setOpen(next);
+    resumeAfterClose.current = !next && resumeTyping;
+  }
+
+  function restoreCursor() {
+    if (!resumeAfterClose.current || !inline || editor.isDestroyed) return;
+    resumeAfterClose.current = false;
+    const pos = getPos();
+    if (typeof pos === 'number' && editor.state.doc.nodeAt(pos)?.type === node.type) {
+      // Focus only after Radix has removed its focus scope. Focusing before
+      // unmount lets the scope move the native caret away from the PM selection.
+      const end = pos + node.nodeSize;
+      // A real text boundary keeps the browser caret after a terminal atom.
+      // Without it some browsers normalize the caret to before the equation.
+      if (!editor.state.doc.resolve(end).nodeAfter?.isText) {
+        editor.chain().insertContentAt(end, ' ').focus(end + 1).run();
+      } else {
+        editor.commands.focus(end);
+      }
+    }
   }
 
   useEffect(() => {
-    if (selected && !saved && editor.isEditable && !autoOpened.current) {
-      autoOpened.current = true;
+    if (selected && (inline || !saved) && !wasSelected.current && editor.isEditable) {
       baseline.current = saved;
       setDraft(saved);
       setOpen(true);
     }
-  }, [selected, saved, editor]);
+    wasSelected.current = selected;
+  }, [selected, saved, editor, inline]);
 
   const preview = <span className="math-preview-content">
     {rendered.error ? <span className="math-placeholder math-error" title={rendered.error}>Invalid equation</span>
@@ -53,7 +73,10 @@ export function MathFormulaView({ node, editor, updateAttributes, selected, inli
             <span className="math-preview" role={editor.isEditable ? 'button' : undefined}
               tabIndex={editor.isEditable ? 0 : undefined} aria-label={editor.isEditable ? 'Edit equation' : undefined}
               aria-haspopup={editor.isEditable ? 'dialog' : undefined} aria-expanded={editor.isEditable ? open : undefined}
-              onClick={() => changeOpen(true)} onKeyDown={event => {
+              onMouseDown={event => {
+                // Keep ProseMirror from selecting and rerendering the atom before click.
+                if (editor.isEditable) { event.preventDefault(); event.stopPropagation(); }
+              }} onClick={() => changeOpen(true)} onKeyDown={event => {
                 if (editor.isEditable && (event.key === 'Enter' || event.key === ' ')) {
                   event.preventDefault(); event.stopPropagation(); changeOpen(true);
                 }
@@ -66,7 +89,8 @@ export function MathFormulaView({ node, editor, updateAttributes, selected, inli
           aria-label="Edit LaTeX equation" onOpenAutoFocus={event => {
             event.preventDefault(); textarea.current?.focus();
             textarea.current?.setSelectionRange(draft.length, draft.length);
-          }} onCloseAutoFocus={event => { event.preventDefault(); }}
+          }} onCloseAutoFocus={event => { event.preventDefault(); restoreCursor(); }}
+          onEscapeKeyDown={event => { event.preventDefault(); changeOpen(false, true); }}
           onKeyDown={event => event.stopPropagation()}>
           <label className="math-editor-label">LaTeX equation
             <span className="math-source-editor">
@@ -80,7 +104,7 @@ export function MathFormulaView({ node, editor, updateAttributes, selected, inli
                   event.stopPropagation();
                   if (event.nativeEvent.isComposing) return;
                   if ((event.key === 'Enter' && !event.shiftKey) || event.key === 'Escape') {
-                    event.preventDefault(); changeOpen(false);
+                    event.preventDefault(); changeOpen(false, true);
                   }
                 }} />
             </span>
@@ -88,7 +112,7 @@ export function MathFormulaView({ node, editor, updateAttributes, selected, inli
           {rendered.error && <div className="math-editor-error" role="status">{rendered.error}</div>}
           {saved !== baseline.current && <div className="math-editor-hint" role="status">Equation changed elsewhere. Saving your edits will replace that change.</div>}
           <div className="math-editor-footer"><span className="math-editor-hint">Shift+Enter for a new line · Enter or Esc to save</span>
-            <button type="button" className="math-editor-done" onClick={() => changeOpen(false)}>Done</button></div>
+            <button type="button" className="math-editor-done" onClick={() => changeOpen(false, true)}>Done</button></div>
         </Popover.Content>
       </Popover.Portal>
     </Popover.Root>

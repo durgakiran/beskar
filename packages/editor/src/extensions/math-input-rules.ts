@@ -11,9 +11,14 @@ export function inlineMathInputRules(type: NodeType) {
     find,
     handler: ({ state, range, match }) => {
       const start = range.from + match[0].indexOf('$$');
+      // renderText serializes existing atoms as $$...$$. InputRule's text
+      // matcher sees that serialization too, but it is not typed delimiter text.
+      // Replacing its string length would consume neighboring document content.
+      if (start < 0 || state.doc.textBetween(start, range.to, '', '\uFFFC') !== match[1]) return null;
       const latex = match[2] ?? '';
       const tr = state.tr.replaceWith(start, range.to, type.create({ latex }));
-      tr.setSelection(latex ? TextSelection.create(tr.doc, start + 1) : NodeSelection.create(tr.doc, start));
+      if (latex) tr.insertText(' ', start + 1);
+      tr.setSelection(latex ? TextSelection.create(tr.doc, start + 2) : NodeSelection.create(tr.doc, start));
     },
   }));
 }

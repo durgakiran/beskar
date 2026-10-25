@@ -6,6 +6,7 @@
 import { Node, mergeAttributes } from '@tiptap/core';
 import { ReactNodeViewRenderer } from '@tiptap/react';
 import { inlineMathInputRules } from './math-input-rules';
+import { NodeSelection } from '@tiptap/pm/state';
 import { InlineMathView } from '../components/math/InlineMathView';
 
 export interface InlineMathOptions {
@@ -92,16 +93,16 @@ export const InlineMath = Node.create<InlineMathOptions>({
       
       insertInlineMath:
         () =>
-        ({ state, commands }) => {
-          const { from, to } = state.selection;
-          const selectedText = state.doc.textBetween(from, to, '');
-          const latex = selectedText.trim() || 'x^2';
-          
-          // Delete selected text and insert inline math
-          return commands.deleteSelection() && commands.insertContent({
-            type: this.name,
-            attrs: { latex },
-          });
+        ({ state, tr, dispatch }) => {
+          const { from, to, $from, $to } = state.selection;
+          // Inline equations may only replace a selection in one text block.
+          if (!$from.sameParent($to) || !$from.parent.inlineContent) return false;
+          const latex = state.doc.textBetween(from, to, '').trim();
+          if (dispatch) {
+            tr.replaceSelectionWith(this.type.create({ latex }));
+            tr.setSelection(NodeSelection.create(tr.doc, from));
+          }
+          return true;
         },
     };
   },

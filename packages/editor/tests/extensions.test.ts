@@ -236,8 +236,10 @@ test('math input rules insert equations, preserve preceding text and protect tra
   }
   const inline = apply('Before $$x^2$$');
   assert.equal(inline.doc.firstChild?.firstChild?.text, 'Before ');
-  assert.equal(inline.doc.firstChild?.lastChild?.type.name, 'inlineMath');
-  assert.equal(inline.doc.firstChild?.lastChild?.attrs.latex, 'x^2');
+  assert.equal(inline.doc.firstChild?.child(1)?.type.name, 'inlineMath');
+  assert.equal(inline.doc.firstChild?.child(1)?.attrs.latex, 'x^2');
+  assert.equal(inline.doc.firstChild?.lastChild?.text, ' ');
+  assert.equal(inline.selection.from, 10);
   const empty = apply('$$');
   assert.equal(empty.selection.node?.type.name, 'inlineMath');
   assert.equal(empty.doc.firstChild?.firstChild?.attrs.latex, '');
@@ -537,4 +539,58 @@ test('legacy hrefs supply target space while persisted unsafe URLs cannot become
   assert.equal(resourceContext(ref, handler).spaceId, 'other');
   assert.equal(resourceHref(ref, handler), ref.href);
   assert.equal(resourceHref({ ...ref, href: 'javascript:alert(1)' }, handler), 'https://beskar.example/docs/42');
+});
+
+import { InlineMath } from '../src/extensions/math-inline';
+
+test('inline math insertion opens a blank equation or converts selection without touching neighboring text', () => {
+  const schema = getSchema(getExtensions());
+  const doc = schema.node('doc', null, [schema.node('paragraph', null, schema.text('Before x^2 after.')), schema.node('paragraph', null, schema.text('Keep me'))]);
+  const commands = InlineMath.config.addCommands!.call({ name: 'inlineMath', type: schema.nodes.inlineMath } as any);
+  for (const to of [8, 11]) {
+    let state = EditorState.create({ doc, selection: TextSelection.create(doc, 8, to), plugins: [history()] });
+    const tr = state.tr;
+    assert.equal(commands.insertInlineMath()({ state, tr, dispatch: () => {} } as any), true);
+    state = state.apply(tr);
+    assert.equal(state.selection instanceof NodeSelection, true);
+    assert.equal(state.selection.from, 8);
+    assert.equal((state.selection as NodeSelection).node.attrs.latex, to === 8 ? '' : 'x^2');
+    // Simulate saving and resuming typing at the right edge of the atom.
+    state = state.apply(state.tr.setSelection(TextSelection.create(state.doc, 9)).insertText(' new '));
+    assert.equal(state.doc.firstChild!.textContent, to === 8 ? 'Before  new x^2 after.' : 'Before  new  after.');
+    assert.equal(state.doc.lastChild!.textContent, 'Keep me');
+    assert.ok(undo(state, t => { state = state.apply(t); }));
+    assert.deepEqual(state.doc.toJSON(), doc.toJSON());
+  }
+  const state = EditorState.create({ doc, selection: TextSelection.create(doc, 8, 22) });
+  const tr = state.tr;
+  assert.equal(commands.insertInlineMath()({ state, tr, dispatch: () => {} } as any), false);
+  assert.equal(tr.docChanged, false);
+});
+
+test('inline math slash action is available within paragraphs', () => {
+  const action = GROUPS.flatMap(group => group.commands).find(command => command.name === 'inlineMath');
+  assert.ok(action);
+  assert.deepEqual(action.requiredNodes, ['inlineMath']);
+  assert.ok(!action.blockOnly);
+  assert.ok(action.aliases?.includes('equation'));
+});
+
+test('typing space after a rendered equation never reinterprets its serialized delimiters', () => {
+  const schema = getSchema(getExtensions());
+  for (const latex of ['x^2', '', 'a very long formula']) {
+    const doc = schema.node('doc', null, [schema.node('paragraph', null, [schema.text('Before '), schema.node('inlineMath', { latex }), schema.text(' after')])]);
+    const state = EditorState.create({ doc, selection: TextSelection.create(doc, 9) });
+    const transaction = state.tr;
+    const chained = createChainableState({ state, transaction });
+    const before = `Before $$${latex}$$ `;
+    for (const rule of inlineMathInputRules(schema.nodes.inlineMath)) {
+      const match = (rule.find as RegExp).exec(before);
+      if (!match) continue;
+      const result = rule.handler({ state: chained, range: { from: 9 - (match[0].length - 1), to: 9 }, match } as any);
+      assert.equal(result, null);
+      assert.equal(transaction.docChanged, false);
+      assert.deepEqual(transaction.doc.toJSON(), doc.toJSON());
+    }
+  }
 });
