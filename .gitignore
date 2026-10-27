@@ -2,6 +2,7 @@ zapy
 dbdatamongo
 editorlocal
 pgdata
+/docker/database/pgdata-debian16/
 uilocal
 .gitconfig.pers
 /**/node_modules

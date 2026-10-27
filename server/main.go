@@ -29,6 +29,7 @@ import (
 	page "github.com/durgakiran/beskar/page"
 	profile "github.com/durgakiran/beskar/profile/controller"
 	"github.com/durgakiran/beskar/quota"
+	"github.com/durgakiran/beskar/searchsync"
 	space "github.com/durgakiran/beskar/space"
 	blobstorage "github.com/durgakiran/beskar/storage"
 	"github.com/durgakiran/beskar/user"
@@ -157,6 +158,23 @@ func main() {
 
 	pageevents.SetLogger(core.Logger)
 	pageevents.Init(context.Background())
+
+	searchSyncConfig, err := searchsync.LoadConfig()
+	if err != nil {
+		logger().Fatal("Invalid search sync configuration", zap.Error(err))
+	}
+	searchTarget, err := searchsync.OpenTarget(appContext, searchSyncConfig)
+	if err != nil {
+		logger().Fatal("Cannot initialize search target", zap.Error(err))
+	}
+	if searchTarget != nil {
+		defer searchTarget.Close()
+	}
+	searchWorker, err := searchsync.NewWorker(connPool, searchTarget, searchSyncConfig, logger())
+	if err != nil {
+		logger().Fatal("Cannot initialize search worker", zap.Error(err))
+	}
+	searchSyncDone := searchWorker.Start(appContext)
 
 	notificationConfig := notification.LoadConfig()
 	notificationProducerResolver, err := notificationv2.LoadProducerResolver()
@@ -311,6 +329,7 @@ func main() {
 		}
 	}
 	stopApplication()
+	<-searchSyncDone
 	<-notificationSchedulerDone
 	<-audienceDone
 	<-deliveryDone

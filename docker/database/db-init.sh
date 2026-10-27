@@ -3,7 +3,10 @@
 # This is bash script to initialise database.
 #=============================================
 
-echo "initialising core database"
+set -euo pipefail
+umask 077
+
+echo "initialising databases"
 
 DIRECTORY=$PWD
 WD=$DIRECTORY/docker/database
@@ -14,24 +17,16 @@ echo "running from 📂 $DIRECTORY"
 # java -version
 
 # download liquibase
-if [ ! -d $WD/$LQB ]
+if [ ! -d "$WD/$LQB" ]
 then
     echo "liquibase does not exist, downloading ... ⚙️"
-    mkdir $WD/$LQB
-    curl -kLSs https://github.com/liquibase/liquibase/releases/download/v4.27.0/liquibase-4.27.0.zip -o $WD/$LQB/liquibase.zip
-    unzip $WD/$LQB/liquibase.zip -d $WD/$LQB
+    mkdir -p "$WD/$LQB"
+    curl -kLSs https://github.com/liquibase/liquibase/releases/download/v4.27.0/liquibase-4.27.0.zip -o "$WD/$LQB/liquibase.zip"
+    unzip "$WD/$LQB/liquibase.zip" -d "$WD/$LQB"
 fi
 
 LQ=$WD/$LQB/liquibase # liquibase command
 
-# check if postgres is up and healthy
-until pg_isready -h postgres -p 5432
-do
-    echo "waiting for postgres container to be ready... 🙁"
-    sleep 1
-done
-
-echo "postgres is ready, running migrations... 🥳"
 DB_HOST=${DB_HOST:-postgres}
 DB_PORT=${DB_PORT:-5432}
 DB_ROOT=${DB_ROOT:-postgres}
@@ -43,54 +38,71 @@ DB_BESKAR_ADMIN_USER=${DB_BESKAR_ADMIN_USER:-beskar_admin} # run liquibase migra
 DB_BESKAR_ADMIN_USER_PWD=${DB_BESKAR_ADMIN_USER_PWD:-beskar_admin_pwd}
 DB_BESKAR_APP_USER=${DB_BESKAR_APP_USER:-app_user}
 DB_BESKAR_APP_USER_PWD=${DB_BESKAR_APP_USER_PWD:-app_user_pwd}
-TAG=$(echo date +"%s")
+DB_SEARCH_NAME=${DB_SEARCH_NAME:-search}
+DB_SEARCH_WRITER_USER=${DB_SEARCH_WRITER_USER:-search_writer}
+: "${DB_SEARCH_WRITER_USER_PWD:?DB_SEARCH_WRITER_USER_PWD is required}"
+# Identifiers are interpolated into SQL; restrict them to ordinary PostgreSQL names.
+for identifier in "$DB_SEARCH_NAME" "$DB_SEARCH_WRITER_USER"; do
+    if [[ ! "$identifier" =~ ^[a-z_][a-z0-9_]{0,62}$ ]]; then
+        echo "Invalid search database or writer identifier" >&2
+        exit 1
+    fi
+done
+if [[ "$DB_SEARCH_NAME" == "$DB_APP_NAME" || "$DB_SEARCH_NAME" == "$DB_AUTH_NAME" || "$DB_SEARCH_NAME" == "$DB_ROOT" ]]; then
+    echo "Search must use a separate database" >&2
+    exit 1
+fi
+DB_SEARCH_WRITER_USER_PWD_SQL=${DB_SEARCH_WRITER_USER_PWD//\'/\'\'}
+TAG=$(date +"%s")
+
+until pg_isready -h "$DB_HOST" -p "$DB_PORT"; do
+    echo "waiting for postgres container to be ready..."
+    sleep 1
+done
+
+temp_properties=()
+trap 'for file in "${temp_properties[@]}"; do rm -f "$file"; done' EXIT
 
 echo "running migrations with tag $TAG"
 
 
 function create_temp_liquibase_file() {
-    echo "creating liquibae-temp.properties in folder $1"
-    rm -f $1/liquibase-temp.properties
-    touch $1/liquibase-temp.properties
-    cp $1/$2 $1/liquibase-temp.properties
+    local destination="$1/liquibase-temp.properties"
+    temp_properties+=("$destination" "$destination.next")
+    cp "$1/$2" "$destination"
 }
 
 function copy_data_to_liquibaes_prop_file() {
-    echo "copying properties to liquibase-temp.properties in folder $1"
-    # copy database host
-    sed -i "s/@DB_HOST@/$DB_HOST/" $1/liquibase-temp.properties
-    sed -i "s/@DB_PORT@/$DB_PORT/" $1/liquibase-temp.properties
-    sed -i "s/@DB_ROOT@/$DB_ROOT/" $1/liquibase-temp.properties
-    sed -i "s/@DB_ROOT_USER@/$DB_ROOT_USER/" $1/liquibase-temp.properties
-    sed -i "s/@DB_ROOT_PASS@/$DB_ROOT_PASS/" $1/liquibase-temp.properties
-    sed -i "s/@DB_APP_NAME@/$DB_APP_NAME/" $1/liquibase-temp.properties
-    sed -i "s/@DB_AUTH_NAME@/$DB_AUTH_NAME/" $1/liquibase-temp.properties
-    sed -i "s/@DB_BESKAR_ADMIN_USER@/$DB_BESKAR_ADMIN_USER/" $1/liquibase-temp.properties
-    sed -i "s/@DB_BESKAR_ADMIN_USER_PWD@/$DB_BESKAR_ADMIN_USER_PWD/" $1/liquibase-temp.properties
-    sed -i "s/@DB_BESKAR_APP_USER@/$DB_BESKAR_APP_USER/" $1/liquibase-temp.properties
-    sed -i "s/@DB_BESKAR_APP_USER_PWD@/$DB_BESKAR_APP_USER_PWD/" $1/liquibase-temp.properties
+    local name value
+    for name in DB_HOST DB_PORT DB_ROOT DB_ROOT_USER DB_ROOT_PASS DB_APP_NAME DB_AUTH_NAME \
+        DB_BESKAR_ADMIN_USER DB_BESKAR_ADMIN_USER_PWD DB_BESKAR_APP_USER DB_BESKAR_APP_USER_PWD \
+        DB_SEARCH_NAME DB_SEARCH_WRITER_USER DB_SEARCH_WRITER_USER_PWD_SQL; do
+        value=${!name}
+        # Preserve backslashes in Java properties, then escape sed replacement syntax.
+        value=${value//\\/\\\\}
+        value=${value//\\/\\\\}
+        value=${value//&/\\&}
+        value=${value//|/\\|}
+        sed "s|@$name@|$value|g" "$1/liquibase-temp.properties" > "$1/liquibase-temp.properties.next"
+        mv "$1/liquibase-temp.properties.next" "$1/liquibase-temp.properties"
+    done
 }
 
-# TODO: we should run these scripts in a postgres container where psql is installed.
-# run init scripts
-INIT_DIRECTORY=$DIRECTORY/db/init
-cd $INIT_DIRECTORY
-create_temp_liquibase_file $INIT_DIRECTORY liquibase.properties
-copy_data_to_liquibaes_prop_file $INIT_DIRECTORY
-$LQ --defaultsFile=liquibase-temp.properties tag $TAG
-$LQ --defaultsFile=liquibase-temp.properties update
+function run_migrations() {
+    local directory="$1" properties="$2"
+    cd "$directory"
+    create_temp_liquibase_file "$directory" "$properties"
+    copy_data_to_liquibaes_prop_file "$directory"
+    "$LQ" --defaultsFile=liquibase-temp.properties update
+    # A fresh database has no changelog table to tag until its first update.
+    "$LQ" --defaultsFile=liquibase-temp.properties tag "$TAG"
+}
 
-create_temp_liquibase_file $INIT_DIRECTORY auth.properties
-copy_data_to_liquibaes_prop_file $INIT_DIRECTORY
-$LQ --defaultsFile=liquibase-temp.properties tag $TAG
-$LQ --defaultsFile=liquibase-temp.properties update
+# Provision databases and roles before applying their schemas.
+run_migrations "$DIRECTORY/db/init" liquibase.properties
+run_migrations "$DIRECTORY/db/init" auth.properties
+run_migrations "$DIRECTORY/db/init" search.properties
+run_migrations "$DIRECTORY/db/beskar" liquibase.properties
+run_migrations "$DIRECTORY/db/search" liquibase.properties
 
-# run beskar scripts
-BESKAR_DIRECTORY=$DIRECTORY/db/beskar
-cd $BESKAR_DIRECTORY
-create_temp_liquibase_file $BESKAR_DIRECTORY liquibase.properties
-copy_data_to_liquibaes_prop_file $BESKAR_DIRECTORY
-$LQ --defaultsFile=liquibase-temp.properties tag $TAG
-$LQ --defaultsFile=liquibase-temp.properties update
-
-echo "database initialised with schema 🔥"
+echo "databases initialised with schema"

@@ -17,6 +17,7 @@ docmost-temp
 tmp-landing-assets
 pgdata
 docker/database/pgdata
+docker/database/pgdata-debian16
 docker/.generated
 
 !packages/
