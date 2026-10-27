@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+    <changeSet id="search-vector-extension-v1" author="Kiran Kumar" dbms="postgresql">
+        <sql>CREATE EXTENSION IF NOT EXISTS vector WITH SCHEMA public;</sql>
+        <rollback><sql>DROP EXTENSION IF EXISTS vector;</sql></rollback>
+    </changeSet>
+
+    <changeSet id="search-pg-search-extension-v1" author="Kiran Kumar" dbms="postgresql">
+        <sql splitStatements="true">
+            SET LOCAL search_path = public, pg_catalog;
+            CREATE EXTENSION IF NOT EXISTS pg_search CASCADE;
+        </sql>
+        <rollback><sql>DROP EXTENSION IF EXISTS pg_search;</sql></rollback>
+    </changeSet>
+</databaseChangeLog>

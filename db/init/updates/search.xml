@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+    <changeSet id="search-create-database-v1" author="Kiran Kumar" dbms="postgresql" runInTransaction="false">
+        <preConditions onFail="MARK_RAN">
+            <sqlCheck expectedResult="0">SELECT count(*) FROM pg_database WHERE datname='${search_database_name}'</sqlCheck>
+        </preConditions>
+        <comment>Database creation must run outside a transaction.</comment>
+        <sql>CREATE DATABASE "${search_database_name}";</sql>
+        <rollback><!-- Preserve the database and its data. --></rollback>
+    </changeSet>
+
+    <changeSet id="search-create-writer-v1" author="Kiran Kumar" dbms="postgresql">
+        <preConditions onFail="MARK_RAN">
+            <sqlCheck expectedResult="0">SELECT count(*) FROM pg_roles WHERE rolname='${search_writer}'</sqlCheck>
+        </preConditions>
+        <sql>CREATE USER "${search_writer}" WITH PASSWORD '${search_writer_pwd}';</sql>
+        <rollback><!-- Preserve the runtime role. --></rollback>
+    </changeSet>
+
+    <changeSet id="search-writer-connect-v1" author="Kiran Kumar" dbms="postgresql">
+        <sql>GRANT CONNECT ON DATABASE "${search_database_name}" TO "${search_writer}";</sql>
+        <rollback><sql>REVOKE CONNECT ON DATABASE "${search_database_name}" FROM "${search_writer}";</sql></rollback>
+    </changeSet>
+</databaseChangeLog>
