@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { useDesktopLogout } from "../core/auth/useKeycloak";
 import { Response, useGet } from "@http/hooks";
 import { Icon } from "@components/ui/Icon";
+import DocumentSearch from "./DocumentSearch";
 import { Topbar, TopbarMenuItem, TopbarUser } from "@components/primitives";
 
 interface UserInfo {
@@ -93,9 +94,10 @@ export default function MenuBar() {
 
     return (
         <Topbar
-            className="fixed inset-x-0 top-0 z-50"
+            className="fixed inset-x-0 top-0 z-[60]"
             brand="Teddox"
             brandHref="/"
+            searchSlot={<DocumentSearch />}
             navItems={[
                 { id: "spaces", label: "Spaces", href: "/space", active: pathname?.startsWith("/space") },
                 { id: "contact", label: "Contact", href: "/contact", active: pathname === "/contact" },

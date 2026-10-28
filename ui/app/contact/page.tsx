@@ -10,7 +10,7 @@ export default function ContactPage() {
     return (
         <div className="min-h-screen bg-[#fbfafc]">
             <MenuBar />
-            <Box className="mx-auto w-full max-w-5xl px-4 pb-12 pt-24 md:px-8">
+            <Box className="mx-auto w-full max-w-5xl px-4 pb-12 pt-36 md:pt-24 md:px-8">
                 <Flex direction="column" gap="6">
                     <Link
                         to="/space"

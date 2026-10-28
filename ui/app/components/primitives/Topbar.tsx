@@ -211,6 +211,7 @@ export function Topbar({
     notificationOpen,
     onNotificationsClick,
     notificationSlot,
+    searchSlot,
     userSlot,
     className,
 }: TopbarProps) {
@@ -221,8 +222,8 @@ export function Topbar({
                 className,
             )}
         >
-            <div className="mx-auto flex w-full max-w-[1440px] items-center justify-between px-4 py-3 sm:px-5 md:px-6 lg:px-8">
-                <Link to={brandHref} className="flex items-center gap-2.5">
+            <div className="mx-auto flex w-full max-w-[1440px] flex-wrap items-center justify-between gap-x-4 gap-y-3 px-4 py-3 sm:px-5 md:px-6 lg:px-8">
+                <Link to={brandHref} className="order-1 flex shrink-0 items-center gap-2.5">
                     <div className="hidden md:block">
                         <BrandMark />
                     </div>
@@ -232,7 +233,9 @@ export function Topbar({
                     <Text className="text-[20px] font-bold leading-none text-neutral-900 md:text-[22px]">{brand}</Text>
                 </Link>
 
-                <Flex align="center" className="gap-2 md:gap-5 lg:gap-[26px]">
+                {searchSlot && <div className="order-3 w-full min-w-0 md:order-2 md:mx-2 md:w-auto md:max-w-[660px] md:flex-1 lg:mx-6">{searchSlot}</div>}
+
+                <Flex align="center" className="order-2 shrink-0 gap-2 md:order-3 md:gap-5 lg:gap-[26px]">
                     <Flex align="center" className="hidden gap-5 md:flex lg:gap-[26px]">
                         {navItems.map((item) => (
                             <NavLink key={item.id} item={item} />

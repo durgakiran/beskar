@@ -47,9 +47,15 @@ func OpenTarget(ctx context.Context, c Config) (*pgxpool.Pool, error) {
 	if !c.WorkerEnabled {
 		return nil, nil
 	}
-	cfg, err := c.Database.poolConfig()
+	return OpenTargetDatabase(ctx, c.Database)
+}
+
+// OpenTargetDatabase always configures a target pool. The application uses it
+// for search queries regardless of the background worker's enablement.
+func OpenTargetDatabase(ctx context.Context, c DatabaseConfig) (*pgxpool.Pool, error) {
+	cfg, err := c.poolConfig()
 	if err != nil {
-		return nil, fmt.Errorf("invalid search database configuration")
+		return nil, err
 	}
 	cfg.MaxConns = 2
 	cfg.MinConns = 0

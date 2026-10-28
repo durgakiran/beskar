@@ -163,7 +163,8 @@ go run ./cmd/searchsync -mode replay-failed
 worker or subsequent `once` calls perform target writes. Worker logs contain event
 IDs, page IDs, counts and safe error categories, never document bodies or DSNs.
 Monitor pending age, failed events and target connectivity; this is an internal
-worker and does not add a public search endpoint.
+worker. The application serves an authenticated keyword-search API and a header
+dropdown; see the [search API documentation](../../docs/api/document-search.md).
 
 Completed events are retained for diagnosis. After your chosen audit window, an
 administrator can delete completed rows in bounded batches; do not delete pending
@@ -188,3 +189,12 @@ capture, title-only creation, draft exclusion, latest-state updates, real lexica
 queries, duplicate delivery, singleton/concurrent workers, target-session loss,
 acknowledgement failure after target commit, capped retries, archive rollback,
 archive/unarchive, backfill, and deletion with cascading source records.
+
+## Serving search queries
+
+The application always configures the search target connection and serves the
+keyword-search API. This is independent of sync-worker enablement; the
+`SEARCH_SYNC_WORKER_ENABLED` setting only controls background synchronization.
+The endpoint checks current source publication state and the reader's page-view
+permission before returning any title or snippet. See [document search](../../docs/api/document-search.md)
+for the request contract, deployment settings, and validation commands.

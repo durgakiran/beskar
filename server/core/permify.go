@@ -245,8 +245,13 @@ func GetListOfEntitiesWithPermission(subject string, subjectId string, permissio
 }
 
 func CheckPermission(entity string, entityId string, subject string, subjectId string, permission string) (bool, error) {
+	return CheckPermissionContext(context.Background(), entity, entityId, subject, subjectId, permission)
+}
+
+// CheckPermissionContext bounds authorization calls to the caller's request lifetime.
+func CheckPermissionContext(ctx context.Context, entity string, entityId string, subject string, subjectId string, permission string) (bool, error) {
 	cr, err := GetPermifyInstance().Permission.Check(
-		context.Background(),
+		ctx,
 		&permify_payload.PermissionCheckRequest{
 			TenantId: "t1",
 			Metadata: &permify_payload.PermissionCheckRequestMetadata{

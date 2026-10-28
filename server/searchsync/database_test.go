@@ -97,3 +97,23 @@ func TestTargetConfigTLSAndPasswordlessAuthentication(t *testing.T) {
 		t.Fatal("target TLS setting was not applied")
 	}
 }
+
+func TestApplicationTargetPoolDoesNotDependOnWorkerEnablement(t *testing.T) {
+	targetEnvironment(t)
+	t.Setenv("SEARCH_SYNC_WORKER_ENABLED", "false")
+	c, err := LoadConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	pool, err := OpenTargetDatabase(context.Background(), c.Database)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer pool.Close()
+	if pool.Config().ConnConfig.Database != "search" {
+		t.Fatal("application search target was not configured")
+	}
+	if _, err := OpenTargetDatabase(context.Background(), DatabaseConfig{}); err == nil {
+		t.Fatal("application accepted missing target settings")
+	}
+}

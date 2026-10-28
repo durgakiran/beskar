@@ -12,7 +12,7 @@ export default function UserLayout() {
         return (
             <div>
                 <MenuBar />
-                <Box className="px-4 pt-16 pb-8 mx-auto max-w-6xl"><Outlet /></Box>
+                <Box className="px-4 pt-[117px] md:pt-16 pb-8 mx-auto max-w-6xl"><Outlet /></Box>
             </div>
         );
     }
@@ -20,7 +20,7 @@ export default function UserLayout() {
     return (
         <div>
             <MenuBar />
-            <Box className="px-4 pt-16 mx-auto max-w-8xl">
+            <Box className="px-4 pt-[117px] md:pt-16 mx-auto max-w-8xl">
                 <Flex gap="4">
                     <Box className="w-64 border-r border-neutral-200" p="4">
                         <Flex direction="column" gap="2">
