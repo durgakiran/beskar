@@ -83,7 +83,6 @@ load_env_file() {
     : "${UI_USE_LOCAL_PACKAGES_DIST:=false}"
     : "${DOCKER_LOG_MAX_SIZE:=10m}"
     : "${DOCKER_LOG_MAX_FILE:=3}"
-    : "${LANDING_DOMAIN_ALIASES:=}"
 
     : "${DB_HOST:=postgres}"
     : "${DB_PORT:=5432}"
@@ -104,7 +103,6 @@ load_env_file() {
 
     require_var APP_DOMAIN
     require_var AUTH_DOMAIN
-    require_var LANDING_DOMAIN
     require_var NEXTAUTH_SECRET
     require_var NPM_TOKEN
     require_var DB_ROOT_USER
@@ -133,7 +131,6 @@ load_env_file() {
 
     : "${PUBLIC_BASE_URL:=${public_scheme}://${APP_DOMAIN}}"
     : "${AUTH_PUBLIC_URL:=${public_scheme}://${AUTH_DOMAIN}}"
-    : "${LANDING_PUBLIC_URL:=${public_scheme}://${LANDING_DOMAIN}}"
     : "${NEXTAUTH_URL:=${PUBLIC_BASE_URL}}"
     : "${NEXT_PUBLIC_USER_SERVER_URL:=${PUBLIC_BASE_URL}/api/v1}"
     : "${NEXT_PUBLIC_API_URL:=${PUBLIC_BASE_URL}/api/v1}"
@@ -264,17 +261,6 @@ load_env_file() {
     : "${SERVER_HTTP_REQUEST_LOGGING_ENABLED:=false}"
     : "${SERVER_DB_POOL_DEBUG_LOGS:=false}"
 
-    LANDING_DOMAIN_NAMES="$LANDING_DOMAIN"
-    LANDING_PROXY_ALIASES_BLOCK="          - ${LANDING_DOMAIN}"
-    if [[ -n "${LANDING_DOMAIN_ALIASES// }" ]]; then
-        local landing_alias
-        for landing_alias in $LANDING_DOMAIN_ALIASES; do
-            LANDING_DOMAIN_NAMES="${LANDING_DOMAIN_NAMES} ${landing_alias}"
-            LANDING_PROXY_ALIASES_BLOCK="${LANDING_PROXY_ALIASES_BLOCK}
-          - ${landing_alias}"
-        done
-    fi
-
     PROXY_DOMAIN_ALIASES_ENABLED="$(normalize_bool "$PROXY_DOMAIN_ALIASES_ENABLED")"
     ORIGIN_CERT_TRUST_INJECTION_ENABLED="$(normalize_bool "$ORIGIN_CERT_TRUST_INJECTION_ENABLED")"
     UI_USE_LOCAL_PACKAGES_DIST="$(normalize_bool "$UI_USE_LOCAL_PACKAGES_DIST")"
@@ -329,7 +315,6 @@ load_env_file() {
         aliases:
           - ${APP_DOMAIN}
           - ${AUTH_DOMAIN}
-${LANDING_PROXY_ALIASES_BLOCK}
 EOF
 )
     else
@@ -376,15 +361,12 @@ EOF
     export PROXY_DOMAIN_ALIASES_ENABLED
     export ORIGIN_CERT_TRUST_INJECTION_ENABLED
     export UI_USE_LOCAL_PACKAGES_DIST
-    export LANDING_DOMAIN_ALIASES
-    export LANDING_DOMAIN_NAMES
     export DOCKER_LOG_MAX_SIZE
     export DOCKER_LOG_MAX_FILE
     export DOCKER_LOGGING_BLOCK
     export UI_DOCKER_BUILD_TARGET
     export PUBLIC_BASE_URL
     export AUTH_PUBLIC_URL
-    export LANDING_PUBLIC_URL
     export NEXTAUTH_URL
     export NEXTAUTH_URL_INTERNAL
     export NEXT_PUBLIC_USER_SERVER_URL

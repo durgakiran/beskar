@@ -12,7 +12,6 @@ services:
         aliases:
           - app.teddox.com
           - app.durgakiran.com
-          - power.durgakiran.com
           - id.durgakiran.com
     ports:
       - "8085:8085" # hits ui and api server  
@@ -20,7 +19,6 @@ services:
       - "443:443" # hits zitadel server
     volumes:
       - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
-      - ./nginx/launch-site.conf:/etc/nginx/conf.d/launch-site.conf:ro
       - ./nginx/certs:/etc/nginx/ssl
     healthcheck:
       test: ["CMD-SHELL", "service nginx status || exit 1"]
@@ -103,23 +101,6 @@ services:
       - ./nginx/certs/_wildcard.durgakiran.com.pem:/etc/ssl/certs/_wildcard.durgakiran.com.pem:ro
     healthcheck:
       test: ["CMD-SHELL", "curl -XGET --output /dev/null --silent --head --fail http://localhost:3000/ || exit 1"]
-      interval: 20s
-      timeout: 10s
-      retries: 6
-    networks:
-      - custom_local_network
-  launchsite:
-    container_name: teddox-launchsite
-    build:
-      context: ../..
-      dockerfile: docker/app/launchsite/Dockerfile
-    environment:
-      - NODE_ENV=production
-      - NEXT_TELEMETRY_DISABLED=1
-    expose:
-      - "3001"
-    healthcheck:
-      test: ["CMD-SHELL", "wget --spider -q http://localhost:3001/ || exit 1"]
       interval: 20s
       timeout: 10s
       retries: 6

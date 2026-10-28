@@ -8,7 +8,7 @@ Local preview from the repository root:
 python3 -m http.server 3001 --directory landing-site/public
 ```
 
-Open http://localhost:3001. Docker Compose serves the same files with Nginx on port 3001, retaining the existing proxy and health checks.
+Open http://localhost:3001. The landing site is deployed separately from Docker Compose. To serve the same files with a standalone Nginx container:
 
 ```sh
 docker build -f docker/app/launchsite/Dockerfile -t teddox-landing .
