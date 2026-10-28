@@ -7,6 +7,49 @@ This directory contains two different Docker workflows:
 
 Do not mix these workflows in the same startup sequence.
 
+## PostgreSQL Search Planning
+
+- [Alpine to Debian migration runbook](../docs/runbooks/postgres-alpine-to-debian.md)
+- [Document search tutorial with pg_search and pgvector](../docs/pg-search-document-tutorial.md)
+- [Runnable tutorial SQL](../docs/sql/pg-search-document-tutorial.sql)
+
+The env-driven Compose `postgres` service now builds Debian Bookworm PostgreSQL
+16.15 with pg_search 0.26.3 and pgvector 0.8.7. The image preloads pg_search;
+enable extensions separately in each restored database that needs them.
+Application search behavior has not been changed.
+
+### Start the Debian database for restore
+
+Stop the existing stack before replacing its database container. The configured
+`POSTGRES_DATA_MOUNT` must point to fresh storage; never reuse the Alpine data
+directory with this image. The dev environment bind-mounts
+`docker/database/pgdata-debian16` to `/var/lib/postgresql/data`, preserving the
+original `docker/database/pgdata` directory.
+
+Set `POSTGRES_DATA_MOUNT` to the absolute host path plus the container path:
+
+```env
+POSTGRES_DATA_MOUNT=/Users/kiran/projects/beskar/docker/database/pgdata-debian16:/var/lib/postgresql/data
+POSTGRES_DEBIAN_IMAGE=beskar-postgres:16.15-bookworm-search0.26.3-vector0.8.7
+```
+
+The image setting can be omitted to use the shared default. Remove the obsolete
+`POSTGRES_DEBIAN_VOLUME_NAME` setting if present. Keep existing database names,
+credentials, host, and port. For a different checkout, use its absolute host
+path. The example env file uses `../database/pgdata-debian16`, relative to the
+generated Compose file's directory, `docker/.generated/`.
+
+```bash
+./docker/scripts/render-configs.sh --env docker/env/dev.env
+docker compose -f docker/.generated/compose.yml -p beskar-dev up -d --build postgres
+```
+
+Start only `postgres` while restoring. Restore globals and the database archives
+before starting application services or running `deploy.sh`, which runs database
+initialization and starts writers. A fresh database initializes `DB_ROOT_USER`
+already; account for that existing role when restoring globals. This configuration
+does not restore backups automatically.
+
 ## Before You Start
 
 - Run all commands from the repository root: `/Users/kiran/projects/beskar`
@@ -128,7 +171,6 @@ You must set the values for:
 
 Optional but important:
 
-- Set `LANDING_DOMAIN_ALIASES` to additional launch-site hostnames, for example `LANDING_DOMAIN=durgakiran.com` and `LANDING_DOMAIN_ALIASES=www.durgakiran.com`
 - Set `UPLOAD_STORAGE_DIR` if uploads should not be stored under the default `public` path inside the server container
 - Set `UI_USE_LOCAL_PACKAGES_DIST=true` only when you want the deployment-style UI image to test local Editor, Glideboard, Glideline, and Canvas Text Editor package outputs instead of published versions.
 - Review the log controls if disk usage matters: `DOCKER_LOG_MAX_SIZE`, `DOCKER_LOG_MAX_FILE`, `POSTGRES_LOG_MIN_MESSAGES`, `REDIS_LOG_LEVEL`, `PERMIFY_LOG_LEVEL`, `ZITADEL_ACCESS_LOG_STDOUT_ENABLED`, `SERVER_LOG_TO_FILES`, and `SERVER_HTTP_REQUEST_LOGGING_ENABLED`
@@ -203,7 +245,20 @@ What this does:
 - Validates the generated compose file
 - Starts `postgres` and `redis`
 - Runs the `db-init` job
-- Starts `guard`, `zitadel`, `server`, `signalserver`, `ui`, `launchsite`, and `proxy`
+- Starts `guard`, `zitadel`, `server`, `signalserver`, `ui`, and `proxy`
+
+The landing site is deployed separately and is no longer served by the Compose
+proxy. Existing `LANDING_DOMAIN`, `LANDING_DOMAIN_ALIASES`, and
+`LANDING_PUBLIC_URL` env settings can be removed. After upgrading an existing
+stack, remove only its old landing container (Compose leaves removed services as
+orphans):
+
+```bash
+docker ps -aq --filter label=com.docker.compose.project=beskar-prod \
+  --filter label=com.docker.compose.service=launchsite | xargs -r docker rm -f
+```
+
+Use the stack's actual project name (`beskar-app` for the legacy workflow).
 
 ### Apply Only the Liquibase Changesets in Production
 
@@ -247,7 +302,9 @@ docker compose -f docker/.generated/compose.yml -p beskar-prod run --rm --build 
 Notes:
 
 - `db-init` is the same job used by `./docker/scripts/deploy.sh`.
-- This is safe to run repeatedly because Liquibase tracks applied changesets in its changelog tables and only applies unapplied entries from [db/beskar/update.xml](/Users/kiran/projects/beskar/db/beskar/update.xml:1).
+- Set `DB_SEARCH_WRITER_USER_PWD` before rendering. `DB_SEARCH_NAME` defaults to `search` and `DB_SEARCH_WRITER_USER` to `search_writer`. The job creates the search database and role through `db/init/search.xml`, then applies `db/search/update.xml` using root migration credentials. The runtime writer receives CONNECT, schema USAGE, and document DML permissions. Existing roles retain their passwords.
+- Search connections use `PG_SEARCH_HOST`, `PG_SEARCH_PORT`, `PG_SEARCH_DB`, `PG_SEARCH_USER`, and `PG_SEARCH_PASSWORD`. Empty deployment values default to `DB_HOST`, `DB_PORT`, `DB_SEARCH_NAME`, `DB_SEARCH_WRITER_USER`, and `DB_SEARCH_WRITER_USER_PWD`. Set overrides for a separate target host. Passwords are raw values; `PG_SEARCH_SSLMODE` defaults to `prefer`.
+- This is safe to run repeatedly because Liquibase tracks applied changesets in its changelog tables and only applies unapplied entries in the initialization, application, and search changelogs.
 - This flow only handles database changes. It does not restart `server`, `ui`, or any other application service.
 
 ### Clean Restart One Production Service

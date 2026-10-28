@@ -169,25 +169,6 @@ services:
     networks:
       - app_net
 
-  launchsite:
-    build:
-      context: ../..
-      dockerfile: docker/app/launchsite/Dockerfile
-    restart: unless-stopped
-{{DOCKER_LOGGING_BLOCK}}
-    environment:
-      NODE_ENV: production
-      NEXT_TELEMETRY_DISABLED: "1"
-    expose:
-      - "3001"
-    healthcheck:
-      test: ["CMD-SHELL", "wget --spider -q http://localhost:3001/ || exit 1"]
-      interval: 20s
-      timeout: 10s
-      retries: 6
-    networks:
-      - app_net
-
   server:
     build:
       context: ../..

@@ -14,6 +14,6 @@ docker_compose config >/dev/null
 
 docker_compose up -d postgres redis
 docker_compose run --rm --build db-init
-docker_compose up -d --build guard zitadel server signalserver ui launchsite proxy
+docker_compose up -d --build guard zitadel server signalserver ui proxy
 
 echo "Deployment finished for project $COMPOSE_PROJECT_NAME"
