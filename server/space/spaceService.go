@@ -10,6 +10,7 @@ import (
 	"github.com/durgakiran/beskar/core"
 	"github.com/durgakiran/beskar/notification"
 	"github.com/durgakiran/beskar/quota"
+	"github.com/durgakiran/beskar/searchsync"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -890,7 +891,12 @@ func archiveSpace(spaceId uuid.UUID, actorId uuid.UUID) (Space, error) {
 		return Space{}, err
 	}
 	defer conn.Release()
-	rows, err := conn.Query(ctx, ARCHIVE_SPACE, spaceId, actorId)
+	tx, err := conn.Begin(ctx)
+	if err != nil {
+		return Space{}, err
+	}
+	defer tx.Rollback(ctx)
+	rows, err := tx.Query(ctx, ARCHIVE_SPACE, spaceId, actorId)
 	if err != nil {
 		return Space{}, err
 	}
@@ -898,6 +904,13 @@ func archiveSpace(spaceId uuid.UUID, actorId uuid.UUID) (Space, error) {
 	if err != nil {
 		return Space{}, err
 	}
+	if err := searchsync.QueueSpace(ctx, tx, spaceId, searchsync.ReasonSpaceArchived); err != nil {
+		return Space{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return Space{}, err
+	}
+
 	emitSpaceLifecycleNotification(context.Background(), notification.NotificationTypeSpaceArchived, space, actor, members, time.Now())
 	return space, nil
 }
@@ -915,7 +928,12 @@ func unarchiveSpace(spaceId uuid.UUID, actorId uuid.UUID) (Space, error) {
 		return Space{}, err
 	}
 	defer conn.Release()
-	rows, err := conn.Query(ctx, UNARCHIVE_SPACE, spaceId)
+	tx, err := conn.Begin(ctx)
+	if err != nil {
+		return Space{}, err
+	}
+	defer tx.Rollback(ctx)
+	rows, err := tx.Query(ctx, UNARCHIVE_SPACE, spaceId)
 	if err != nil {
 		return Space{}, err
 	}
@@ -923,6 +941,13 @@ func unarchiveSpace(spaceId uuid.UUID, actorId uuid.UUID) (Space, error) {
 	if err != nil {
 		return Space{}, err
 	}
+	if err := searchsync.QueueSpace(ctx, tx, spaceId, searchsync.ReasonSpaceUnarchived); err != nil {
+		return Space{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return Space{}, err
+	}
+
 	emitSpaceLifecycleNotification(context.Background(), notification.NotificationTypeSpaceUnarchived, space, actor, members, time.Now())
 	return space, nil
 }
@@ -947,11 +972,23 @@ func softDeleteSpace(spaceId uuid.UUID, actorId uuid.UUID, req DeleteSpaceReques
 		return err
 	}
 	defer conn.Release()
-	deletedAt := time.Now()
-	_, err = conn.Exec(ctx, SOFT_DELETE_SPACE, spaceId, actorId)
+	tx, err := conn.Begin(ctx)
 	if err != nil {
 		return err
 	}
+	defer tx.Rollback(ctx)
+	deletedAt := time.Now()
+	_, err = tx.Exec(ctx, SOFT_DELETE_SPACE, spaceId, actorId)
+	if err != nil {
+		return err
+	}
+	if err := searchsync.QueueSpace(ctx, tx, spaceId, searchsync.ReasonSpaceDeleted); err != nil {
+		return err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return err
+	}
+
 	emitSpaceLifecycleNotification(context.Background(), notification.NotificationTypeSpaceDeleted, details, actor, members, deletedAt)
 	return nil
 }

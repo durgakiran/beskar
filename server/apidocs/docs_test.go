@@ -132,3 +132,38 @@ func TestPageHierarchyOperationsDocumented(t *testing.T) {
 		}
 	}
 }
+
+func TestDocumentSearchOperationDocumented(t *testing.T) {
+	var doc struct {
+		Paths map[string]map[string]struct {
+			OperationID string `json:"operationId"`
+			Parameters  []struct {
+				Name     string `json:"name"`
+				Required bool   `json:"required"`
+			} `json:"parameters"`
+			Responses map[string]json.RawMessage   `json:"responses"`
+			Security  []map[string]json.RawMessage `json:"security"`
+		} `json:"paths"`
+	}
+	if err := json.Unmarshal(specification, &doc); err != nil {
+		t.Fatal(err)
+	}
+	op, ok := doc.Paths["/api/v1/search/documents"]["get"]
+	if !ok || op.OperationID != "searchPublishedDocuments" || len(op.Security) == 0 {
+		t.Fatal("authenticated search operation missing from OpenAPI")
+	}
+	foundQuery := false
+	for _, p := range op.Parameters {
+		if p.Name == "q" && p.Required {
+			foundQuery = true
+		}
+	}
+	if !foundQuery {
+		t.Fatal("required search query is undocumented")
+	}
+	for _, code := range []string{"200", "400", "401", "503"} {
+		if _, ok := op.Responses[code]; !ok {
+			t.Fatalf("search missing response %s", code)
+		}
+	}
+}

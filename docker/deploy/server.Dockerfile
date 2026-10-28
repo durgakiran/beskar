@@ -8,6 +8,7 @@ RUN go mod download
 
 COPY server ./
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /out/server .
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /out/searchsync ./cmd/searchsync
 
 FROM node:22-alpine AS whiteboard-runtime
 WORKDIR /runtime
@@ -22,6 +23,7 @@ RUN apk add --no-cache ca-certificates nodejs
 WORKDIR /app
 COPY --from=whiteboard-runtime /runtime /app/whiteboard-runtime
 COPY --from=builder /out/server /usr/local/bin/server
+COPY --from=builder /out/searchsync /usr/local/bin/searchsync
 
 EXPOSE 9095
 

@@ -35,6 +35,10 @@
     {
       "name": "Notifications v2",
       "description": "Producer-owned notification definitions and lifecycle operations."
+    },
+    {
+      "name": "Document search",
+      "description": "Keyword search across published documents the authenticated user can view."
     }
   ],
   "security": [
@@ -6815,6 +6819,93 @@
           }
         }
       }
+    },
+    "/api/v1/search/documents": {
+      "get": {
+        "tags": [
+          "Document search"
+        ],
+        "operationId": "searchPublishedDocuments",
+        "summary": "Search accessible published documents",
+        "description": "Always available to authenticated callers. Keyword search over published titles and body text, with title weighting and literal final-token prefix matching in titles and bodies. Body-prefix matches receive a lower weight than ordinary body matches. For example, localstorage can match the body token localStorage.getItem; arbitrary middle substrings are not matched. Every candidate must pass current source-publication verification and the authenticated actor's page/view permission check. Deleted, archived, unpublished, stale, and inaccessible results are omitted. Permission/backend failures return 503 without partial results or internal errors. No global totals or scores are returned. This dropdown endpoint has a five-second deadline and scans at most 200 candidates, so it may return fewer results than requested. Independent of background sync-worker enablement.",
+        "security": [
+          {
+            "BrowserSession": []
+          },
+          {
+            "BearerToken": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": true,
+            "description": "Trimmed plain text, 2–200 Unicode characters with no control characters. Not interpreted as SQL or search-parser syntax.",
+            "schema": {
+              "type": "string",
+              "minLength": 2,
+              "maxLength": 200
+            },
+            "example": "roadmap"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Maximum authorized results; no pagination or global count.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 20,
+              "default": 8
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Authorized current publications, or an empty results array.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "private, no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentSearchResponse"
+                },
+                "example": {
+                  "status": "success",
+                  "data": {
+                    "results": [
+                      {
+                        "pageId": 42,
+                        "spaceId": "11111111-1111-1111-1111-111111111111",
+                        "spaceName": "Product",
+                        "title": "Roadmap",
+                        "snippet": "Milestones for the next release",
+                        "updatedAt": "2026-10-28T00:00:00Z"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid query text, encoding, or limit."
+          },
+          "401": {
+            "description": "Authentication required or invalid actor."
+          },
+          "503": {
+            "description": "Database or authorization service unavailable, or request deadline exceeded. No partial results or internal error details."
+          }
+        }
+      }
     }
   },
   "components": {
@@ -8671,6 +8762,72 @@
               "detail": {
                 "type": "string",
                 "description": "Human-readable failure explanation, when supplied."
+              }
+            }
+          }
+        }
+      },
+      "DocumentSearchResult": {
+        "type": "object",
+        "required": [
+          "pageId",
+          "spaceId",
+          "spaceName",
+          "title",
+          "snippet",
+          "updatedAt"
+        ],
+        "properties": {
+          "pageId": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "spaceId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "spaceName": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "snippet": {
+            "type": "string",
+            "maxLength": 240,
+            "description": "Plain text from the start of the published body, with whitespace normalized. Never render as HTML."
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Publication timestamp in UTC."
+          }
+        }
+      },
+      "DocumentSearchResponse": {
+        "type": "object",
+        "required": [
+          "status",
+          "data"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "const": "success"
+          },
+          "data": {
+            "type": "object",
+            "required": [
+              "results"
+            ],
+            "properties": {
+              "results": {
+                "type": "array",
+                "maxItems": 20,
+                "items": {
+                  "$ref": "#/components/schemas/DocumentSearchResult"
+                }
               }
             }
           }

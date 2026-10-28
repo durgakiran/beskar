@@ -87,10 +87,13 @@ load_env_file() {
 
     : "${DB_HOST:=postgres}"
     : "${DB_PORT:=5432}"
-    : "${POSTGRES_DATA_MOUNT:=postgres_data:/var/lib/postgresql/data}"
+    : "${POSTGRES_DATA_MOUNT:=$ROOT_DIR/docker/database/pgdata-debian16:/var/lib/postgresql/data}"
+    : "${POSTGRES_DEBIAN_IMAGE:=beskar-postgres:16.15-bookworm-search0.26.3-vector0.8.7}"
     : "${DB_ROOT_DB:=postgres}"
     : "${DB_APP_NAME:=beskar}"
     : "${DB_AUTH_NAME:=auth}"
+    : "${DB_SEARCH_NAME:=search}"
+    : "${DB_SEARCH_WRITER_USER:=search_writer}"
     : "${DB_ZITADEL_NAME:=zitadel}"
     : "${ZITADEL_IMAGE:=ghcr.io/zitadel/zitadel:v4.13.0}"
     : "${ZITADEL_LOGIN_V2_REQUIRED:=false}"
@@ -110,6 +113,7 @@ load_env_file() {
     require_var DB_ADMIN_PASSWORD
     require_var DB_APP_USERNAME
     require_var DB_APP_PASSWORD
+    require_var DB_SEARCH_WRITER_USER_PWD
     require_var REDIS_PASSWORD
     require_var PERMIFY_SECRET
     require_var ZITADEL_MASTER_KEY
@@ -176,6 +180,25 @@ load_env_file() {
     : "${EMAIL_MAX_ATTEMPTS:=10}"
     : "${EMAIL_RETRY_INITIAL_SECONDS:=30}"
     : "${EMAIL_RETRY_MAX_SECONDS:=21600}"
+
+    # Enable search only after source/target migrations and writer setup.
+    : "${SEARCH_SYNC_CAPTURE_ENABLED:=false}"
+    : "${SEARCH_SYNC_WORKER_ENABLED:=false}"
+    : "${PG_SEARCH_HOST:=$DB_HOST}"
+    : "${PG_SEARCH_PORT:=$DB_PORT}"
+    : "${PG_SEARCH_DB:=$DB_SEARCH_NAME}"
+    : "${PG_SEARCH_USER:=$DB_SEARCH_WRITER_USER}"
+    : "${PG_SEARCH_PASSWORD:=$DB_SEARCH_WRITER_USER_PWD}"
+    : "${PG_SEARCH_SSLMODE:=prefer}"
+    # A YAML single-quoted scalar preserves raw passwords, including quotes and backslashes.
+    PG_SEARCH_PASSWORD_YAML=${PG_SEARCH_PASSWORD//\$/\$\$}
+    PG_SEARCH_PASSWORD_YAML="'$(printf '%s' "$PG_SEARCH_PASSWORD_YAML" | sed "s/'/''/g")'"
+    : "${SEARCH_SYNC_POLL_INTERVAL:=1s}"
+    : "${SEARCH_SYNC_TRANSACTION_TIMEOUT:=30s}"
+    : "${SEARCH_SYNC_BATCH_SIZE:=25}"
+    : "${SEARCH_SYNC_MAX_ATTEMPTS:=10}"
+    : "${SEARCH_SYNC_RETRY_INITIAL:=1s}"
+    : "${SEARCH_SYNC_RETRY_MAX:=5m}"
 
     # Keep v2 workers disabled until migrations and provider setup are complete.
     : "${NOTIFICATION_V2_SCHEDULER_ENABLED:=false}"
@@ -412,6 +435,17 @@ EOF
     export EMAIL_MAX_ATTEMPTS
     export EMAIL_RETRY_INITIAL_SECONDS
     export EMAIL_RETRY_MAX_SECONDS
+    export SEARCH_SYNC_CAPTURE_ENABLED
+    export SEARCH_SYNC_WORKER_ENABLED
+    export PG_SEARCH_HOST PG_SEARCH_PORT PG_SEARCH_DB PG_SEARCH_USER PG_SEARCH_PASSWORD PG_SEARCH_SSLMODE
+    export PG_SEARCH_PASSWORD_YAML
+    export SEARCH_SYNC_POLL_INTERVAL
+    export SEARCH_SYNC_TRANSACTION_TIMEOUT
+    export SEARCH_SYNC_BATCH_SIZE
+    export SEARCH_SYNC_MAX_ATTEMPTS
+    export SEARCH_SYNC_RETRY_INITIAL
+    export SEARCH_SYNC_RETRY_MAX
+
     export NOTIFICATION_V2_SCHEDULER_ENABLED
     export NOTIFICATION_V2_SCHEDULER_POLL_INTERVAL
     export NOTIFICATION_V2_SCHEDULER_BATCH_SIZE
@@ -477,9 +511,13 @@ EOF
     export DB_HOST
     export DB_PORT
     export POSTGRES_DATA_MOUNT
+    export POSTGRES_DEBIAN_IMAGE
     export DB_ROOT_DB
     export DB_APP_NAME
     export DB_AUTH_NAME
+    export DB_SEARCH_NAME
+    export DB_SEARCH_WRITER_USER
+    export DB_SEARCH_WRITER_USER_PWD
     export DB_ZITADEL_NAME
     export ZITADEL_IMAGE
     export ZITADEL_LOGIN_V2_REQUIRED
@@ -504,16 +542,11 @@ render_template() {
     mkdir -p "$(dirname "$output_file")"
 
     awk '
-    function escape_replacement(value) {
-        gsub(/\\/, "\\\\", value)
-        gsub(/&/, "\\&", value)
-        return value
-    }
     {
         line = $0
         while (match(line, /\{\{[A-Z0-9_]+\}\}/)) {
             key = substr(line, RSTART + 2, RLENGTH - 4)
-            value = escape_replacement(ENVIRON[key])
+            value = ENVIRON[key]
             line = substr(line, 1, RSTART - 1) value substr(line, RSTART + RLENGTH)
         }
         print line

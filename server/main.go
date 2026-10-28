@@ -29,6 +29,8 @@ import (
 	page "github.com/durgakiran/beskar/page"
 	profile "github.com/durgakiran/beskar/profile/controller"
 	"github.com/durgakiran/beskar/quota"
+	"github.com/durgakiran/beskar/search"
+	"github.com/durgakiran/beskar/searchsync"
 	space "github.com/durgakiran/beskar/space"
 	blobstorage "github.com/durgakiran/beskar/storage"
 	"github.com/durgakiran/beskar/user"
@@ -158,6 +160,21 @@ func main() {
 	pageevents.SetLogger(core.Logger)
 	pageevents.Init(context.Background())
 
+	searchSyncConfig, err := searchsync.LoadConfig()
+	if err != nil {
+		logger().Fatal("Invalid search sync configuration", zap.Error(err))
+	}
+	searchTarget, err := searchsync.OpenTargetDatabase(appContext, searchSyncConfig.Database)
+	if err != nil {
+		logger().Fatal("Cannot initialize search target", zap.Error(err))
+	}
+	defer searchTarget.Close()
+	searchWorker, err := searchsync.NewWorker(connPool, searchTarget, searchSyncConfig, logger())
+	if err != nil {
+		logger().Fatal("Cannot initialize search worker", zap.Error(err))
+	}
+	searchSyncDone := searchWorker.Start(appContext)
+
 	notificationConfig := notification.LoadConfig()
 	notificationProducerResolver, err := notificationv2.LoadProducerResolver()
 	if err != nil {
@@ -274,6 +291,8 @@ func main() {
 	r.Mount("/api/v2/editor", authChain(false)(editor.RouterV2()))
 	r.Mount("/api/v1/space", authChain(false)(space.Router()))
 	r.Mount("/api/v1/invite", authChain(false)(invite.Router()))
+	searchService := search.NewService(connPool, searchTarget)
+	r.Mount("/api/v1/search", authChain(false)(search.Router(searchService)))
 	r.Mount("/api/v1/page", authChain(false)(page.Router()))
 	r.Mount("/api/v1/comment", authChain(false)(comment.Router()))
 	r.Mount("/api/v1/notifications", authChain(false)(notification.NewController().Router()))
@@ -311,6 +330,7 @@ func main() {
 		}
 	}
 	stopApplication()
+	<-searchSyncDone
 	<-notificationSchedulerDone
 	<-audienceDone
 	<-deliveryDone

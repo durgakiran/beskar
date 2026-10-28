@@ -34,6 +34,7 @@ export type TopbarProps = {
     notificationOpen?: boolean;
     onNotificationsClick?: () => void;
     notificationSlot?: ReactNode;
+    searchSlot?: ReactNode;
     userSlot?: ReactNode;
     className?: string;
 };

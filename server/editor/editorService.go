@@ -14,6 +14,7 @@ import (
 	"github.com/durgakiran/beskar/core"
 	"github.com/durgakiran/beskar/page"
 	"github.com/durgakiran/beskar/quota"
+	"github.com/durgakiran/beskar/searchsync"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
@@ -83,6 +84,11 @@ func (p Page) Delete(conn pgx.Tx, ctx context.Context) (int64, error) {
 	if err != nil {
 		logger().Error(err.Error())
 		return int64(0), err
+	}
+	if rowsAffected > 0 {
+		if err := searchsync.QueuePage(ctx, conn, p.Id, searchsync.ReasonDocumentDeleted); err != nil {
+			return 0, err
+		}
 	}
 	return rowsAffected, nil
 }
@@ -310,7 +316,12 @@ func (document InputDocument) Create() (int64, error) {
 		logger().Error(err.Error())
 		return pageId, err
 	}
-	tx.Commit(ctx)
+	if err := searchsync.QueuePage(ctx, tx, pageId, searchsync.ReasonDocumentCreated); err != nil {
+		return 0, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return 0, err
+	}
 	// return created page id
 	return pageId, nil
 }
@@ -425,6 +436,9 @@ func (document InputDocument) Publish() (pageId int64, publishedDocId int64, err
 	// 	}
 	// }
 	if err := queuePublishedMentionNotifications(ctx, tx, document, docId, previousMentions, defaultMentionDependencies()); err != nil {
+		return document.Id, 0, err
+	}
+	if err := searchsync.QueuePage(ctx, tx, document.Id, searchsync.ReasonDocumentPublished); err != nil {
 		return document.Id, 0, err
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -819,6 +833,8 @@ func DeleteDocument(pageId int64, spaceId uuid.UUID, ownerId uuid.UUID) (int64, 
 	if err != nil {
 		return rowsAffected, err
 	}
-	tx.Commit(ctx)
+	if err := tx.Commit(ctx); err != nil {
+		return 0, err
+	}
 	return rowsAffected, nil
 }

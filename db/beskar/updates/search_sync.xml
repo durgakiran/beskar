@@ -1,0 +1,151 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+    <changeSet id="search-sync-schema-v1" author="Kiran Kumar" dbms="postgresql">
+        <comment>Create the schema for published-document search refresh events.</comment>
+        <sql>CREATE SCHEMA search_sync;</sql>
+        <rollback>
+            <sql>DROP SCHEMA search_sync;</sql>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="search-sync-reasons-table-v1" author="Kiran Kumar" dbms="postgresql">
+        <createTable schemaName="search_sync" tableName="reasons">
+            <column name="id" type="SMALLINT"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="name" type="TEXT"><constraints unique="true" nullable="false"/></column>
+        </createTable>
+        <rollback><dropTable schemaName="search_sync" tableName="reasons"/></rollback>
+    </changeSet>
+
+    <changeSet id="search-sync-reasons-seed-v1" author="Kiran Kumar" dbms="postgresql">
+        <insert schemaName="search_sync" tableName="reasons">
+            <column name="id" valueNumeric="1"/><column name="name" value="document_created"/>
+        </insert>
+        <insert schemaName="search_sync" tableName="reasons">
+            <column name="id" valueNumeric="2"/><column name="name" value="document_published"/>
+        </insert>
+        <insert schemaName="search_sync" tableName="reasons">
+            <column name="id" valueNumeric="3"/><column name="name" value="document_deleted"/>
+        </insert>
+        <insert schemaName="search_sync" tableName="reasons">
+            <column name="id" valueNumeric="4"/><column name="name" value="space_archived"/>
+        </insert>
+        <insert schemaName="search_sync" tableName="reasons">
+            <column name="id" valueNumeric="5"/><column name="name" value="space_unarchived"/>
+        </insert>
+        <insert schemaName="search_sync" tableName="reasons">
+            <column name="id" valueNumeric="6"/><column name="name" value="space_deleted"/>
+        </insert>
+        <insert schemaName="search_sync" tableName="reasons">
+            <column name="id" valueNumeric="7"/><column name="name" value="backfill"/>
+        </insert>
+        <insert schemaName="search_sync" tableName="reasons">
+            <column name="id" valueNumeric="8"/><column name="name" value="reconcile"/>
+        </insert>
+        <rollback><delete schemaName="search_sync" tableName="reasons"><where>id IN (1,2,3,4,5,6,7,8)</where></delete></rollback>
+    </changeSet>
+
+    <changeSet id="search-sync-statuses-table-v1" author="Kiran Kumar" dbms="postgresql">
+        <createTable schemaName="search_sync" tableName="statuses">
+            <column name="id" type="SMALLINT"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="name" type="TEXT"><constraints unique="true" nullable="false"/></column>
+        </createTable>
+        <rollback><dropTable schemaName="search_sync" tableName="statuses"/></rollback>
+    </changeSet>
+
+    <changeSet id="search-sync-statuses-seed-v1" author="Kiran Kumar" dbms="postgresql">
+        <insert schemaName="search_sync" tableName="statuses">
+            <column name="id" valueNumeric="1"/><column name="name" value="pending"/>
+        </insert>
+        <insert schemaName="search_sync" tableName="statuses">
+            <column name="id" valueNumeric="2"/><column name="name" value="completed"/>
+        </insert>
+        <insert schemaName="search_sync" tableName="statuses">
+            <column name="id" valueNumeric="3"/><column name="name" value="failed"/>
+        </insert>
+        <rollback><delete schemaName="search_sync" tableName="statuses"><where>id IN (1,2,3)</where></delete></rollback>
+    </changeSet>
+
+    <changeSet id="search-sync-outbox-table-v1" author="Kiran Kumar" dbms="postgresql">
+        <comment>Create transactional refresh events without a page foreign key so they survive source deletion.</comment>
+        <createTable schemaName="search_sync" tableName="outbox">
+            <column name="id" type="BIGINT" autoIncrement="true" generationType="ALWAYS">
+                <constraints primaryKey="true" primaryKeyName="search_sync_outbox_pkey" nullable="false"/>
+            </column>
+            <column name="page_id" type="BIGINT" remarks="No foreign key: refresh events must survive source deletion.">
+                <constraints nullable="false"/>
+            </column>
+            <column name="reason_id" type="SMALLINT"><constraints nullable="false"/></column>
+            <column name="status_id" type="SMALLINT" defaultValueNumeric="1"><constraints nullable="false"/></column>
+            <column name="attempts" type="INTEGER" defaultValueNumeric="0"><constraints nullable="false"/></column>
+            <column name="created_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="clock_timestamp()"><constraints nullable="false"/></column>
+            <column name="next_attempt_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="clock_timestamp()"><constraints nullable="false"/></column>
+            <column name="completed_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="last_error_code" type="TEXT"/>
+        </createTable>
+        <rollback>
+            <dropTable schemaName="search_sync" tableName="outbox"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="search-sync-outbox-catalog-foreign-keys-v1" author="Kiran Kumar" dbms="postgresql">
+        <addForeignKeyConstraint baseTableSchemaName="search_sync" baseTableName="outbox" baseColumnNames="reason_id"
+            referencedTableSchemaName="search_sync" referencedTableName="reasons" referencedColumnNames="id" constraintName="fk_search_sync_outbox_reason"/>
+        <addForeignKeyConstraint baseTableSchemaName="search_sync" baseTableName="outbox" baseColumnNames="status_id"
+            referencedTableSchemaName="search_sync" referencedTableName="statuses" referencedColumnNames="id" constraintName="fk_search_sync_outbox_status"/>
+        <rollback>
+            <dropForeignKeyConstraint baseTableSchemaName="search_sync" baseTableName="outbox" constraintName="fk_search_sync_outbox_status"/>
+            <dropForeignKeyConstraint baseTableSchemaName="search_sync" baseTableName="outbox" constraintName="fk_search_sync_outbox_reason"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="search-sync-outbox-constraints-v1" author="Kiran Kumar" dbms="postgresql">
+        <comment>Validate attempt counts.</comment>
+        <sql splitStatements="true">
+            ALTER TABLE search_sync.outbox ADD CONSTRAINT ck_search_sync_attempts CHECK (attempts &gt;= 0);
+        </sql>
+        <rollback>
+            <sql splitStatements="true">
+                ALTER TABLE search_sync.outbox DROP CONSTRAINT ck_search_sync_attempts;
+            </sql>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="search-sync-outbox-pending-index-v1" author="Kiran Kumar" dbms="postgresql">
+        <comment>Index due pending events for worker polling.</comment>
+        <sql>CREATE INDEX search_sync_pending_idx ON search_sync.outbox(next_attempt_at,id) WHERE status_id=1;</sql>
+        <rollback>
+            <dropIndex schemaName="search_sync" tableName="outbox" indexName="search_sync_pending_idx"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="search-sync-outbox-page-index-v1" author="Kiran Kumar" dbms="postgresql">
+        <comment>Index event history by page.</comment>
+        <createIndex schemaName="search_sync" tableName="outbox" indexName="search_sync_page_idx">
+            <column name="page_id"/>
+            <column name="id"/>
+        </createIndex>
+        <rollback>
+            <dropIndex schemaName="search_sync" tableName="outbox" indexName="search_sync_page_idx"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="search-sync-outbox-grants-v1" author="Kiran Kumar" dbms="postgresql">
+        <comment>Grant runtime access to capture and process search refresh events.</comment>
+        <sql splitStatements="true">
+            GRANT USAGE ON SCHEMA search_sync TO ${app_user};
+            GRANT SELECT ON search_sync.reasons, search_sync.statuses TO ${app_user};
+            GRANT SELECT, INSERT, UPDATE ON search_sync.outbox TO ${app_user};
+            GRANT USAGE, SELECT ON SEQUENCE search_sync.outbox_id_seq TO ${app_user};
+        </sql>
+        <rollback>
+            <sql splitStatements="true">
+                REVOKE USAGE, SELECT ON SEQUENCE search_sync.outbox_id_seq FROM ${app_user};
+                REVOKE SELECT, INSERT, UPDATE ON search_sync.outbox FROM ${app_user};
+                REVOKE SELECT ON search_sync.reasons, search_sync.statuses FROM ${app_user};
+                REVOKE USAGE ON SCHEMA search_sync FROM ${app_user};
+            </sql>
+        </rollback>
+    </changeSet>
+</databaseChangeLog>
