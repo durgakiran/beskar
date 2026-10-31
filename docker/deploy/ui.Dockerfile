@@ -1,3 +1,7 @@
+# syntax=docker/dockerfile:1
+
+ARG UI_STATIC_BUILD_STAGE=builder
+
 FROM node:22-alpine AS editor-pdf
 WORKDIR /packages/editor
 COPY packages/editor/package.json packages/editor/package-lock.json ./
@@ -14,9 +18,13 @@ ARG NPM_TOKEN
 
 COPY ui/package.json ui/package-lock.json ./
 
-RUN test -n "$NPM_TOKEN"
-RUN printf "registry=https://registry.npmjs.org/\n@durgakiran:registry=https://npm.pkg.github.com\n//npm.pkg.github.com/:_authToken=%s\n" "$NPM_TOKEN" > .npmrc
-RUN npm ci
+# BuildKit secrets are used by the static deployment scripts. Keep the build
+# argument as a fallback for the existing Compose deployment.
+RUN --mount=type=secret,id=npm_token,env=NPM_TOKEN \
+    test -n "$NPM_TOKEN" && \
+    printf "registry=https://registry.npmjs.org/\n@durgakiran:registry=https://npm.pkg.github.com\n//npm.pkg.github.com/:_authToken=%s\n" "$NPM_TOKEN" > .npmrc && \
+    npm ci && \
+    rm .npmrc
 
 FROM scratch AS local-editor-dist
 COPY packages/editor/dist /dist
@@ -39,7 +47,8 @@ COPY jbi/go.mod jbi/go.sum ./
 RUN go mod download
 
 COPY jbi ./
-RUN GOOS=js GOARCH=wasm go build -o /out/jbi.wasm .
+RUN GOOS=js GOARCH=wasm go build -o /out/jbi.wasm . && \
+    cp /usr/local/go/lib/wasm/wasm_exec.js /out/wasm_exec.js
 
 FROM node:22-alpine AS builder-base
 
@@ -71,6 +80,7 @@ COPY --from=editor-pdf /packages/editor /packages/editor
 RUN mkdir -p /app/public
 COPY ui ./
 COPY --from=wasm-builder /out/jbi.wasm ./public/jbi.wasm
+COPY --from=wasm-builder /out/wasm_exec.js ./workers/wasm_exec.js
 
 FROM builder-base AS builder
 
@@ -84,6 +94,17 @@ COPY --from=local-glideline-dist /dist ./node_modules/@durgakiran/glideline/dist
 COPY --from=local-canvas-text-editor-dist /dist ./node_modules/@durgakiran/canvas-text-editor/dist
 RUN npm run build:workers
 RUN npm run build
+
+# Export the same build used by the UI runtime, with release metadata outside
+# the public directory. UI_STATIC_BUILD_STAGE can select builder-local-packages.
+FROM ${UI_STATIC_BUILD_STAGE} AS static-verified
+ARG UI_BUILD_REVISION=unknown
+COPY docker/scripts/verify-ui-static.mjs /verify-ui-static.mjs
+RUN node /verify-ui-static.mjs /app/dist --write-manifest /app/build-info.json
+
+FROM scratch AS static-artifact
+COPY --from=static-verified /app/dist /dist
+COPY --from=static-verified /app/build-info.json /build-info.json
 
 FROM node:22-alpine AS runner
 WORKDIR /app

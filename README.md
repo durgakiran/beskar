@@ -15,7 +15,7 @@ You need:
 - Docker with the Docker Compose v2 plugin, and Bash with standard Unix tools.
 - A GitHub Packages token (`NPM_TOKEN`) that can read the `@durgakiran` packages
   used by the UI build.
-- Application, authentication, and landing-site hostnames that resolve to the
+- Application and authentication hostnames that resolve to the
   deployment host, plus TLS certificate/key files when HTTPS is enabled.
 - Zitadel application credentials and a user PAT, Permify configuration, and
   S3-compatible upload storage credentials.
@@ -46,7 +46,7 @@ by Git.
 | Settings | Configuration |
 | --- | --- |
 | `COMPOSE_PROJECT_NAME`, `DOCKER_NETWORK_NAME` | Use different names for local and production, such as `beskar-local` / `beskar-local-network` and `beskar-prod` / `beskar-prod-network`. |
-| `APP_DOMAIN`, `AUTH_DOMAIN`, `LANDING_DOMAIN` | Set hostnames for the app, Zitadel, and landing site. Local names need host/DNS entries; production names need DNS records. |
+| `APP_DOMAIN`, `AUTH_DOMAIN` | Set hostnames for the app and Zitadel. Local names need host/DNS entries; production names need DNS records. |
 | `TLS_ENABLED`, `TLS_CERT_PATH`, `TLS_KEY_PATH` | HTTPS is the default. Paths must refer to certificate/key files on the Docker host. Local browsers and services must trust the local certificate. |
 | `PROXY_HTTP_PORT`, `PROXY_HTTPS_PORT` | Published proxy ports, defaulting to 80 and 443. Separate simultaneous stacks need distinct ports. If using nonstandard public ports, set the corresponding public URL overrides explicitly. |
 | `POSTGRES_DATA_MOUNT` | Choose persistent storage for this environment. Different Compose project names do **not** isolate a shared bind-mount path. Relative paths resolve from `docker/.generated/`. |
@@ -58,7 +58,7 @@ by Git.
 | `NPM_TOKEN` | Token used to install private packages during UI builds. |
 
 Public URLs are derived from the domains and `TLS_ENABLED` unless overridden.
-For local use, route all three hostnames to the local machine and ensure
+For local use, route both hostnames to the local machine and ensure
 containers can reach the configured Zitadel issuer. The
 `PROXY_DOMAIN_ALIASES_ENABLED` option can route those names to the proxy inside
 Docker. Use `ORIGIN_CERT_TRUST_INJECTION_ENABLED` only when the configured
@@ -98,7 +98,7 @@ Deploy to production:
 
 The script renders and validates configuration, starts PostgreSQL and Redis,
 runs the `db-init` job, then builds/starts `guard`, `zitadel`, `server`,
-`signalserver`, `ui`, `launchsite`, and the nginx `proxy`.
+`signalserver`, `ui`, and the nginx `proxy`.
 
 Open the app at its configured public URL. API documentation is served at
 `/api/docs`, with the OpenAPI specification at `/api/openapi.json`.

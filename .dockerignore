@@ -10,6 +10,11 @@
 **/.cache
 **/coverage
 **/*.tsbuildinfo
+**/.wrangler
+
+# Production UI builds receive their public configuration through build args.
+ui/.env*
+ui/.npmrc
 
 packages
 backup
