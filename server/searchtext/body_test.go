@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
+	"os"
 	"reflect"
 	"strings"
 	"testing"
@@ -103,6 +104,19 @@ func TestExtractAttributeNodes(t *testing.T) {
 		{"internalLinkBlock", map[string]any{"resourceTitle": "Guide", "href": "private-url"}, "Guide"},
 		{"attachmentInline", map[string]any{"fileName": "guide.pdf", "fileUrl": "private-url"}, "guide.pdf"},
 		{"embedInline", map[string]any{"title": "Video", "src": "private-url"}, "Video"},
+		{"externalLinkInline", map[string]any{"title": "Article", "siteName": "Example Site", "href": "private-url"}, "Example Site\nArticle"},
+		{"externalLinkInline", map[string]any{"siteName": "Example Site"}, "Example Site"},
+		{"externalLinkInline", map[string]any{"title": "Article"}, "Article"},
+		{"externalLinkInline", map[string]any{"siteName": "", "title": "Article"}, "Article"},
+		{"externalLinkInline", map[string]any{"href": "private-url"}, ""},
+		{"embedInline", map[string]any{"title": "Video", "siteName": "Not an embed label"}, "Video"},
+		{"emoji", map[string]any{"name": "smile"}, "😄"},
+		{"emoji", map[string]any{"name": "woman_technologist"}, "👩‍💻"},
+		{"emoji", map[string]any{"name": "+1"}, "👍"},
+		{"emoji", map[string]any{"name": "octocat"}, ":octocat:"},
+		{"emoji", map[string]any{"name": "future_custom_emoji"}, ":future_custom_emoji:"},
+		{"emoji", map[string]any{"name": ""}, ""},
+		{"emoji", nil, ""},
 		{"dateInline", map[string]any{"value": "2026-10-26"}, "2026-10-26"},
 		{"statusBadge", map[string]any{"label": "Done"}, "Done"},
 		{"tableOfContents", map[string]any{"title": "Do not duplicate"}, ""},
@@ -119,6 +133,56 @@ func TestExtractAttributeNodes(t *testing.T) {
 				t.Fatalf("got=%q err=%v", got, err)
 			}
 		})
+	}
+}
+
+func TestExtractEmojiMixedInline(t *testing.T) {
+	input := paragraph()
+	emoji := node(3, 2, 1, "emoji")
+	emoji.Attrs = map[string]any{"name": "smile"}
+	input.Content = append(input.Content, emoji)
+	input.Text = []TextNode{text(2, 0, "Before "), text(2, 2, " after")}
+	got, err := Extract(input)
+	if err != nil || got != "Before 😄 after" {
+		t.Fatalf("got=%q err=%v", got, err)
+	}
+}
+
+// The editor's npm test supplies its live schema and emoji catalog.
+func TestEditorNodeCoverage(t *testing.T) {
+	path := os.Getenv("SEARCHTEXT_EDITOR_CONTRACT_FILE")
+	if path == "" {
+		t.Skip("run npm test in packages/editor for live editor schema coverage")
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var contract struct {
+		NodeTypes []string          `json:"nodeTypes"`
+		Emojis    map[string]string `json:"emojis"`
+	}
+	if err := json.Unmarshal(raw, &contract); err != nil || len(contract.NodeTypes) == 0 {
+		t.Fatalf("expected a nonempty editor node list: %v", err)
+	}
+	for _, kind := range contract.NodeTypes {
+		t.Run(kind, func(t *testing.T) {
+			input := paragraph()
+			switch kind {
+			case "doc":
+				input.Content = input.Content[:1]
+			case "text":
+				input.Text = []TextNode{text(2, 0, "Text")}
+			default:
+				input.Content[1].Type = kind
+			}
+			if _, err := Extract(input); err != nil {
+				t.Fatalf("editor node %q needs a searchtext extraction rule: %v", kind, err)
+			}
+		})
+	}
+	if !reflect.DeepEqual(emojiTextByName, contract.Emojis) {
+		t.Fatal("searchtext emoji catalog differs from the editor; run node scripts/generate-search-emoji.mjs in packages/editor")
 	}
 }
 
@@ -170,6 +234,18 @@ func TestExtractRejectsMalformedInput(t *testing.T) {
 		{"invalid attr", "invalid_attribute", func(d *DocumentNodes) {
 			d.Content[1].Type = "mention"
 			d.Content[1].Attrs = map[string]any{"label": false}
+		}},
+		{"invalid emoji name", "invalid_attribute", func(d *DocumentNodes) {
+			d.Content[1].Type = "emoji"
+			d.Content[1].Attrs = map[string]any{"name": false}
+		}},
+		{"invalid site name", "invalid_attribute", func(d *DocumentNodes) {
+			d.Content[1].Type = "externalLinkInline"
+			d.Content[1].Attrs = map[string]any{"siteName": false}
+		}},
+		{"emoji leaf children", "invalid_children", func(d *DocumentNodes) {
+			d.Content[1].Type = "emoji"
+			d.Text = []TextNode{text(2, 0, "x")}
 		}},
 		{"invalid utf8", "invalid_text", func(d *DocumentNodes) { d.Text = []TextNode{text(2, 0, string([]byte{0xff}))} }},
 		{"body limit", "limit_exceeded", func(d *DocumentNodes) { d.Text = []TextNode{text(2, 0, strings.Repeat("a", MaxBodyBytes+1))} }},

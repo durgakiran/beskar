@@ -16,6 +16,9 @@ write a search database, or start a synchronization worker.
 - Mentions and status badges contribute their stored label; formulas contribute LaTeX;
   images contribute caption and alt text; attachments contribute filename; references
   and embeds contribute stored titles; dates contribute their stored value.
+- Emoji nodes resolve their stored name using the editor's GitHub emoji catalog;
+  image-only/custom or unknown names contribute `:name:`. External-link chips
+  contribute their stored site name followed by their title.
 - Mermaid source is read from its text children, as present in the persisted corpus.
 - URLs, identifiers, and remote content are not used as text fallbacks. Missing visible
   labels contribute no text. Generated table-of-contents and child-page lists are omitted.
@@ -30,6 +33,19 @@ write a search database, or start a synchronization worker.
 
 This validates the persisted hierarchy; it is not a full Tiptap schema validator.
 Whitespace does not enforce phrase boundaries across blocks in the search tokenizer.
+
+## Editor schema coverage
+
+Run `npm test` from `packages/editor` with Go 1.25 or newer installed. The editor
+test passes its actual default schema and emoji catalog to `TestEditorNodeCoverage`
+in this package. New editor node types fail the check until they have extraction
+rules, including an explicit omission rule when appropriate. The same check catches
+emoji catalog drift after editor dependency or configuration changes.
+
+Regenerate the server's emoji catalog from the installed editor dependency with
+`node scripts/generate-search-emoji.mjs` from `packages/editor`, then rerun the tests.
+Changes to extraction rules require reprocessing affected published documents;
+deploying new code alone does not refresh existing search rows or failed events.
 
 ## Run from the server directory
 

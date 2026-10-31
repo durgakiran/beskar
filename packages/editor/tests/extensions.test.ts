@@ -1,5 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { Editor, Extension, flattenExtensions, getSchema } from '@tiptap/core';
 import { getExtensions } from '../src/extensions';
 import { EDITOR_FEATURE_EXTENSIONS, MANDATORY_EDITOR_EXTENSIONS, type EditorFeature } from '../src/extensions/features';
@@ -32,6 +37,30 @@ test('default preset preserves all optional features without duplicate extension
     for (const name of group) assert.ok(registered.includes(name), name);
   }
   getSchema(extensions);
+});
+
+test('search extraction supports every node in the live default editor schema', () => {
+  const extensions = getExtensions();
+  const schema = getSchema(extensions);
+  const emoji = flattenExtensions(extensions).find(extension => extension.name === 'emoji')!;
+  const emojis: Record<string, string> = {};
+  for (const item of emoji.options.emojis) {
+    for (const name of [item.name, ...item.shortcodes]) {
+      if (!Object.hasOwn(emojis, name)) emojis[name] = item.emoji || `:${name}:`;
+    }
+  }
+  const directory = mkdtempSync(join(tmpdir(), 'searchtext-editor-contract-'));
+  const path = join(directory, 'contract.json');
+  try {
+    writeFileSync(path, JSON.stringify({ nodeTypes: Object.keys(schema.nodes), emojis }));
+    execFileSync('go', ['test', './searchtext', '-run', '^TestEditorNodeCoverage$', '-count=1'], {
+      cwd: fileURLToPath(new URL('../../../server/', import.meta.url)),
+      env: { ...process.env, SEARCHTEXT_EDITOR_CONTRACT_FILE: path },
+      encoding: 'utf8',
+    });
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
 });
 
 test('minimal preset retains mandatory extensions and a valid paragraph document', () => {

@@ -187,6 +187,13 @@ func Extract(input DocumentNodes) (string, error) {
 					return fail("invalid_attribute", id, "visible attribute must be a string")
 				}
 				if s != "" {
+					if node.Type == "emoji" {
+						if value, known := emojiTextByName[s]; known {
+							s = value
+						} else {
+							s = ":" + s + ":"
+						}
+					}
 					parts = append(parts, s)
 				}
 			}
@@ -242,6 +249,8 @@ func ruleFor(kind string) (nodeRule, bool) {
 		return nodeRule{leaf: true, omit: true}, true
 	case "mention", "statusBadge":
 		return nodeRule{leaf: true, attrs: []string{"label"}}, true
+	case "emoji":
+		return nodeRule{leaf: true, attrs: []string{"name"}}, true
 	case "inlineMath", "mathBlock":
 		return nodeRule{leaf: true, attrs: []string{"latex"}}, true
 	case "imageBlock", "imageInline":
@@ -250,7 +259,9 @@ func ruleFor(kind string) (nodeRule, bool) {
 		return nodeRule{leaf: true, attrs: []string{"fileName"}}, true
 	case "internalDocInline", "internalLinkBlock":
 		return nodeRule{leaf: true, attrs: []string{"resourceTitle"}}, true
-	case "externalLinkInline", "embedInline", "embedBlock":
+	case "externalLinkInline":
+		return nodeRule{leaf: true, attrs: []string{"siteName", "title"}}, true
+	case "embedInline", "embedBlock":
 		return nodeRule{leaf: true, attrs: []string{"title"}}, true
 	case "dateInline":
 		return nodeRule{leaf: true, attrs: []string{"value"}}, true
