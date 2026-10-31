@@ -260,6 +260,96 @@ docker ps -aq --filter label=com.docker.compose.project=beskar-prod \
 
 Use the stack's actual project name (`beskar-app` for the legacy workflow).
 
+### Build and Deploy the UI to Cloudflare from Your Machine
+
+The local scripts reuse `docker/deploy/ui.Dockerfile`, including private package
+installation, the editor PDF build, browser worker compilation, and Go WASM.
+Docker with Buildx builds the UI. Deployment requires Node.js 22 or newer and
+npm/npx on your machine. The scripts run pinned Wrangler 4.155.0 locally and
+reuse your saved `wrangler login` OAuth session.
+
+This first stage publishes static files to a dedicated `workers.dev` URL. It
+does not configure app-domain routes, DNS, API proxying, or SPA fallback. The
+preview verifies static delivery; full login and editor flows need the routing
+work that follows. The existing Compose UI deployment continues to work.
+
+1. Create the frontend-only environment file:
+
+   ```bash
+   cp docker/env/ui-cloudflare.env.example docker/env/ui-cloudflare.env
+   ```
+
+   Set `UI_PUBLIC_BASE_URL` to the existing app origin. Its default API values
+   are `<origin>/api/v1`, and signaling defaults to the matching WebSocket URL
+   at `/ws`. Copy any `NEXT_PUBLIC_*` overrides and feature flags from the
+   existing UI deployment. These values are compiled into the artifact.
+
+   Set `CLOUDFLARE_ACCOUNT_ID` (listed by `wrangler whoami` below) and choose a
+   dedicated `CLOUDFLARE_WORKER_NAME`, such as `beskar-ui-preview`. Repeated
+   deployment updates that Worker.
+   Use a new Worker name without existing custom domains or routes for this
+   initial phase.
+
+2. Export `NPM_TOKEN` with read access to the private GitHub packages, then log
+   in to Cloudflare from your local terminal:
+
+   ```bash
+   npx --yes wrangler@4.155.0 login
+   npx --yes wrangler@4.155.0 whoami
+   ```
+
+   If you previously exported Cloudflare API token/key variables, unset them
+   before running `login`. Approve the browser login and copy the intended
+   account ID from `whoami` into the env file. Wrangler saves and refreshes the
+   OAuth credentials on your machine. No Cloudflare API token is required. The deployment script ignores
+   legacy API token/key environment variables so it uses the saved login, and
+   checks the session before starting a Docker build. If verification fails,
+   it stops with the login command; it does not start browser login itself.
+
+   Enable Workers and register the account's `workers.dev` subdomain in
+   Cloudflare before the first deployment. Keep the package token in your shell
+   or password manager where possible; the frontend env file is ignored by Git.
+
+3. Build and validate without contacting Cloudflare:
+
+   ```bash
+   ./docker/scripts/build-ui-static.sh --env docker/env/ui-cloudflare.env
+   ```
+
+   The exported release contains `output/ui-cloudflare/dist/` and a separate
+   `build-info.json` recording public build configuration, the Git revision,
+   and SHA-256 checksums. The revision identifies HEAD; local uncommitted
+   source changes are also included in the build. Only `dist/` is published.
+   The build uses an ephemeral BuildKit package-token secret and excludes
+   local UI env files from the Docker context.
+
+4. Build and deploy in one command:
+
+   ```bash
+   ./docker/scripts/deploy-ui-cloudflare.sh --env docker/env/ui-cloudflare.env
+   ```
+
+   Or upload the release you already built, without rebuilding it:
+
+   ```bash
+   ./docker/scripts/deploy-ui-cloudflare.sh --env docker/env/ui-cloudflare.env --skip-build
+   ```
+
+   Deployment checks the artifact checksums and frontend configuration before
+   uploading. It fails if files or public env values changed since the build;
+   rebuild instead of uploading mismatched output. Wrangler prints the
+   `workers.dev` URL and deployment version. OAuth credentials stay in Wrangler's
+   local credential storage and are not passed to the Docker UI build or
+   included in the public files. To end the saved session, run:
+
+   ```bash
+   npx --yes wrangler@4.155.0 logout
+   ```
+
+To use `UI_USE_LOCAL_PACKAGES_DIST=true`, first build the four local package
+outputs described in [Local Package Testing](#local-package-testing). Otherwise
+the scripts use published packages, matching the default Compose build.
+
 ### Apply Only the Liquibase Changesets in Production
 
 If you only want to apply database schema changes for a production-style environment and do not want to start or redeploy the full app stack, run just the `db-init` job.

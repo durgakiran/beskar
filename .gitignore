@@ -39,6 +39,7 @@ signalserver/signalserver
 server/server
 # new-features
 docker/.generated
+.wrangler/
 docker/env/*.env
 .playwright-cli
 .DS_Store
@@ -69,3 +70,8 @@ ui/scripts
 *.exe
 .task
 bindings
+wireframe-poc
+docs/api/*
+docs/audits
+docs/sql
+docs/*.md
