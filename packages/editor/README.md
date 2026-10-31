@@ -75,6 +75,8 @@ registration and behavior, not bundle size. Client-owned toolbars should also
 check the editor schema or available commands before showing actions.
 
 Run extension configuration checks with `npm test` from this package.
+This also checks the live editor schema and emoji catalog against the Go search
+extractor, so the repository's Go 1.25+ toolchain is required.
 
 ### Basic Editor
 
