@@ -351,6 +351,7 @@ EOF
       options:
         max-size: "${DOCKER_LOG_MAX_SIZE}"
         max-file: "${DOCKER_LOG_MAX_FILE}"
+        labels: "com.docker.compose.project,com.docker.compose.service"
 EOF
 )
 
