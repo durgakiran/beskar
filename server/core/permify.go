@@ -8,6 +8,7 @@ import (
 
 	permify_payload "buf.build/gen/go/permifyco/permify/protocolbuffers/go/base/v1"
 	permify_grpc "github.com/Permify/permify-go/grpc"
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -41,6 +42,7 @@ func GetPermifyInstance() *permify_grpc.Client {
 					Endpoint: os.Getenv("PERMIFY_ENDPOINT"),
 				},
 				grpc.WithTransportCredentials(insecure.NewCredentials()),
+				grpc.WithStatsHandler(otelgrpc.NewClientHandler()),
 				grpc.WithPerRPCCredentials(nonSecureTokenCredentials{"authorization": fmt.Sprintf("Bearer %s", os.Getenv("PERMIFY_SECRET"))}),
 			)
 			if err != nil {

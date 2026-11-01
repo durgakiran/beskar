@@ -1,11 +1,13 @@
 package core
 
 import (
+	"context"
 	"io"
 	"os"
 	"strconv"
 	"strings"
 
+	"github.com/durgakiran/beskar/observability"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"golang.org/x/exp/slog"
@@ -90,4 +92,9 @@ func InitializeSlogLogger() {
 	}
 	var handler slog.Handler = slog.NewJSONHandler(destination, opts)
 	SlogLogger = slog.New(handler)
+}
+
+// RequestLogger adds OpenTelemetry trace IDs to a handler's local JSON logs.
+func RequestLogger(ctx context.Context) *zap.Logger {
+	return observability.RequestLogger(ctx, Logger)
 }

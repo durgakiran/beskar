@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/exaring/otelpgx"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -47,6 +48,8 @@ func Config() *pgxpool.Config {
 		log.Fatal("Failed to create a config, error: ", err)
 	}
 
+	dbConfig.ConnConfig.Tracer = otelpgx.NewTracer(otelpgx.WithDisableSQLStatementInAttributes(), otelpgx.WithTrimSQLInSpanName())
+
 	dbConfig.MaxConns = defaultMaxConns
 	dbConfig.MinConns = defaultMinConns
 	dbConfig.MaxConnLifetime = defaultMaxConnLifetime
@@ -83,6 +86,9 @@ func GetPool() *pgxpool.Pool {
 			pool, err := pgxpool.NewWithConfig(context.Background(), Config())
 			if err != nil {
 				log.Fatal("Error while creating connection to the database!!")
+			}
+			if err := otelpgx.RecordStats(pool); err != nil {
+				log.Printf("OpenTelemetry pool metrics: %v", err)
 			}
 			connPool = pool
 		}

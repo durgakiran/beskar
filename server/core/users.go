@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/durgakiran/beskar/observability"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/zitadel/zitadel-go/v3/pkg/authentication"
@@ -305,7 +306,7 @@ func runUserSearchContext(ctx context.Context, providerURL string, query UserSea
 	req.Header.Set("Authorization", "Bearer "+os.Getenv("SERVER_PAT"))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Add("Accept", "application/json")
-	httpClient := &http.Client{}
+	httpClient := &http.Client{Transport: observability.NewTransport(http.DefaultTransport)}
 	resp, err := httpClient.Do(req)
 	if err != nil {
 		Logger.Error(err.Error())

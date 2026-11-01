@@ -26,6 +26,7 @@ import (
 	mediaservice "github.com/durgakiran/beskar/media/services"
 	"github.com/durgakiran/beskar/notification"
 	"github.com/durgakiran/beskar/notificationv2"
+	"github.com/durgakiran/beskar/observability"
 	page "github.com/durgakiran/beskar/page"
 	profile "github.com/durgakiran/beskar/profile/controller"
 	"github.com/durgakiran/beskar/quota"
@@ -77,7 +78,7 @@ func addCorsMiddleWare(r *chi.Mux) {
 			AllowedOrigins: core.AllowedOriginsFromEnv(),
 			// AllowOriginFunc:  func(r *http.Request, origin string) bool { return true },
 			AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
-			AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token", "Idempotency-Key", "If-Match"},
+			AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token", "Idempotency-Key", "If-Match", "traceparent", "tracestate", "baggage", "newrelic"},
 			ExposedHeaders:   []string{"Link", "ETag", "Location"},
 			AllowCredentials: false,
 			MaxAge:           300, // Maximum value not ignored by any of major browsers
@@ -121,6 +122,18 @@ func main() {
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		logger().Error(err.Error())
 	}
+
+	shutdownTelemetry, err := observability.Init(appContext, "beskar-api")
+	if err != nil {
+		logger().Fatal("Invalid OpenTelemetry configuration", zap.Error(err))
+	}
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := shutdownTelemetry(ctx); err != nil {
+			logger().Error("OpenTelemetry shutdown failed", zap.Error(err))
+		}
+	}()
 
 	closeBrowserSessions, err := core.InitializeBrowserSessions(appContext)
 	if err != nil {
@@ -200,7 +213,7 @@ func main() {
 	audienceDirectory := &notificationv2.ZitadelAudienceDirectory{
 		IssuerURL: strings.TrimSpace(os.Getenv("ISSUER_URL")),
 		Token:     os.Getenv("SERVER_PAT"),
-		Client:    &http.Client{Timeout: 15 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }},
+		Client:    &http.Client{Transport: observability.NewTransport(http.DefaultTransport), Timeout: 15 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }},
 	}
 	audienceExpander, err := notificationv2.NewAudienceExpander(core.GetPool(), audienceConfig, audienceDirectory, logger())
 	if err != nil {
@@ -254,6 +267,7 @@ func main() {
 	whiteboardAssetV2CleanupDone := editor.StartWhiteboardAssetCleanupV2(appContext)
 
 	r := chi.NewRouter()
+	r.Use(observability.RouteMiddleware(core.Logger, requestLoggingEnabled()))
 	addCorsMiddleWare(r)
 
 	// Query credentials are opt-in for legacy media only. Invitation tokens
@@ -264,9 +278,6 @@ func main() {
 		}
 	}
 
-	if requestLoggingEnabled() {
-		r.Use(middleware.Logger)
-	}
 	r.Use(middleware.Heartbeat("/"))
 	r.Use(middleware.Recoverer)
 	// r.Use(CookieLogger)
@@ -313,7 +324,7 @@ func main() {
 	}
 
 	logger().Info(fmt.Sprintf("Serving on port: %s", port))
-	server := &http.Server{Addr: port, Handler: r}
+	server := &http.Server{Addr: port, Handler: observability.HTTPHandler(r, "beskar-api")}
 	serveError := make(chan error, 1)
 	go func() { serveError <- server.ListenAndServe() }()
 	select {

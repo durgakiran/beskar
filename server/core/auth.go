@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/durgakiran/beskar/observability"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/render"
 	"github.com/zitadel/oidc/v3/pkg/client/rp"
@@ -66,7 +67,7 @@ func zitadelRedirectURI() string {
 }
 
 func zitadelClientAuthentication() openid.ClientAuthentication {
-	return zitadelClientAuthenticationWithHTTPClient(&http.Client{
+	return zitadelClientAuthenticationWithHTTPClient(&http.Client{Transport: observability.NewTransport(http.DefaultTransport),
 		Timeout:       10 * time.Second,
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 	})

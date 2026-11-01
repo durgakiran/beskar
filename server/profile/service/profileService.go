@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/durgakiran/beskar/core"
+	"github.com/durgakiran/beskar/observability"
 )
 
 const profileEndpoint = "/protocol/openid-connect/userinfo"
@@ -18,7 +19,7 @@ func GetProfileData(token string) (core.UserInfoOut, error) {
 
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
-	client := &http.Client{}
+	client := &http.Client{Transport: observability.NewTransport(http.DefaultTransport)}
 	resp, err := client.Do(req)
 	if err != nil {
 		return core.UserInfoOut{}, err

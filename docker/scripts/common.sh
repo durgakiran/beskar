@@ -259,6 +259,15 @@ load_env_file() {
     : "${ZITADEL_ACCESS_LOG_STDOUT_ENABLED:=false}"
     : "${PROXY_ERROR_LOG_LEVEL:=warn}"
     : "${PROXY_ACCESS_LOG_MODE:=errors_slow}"
+    : "${OTEL_SDK_DISABLED:=true}"
+    : "${OTEL_SERVER_SERVICE_NAME:=beskar-api-prod}"
+    : "${OTEL_SIGNAL_SERVICE_NAME:=beskar-signal-prod}"
+    : "${OTEL_RESOURCE_ATTRIBUTES:=deployment.environment.name=production}"
+    : "${OTEL_EXPORTER_OTLP_ENDPOINT:=http://otel-collector:4318}"
+    : "${OTEL_EXPORTER_OTLP_PROTOCOL:=http/protobuf}"
+    : "${OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE:=delta}"
+    : "${OTEL_TRACES_SAMPLER:=parentbased_traceidratio}"
+    : "${OTEL_TRACES_SAMPLER_ARG:=0.1}"
     : "${SERVER_LOG_TO_FILES:=false}"
     : "${SERVER_LOG_LEVEL:=error}"
     : "${SERVER_HTTP_REQUEST_LOGGING_ENABLED:=false}"
@@ -502,6 +511,15 @@ EOF
     export PROXY_ERROR_LOG_LEVEL
     export PROXY_ACCESS_LOG_MODE
     export ZITADEL_ACCESS_LOG_STDOUT_ENABLED
+    export OTEL_SDK_DISABLED
+    export OTEL_SERVER_SERVICE_NAME
+    export OTEL_SIGNAL_SERVICE_NAME
+    export OTEL_RESOURCE_ATTRIBUTES
+    export OTEL_EXPORTER_OTLP_ENDPOINT
+    export OTEL_EXPORTER_OTLP_PROTOCOL
+    export OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE
+    export OTEL_TRACES_SAMPLER
+    export OTEL_TRACES_SAMPLER_ARG
     export SERVER_LOG_TO_FILES
     export SERVER_LOG_LEVEL
     export SERVER_HTTP_REQUEST_LOGGING_ENABLED
