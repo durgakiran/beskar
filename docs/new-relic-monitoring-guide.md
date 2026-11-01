@@ -508,129 +508,114 @@ If the image has no `wget`, use a temporary diagnostic container on `beskar-netw
 
 Source: [NGINX collector configuration](https://github.com/newrelic/nri-nginx/blob/master/nginx-config.yml.sample).
 
-## 6. Send container logs to New Relic
+## 6. Send container logs with automatic discovery
 
-The containerized infrastructure agent does not include a log forwarder. Add one Fluent Bit container.
+Fluent Bit watches `/var/lib/docker/containers/*/*-json.log` and scans for new files every 5 seconds. Recreated containers get discovered automatically; no generated `inputs.conf` is needed.
 
-### 6.1 Confirm the log format and location
+Docker adds Compose project/service labels to each log record. Fluent Bit uses them to select only your project's seven services and keep a stable `service` field across container recreation. It does not need the Docker socket.
 
-Run for the application containers:
+### 6.1 Apply the Docker logging labels once
+
+The repository's `docker/scripts/common.sh` now adds this option to every application's `json-file` logging block:
+
+```yaml
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+        labels: "com.docker.compose.project,com.docker.compose.service"
+```
+
+The actual size/file limits still come from your existing deployment env settings.
+
+Update `/root/beskar` to the version containing this change, then render and validate:
 
 ```bash
-for service in server signalserver postgres redis proxy guard zitadel; do
-  container_id=$(docker compose -f /root/beskar/docker/.generated/compose.yml -p "$APP_PROJECT" ps -q "$service")
-  docker inspect "$container_id" --format '{{.Name}} driver={{.HostConfig.LogConfig.Type}} path={{.LogPath}}'
-done
+bash /root/beskar/docker/scripts/validate-config.sh --env "$DEPLOY_ENV"
 ```
 
-The following setup requires **rootful Docker**, the `json-file` driver, and log paths under `/var/lib/docker/containers/`. The repository's production templates configure `json-file`. If your paths/driver differ, adapt the mount/input before continuing.
-
-### 6.2 Create the Fluent Bit files
-
-Create `/root/newrelic-infra/parsers.conf`:
-
-```ini
-[PARSER]
-    Name docker_json
-    Format json
-    Time_Key time
-    Time_Format %Y-%m-%dT%H:%M:%S.%L
-    Time_Keep On
-
-[PARSER]
-    Name application_json
-    Format json
-```
-
-Create `/root/newrelic-infra/fluent-bit.conf`:
-
-```ini
-[SERVICE]
-    Flush 5
-    Log_Level info
-    Parsers_File /fluent-bit/etc/beskar-parsers.conf
-
-@INCLUDE /fluent-bit/etc/beskar-inputs.conf
-
-[FILTER]
-    Name parser
-    Match beskar.*
-    Key_Name log
-    Parser application_json
-    Reserve_Data On
-    Preserve_Key On
-
-[FILTER]
-    Name modify
-    Match beskar.*
-    Rename log message
-    Add environment staging
-
-[OUTPUT]
-    Name newrelic
-    Match beskar.*
-    licenseKey REPLACE_WITH_INGEST_LICENSE_KEY
-    endpoint https://log-api.newrelic.com/log/v1
-```
-
-Replace the license key. Use `https://log-api.eu.newrelic.com/log/v1` for EU or `https://log-api.jp.nr-data.net/log/v1` for Japan.
-
-Generate an input for each running service in the terminal where you set `APP_PROJECT` in Step 1.2:
+**One-time rollout:** recreate the affected containers during your planned deployment window so Docker applies the new logging options:
 
 ```bash
-(
-  set -eu
-  : > "/root/newrelic-infra/inputs.conf.tmp"
-  for service in server signalserver postgres redis proxy guard zitadel; do
-    container_id=$(docker compose -f /root/beskar/docker/.generated/compose.yml -p "$APP_PROJECT" ps -q "$service")
-    test -n "$container_id"
-    log_path=$(docker inspect "$container_id" --format '{{.LogPath}}')
-    case "$log_path" in
-      /var/lib/docker/containers/*/*-json.log) ;;
-      *) echo "Unsupported log path for $service" >&2; exit 1 ;;
-    esac
-    cat >> "/root/newrelic-infra/inputs.conf.tmp" <<INPUT
+docker compose -f /root/beskar/docker/.generated/compose.yml -p "$APP_PROJECT" up -d --no-deps server signalserver postgres redis proxy guard zitadel
+```
+
+The changed logging options cause Compose to recreate these services. This includes PostgreSQL and Redis, so plan for interruption. A plain restart does not apply Docker logging options. You can instead apply the change service by service during normal deployments; that service's logs become eligible after its recreation.
+
+Check one updated container:
+
+```bash
+container_id=$(docker compose -f /root/beskar/docker/.generated/compose.yml -p "$APP_PROJECT" ps -q proxy)
+docker inspect "$container_id" --format '{{json .HostConfig.LogConfig}}'
+```
+
+**Expected:** driver `json-file` and the `labels` option containing both Compose labels. This setup requires rootful Docker with logs under `/var/lib/docker/containers/`.
+
+### 6.2 Copy the ready-to-use Fluent Bit files
+
+```bash
+install -m 644 /root/beskar/docker/monitoring/parsers.conf /root/newrelic-infra/parsers.conf
+install -m 644 /root/beskar/docker/monitoring/fluent-bit.conf /root/newrelic-infra/fluent-bit.conf
+```
+
+In Beskar's existing env file (`/root/beskar/docker/env/deploy.env`, or your actual deployment env filename), add or update:
+
+```dotenv
+NEW_RELIC_LICENSE_KEY='REPLACE_WITH_INGEST_LICENSE_KEY'
+NEW_RELIC_LOG_ENDPOINT=https://log-api.newrelic.com/log/v1
+BESKAR_LOG_PROJECT=beskar-prod
+BESKAR_LOG_ENVIRONMENT=production
+```
+
+Reuse an existing `NEW_RELIC_LICENSE_KEY` entry. Set `BESKAR_LOG_PROJECT` to the existing `APP_PROJECT` value from Step 1.2. Use `staging` for the environment when testing in staging.
+
+For EU, use `https://log-api.eu.newrelic.com/log/v1`; for Japan, use `https://log-api.jp.nr-data.net/log/v1`.
+
+The main input in `fluent-bit.conf` is:
+
+```ini
 [INPUT]
     Name tail
-    Path $log_path
-    Tag beskar.$service
+    Path /var/lib/docker/containers/*/*-json.log
+    Tag beskar.containers
     Parser docker_json
-    DB /state/$service.db
-    Read_from_Head Off
-    Mem_Buf_Limit 10MB
+    Path_Key docker.log_path
+    DB /state/containers.db
+    DB.Compare_Filename On
+    Read_from_Head On
+    Mem_Buf_Limit 50MB
     Skip_Long_Lines On
     Refresh_Interval 5
-
-[FILTER]
-    Name modify
-    Match beskar.$service
-    Add service $service
-
-INPUT
-  done
-  mv "/root/newrelic-infra/inputs.conf.tmp" "/root/newrelic-infra/inputs.conf"
-)
-chmod 600 "/root/newrelic-infra/fluent-bit.conf"
+    Rotate_Wait 30
 ```
 
-### 6.3 Start the forwarder
+The rest of the supplied file filters Docker's labels, parses JSON application logs, sets `service`/`compose.project`/`environment`, and sends logs to New Relic. Unrelated projects, unlabelled logs, and the monitoring containers' own logs are excluded.
 
-Add this service under `services:` in `/root/newrelic-infra/docker-compose.yaml`, beside `agent`:
+**First-run behavior:** files without a saved offset are read from the beginning, so retained eligible logs can be forwarded once. When migrating from the old per-service inputs, the new `containers.db` does not reuse their offsets; logs already carrying the labels can be replayed. Existing unlabelled log records are skipped. Keep the state volume to retain offsets across forwarder restarts.
+
+Do not include or mount the old generated `inputs.conf` alongside this configuration: that could read the same files twice.
+
+### 6.3 Start or update the forwarder
+
+Use this service under `services:` in `/root/newrelic-infra/docker-compose.yaml`. Replace the old `logs` service definition if already present:
 
 ```yaml
   logs:
-    image: newrelic/logging-fluent-bit:latest
+    image: newrelic/newrelic-fluentbit-output@sha256:87b92e85b5344678d7315d0b5552b241a9f976977c7ced9f044d1e6d797a5a02
+    command: ["-c", "/fluent-bit/etc/fluent-bit.conf", "-e", "/fluent-bit/bin/out_newrelic.so"]
     user: "0:0"
+    env_file:
+      - /root/beskar/docker/env/deploy.env
     volumes:
       - /var/lib/docker/containers:/var/lib/docker/containers:ro
       - ./fluent-bit.conf:/fluent-bit/etc/fluent-bit.conf:ro
       - ./parsers.conf:/fluent-bit/etc/beskar-parsers.conf:ro
-      - ./inputs.conf:/fluent-bit/etc/beskar-inputs.conf:ro
       - log_state:/state
     restart: unless-stopped
 ```
 
-Add this top-level section at the end of the same file:
+Use your actual Beskar env filename in `env_file`. Keep this top-level volume declaration, adding it only if absent:
 
 ```yaml
 volumes:
@@ -641,28 +626,30 @@ Run:
 
 ```bash
 docker compose -f /root/newrelic-infra/docker-compose.yaml -p "$MONITOR_PROJECT" config --quiet
-docker compose -f /root/newrelic-infra/docker-compose.yaml -p "$MONITOR_PROJECT" up -d logs
+docker compose -f /root/newrelic-infra/docker-compose.yaml -p "$MONITOR_PROJECT" up -d --force-recreate logs
 docker compose -f /root/newrelic-infra/docker-compose.yaml -p "$MONITOR_PROJECT" logs --tail 100 logs
 ```
 
-After testing, pin this image to its downloaded digest too, using `docker image inspect newrelic/logging-fluent-bit:latest --format '{{index .RepoDigests 0}}'`.
+Fluent Bit expands the `${...}` variables from its own environment; infrastructure-agent `passthrough_environment` is not needed. Recreate `logs` after changing its env values or mounts. The image above is pinned to the tested digest (Fluent Bit 5.1.5). The corrected published image name is `newrelic/newrelic-fluentbit-output`; the older `newrelic/logging-fluent-bit` name in this guide was incorrect.
 
-### 6.4 Test a real log
+### 6.4 Check logs and discovery
 
-Repeat the `pg_sleep` test from Step 3. Then run in New Relic:
+Visit your site to generate proxy access logs, then run in New Relic:
 
 ```sql
-FROM Log SELECT * WHERE service = 'postgres' AND message LIKE '%pg_sleep%'
-SINCE 15 minutes ago LIMIT 20
+FROM Log SELECT count(*) FACET service
+WHERE compose.project = 'beskar-prod' SINCE 15 minutes ago
 ```
 
-**Expected:** the slow query log. Generate traffic through the site, then query `FROM Log SELECT count(*) FACET service SINCE 15 minutes ago` to check the other services. Quiet services may have no new logs yet.
+Replace the project name if different. Quiet services may have no new logs yet. Repeat the `pg_sleep` test from Step 3 to check PostgreSQL logs too.
 
-**After recreating any app container:** rerun the input-generation block in 6.2, then run `docker compose -f /root/newrelic-infra/docker-compose.yaml -p "$MONITOR_PROJECT" restart logs`. Docker gives recreated containers new log paths. This simple setup does not discover those changes automatically.
+**During the next normal application deployment:** note the new container ID, generate a new request/log after deployment, and check that it appears with the same `service` field. New files are discovered on the five-second scan; allow additional time for flushing and New Relic ingestion. You do not regenerate inputs or restart Fluent Bit for an application recreation.
 
-This forwards new logs and stores read offsets. It does not guarantee delivery during long outages, and it does not collect journald/Docker daemon logs. Do not enable another forwarding pipeline for these same container logs.
+If logs are missing, check the container's logging labels, `BESKAR_LOG_PROJECT`, key/region, and forwarder logs. A running container from before the logging-option rollout still lacks the required log attributes.
 
-Source: [New Relic Fluent Bit image and output options](https://docs.newrelic.com/docs/logs/forward-logs/fluent-bit-plugin-log-forwarding/).
+The watcher follows active log files and waits briefly for rotated files. A container created and deleted between scans, logs deleted before discovery, oversized lines, or a long forwarding outage can still cause loss. This setup does not collect host journal/Docker daemon logs. Keep only one forwarding pipeline for these container logs.
+
+Sources: [Docker JSON-file logging options](https://docs.docker.com/engine/logging/drivers/json-file/), [Fluent Bit wildcard discovery and offsets](https://docs.fluentbit.io/manual/data-pipeline/inputs/tail), [New Relic log output](https://docs.newrelic.com/docs/logs/forward-logs/fluent-bit-plugin-log-forwarding/).
 
 ## 7. Add vendor-neutral Go monitoring with OpenTelemetry
 
@@ -938,7 +925,7 @@ docker compose -f /root/beskar/docker/.generated/compose.yml -p "$APP_PROJECT" u
 docker compose -f /root/newrelic-infra/docker-compose.yaml -p "$MONITOR_PROJECT" logs --tail 100 otel-collector
 ```
 
-Regenerate Fluent Bit inputs using Step 6.2 and restart `logs` after container recreation. Open the app and a document, then run:
+Fluent Bit automatically discovers the new container log file after recreation once Step 6's logging labels are applied. Open the app and a document, then run:
 
 ```sql
 FROM Span SELECT count(*) WHERE service.name = 'beskar-api-staging' SINCE 15 minutes ago
@@ -1025,7 +1012,7 @@ bash /root/beskar/docker/scripts/validate-config.sh --env "$DEPLOY_ENV"
 docker compose -f /root/beskar/docker/.generated/compose.yml -p "$APP_PROJECT" up -d --build --no-deps signalserver
 ```
 
-Regenerate Fluent Bit inputs and restart `logs`. Edit the same document from two clients. Check:
+Fluent Bit automatically discovers recreated containers; no input regeneration is needed. Edit the same document from two clients. Check:
 
 ```sql
 FROM Span SELECT count(*) FACET name
@@ -1067,7 +1054,7 @@ bash /root/beskar/docker/scripts/validate-config.sh --env "$DEPLOY_ENV"
 docker compose -f /root/beskar/docker/.generated/compose.yml -p "$APP_PROJECT" up -d --build --no-deps ui server
 ```
 
-Regenerate Fluent Bit inputs and restart `logs`.
+Fluent Bit automatically discovers recreated containers; no input regeneration is needed.
 
 ### 9.3 Verify in the browser
 
@@ -1159,7 +1146,7 @@ Only use this if you need host network-interface metrics:
 3. Replace `postgres`, `redis`, and `proxy` in integration files with host-reachable endpoints. Compose DNS will no longer work in the agent.
 4. One Linux-host option is to publish **loopback-only** application ports: `127.0.0.1:15432:5432`, `127.0.0.1:16379:6379`, and `127.0.0.1:18088:8088` under their respective services in both templates.
 5. Point the integrations to `127.0.0.1:15432`, `127.0.0.1:16379`, and `http://127.0.0.1:18088/nginx_status`. Check those ports are unused first.
-6. Render/validate, recreate the affected services during a planned window, restart the agent, and repeat Steps 2–5 checks. Regenerate log inputs after container recreation.
+6. Render/validate, recreate the affected services during a planned window, restart the agent, and repeat Steps 2–5 checks. Fluent Bit discovers the recreated containers automatically after Step 6's logging labels are applied.
 
 Do not publish those ports on `0.0.0.0`. This optional change restarts the affected containers and requires rechecking database and proxy availability.
 
@@ -1169,6 +1156,8 @@ Do not publish those ports on `0.0.0.0`. This optional change restarts the affec
 | --- | --- |
 | `/root/newrelic-infra/` outside Git | Infrastructure/OTel Collector/log configurations and credentials |
 | Both `/root/beskar/docker/templates/compose.*.yml.tmpl` files | Slow-query settings and standard OTEL environment variables |
+| `/root/beskar/docker/scripts/common.sh` | Compose labels in Docker JSON logs for automatic service discovery |
+| `/root/beskar/docker/monitoring/fluent-bit.conf`, `parsers.conf` | Wildcard log collection, filtering, and parsing |
 | Both `/root/beskar/docker/templates/nginx.*.conf.tmpl` files | Private status port and access logs |
 | `$DEPLOY_ENV` (existing application env file) | API log output and level |
 | `/root/beskar/server/`, `/root/beskar/signalserver/` | Go tracing code and dependencies |
