@@ -1,5 +1,26 @@
 error_log /dev/stderr warn;
-access_log off;
+log_format monitoring escape=json
+    '{"service":"proxy","method":"$request_method",'
+    '"status":$status,"request_time":$request_time,'
+    '"upstream_status":"$upstream_status",'
+    '"upstream_response_time":"$upstream_response_time",'
+    '"request_id":"$request_id"}';
+access_log /dev/stdout monitoring;
+
+# Internal collector endpoint. Do not publish port 8088 on the host.
+server {
+    listen 8088;
+    server_name _;
+    access_log off;
+
+    location = /nginx_status {
+        stub_status;
+    }
+
+    location / {
+        return 404;
+    }
+}
 
 server {
     listen 80;
