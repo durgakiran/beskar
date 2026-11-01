@@ -14,9 +14,42 @@ Do not mix these workflows in the same startup sequence.
 - [Runnable tutorial SQL](../docs/sql/pg-search-document-tutorial.sql)
 
 The env-driven Compose `postgres` service now builds Debian Bookworm PostgreSQL
-16.15 with pg_search 0.26.3 and pgvector 0.8.7. The image preloads pg_search;
+16.15 with pg_search 0.26.3 and pgvector 0.8.7. Compose preloads pg_search and pg_stat_statements;
 enable extensions separately in each restored database that needs them.
 Application search behavior has not been changed.
+
+### Query statistics with pg_stat_statements
+
+Both deployment templates and the legacy `docker/database/db.yml` preload
+`pg_stat_statements`. For an existing deployment, render the configuration and
+recreate the Postgres service to apply the preload setting:
+
+```bash
+./docker/scripts/render-configs.sh --env docker/env/dev.env
+docker compose -f docker/.generated/compose.yml -p beskar-dev up -d postgres
+```
+
+For the legacy stack, use its Compose file and project name instead:
+
+```bash
+docker compose -f docker/database/db.yml --env-file docker/database/.env -p beskar-db up -d postgres
+```
+
+Using a database superuser, run this SQL in each database where you want to query
+the statistics (including existing or restored databases):
+
+```sql
+CREATE EXTENSION IF NOT EXISTS pg_stat_statements;
+SHOW shared_preload_libraries;
+SELECT query, calls, total_exec_time, mean_exec_time
+FROM pg_stat_statements
+ORDER BY total_exec_time DESC
+LIMIT 20;
+```
+
+Statistics are collected across the server; the extension exposes the views in
+the database where it is created. See the
+[PostgreSQL documentation](https://www.postgresql.org/docs/16/pgstatstatements.html).
 
 ### Start the Debian database for restore
 

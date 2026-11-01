@@ -144,6 +144,10 @@ func fetchDocumentToEdit(conn pgx.Tx, ctx context.Context, pageId int64, spaceId
 		return doc, err
 	}
 	doc, err = pgx.CollectExactlyOneRow(row, pgx.RowToStructByNameLax[Document])
+	// A missing draft is expected when the caller needs to create one.
+	if errors.Is(err, pgx.ErrNoRows) {
+		return doc, err
+	}
 	if err != nil {
 		logger().Error(err.Error())
 		fmt.Printf("Error happend while fetching document %v \n", err.Error())
