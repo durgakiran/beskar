@@ -255,11 +255,23 @@ load_env_file() {
     : "${POSTGRES_LOG_MIN_MESSAGES:=warning}"
     : "${REDIS_LOG_LEVEL:=warning}"
     : "${PERMIFY_LOG_LEVEL:=warn}"
+    : "${ZITADEL_LOG_LEVEL:=warn}"
     : "${ZITADEL_ACCESS_LOG_STDOUT_ENABLED:=false}"
+    : "${PROXY_ERROR_LOG_LEVEL:=warn}"
+    : "${PROXY_ACCESS_LOG_MODE:=errors_slow}"
     : "${SERVER_LOG_TO_FILES:=false}"
     : "${SERVER_LOG_LEVEL:=error}"
     : "${SERVER_HTTP_REQUEST_LOGGING_ENABLED:=false}"
     : "${SERVER_DB_POOL_DEBUG_LOGS:=false}"
+
+    case "$PROXY_ACCESS_LOG_MODE" in
+        all|errors_slow|off) ;;
+        *) echo "PROXY_ACCESS_LOG_MODE must be all, errors_slow, or off" >&2; exit 1 ;;
+    esac
+    case "$PROXY_ERROR_LOG_LEVEL" in
+        debug|info|notice|warn|error|crit|alert|emerg) ;;
+        *) echo "Invalid PROXY_ERROR_LOG_LEVEL" >&2; exit 1 ;;
+    esac
 
     PROXY_DOMAIN_ALIASES_ENABLED="$(normalize_bool "$PROXY_DOMAIN_ALIASES_ENABLED")"
     ORIGIN_CERT_TRUST_INJECTION_ENABLED="$(normalize_bool "$ORIGIN_CERT_TRUST_INJECTION_ENABLED")"
@@ -486,6 +498,9 @@ EOF
     export POSTGRES_LOG_MIN_MESSAGES
     export REDIS_LOG_LEVEL
     export PERMIFY_LOG_LEVEL
+    export ZITADEL_LOG_LEVEL
+    export PROXY_ERROR_LOG_LEVEL
+    export PROXY_ACCESS_LOG_MODE
     export ZITADEL_ACCESS_LOG_STDOUT_ENABLED
     export SERVER_LOG_TO_FILES
     export SERVER_LOG_LEVEL

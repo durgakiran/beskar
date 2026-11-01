@@ -54,7 +54,7 @@ Run in Bash:
 ```bash
 MONITOR_PROJECT=$(docker inspect newrelic-infra --format '{{index .Config.Labels "com.docker.compose.project"}}')
 APP_PROJECT=$(docker ps --filter network=beskar-network --filter label=com.docker.compose.service=server --format '{{.Label "com.docker.compose.project"}}' | sort -u)
-DEPLOY_ENV=/root/beskar/docker/env/deploy.env
+DEPLOY_ENV=/root/beskar/docker/env/prod.env
 
 printf 'Monitoring project: %s\nApplication project: %s\n' "$MONITOR_PROJECT" "$APP_PROJECT"
 test -n "$MONITOR_PROJECT" && test -n "$APP_PROJECT"
@@ -323,7 +323,7 @@ Source: [PostgreSQL configuration and permissions](https://docs.newrelic.com/ins
 
 ### 4.1 Use Beskar's existing env file
 
-Use the application env file containing `REDIS_PASSWORD`, identified by `DEPLOY_ENV` in Step 1.2. The example path below is `/root/beskar/docker/env/deploy.env`; replace it if your existing file has a different name.
+Use the application env file containing `REDIS_PASSWORD`, identified by `DEPLOY_ENV` in Step 1.2. The example path below is `/root/beskar/docker/env/prod.env`; replace it if your existing file has a different name.
 
 Keep the current `REDIS_PASSWORD` value. No new env file or password copy is needed.
 
@@ -333,7 +333,7 @@ In `/root/newrelic-infra/docker-compose.yaml`, add this under the existing `agen
 
 ```yaml
     env_file:
-      - /root/beskar/docker/env/deploy.env
+      - /root/beskar/docker/env/prod.env
 ```
 
 Append to an existing `env_file` list if present. Do not add a second `agent` service. Compose loads this file into the agent container; the integration cannot read a Compose env file by itself.
@@ -426,7 +426,7 @@ Do **not** publish port `8088` in Compose. It is only for containers on the appl
 
 ### 5.2 Enable useful access logs
 
-Both templates now write JSON access logs to stdout using this format:
+Both templates now write JSON access logs to stdout using this format. By default they keep only 4xx/5xx responses and requests taking at least one second:
 
 ```nginx
 log_format monitoring escape=json
@@ -435,15 +435,29 @@ log_format monitoring escape=json
     '"upstream_status":"$upstream_status",'
     '"upstream_response_time":"$upstream_response_time",'
     '"request_id":"$request_id"}';
-access_log /dev/stdout monitoring;
+access_log /dev/stdout monitoring if=$monitoring_loggable;
 ```
 
-Error logs remain on `/dev/stderr` at `warn` level. This first format omits paths, query strings, cookies, and tokens. Add a sanitized route field later if needed.
+In `/root/beskar/docker/env/prod.env` (or your existing deployment env file), use:
+
+```dotenv
+ZITADEL_LOG_LEVEL=warn
+ZITADEL_ACCESS_LOG_STDOUT_ENABLED=false
+PROXY_ACCESS_LOG_MODE=errors_slow
+PROXY_ERROR_LOG_LEVEL=warn
+```
+
+`errors_slow` keeps proxy 4xx/5xx responses and requests lasting at least 1 second. Set `all` to restore every access log or `off` to disable access logs. Proxy error logs remain separately controlled by `PROXY_ERROR_LOG_LEVEL`.
+
+Zitadel's runtime logs use `ZITADEL_LOG_LEVEL`; its separate access-log stream stays disabled. Changing these env settings requires rendering and recreating Zitadel. Do not expect an env-file edit alone to update a running container.
+
+Error logs go to `/dev/stderr`. This first format omits paths, query strings, cookies, and tokens. Add a sanitized route field later if needed.
 
 Apply and test:
 
 ```bash
 bash /root/beskar/docker/scripts/validate-config.sh --env "$DEPLOY_ENV"
+docker compose -f /root/beskar/docker/.generated/compose.yml -p "$APP_PROJECT" up -d --no-deps zitadel
 docker compose -f /root/beskar/docker/.generated/compose.yml -p "$APP_PROJECT" exec proxy nginx -t
 docker compose -f /root/beskar/docker/.generated/compose.yml -p "$APP_PROJECT" exec proxy nginx -s reload
 docker compose -f /root/beskar/docker/.generated/compose.yml -p "$APP_PROJECT" exec proxy wget -qO- http://127.0.0.1:8088/nginx_status
@@ -488,9 +502,9 @@ In New Relic:
 FROM NginxSample SELECT * LIMIT 5 SINCE 15 minutes ago
 ```
 
-**Expected:** NGINX connection/request counters. In the UI, open **Infrastructure → Third-party services → NGINX**.
+**Expected:** NGINX connection/request counters. `errors_slow` access logs cover only failures/slow requests, so do not use them to calculate total request volume or overall latency percentiles. The status endpoint counters still cover all requests. In the UI, open **Infrastructure → Third-party services → NGINX**.
 
-Access logs provide response codes and timings; `stub_status` does not. Check that JSON access logs are being written after visiting the site:
+Access logs provide response codes and timings; `stub_status` does not. Check JSON access logs after a request that returns 4xx/5xx or takes at least one second. Fast successful requests are intentionally absent:
 
 ```bash
 docker compose -f /root/beskar/docker/.generated/compose.yml -p "$APP_PROJECT" logs --since 2m proxy
@@ -559,7 +573,7 @@ install -m 644 /root/beskar/docker/monitoring/parsers.conf /root/newrelic-infra/
 install -m 644 /root/beskar/docker/monitoring/fluent-bit.conf /root/newrelic-infra/fluent-bit.conf
 ```
 
-In Beskar's existing env file (`/root/beskar/docker/env/deploy.env`, or your actual deployment env filename), add or update:
+In Beskar's existing env file (`/root/beskar/docker/env/prod.env`, or your actual deployment env filename), add or update:
 
 ```dotenv
 NEW_RELIC_LICENSE_KEY='REPLACE_WITH_INGEST_LICENSE_KEY'
@@ -606,7 +620,7 @@ Use this service under `services:` in `/root/newrelic-infra/docker-compose.yaml`
     command: ["-c", "/fluent-bit/etc/fluent-bit.conf", "-e", "/fluent-bit/bin/out_newrelic.so"]
     user: "0:0"
     env_file:
-      - /root/beskar/docker/env/deploy.env
+      - /root/beskar/docker/env/prod.env
     volumes:
       - /var/lib/docker/containers:/var/lib/docker/containers:ro
       - ./fluent-bit.conf:/fluent-bit/etc/fluent-bit.conf:ro
@@ -634,7 +648,7 @@ Fluent Bit expands the `${...}` variables from its own environment; infrastructu
 
 ### 6.4 Check logs and discovery
 
-Visit your site to generate proxy access logs, then run in New Relic:
+Generate a proxy request that returns 4xx/5xx or takes at least one second (or temporarily use `PROXY_ACCESS_LOG_MODE=all`), then run in New Relic:
 
 ```sql
 FROM Log SELECT count(*) FACET service
@@ -665,7 +679,7 @@ Do not install the New Relic Go agent alongside this setup. If you followed an o
 
 ### 7.1 Add the Collector to your monitoring Compose file
 
-In the existing Beskar env file (`/root/beskar/docker/env/deploy.env`, or your actual filename), add:
+In the existing Beskar env file (`/root/beskar/docker/env/prod.env`, or your actual filename), add:
 
 ```dotenv
 NEW_RELIC_LICENSE_KEY='REPLACE_WITH_INGEST_LICENSE_KEY'
@@ -712,7 +726,7 @@ Add this beside `agent` under `services` in `/root/newrelic-infra/docker-compose
     image: otel/opentelemetry-collector-contrib:latest
     command: ["--config=/etc/otelcol-contrib/config.yaml"]
     env_file:
-      - /root/beskar/docker/env/deploy.env
+      - /root/beskar/docker/env/prod.env
     volumes:
       - ./otel-collector.yml:/etc/otelcol-contrib/config.yaml:ro
     mem_limit: 512m
