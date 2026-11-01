@@ -665,375 +665,171 @@ The watcher follows active log files and waits briefly for rotated files. A cont
 
 Sources: [Docker JSON-file logging options](https://docs.docker.com/engine/logging/drivers/json-file/), [Fluent Bit wildcard discovery and offsets](https://docs.fluentbit.io/manual/data-pipeline/inputs/tail), [New Relic log output](https://docs.newrelic.com/docs/logs/forward-logs/fluent-bit-plugin-log-forwarding/).
 
-## 7. Add vendor-neutral Go monitoring with OpenTelemetry
+## 7. Enable vendor-neutral Go monitoring with OpenTelemetry
 
-Use this path for both Go services:
+The API and signal server now include OpenTelemetry instrumentation. You do not need to edit Go code or run `go get` on the server.
 
 ```text
-Go OpenTelemetry SDK → OTLP → OpenTelemetry Collector → New Relic
+Go services → OTLP/HTTP → OpenTelemetry Collector → New Relic
 ```
 
-The application code uses OpenTelemetry APIs. The Collector holds the backend endpoint and key. To change providers later, update the Collector exporter. Dashboards, alerts, and backend-specific features still need migration.
+Telemetry export is **disabled by default** until the Collector is ready. New Relic credentials live in the Collector, not the Go telemetry code. To change providers later, change the Collector exporter. Dashboards/alerts still need migration.
 
-Do not install the New Relic Go agent alongside this setup. If you followed an older version of this guide, remove its Go agent initialization, middleware, pgx tracer, Redis hooks, and `NEW_RELIC_*` application settings as you replace them below. Keep one instrumentation path per operation.
+### 7.1 Update the checkout and existing env file
 
-### 7.1 Add the Collector to your monitoring Compose file
+Update `/root/beskar` to the version containing the implementation.
 
-In the existing Beskar env file (`/root/beskar/docker/env/prod.env`, or your actual filename), add:
+In `/root/beskar/docker/env/prod.env`, add or update these existing backend settings:
 
 ```dotenv
 NEW_RELIC_LICENSE_KEY='REPLACE_WITH_INGEST_LICENSE_KEY'
 NEW_RELIC_OTLP_ENDPOINT=https://otlp.nr-data.net
 ```
 
-Use `https://otlp.eu01.nr-data.net` for EU or `https://otlp.jp.nr-data.net` for Japan. These settings are for the Collector; do not add vendor credentials to the Go application's telemetry initializer.
+Reuse your existing license key entry. For EU use `https://otlp.eu01.nr-data.net`; for Japan use `https://otlp.jp.nr-data.net`.
 
-Create `/root/newrelic-infra/otel-collector.yml`:
+The ready-to-use Collector files are:
 
-```yaml
-receivers:
-  otlp:
-    protocols:
-      http:
-        endpoint: 0.0.0.0:4318
-processors:
-  memory_limiter:
-    check_interval: 1s
-    limit_mib: 256
-    spike_limit_mib: 64
-  batch: {}
-exporters:
-  otlphttp/backend:
-    endpoint: ${env:NEW_RELIC_OTLP_ENDPOINT}
-    headers:
-      api-key: ${env:NEW_RELIC_LICENSE_KEY}
-service:
-  pipelines:
-    traces:
-      receivers: [otlp]
-      processors: [memory_limiter, batch]
-      exporters: [otlphttp/backend]
-    metrics:
-      receivers: [otlp]
-      processors: [memory_limiter, batch]
-      exporters: [otlphttp/backend]
-```
+- `/root/beskar/docker/monitoring/otel-collector.yml`: OTLP receiver, batching, memory limit, and backend exporter.
+- `/root/beskar/docker/monitoring/compose.otel.yml`: Collector service attached to `beskar-network`, without publishing port 4318.
 
-Add this beside `agent` under `services` in `/root/newrelic-infra/docker-compose.yaml`:
+The overlay loads `/root/beskar/docker/env/prod.env`. Adjust that file's `env_file` path if your deployment uses another filename.
 
-```yaml
-  otel-collector:
-    image: otel/opentelemetry-collector-contrib:latest
-    command: ["--config=/etc/otelcol-contrib/config.yaml"]
-    env_file:
-      - /root/beskar/docker/env/prod.env
-    volumes:
-      - ./otel-collector.yml:/etc/otelcol-contrib/config.yaml:ro
-    mem_limit: 512m
-    networks:
-      - beskar-network
-    restart: unless-stopped
-```
+### 7.2 Start the Collector
 
-Do not publish port 4318 to the host. Both Go services reach `http://otel-collector:4318` through `beskar-network`.
+Use the monitoring project name from Step 1.2. Include **both** Compose files for Collector commands:
 
 ```bash
-docker compose -f /root/newrelic-infra/docker-compose.yaml -p "$MONITOR_PROJECT" config --quiet
-docker compose -f /root/newrelic-infra/docker-compose.yaml -p "$MONITOR_PROJECT" run --rm --no-deps otel-collector validate --config=/etc/otelcol-contrib/config.yaml
-docker compose -f /root/newrelic-infra/docker-compose.yaml -p "$MONITOR_PROJECT" up -d otel-collector
+docker compose -f /root/newrelic-infra/docker-compose.yaml \
+  -f /root/beskar/docker/monitoring/compose.otel.yml \
+  -p "$MONITOR_PROJECT" config --quiet
+
+docker compose -f /root/newrelic-infra/docker-compose.yaml \
+  -f /root/beskar/docker/monitoring/compose.otel.yml \
+  -p "$MONITOR_PROJECT" run --rm --no-deps otel-collector \
+  validate --config=/etc/otelcol-contrib/config.yaml
+
+docker compose -f /root/newrelic-infra/docker-compose.yaml \
+  -f /root/beskar/docker/monitoring/compose.otel.yml \
+  -p "$MONITOR_PROJECT" up -d otel-collector
 ```
 
-After staging validation, pin the Collector image digest, as with the other monitoring images. This example has batching and retries, but no durable disk queue; prolonged outages can lose telemetry.
+**Expected:** validation succeeds and `otel-collector` stays running. It receives OTLP/HTTP privately at `http://otel-collector:4318`.
 
-### 7.2 Install the OpenTelemetry packages
+The configuration batches and retries exports, but has no durable disk queue. Long outages can lose buffered telemetry.
 
-Run for the API module:
+### 7.3 Enable export in Beskar's env file
+
+Add these to `/root/beskar/docker/env/prod.env`:
+
+```dotenv
+OTEL_SDK_DISABLED=false
+OTEL_SERVER_SERVICE_NAME=beskar-api-prod
+OTEL_SIGNAL_SERVICE_NAME=beskar-signal-prod
+OTEL_RESOURCE_ATTRIBUTES=deployment.environment.name=production
+OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
+OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
+OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE=delta
+OTEL_TRACES_SAMPLER=parentbased_traceidratio
+OTEL_TRACES_SAMPLER_ARG=0.1
+```
+
+`0.1` samples 10% of new traces and follows an incoming parent's sampling decision. For initial staging checks, use `1` and staging service/environment names. Metrics are not trace-sampled.
+
+Both production Compose templates map the service-specific names into standard `OTEL_SERVICE_NAME` variables. The Go services use standard OpenTelemetry configuration and HTTP/protobuf exporters. No vendor-specific Go agent is installed.
+
+### 7.4 Build and apply the application changes
 
 ```bash
-cd /root/beskar/server
-go get go.opentelemetry.io/otel go.opentelemetry.io/otel/sdk go.opentelemetry.io/otel/sdk/metric
-go get go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp
-go get go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp github.com/exaring/otelpgx
-go get github.com/redis/go-redis/extra/redisotel/v9
+bash /root/beskar/docker/scripts/validate-config.sh \
+  --env /root/beskar/docker/env/prod.env
+
+docker compose -f /root/beskar/docker/.generated/compose.yml \
+  -p "$APP_PROJECT" up -d --build --no-deps server signalserver
 ```
 
-Keep the resolved versions in `go.mod` and `go.sum`. Select versions compatible with the project's Go version and existing pgx/go-redis dependencies; inspect dependency upgrades before deploying.
+This recreates the API and signal server. Plan for API interruption and collaboration reconnects. Fluent Bit automatically discovers their new log files after Step 6's logging-label rollout.
 
-### 7.3 Initialize tracing and metrics
+### 7.5 Check one API trace
 
-Create `/root/beskar/server/core/telemetry.go`:
+1. Sign in and open a document to generate real API calls.
+2. Open New Relic's query drawer at the bottom and run:
 
-```go
-package core
+   ```sql
+   FROM Span SELECT count(*) FACET name
+   WHERE service.name = 'beskar-api-prod' SINCE 15 minutes ago
+   ```
 
-import (
-    "context"
-    "errors"
+3. Open the service in New Relic's OpenTelemetry/APM views and inspect a sampled trace.
+4. Check HTTP route names use patterns, and that database/cache spans appear for calls made with the request context.
 
-    "go.opentelemetry.io/otel"
-    "go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
-    "go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
-    "go.opentelemetry.io/otel/propagation"
-    "go.opentelemetry.io/otel/sdk/resource"
-    sdkmetric "go.opentelemetry.io/otel/sdk/metric"
-    sdktrace "go.opentelemetry.io/otel/sdk/trace"
-)
+**Implemented collection:**
 
-func InitTelemetry(ctx context.Context) (func(context.Context) error, error) {
-    res, err := resource.New(ctx, resource.WithFromEnv(), resource.WithTelemetrySDK())
-    if err != nil {
-        return nil, err
-    }
-    traceExporter, err := otlptracehttp.New(ctx)
-    if err != nil {
-        return nil, err
-    }
-    metricExporter, err := otlpmetrichttp.New(ctx)
-    if err != nil {
-        _ = traceExporter.Shutdown(ctx)
-        return nil, err
-    }
-    tp := sdktrace.NewTracerProvider(sdktrace.WithResource(res), sdktrace.WithBatcher(traceExporter))
-    mp := sdkmetric.NewMeterProvider(
-        sdkmetric.WithResource(res),
-        sdkmetric.WithReader(sdkmetric.NewPeriodicReader(metricExporter)),
-    )
-    otel.SetTracerProvider(tp)
-    otel.SetMeterProvider(mp)
-    otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(
-        propagation.TraceContext{}, propagation.Baggage{},
-    ))
-    return func(ctx context.Context) error {
-        return errors.Join(tp.Shutdown(ctx), mp.Shutdown(ctx))
-    }, nil
-}
-```
+| Area | Included |
+| --- | --- |
+| Incoming API HTTP | W3C propagation, bounded Chi route names, status/duration metrics; health checks excluded |
+| PostgreSQL | Application and search pool tracers plus pool metrics |
+| Redis | Session/page-event clients, spans, and client metrics |
+| Outgoing HTTP/gRPC | Instrumented application HTTP transports and Permify's gRPC client |
+| Go runtime | Runtime metrics from the OpenTelemetry runtime instrumentation |
+| Shutdown | Flushes telemetry with a fresh timeout context |
 
-In `server/main.go`, immediately after loading application configuration and before database/Redis clients are created, call:
+HTTP query strings are omitted from span attributes while the original request still reaches the application/upstream. PostgreSQL SQL text/parameters and Redis command arguments are disabled in spans. PostgreSQL's slow-query server logs from Step 3 remain separate and can contain SQL text.
 
-```go
-shutdownOTel, err := core.InitTelemetry(appContext)
-if err != nil {
-    logger().Fatal("OpenTelemetry setup failed", zap.Error(err))
-}
-defer func() {
-    ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-    defer cancel()
-    if err := shutdownOTel(ctx); err != nil {
-        logger().Error("OpenTelemetry shutdown failed", zap.Error(err))
-    }
-}()
-```
+Older functions that create `context.Background()` instead of carrying the request context can produce independent spans. Background workers are not automatically connected to HTTP traces. Propagate context deliberately when updating those workflows.
 
-Use a fresh shutdown context because `appContext` is cancelled on SIGTERM. Keep the existing HTTP graceful shutdown.
-
-In both `/root/beskar/docker/templates/compose.http.yml.tmpl` and `/root/beskar/docker/templates/compose.https.yml.tmpl`, append these to `server.environment`:
-
-```yaml
-      OTEL_SERVICE_NAME: beskar-api-staging
-      OTEL_RESOURCE_ATTRIBUTES: deployment.environment.name=staging
-      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
-      OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
-      OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: delta
-```
-
-Use production service/environment names in production. The exporter constructors above read standard OTLP environment settings. The app needs no New Relic license key.
-
-### 7.4 Instrument HTTP and Chi route names
-
-In `server/main.go`, import:
-
-```go
-"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
-"go.opentelemetry.io/otel/attribute"
-"go.opentelemetry.io/otel/trace"
-```
-
-After `r := chi.NewRouter()`, add this middleware before routes are registered:
-
-```go
-r.Use(func(next http.Handler) http.Handler {
-    return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-        next.ServeHTTP(w, req)
-        pattern := chi.RouteContext(req.Context()).RoutePattern()
-        if pattern != "" {
-            span := trace.SpanFromContext(req.Context())
-            span.SetName(req.Method + " " + pattern)
-            span.SetAttributes(attribute.String("http.route", pattern))
-            labeler, _ := otelhttp.LabelerFromContext(req.Context())
-            labeler.Add(attribute.String("http.route", pattern))
-        }
-    })
-})
-```
-
-Change the existing HTTP server's `Handler: r` to:
-
-```go
-Handler: otelhttp.NewHandler(r, "beskar-api"),
-```
-
-This starts the HTTP server span; the Chi middleware adds the resolved route pattern after routing. Check mounted routes, unmatched requests, SSE streaming, and response-writer behavior in staging. Do not use raw document IDs as span names.
-
-Wrap outbound HTTP client transports with `otelhttp.NewTransport(existingTransport)` and use `http.NewRequestWithContext` with the active request context. For gRPC clients, use the OpenTelemetry `otelgrpc` stats handler rather than a vendor agent.
-
-### 7.5 Instrument PostgreSQL and Redis
-
-In `/root/beskar/server/core/postgres.go`, import `github.com/exaring/otelpgx`. After successful `pgxpool.ParseConfig(...)`, add:
-
-```go
-dbConfig.ConnConfig.Tracer = otelpgx.NewTracer()
-```
-
-Do not enable `WithIncludeQueryParameters`. SQL text can still contain literal values; disable statement capture with `otelpgx.WithDisableSQLStatementInAttributes()` if those statements are unsafe to export. Slow-query server logs from Step 3 remain separate.
-
-In both `/root/beskar/server/core/browser_session_redis.go` and `/root/beskar/server/editor/pageevents/pageevents.go`, import:
-
-```go
-"github.com/redis/go-redis/extra/redisotel/v9"
-```
-
-Immediately after creating each Redis client, attach instrumentation and handle errors through that function's normal error path:
-
-```go
-if err := redisotel.InstrumentTracing(client); err != nil {
-    // Close the new client and return/report this setup error.
-}
-if err := redisotel.InstrumentMetrics(client); err != nil {
-    // Close the new client and return/report this setup error.
-}
-```
-
-Use the actual client variable (`client` or `c`). Review/disable Redis command-argument capture using the selected redisotel version's options if commands contain sensitive values.
-
-Pass `req.Context()` through handlers into database/Redis calls. Operations using `context.Background()` do not inherit the request's span. Optionally call `otelpgx.RecordStats(pool)` after creating the pool to emit pool metrics.
-
-### 7.6 Add portable trace fields to local JSON logs
-
-Continue using Zap and the existing Fluent Bit log pipeline. In `/root/beskar/server/core/logger.go`, import `context` and `go.opentelemetry.io/otel/trace`, then add:
-
-```go
-func RequestLogger(ctx context.Context) *zap.Logger {
-    requestLogger := Logger.With(zap.String("service", "server"))
-    sc := trace.SpanContextFromContext(ctx)
-    if !sc.IsValid() {
-        return requestLogger
-    }
-    return requestLogger.With(
-        zap.String("trace.id", sc.TraceID().String()),
-        zap.String("span.id", sc.SpanID().String()),
-    )
-}
-```
-
-Use `core.RequestLogger(req.Context())` in request handlers. Apply the same context-derived fields to the auth/slog logger when updating those handlers. Existing global log calls do not gain trace context automatically.
-
-In the Beskar deployment env file set `SERVER_LOG_TO_FILES=false` and `SERVER_LOG_LEVEL=info`. Do not also export those same records through an OTel log bridge while Fluent Bit forwards them. The `trace.id`/`span.id` field spelling here matches the existing New Relic log pipeline; the IDs come from OpenTelemetry.
-
-### 7.7 Build, deploy, and check
+If no spans appear, inspect the Collector:
 
 ```bash
-(cd /root/beskar/server && go mod tidy && go test ./...)
-bash /root/beskar/docker/scripts/validate-config.sh --env "$DEPLOY_ENV"
-docker compose -f /root/beskar/docker/.generated/compose.yml -p "$APP_PROJECT" up -d --build --no-deps server
-docker compose -f /root/newrelic-infra/docker-compose.yaml -p "$MONITOR_PROJECT" logs --tail 100 otel-collector
+docker compose -f /root/newrelic-infra/docker-compose.yaml \
+  -f /root/beskar/docker/monitoring/compose.otel.yml \
+  -p "$MONITOR_PROJECT" logs --tail 100 otel-collector
 ```
 
-Fluent Bit automatically discovers the new container log file after recreation once Step 6's logging labels are applied. Open the app and a document, then run:
+Check `OTEL_SDK_DISABLED=false` reached the recreated services, the endpoint is reachable on `beskar-network`, the region/key are correct, and sampling/traffic are sufficient. An unavailable Collector does not block application requests.
 
-```sql
-FROM Span SELECT count(*) WHERE service.name = 'beskar-api-staging' SINCE 15 minutes ago
+### 7.6 Find matching request logs
+
+API failures and slow non-streaming requests have structured summaries with `trace.id`/`span.id`. The logger level still applies: `SERVER_LOG_LEVEL=error` keeps failures; set `warn` to include slow-request warnings.
+
+For full request summaries **in staging**, use:
+
+```dotenv
+SERVER_LOG_TO_FILES=false
+SERVER_LOG_LEVEL=info
+SERVER_HTTP_REQUEST_LOGGING_ENABLED=true
 ```
 
-**Expected:** spans for real requests, plus PostgreSQL/Redis spans for calls they make. Inspect the service in New Relic's OpenTelemetry/APM views. Native-agent `Transaction` queries are not interchangeable with OTLP `Span`/`Metric` queries.
+Render and recreate the API to apply env changes. Open a document, then search its trace ID in Logs. Avoid leaving full request summaries enabled if ingestion volume is too high.
 
-HTTP/client metrics come from the instrumented libraries. Go runtime metrics and application-specific queue/worker metrics need their own OpenTelemetry instrumentation; SDK initialization alone does not create every APM panel.
+Handlers can call `core.RequestLogger(req.Context())` for additional trace-linked records. Existing global logger calls do not automatically receive request context. The separate auth/slog logger still needs context-aware calls where deeper auth-log correlation is desired.
 
-Sources: [OpenTelemetry Go exporters](https://opentelemetry.io/docs/languages/go/exporters/), [pgx instrumentation](https://github.com/exaring/otelpgx), [Redis instrumentation](https://github.com/redis/go-redis/tree/master/extra/redisotel), [New Relic OTLP endpoints](https://docs.newrelic.com/docs/opentelemetry/best-practices/opentelemetry-otlp/).
+Keep Fluent Bit as the log pipeline; do not also export those same records through an OTel log bridge.
 
-## 8. Add OpenTelemetry to the signal server
+### 7.7 Disable export without removing instrumentation
 
-### 8.1 Initialize the separate Go module
+Set `OTEL_SDK_DISABLED=true`, render, and recreate the two Go services. The instrumentation remains in the code, but no OTLP exporters are started. Running locally without any configured OTLP endpoint also leaves export inactive.
 
-Install the same OTel SDK/exporter packages from Step 7.2 in `/root/beskar/signalserver`; the signal server needs redisotel and outbound HTTP instrumentation, but no pgx package.
+Sources: [OpenTelemetry Go exporters](https://opentelemetry.io/docs/languages/go/exporters/), [New Relic OTLP endpoints](https://docs.newrelic.com/docs/opentelemetry/best-practices/opentelemetry-otlp/).
 
-Copy the `InitTelemetry` helper into `/root/beskar/signalserver/telemetry.go`, changing `package core` to `package main`. Both modules use the same standard OTel configuration, without New Relic imports.
+## 8. Verify signal-server monitoring
 
-Add the same environment settings under `signalserver.environment` in both Compose templates, with `OTEL_SERVICE_NAME: beskar-signal-staging`.
+The signal server is enabled by the same settings and deployment commands in Step 7. It does not require manual source-code changes.
 
-Call `InitTelemetry` at startup before `initSignalRedis()`, and defer shutdown with a fresh timeout context, as in Step 7.3. Replace the existing `log.Fatal(http.ListenAndServe(...))` with a signal-aware `http.Server` lifecycle like `/root/beskar/server/main.go`; `log.Fatal` skips deferred telemetry flushing. HTTP shutdown does not wait for upgraded WebSockets, so test reconnects during rollout.
+1. Open the same document in two clients and edit it.
+2. Confirm updates reach both clients and reconnects still work.
+3. Run:
 
-In `initSignalRedis()`, call `redisotel.InstrumentTracing(c)` and `redisotel.InstrumentMetrics(c)` after creating the Redis client. Handle setup failures before using the client.
+   ```sql
+   FROM Span SELECT count(*) FACET name
+   WHERE service.name = 'beskar-signal-prod' SINCE 15 minutes ago
+   ```
 
-### 8.2 Create short message spans
+**Expected:** short `GET /ws` handshake spans, `WebSocket/Message` spans, and watchdog/Redis-update spans when those operations run. A connection lasting hours does not keep its handshake span open.
 
-In `/root/beskar/signalserver/main.go`:
+The service also emits connection counts, message counts, and message-processing duration metrics with bounded message-type attributes. Selected message/Redis errors carry trace IDs in local JSON logs. HTTP authentication calls propagate trace context to the API.
 
-1. Move the message-processing body of `readPump` into a new `processIncomingMessage` method: start at the binary-message branch and include the complete `switch msg.Type` block.
-2. Change the moved loop-level `continue` statements to `return`.
-3. Keep `ReadMessage()` and its error check in the original loop.
-4. Call the new method once for each successfully read message.
-
-Use this method signature and put the moved processing code after the span initialization:
-
-```go
-func (c *Client) processIncomingMessage(h *Hub, messageType int, payload []byte) {
-    ctx, span := otel.Tracer("beskar/signal").Start(context.Background(), "WebSocket/Message")
-    defer span.End()
-    _ = ctx // Use this context for synchronous work performed by this message.
-    // Move the existing binary forwarding and message switch here.
-}
-```
-
-Import `go.opentelemetry.io/otel`. The call inside `readPump` is:
-
-```go
-c.processIncomingMessage(h, messageType, payload)
-```
-
-This creates independent message spans. Do not keep a single span open for an hours-long socket. Add bounded message types to names if useful; omit room/client/document IDs from metric dimensions and span names.
-
-For watchdog work, add this at the beginning of `watchdogTick(ctx)`:
-
-```go
-ctx, span := otel.Tracer("beskar/signal").Start(ctx, "Signal/Watchdog")
-defer span.End()
-```
-
-In each goroutine in `redisSetRoomLeader`, `redisAddRoomMember`, and `redisRemoveRoomMember`, start a separate span, then use its context as the timeout's parent:
-
-```go
-spanCtx, span := otel.Tracer("beskar/signal").Start(context.Background(), "Signal/RedisRoomUpdate")
-defer span.End()
-ctx, cancel := context.WithTimeout(spanCtx, 2*time.Second)
-defer cancel()
-```
-
-In the existing Redis error blocks, record errors and set span status:
-
-```go
-span.RecordError(err)
-span.SetStatus(codes.Error, "Redis operation failed")
-```
-
-Import `go.opentelemetry.io/otel/codes`. These asynchronous updates are independent traces. To connect them to a message later, explicitly pass a live context or use a span link for detached work. WebSocket messages and Redis Pub/Sub do not carry W3C trace context automatically.
-
-### 8.3 Build and verify
-
-```bash
-(cd /root/beskar/signalserver && go mod tidy && go test ./...)
-bash /root/beskar/docker/scripts/validate-config.sh --env "$DEPLOY_ENV"
-docker compose -f /root/beskar/docker/.generated/compose.yml -p "$APP_PROJECT" up -d --build --no-deps signalserver
-```
-
-Fluent Bit automatically discovers recreated containers; no input regeneration is needed. Edit the same document from two clients. Check:
-
-```sql
-FROM Span SELECT count(*) FACET name
-WHERE service.name = 'beskar-signal-staging' SINCE 15 minutes ago
-```
-
-**Expected:** message/watchdog/Redis spans when those paths run, and working collaboration/reconnects. Room/connection counts and send-queue metrics still require explicit OTel instruments in the hub.
+WebSocket message spans and asynchronous Redis updates are currently independent traces. Cross-message/service causality needs explicit compatible message metadata or context/span links. Do not change opaque collaboration frames to add trace headers.
 
 ## 9. Add the browser agent
 
@@ -1053,7 +849,7 @@ Use only the generated public Browser configuration. Do not paste the backend in
 
 In the Browser application's settings, enable distributed tracing. If the API has a different origin, add that API origin to the allowed origins.
 
-In `/root/beskar/server/main.go`, extend the existing CORS `AllowedHeaders` list with:
+The API implementation already allows these tracing headers in CORS; no extra source edit is needed:
 
 ```go
 "traceparent", "tracestate", "newrelic"
@@ -1076,7 +872,7 @@ Fluent Bit automatically discovers recreated containers; no input regeneration i
 2. Check Network for successful requests to New Relic's collector. If blocked by CSP, allow the domains required by your generated snippet/region.
 3. Sign in and open a document to generate API calls.
 4. In New Relic, open `beskar-web-staging` and inspect an AJAX request with distributed tracing data.
-5. Follow its trace into `beskar-api-staging`.
+5. Follow its trace into `beskar-api-prod`.
 
 **Expected:** page/API timing data and sampled browser-to-API traces. Browser extensions, sampling, or an idle session can prevent an individual request from appearing.
 
@@ -1103,7 +899,7 @@ FACET hostname TIMESERIES SINCE 30 minutes ago
 
 ```sql
 FROM Span SELECT count(*)
-WHERE service.name = 'beskar-api-staging' FACET name TIMESERIES SINCE 30 minutes ago
+WHERE service.name = 'beskar-api-prod' FACET name TIMESERIES SINCE 30 minutes ago
 ```
 
 ```sql
@@ -1119,10 +915,10 @@ Use the built-in PostgreSQL, Redis, and NGINX entity views for their metrics fir
 
    ```sql
    FROM Span SELECT percentage(count(*), WHERE http.response.status_code >= 500)
-   WHERE service.name = 'beskar-api-staging' AND span.kind = 'server'
+   WHERE service.name = 'beskar-api-prod' AND span.kind = 'server'
    ```
 
-3. Inspect a server span first with `FROM Span SELECT * WHERE service.name = 'beskar-api-staging' SINCE 15 minutes ago LIMIT 5`. Confirm `span.kind` and the HTTP status attribute match the query; older semantic conventions can use `http.status_code`. Span-based percentages describe sampled requests. Prefer HTTP request metrics for production error-rate alerts once their metric names are confirmed.
+3. Inspect a server span first with `FROM Span SELECT * WHERE service.name = 'beskar-api-prod' SINCE 15 minutes ago LIMIT 5`. Confirm `span.kind` and the HTTP status attribute match the query; older semantic conventions can use `http.status_code`. Span-based percentages describe sampled requests. Prefer HTTP request metrics for production error-rate alerts once their metric names are confirmed.
 4. Start with a critical threshold **above 5 for 5 minutes**. This means more than 5% errors; tune it to your traffic.
 5. Use a one-minute aggregation window. Set missing-data behavior separately; a quiet API is not automatically down.
 6. Create/select a notification destination and workflow for this policy. Use your team's chosen channel.

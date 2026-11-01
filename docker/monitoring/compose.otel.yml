@@ -1,0 +1,18 @@
+# Merge with the existing monitoring Compose file; do not publish the OTLP port.
+services:
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.137.0
+    command: ["--config=/etc/otelcol-contrib/config.yaml"]
+    env_file:
+      - /root/beskar/docker/env/prod.env
+    volumes:
+      - /root/beskar/docker/monitoring/otel-collector.yml:/etc/otelcol-contrib/config.yaml:ro
+    mem_limit: 512m
+    networks:
+      - beskar-network
+    restart: unless-stopped
+
+networks:
+  beskar-network:
+    external: true
+    name: beskar-network

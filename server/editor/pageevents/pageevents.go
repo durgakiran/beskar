@@ -14,6 +14,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/durgakiran/beskar/observability"
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
@@ -98,6 +99,11 @@ func Init(ctx context.Context) {
 	}
 
 	c := redis.NewClient(opts)
+	if err := observability.InstrumentRedis(c); err != nil {
+		logger().Error("pageevents: instrument Redis", zap.Error(err))
+		_ = c.Close()
+		return
+	}
 	if err := c.Ping(ctx).Err(); err != nil {
 		logger().Warn("pageevents: redis ping failed", zap.Error(err))
 		_ = c.Close()

@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/exaring/otelpgx"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -35,6 +36,7 @@ func (c DatabaseConfig) poolConfig() (*pgxpool.Config, error) {
 	if err != nil {
 		return nil, fmt.Errorf("invalid PG_SEARCH_* database configuration")
 	}
+	config.ConnConfig.Tracer = otelpgx.NewTracer(otelpgx.WithDisableSQLStatementInAttributes(), otelpgx.WithTrimSQLInSpanName())
 	return config, nil
 }
 
@@ -63,6 +65,10 @@ func OpenTargetDatabase(ctx context.Context, c DatabaseConfig) (*pgxpool.Pool, e
 	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {
 		return nil, fmt.Errorf("create search target pool failed")
+	}
+	if err := otelpgx.RecordStats(pool); err != nil {
+		pool.Close()
+		return nil, fmt.Errorf("register search pool metrics: %w", err)
 	}
 	return pool, nil
 }

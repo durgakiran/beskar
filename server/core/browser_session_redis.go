@@ -10,11 +10,13 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net"
 	"os"
 	"strings"
 	"time"
 
+	"github.com/durgakiran/beskar/observability"
 	"github.com/redis/go-redis/v9"
 	"github.com/zitadel/oidc/v3/pkg/oidc"
 	"github.com/zitadel/zitadel-go/v3/pkg/authentication"
@@ -63,6 +65,10 @@ func InitializeBrowserSessions(ctx context.Context) (func(), error) {
 		return nil, errors.New("browser session idle timeout must not exceed absolute timeout")
 	}
 	client := redis.NewClient(opts)
+	if err := observability.InstrumentRedis(client); err != nil {
+		_ = client.Close()
+		return nil, fmt.Errorf("instrument session Redis: %w", err)
+	}
 	store, err := newRedisBrowserSessionStore(client, os.Getenv("KEY"), idle, absolute)
 	if err != nil {
 		_ = client.Close()

@@ -11,40 +11,49 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/signal"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/gorilla/websocket"
 	"github.com/redis/go-redis/v9"
-	"slices"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/metric"
 )
 
 // Client represents a single connected user
 type Client struct {
-	conn     *websocket.Conn // WebSocket connection
-	topics   map[string]bool   // topics the client is in
-	send     chan []byte       // Outbound messages
-	clientID string            // stable id for deterministic leader election
+	conn      *websocket.Conn // WebSocket connection
+	topics    map[string]bool // topics the client is in
+	send      chan []byte     // Outbound messages
+	done      chan struct{}
+	closeOnce sync.Once
+	clientID  string // stable id for deterministic leader election
 }
 
 // Hub maintains the set of active clients and broadcasts messages to them
 type Hub struct {
 	topics        map[string]map[*Client]bool // rooms and clients in them
 	topicLeaderID map[string]string           // topic -> current leader clientID (sticky amIleader)
+	connections   sync.Map                    // all upgraded clients, including clients with no rooms
 	mu            sync.RWMutex                // Mutex for the rooms map
 }
 
 type Message struct {
-	Type             string   `json:"type"`
-	Topics           []string `json:"topics,omitempty"` // For subscribe
-	Topic            string   `json:"topic,omitempty"`  // For publish
-	Data             any      `json:"data,omitempty"`
-	Binary           []byte   `json:"-"` // Raw binary data for y-webrtc updates
-	IsLeader         bool     `json:"isLeader"`                   // For leader election (explicit false)
-	LeaderClientID   string   `json:"leaderClientId,omitempty"` // Room leader's stable id
-	Clients          int      `json:"clients,omitempty"`        // For publish
+	Type           string   `json:"type"`
+	Topics         []string `json:"topics,omitempty"` // For subscribe
+	Topic          string   `json:"topic,omitempty"`  // For publish
+	Data           any      `json:"data,omitempty"`
+	Binary         []byte   `json:"-"`                        // Raw binary data for y-webrtc updates
+	IsLeader       bool     `json:"isLeader"`                 // For leader election (explicit false)
+	LeaderClientID string   `json:"leaderClientId,omitempty"` // Room leader's stable id
+	Clients        int      `json:"clients,omitempty"`        // For publish
 }
 
 func handleRoot(w http.ResponseWriter, r *http.Request) {
@@ -55,45 +64,7 @@ func handleRoot(w http.ResponseWriter, r *http.Request) {
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
-	CheckOrigin: func(r *http.Request) bool {
-		origin := r.Header.Get("Origin")
-		if origin == "" {
-			return true // Allow non-browser clients
-		}
-
-		origins := os.Getenv("CORS_ALLOWED_ORIGINS")
-		if origins == "" {
-			origins = "http://localhost:3000,http://localhost:8085,wails://wails,http://wails.localhost,http://wails.localhost:*"
-		}
-
-		for _, o := range strings.Split(origins, ",") {
-			o = strings.TrimSpace(o)
-			if o == "" {
-				continue
-			}
-			// Exact match
-			if o == origin {
-				return true
-			}
-			// Prefix wildcard (e.g., wails://*)
-			if strings.HasSuffix(o, "*") && strings.HasPrefix(origin, strings.TrimSuffix(o, "*")) {
-				return true
-			}
-			// Suffix wildcard (e.g., *.localhost)
-			if strings.HasPrefix(o, "*") && strings.HasSuffix(origin, strings.TrimPrefix(o, "*")) {
-				return true
-			}
-		}
-
-		// Fallback to default check (origin host == request host)
-		u, err := url.Parse(origin)
-		if err == nil && u.Host == r.Host {
-			return true
-		}
-
-		log.Printf("CheckOrigin rejected origin: %s", origin)
-		return false
-	},
+	CheckOrigin:     func(r *http.Request) bool { return isAllowedOrigin(r.Header.Get("Origin")) },
 }
 
 func newHub() *Hub {
@@ -128,10 +99,16 @@ func initSignalRedis() {
 		return
 	}
 	c := redis.NewClient(opts)
+	if err := instrumentRedis(c); err != nil {
+		log.Printf("signalserver: instrument Redis: %v", err)
+		_ = c.Close()
+		return
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	if err := c.Ping(ctx).Err(); err != nil {
 		log.Printf("signalserver: redis ping failed: %v — watchdog disabled", err)
+		_ = c.Close()
 		return
 	}
 	sigRedis = c
@@ -154,11 +131,15 @@ func redisSetRoomLeader(topic, leaderClientID string) {
 		return
 	}
 	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		spanCtx, span := otel.Tracer("beskar/signal").Start(context.Background(), "Signal/RedisRoomUpdate")
+		defer span.End()
+		ctx, cancel := context.WithTimeout(spanCtx, 2*time.Second)
 		defer cancel()
 		key := "beskar:room:" + topic + ":leader"
 		if err := sigRedis.Set(ctx, key, leaderClientID, roomKeyTTL).Err(); err != nil {
-			log.Printf("signalserver: redis set room leader: %v", err)
+			span.RecordError(err)
+			span.SetStatus(codes.Error, "Redis operation failed")
+			signalRequestLogger(ctx).Error("redis set room leader", "error", err)
 		}
 	}()
 }
@@ -168,11 +149,15 @@ func redisAddRoomMember(topic, clientID string) {
 		return
 	}
 	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		spanCtx, span := otel.Tracer("beskar/signal").Start(context.Background(), "Signal/RedisRoomUpdate")
+		defer span.End()
+		ctx, cancel := context.WithTimeout(spanCtx, 2*time.Second)
 		defer cancel()
 		key := "beskar:room:" + topic + ":members"
 		if err := sigRedis.HSet(ctx, key, clientID, "1").Err(); err != nil {
-			log.Printf("signalserver: redis add room member: %v", err)
+			span.RecordError(err)
+			span.SetStatus(codes.Error, "Redis operation failed")
+			signalRequestLogger(ctx).Error("redis add room member", "error", err)
 		}
 	}()
 }
@@ -182,7 +167,9 @@ func redisRemoveRoomMember(topic, clientID string, topicDrained bool) {
 		return
 	}
 	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		spanCtx, span := otel.Tracer("beskar/signal").Start(context.Background(), "Signal/RedisRoomUpdate")
+		defer span.End()
+		ctx, cancel := context.WithTimeout(spanCtx, 2*time.Second)
 		defer cancel()
 		memberKey := "beskar:room:" + topic + ":members"
 		leaderKey := "beskar:room:" + topic + ":leader"
@@ -192,7 +179,9 @@ func redisRemoveRoomMember(topic, clientID string, topicDrained bool) {
 			pipe.Del(ctx, memberKey, leaderKey)
 		}
 		if _, err := pipe.Exec(ctx); err != nil {
-			log.Printf("signalserver: redis remove room member: %v", err)
+			span.RecordError(err)
+			span.SetStatus(codes.Error, "Redis operation failed")
+			signalRequestLogger(ctx).Error("redis remove room member", "error", err)
 		}
 	}()
 }
@@ -234,6 +223,8 @@ func (h *Hub) startWatchdog(ctx context.Context) {
 }
 
 func (h *Hub) watchdogTick(ctx context.Context) {
+	ctx, span := otel.Tracer("beskar/signal").Start(ctx, "Signal/Watchdog")
+	defer span.End()
 	threshold := leaderEvictSec()
 
 	h.mu.RLock()
@@ -254,7 +245,9 @@ func (h *Hub) watchdogTick(ctx context.Context) {
 		tsStr, err := sigRedis.Get(ctx, tsKey).Result()
 		if err != nil {
 			if !errors.Is(err, redis.Nil) {
-				log.Printf("watchdog: redis error topic=%s: %v — skipping", topic, err)
+				span.RecordError(err)
+				span.SetStatus(codes.Error, "Redis operation failed")
+				signalRequestLogger(ctx).Error("watchdog: Redis operation failed", "error", err)
 			}
 			continue
 		}
@@ -309,13 +302,39 @@ func (h *Hub) evictLeader(topic, leaderClientID, pageID, spaceID string) {
 	}()
 }
 
-func (c *Client) writePump() {
-	for msg := range c.send {
-		mt := websocket.BinaryMessage
-		if len(msg) > 0 && msg[0] == '{' {
-			mt = websocket.TextMessage
+func (c *Client) close() {
+	c.closeOnce.Do(func() {
+		if c.done != nil {
+			close(c.done)
 		}
-		c.conn.WriteMessage(mt, msg)
+		if c.conn != nil {
+			_ = c.conn.Close()
+		}
+	})
+}
+
+func (c *Client) enqueue(payload []byte) {
+	select {
+	case c.send <- payload:
+	case <-c.done:
+	}
+}
+
+func (c *Client) writePump() {
+	defer c.close()
+	for {
+		select {
+		case <-c.done:
+			return
+		case msg := <-c.send:
+			mt := websocket.BinaryMessage
+			if len(msg) > 0 && msg[0] == '{' {
+				mt = websocket.TextMessage
+			}
+			if err := c.conn.WriteMessage(mt, msg); err != nil {
+				return
+			}
+		}
 	}
 }
 
@@ -391,11 +410,13 @@ func (h *Hub) handleUnregister(c *Client) {
 			}
 		}
 	}
-	c.conn.Close()
+	c.close()
 }
 
 func (c *Client) readPump(h *Hub) {
 	defer func() {
+		h.connections.Delete(c)
+		activeSignalConnections.Add(context.Background(), -1)
 		h.handleUnregister(c)
 	}()
 
@@ -405,61 +426,85 @@ func (c *Client) readPump(h *Hub) {
 			break
 		}
 
-		if messageType == websocket.BinaryMessage {
-			h.mu.RLock()
-			for topicName := range c.topics {
-				if clients, ok := h.topics[topicName]; ok {
-					for client := range clients {
-						if client != c {
-							client.send <- payload
-						}
-					}
-				}
-			}
-			h.mu.RUnlock()
-			continue
-		}
+		c.processIncomingMessage(h, messageType, payload)
+	}
+}
 
-		var msg Message
-		if err := json.Unmarshal(payload, &msg); err != nil {
-			continue
-		}
+func (c *Client) processIncomingMessage(h *Hub, messageType int, payload []byte) {
+	started := time.Now()
+	ctx, span := otel.Tracer("beskar/signal").Start(context.Background(), "WebSocket/Message")
+	defer span.End()
+	kind := "unknown"
+	if messageType == websocket.BinaryMessage {
+		kind = "binary"
+	}
+	defer func() {
+		attrs := attribute.String("message.type", kind)
+		span.SetAttributes(attrs)
+		signalMessages.Add(context.Background(), 1, metric.WithAttributes(attrs))
+		signalMessageDuration.Record(context.Background(), time.Since(started).Seconds(), metric.WithAttributes(attrs))
+	}()
 
-		switch msg.Type {
-		case "subscribe":
-			h.mu.Lock()
-			for _, t := range msg.Topics {
-				if h.topics[t] == nil {
-					h.topics[t] = make(map[*Client]bool)
-				}
-				h.topics[t][c] = true
-				c.topics[t] = true
-				redisAddRoomMember(t, c.clientID)
-				h.electLeaderInternal(t, nil)
-			}
-			h.mu.Unlock()
-
-		case "publish":
-			h.mu.RLock()
-			if clients, ok := h.topics[msg.Topic]; ok {
-				msg.Clients = len(clients)
-				resp, _ := json.Marshal(msg)
+	if messageType == websocket.BinaryMessage {
+		h.mu.RLock()
+		for topicName := range c.topics {
+			if clients, ok := h.topics[topicName]; ok {
 				for client := range clients {
 					if client != c {
-						client.send <- resp
+						client.enqueue(payload)
 					}
 				}
 			}
-			h.mu.RUnlock()
-
-		case "amIleader":
-			h.mu.Lock()
-			h.electLeaderInternal(msg.Topic, c)
-			h.mu.Unlock()
-		case "ping":
-			pong, _ := json.Marshal(Message{Type: "pong"})
-			c.send <- pong
 		}
+		h.mu.RUnlock()
+		return
+	}
+
+	var msg Message
+	if err := json.Unmarshal(payload, &msg); err != nil {
+		span.SetStatus(codes.Error, "Invalid message")
+		signalRequestLogger(ctx).Warn("Invalid WebSocket message")
+		return
+	}
+	switch msg.Type {
+	case "subscribe", "publish", "amIleader", "ping":
+		kind = msg.Type
+	}
+
+	switch msg.Type {
+	case "subscribe":
+		h.mu.Lock()
+		for _, t := range msg.Topics {
+			if h.topics[t] == nil {
+				h.topics[t] = make(map[*Client]bool)
+			}
+			h.topics[t][c] = true
+			c.topics[t] = true
+			redisAddRoomMember(t, c.clientID)
+			h.electLeaderInternal(t, nil)
+		}
+		h.mu.Unlock()
+
+	case "publish":
+		h.mu.RLock()
+		if clients, ok := h.topics[msg.Topic]; ok {
+			msg.Clients = len(clients)
+			resp, _ := json.Marshal(msg)
+			for client := range clients {
+				if client != c {
+					client.enqueue(resp)
+				}
+			}
+		}
+		h.mu.RUnlock()
+
+	case "amIleader":
+		h.mu.Lock()
+		h.electLeaderInternal(msg.Topic, c)
+		h.mu.Unlock()
+	case "ping":
+		pong, _ := json.Marshal(Message{Type: "pong"})
+		c.enqueue(pong)
 	}
 }
 
@@ -495,7 +540,7 @@ func validateSession(r *http.Request) bool {
 	}
 
 	log.Printf("auth: Making request to %s", req.URL.String())
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := signalHTTPClient.Do(req)
 	if err != nil {
 		log.Println("auth: validation request failed:", err)
 		return false
@@ -522,10 +567,6 @@ func authMiddleware(next http.HandlerFunc) http.HandlerFunc {
 }
 
 func handleWebSocket(w http.ResponseWriter, r *http.Request) {
-	upgrader.CheckOrigin = func(r *http.Request) bool {
-		return isAllowedOrigin(r.Header.Get("Origin"))
-	}
-
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Println("Failed to upgrade to WebSocket:", err)
@@ -536,7 +577,10 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		topics:   make(map[string]bool),
 		send:     make(chan []byte, 2048),
 		clientID: newClientID(),
+		done:     make(chan struct{}),
 	}
+	hub.connections.Store(client, struct{}{})
+	activeSignalConnections.Add(context.Background(), 1)
 	go client.writePump()
 	go client.readPump(hub)
 }
@@ -597,15 +641,57 @@ func isAllowedOrigin(origin string) bool {
 	return false
 }
 
-func setupRoutes() {
-	http.HandleFunc("/", handleRoot)
-	http.HandleFunc("/ws", authMiddleware(handleWebSocket))
+func setupRoutes() http.Handler {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", handleRoot)
+	mux.Handle("/ws", signalHTTPHandler(http.HandlerFunc(authMiddleware(handleWebSocket)), "GET /ws"))
+	return mux
+}
+
+func runSignalServer(ctx context.Context) error {
+	shutdownTelemetry, err := initTelemetry(ctx, "beskar-signal")
+	if err != nil {
+		return err
+	}
+	defer func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := shutdownTelemetry(shutdownCtx); err != nil {
+			log.Printf("OpenTelemetry shutdown: %v", err)
+		}
+	}()
+	appCtx, cancelApp := context.WithCancel(ctx)
+	defer cancelApp()
+	initSignalRedis()
+	if sigRedis != nil {
+		defer sigRedis.Close()
+	}
+	hub.startWatchdog(appCtx)
+	srv := &http.Server{Addr: ":8080", Handler: setupRoutes()}
+	serveErrors := make(chan error, 1)
+	go func() { serveErrors <- srv.ListenAndServe() }()
+	log.Println("Starting server on port 8080")
+	select {
+	case <-ctx.Done():
+	case err := <-serveErrors:
+		if !errors.Is(err, http.ErrServerClosed) {
+			return err
+		}
+	}
+	cancelApp()
+	shutdownCtx, cancelShutdown := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancelShutdown()
+	// Stop accepting HTTP handshakes before closing all upgraded connections.
+	shutdownError := srv.Shutdown(shutdownCtx)
+	hub.connections.Range(func(key, value any) bool { key.(*Client).close(); return true })
+	return shutdownError
 }
 
 func main() {
-	initSignalRedis()
-	setupRoutes()
-	hub.startWatchdog(context.Background())
-	log.Println("Starting server on port 8080")
-	log.Fatal(http.ListenAndServe(":8080", nil))
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	if err := runSignalServer(ctx); err != nil {
+		log.Printf("signalserver: %v", err)
+		os.Exit(1)
+	}
 }

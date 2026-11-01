@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/durgakiran/beskar/core"
+	"github.com/durgakiran/beskar/observability"
 	"golang.org/x/net/html"
 	"golang.org/x/net/html/atom"
 )
@@ -91,6 +92,7 @@ func fetchExternalLinkMetadata(ctx context.Context, rawURL string) (*ExternalLin
 		},
 	}
 
+	client.Transport = observability.NewTransport(client.Transport)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, parsed.String(), nil)
 	if err != nil {
 		return nil, err

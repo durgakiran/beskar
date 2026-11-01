@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/durgakiran/beskar/observability"
 	"github.com/go-chi/render"
 	"github.com/zitadel/oidc/v3/pkg/client/rs"
 	"github.com/zitadel/oidc/v3/pkg/oidc"
@@ -50,7 +51,8 @@ func NewBrowserAccessTokenValidator() (*BrowserAccessTokenValidator, error) {
 		audience:     strings.TrimSpace(os.Getenv("ZITADEL_API_AUDIENCE")),
 		clientSecret: os.Getenv("ZITADEL_CLIENT_SECRET"),
 	}, &http.Client{
-		Timeout: 10 * time.Second,
+		Transport: observability.NewTransport(http.DefaultTransport),
+		Timeout:   10 * time.Second,
 		// Never forward credentials to a redirect target. TLS uses system trust.
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 	})
