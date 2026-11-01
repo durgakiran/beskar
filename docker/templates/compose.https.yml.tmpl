@@ -17,6 +17,11 @@ services:
       - -c
       - log_statement=none
       - -c
+      # Log SQL text and duration for statements taking at least 1 second.
+      - log_min_duration_statement=1000
+      - -c
+      - log_lock_waits=on
+      - -c
       - log_connections=off
       - -c
       - log_disconnections=off
