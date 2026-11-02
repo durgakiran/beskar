@@ -20,7 +20,10 @@ COPY ui/package.json ui/package-lock.json ./
 
 # BuildKit secrets are used by the static deployment scripts. Keep the build
 # argument as a fallback for the existing Compose deployment.
-RUN --mount=type=secret,id=npm_token,env=NPM_TOKEN \
+RUN --mount=type=secret,id=npm_token \
+    if [ -f /run/secrets/npm_token ]; then \
+        NPM_TOKEN="$(cat /run/secrets/npm_token)"; \
+    fi && \
     test -n "$NPM_TOKEN" && \
     printf "registry=https://registry.npmjs.org/\n@durgakiran:registry=https://npm.pkg.github.com\n//npm.pkg.github.com/:_authToken=%s\n" "$NPM_TOKEN" > .npmrc && \
     npm ci && \
