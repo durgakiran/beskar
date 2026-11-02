@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Button, Flex, Spinner, Text } from '@radix-ui/themes';
-import { normalizeReturnTo } from './returnTo';
+import { redirectToLogin } from './redirectToLogin';
 
 export default function AuthGuard({ children }: { children: React.ReactNode }) {
   const location = useLocation();
@@ -37,8 +37,7 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
   );
 
   if (status === 'unauthenticated') {
-    const returnTo = normalizeReturnTo(location.pathname + location.search);
-    window.location.href = `/auth/login?returnTo=${encodeURIComponent(returnTo)}`;
+    redirectToLogin(location.pathname + location.search + location.hash);
     return null;
   }
 

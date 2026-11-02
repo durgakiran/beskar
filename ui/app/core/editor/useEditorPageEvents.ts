@@ -42,13 +42,23 @@ export function useEditorPageEvents({ spaceId, pageId, enabled, onPageEvent, onT
         const metaPath = `${USER_URI}/editor/space/${spaceId}/page/${pageId}/edit/meta`;
 
         if (sseDisabled) {
+            const controller = new AbortController();
+            let stopped = false;
             if (!reportedTransportRef.current) {
                 reportedTransportRef.current = true;
                 onTransportRef.current?.("shortpoll");
             }
             const poll = async () => {
+                if (stopped) return;
                 try {
-                    const res = await fetch(metaPath, { credentials: "include", headers: { "Content-Type": "application/json" } });
+                    const res = await fetch(metaPath, { credentials: "include", headers: { "Content-Type": "application/json" }, signal: controller.signal });
+                    if (stopped) return;
+                    if (res.status === 401) {
+                        stopped = true;
+                        controller.abort();
+                        window.clearInterval(id);
+                        return;
+                    }
                     if (!res.ok) return;
                     const json = (await res.json()) as { data?: { draftGeneration?: number; docId?: number } };
                     const inner = json?.data;
@@ -70,6 +80,8 @@ export function useEditorPageEvents({ spaceId, pageId, enabled, onPageEvent, onT
             const id = window.setInterval(() => void poll(), 45_000);
             void poll();
             return () => {
+                stopped = true;
+                controller.abort();
                 reportedTransportRef.current = false;
                 window.clearInterval(id);
             };
@@ -93,6 +105,12 @@ export function useEditorPageEvents({ spaceId, pageId, enabled, onPageEvent, onT
                     signal: controller.signal,
                 });
 
+                if (stopped) return;
+                if (res.status === 401) {
+                    stopped = true;
+                    controller.abort();
+                    return;
+                }
                 if (!res.ok) throw new Error(`SSE failed: ${res.status}`);
                 if (!res.body) throw new Error('SSE response has no body');
 

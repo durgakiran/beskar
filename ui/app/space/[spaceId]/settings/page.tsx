@@ -1,6 +1,5 @@
-import { redirect } from "next/navigation";
+import { Navigate } from "react-router-dom";
 
 export default function Page() {
-    const { spaceId } = await params;
-    redirect(`/space/${spaceId}/settings/users`);
+    return <Navigate to="users" replace />;
 }

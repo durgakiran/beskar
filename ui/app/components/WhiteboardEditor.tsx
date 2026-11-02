@@ -1,6 +1,6 @@
 import "@durgakiran/glideboard/styles.css";
 
-import { useGet, Response } from "@http/hooks";
+import { useGet, type Response as ApiResponse } from "@http/hooks";
 import { useCallback, useEffect, useMemo, useState, useRef, type Ref } from "react";
 import * as Y from "yjs";
 import { WebrtcProvider } from "y-webrtc";
@@ -200,7 +200,7 @@ export default function WhiteboardEditor({
     const fetchPath = readOnly
         ? `editor/space/${spaceId}/whiteboard/${pageId}`
         : `editor/space/${spaceId}/whiteboard/${pageId}/edit`;
-    const [{ data: profileData }, getProfile] = useGet<Response<{ id: string; name: string; email: string }>>(`profile/details`);
+    const [{ data: profileData }, getProfile] = useGet<ApiResponse<{ id: string; name: string; email: string }>>(`profile/details`);
 
     const documentSessionKey = `${spaceId}:${pageId}`;
     const boardRequestRef = useRef({
@@ -479,7 +479,7 @@ export default function WhiteboardEditor({
                     throw new Error(`Failed to load whiteboard (${response.status})`);
                 }
 
-                const result = await response.json() as Response<WhiteboardData>;
+                const result = await response.json() as ApiResponse<WhiteboardData>;
                 if (!active || abortController.signal.aborted) return;
                 const data = result.data;
                 if (
@@ -610,7 +610,7 @@ export default function WhiteboardEditor({
                     headers: { "Content-Type": "application/json" },
                 });
                 if (!response.ok) throw new Error(`Failed to verify active draft (${response.status})`);
-                const body = await response.json() as Response<WhiteboardData>;
+                const body = await response.json() as ApiResponse<WhiteboardData>;
                 const nextDraftId = String(body.data.docId);
                 if (expectedDraftId && nextDraftId !== expectedDraftId) return;
                 if (nextDraftId === activeDraftIdRef.current) return;
@@ -785,7 +785,7 @@ export default function WhiteboardEditor({
                 throw new Error('Publish stopped because this draft changed on the server. Reload before trying again.');
             }
             if (!publishRes.ok) throw new Error(`Publish failed (${publishRes.status})`);
-            const publishBody = await publishRes.json() as Response<{
+            const publishBody = await publishRes.json() as ApiResponse<{
                 nextDraftId: number;
                 nextRevision: string;
             }>;

@@ -39,6 +39,12 @@ export function useCommentEvents(pageId: string) {
           signal: controller.signal,
         });
 
+        if (stopped) return;
+        if (response.status === 401) {
+          stopped = true;
+          controller.abort();
+          return;
+        }
         if (!response.ok) {
           throw new Error(`Comment event stream failed with status ${response.status}`);
         }
