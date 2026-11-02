@@ -10,8 +10,8 @@ import (
 )
 
 type Node struct {
-	DocId    int64                    `json:"docId" db:"docId"`
-	ParentId uuid.UUID                `json:"parentId" db:"parentId"`
+	DocId    int64                    `json:"docId" db:"docid"`
+	ParentId uuid.UUID                `json:"parentId" db:"parentid"`
 	Marks    []map[string]interface{} `json:"marks" db:"marks"`
 	OrderId  int64                    `json:"orderId" db:"order"`
 }
