@@ -12,7 +12,6 @@ import (
 )
 
 func TestDesktopAPIProxy(t *testing.T) {
-	t.Setenv("BESKAR_DEV_ALLOW_SELF_SIGNED", "1")
 	backend := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.RequestURI() != "/api/v1/space/list?limit=10" {
 			t.Errorf("unexpected backend request: %s", r.URL.RequestURI())
@@ -21,10 +20,16 @@ func TestDesktopAPIProxy(t *testing.T) {
 		_, _ = io.WriteString(w, `{"status":"success","data":[]}`)
 	}))
 	defer backend.Close()
+	previous := http.DefaultTransport
+	trusted := previous.(*http.Transport).Clone()
+	trusted.TLSClientConfig = backend.Client().Transport.(*http.Transport).TLSClientConfig.Clone()
+	trusted.TLSClientConfig.InsecureSkipVerify = false
+	http.DefaultTransport = trusted
+	t.Cleanup(func() { http.DefaultTransport = previous; trusted.CloseIdleConnections() })
 	assets := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = io.WriteString(w, "native assets or IPC")
 	})
-	handler := ProxyMiddleware(&auth.AuthService{}, &config.AppConfig{ServerURL: backend.URL})(assets)
+	handler := ProxyMiddleware(&auth.Manager{}, &config.AppConfig{ServerURL: backend.URL})(assets)
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, httptest.NewRequest("GET", "/api/v1/space/list?limit=10", nil))
 	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"status":"success"`) {

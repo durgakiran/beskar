@@ -2,9 +2,7 @@ package auth
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
-	"io"
 	"net/http"
 	"net/url"
 	"strings"
@@ -14,14 +12,19 @@ import (
 
 // Read the API's public audience configuration before login, so newly issued
 // access tokens target that API. Existing grants require a fresh login.
-func loginAuthorizationURL(ctx context.Context, cfg *config.AppConfig, challenge string, client *http.Client) (string, error) {
-	for _, raw := range []string{cfg.ServerURL, cfg.ZitadelURL} {
-		u, err := url.Parse(raw)
-		if err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
-			return "", errors.New("login requires HTTPS server and Zitadel URLs")
-		}
+func loginAuthorizationURL(ctx context.Context, cfg *config.AppConfig, challenge, state string, client *http.Client) (string, error) {
+	serverOrigin, err := trustedOrigin(cfg.ServerURL)
+	if err != nil {
+		return "", err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(cfg.ServerURL, "/")+"/.well-known/beskar", nil)
+	issuerOrigin, err := trustedOrigin(cfg.ZitadelURL)
+	if err != nil {
+		return "", err
+	}
+	ctx, cancel := context.WithTimeout(ctx, providerTimeout)
+	defer cancel()
+	client = boundedClient(client, providerTimeout)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, serverOrigin+"/.well-known/beskar", nil)
 	if err != nil {
 		return "", err
 	}
@@ -37,15 +40,16 @@ func loginAuthorizationURL(ctx context.Context, cfg *config.AppConfig, challenge
 		Issuer   string `json:"zitadel_url"`
 		Audience string `json:"api_audience"`
 	}
-	if json.NewDecoder(io.LimitReader(response.Body, 64*1024)).Decode(&metadata) != nil ||
-		strings.TrimRight(metadata.Issuer, "/") != strings.TrimRight(cfg.ZitadelURL, "/") ||
+	if decodeProviderJSON(response.Body, &metadata, 64*1024) != nil ||
+		strings.TrimRight(metadata.Issuer, "/") != issuerOrigin ||
 		metadata.Audience == "" || strings.ContainsAny(metadata.Audience, " \t\r\n") {
 		return "", errors.New("invalid API audience or mismatched Zitadel issuer")
 	}
 	params := url.Values{
 		"client_id": {cfg.ClientID}, "redirect_uri": {RedirectURI}, "response_type": {"code"},
 		"scope":          {"openid profile email offline_access urn:zitadel:iam:org:project:id:" + metadata.Audience + ":aud"},
+		"state":          {state},
 		"code_challenge": {challenge}, "code_challenge_method": {"S256"},
 	}
-	return strings.TrimRight(cfg.ZitadelURL, "/") + "/oauth/v2/authorize?" + params.Encode(), nil
+	return issuerOrigin + "/oauth/v2/authorize?" + params.Encode(), nil
 }

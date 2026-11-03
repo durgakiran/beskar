@@ -14,9 +14,6 @@ import (
 
 	"beskar/desktop/auth"
 	"beskar/desktop/config"
-	"beskar/desktop/pdfexport"
-	"beskar/desktop/platform"
-	"beskar/desktop/transport"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/events"
@@ -29,7 +26,7 @@ var embeddedAssets embed.FS
 type APIProxyService struct{}
 
 // ProxyMiddleware forwards API and collaboration requests to the configured backend with the auth token.
-func ProxyMiddleware(authService *auth.AuthService, cfg *config.AppConfig) application.Middleware {
+func ProxyMiddleware(authService *auth.Manager, cfg *config.AppConfig) application.Middleware {
 	return func(next http.Handler) http.Handler {
 		targetStr := cfg.ServerURL
 		if targetStr == "" {
@@ -77,8 +74,10 @@ func main() {
 	mime.AddExtensionType(".wasm", "application/wasm")
 	mime.AddExtensionType(".js", "application/javascript")
 
+	appCtx, cancelApp := context.WithCancel(context.Background())
+	defer cancelApp()
 	configService := config.NewConfigService()
-	authService := &auth.AuthService{}
+	authService := &auth.Manager{}
 
 	// Check if started with a deep link
 	for _, arg := range os.Args {
@@ -95,22 +94,13 @@ func main() {
 	}
 
 	app := application.New(application.Options{
-		Name: "Teddox",
+		Name:       "Teddox",
+		OnShutdown: cancelApp,
 		Assets: application.AssetOptions{
 			Handler:    application.AssetFileServerFS(assets),
 			Middleware: ProxyMiddleware(authService, configService.Config),
 		},
-		Services: []application.Service{
-			application.NewService(authService),
-			application.NewService(configService),
-			application.NewService(platform.NewNotificationService()),
-			application.NewService(&APIProxyService{}),
-			application.NewService(&pdfexport.Service{}),
-			application.NewService(transport.New(configService.Config, authService.GetAccessToken)),
-		},
-		Windows: application.WindowsOptions{
-			AdditionalBrowserArgs: []string{"--ignore-certificate-errors", "--disable-web-security"},
-		},
+		Services: desktopServices(authService, configService),
 
 		SingleInstance: &application.SingleInstanceOptions{
 			UniqueID: "com.durgakiran.beskar",
@@ -171,7 +161,7 @@ func main() {
 	})
 	systemTray.SetMenu(trayMenu)
 
-	authService.Initialize(context.Background(), configService.Config)
+	authService.Initialize(appCtx, configService.Config)
 
 	err = app.Run()
 	if err != nil {

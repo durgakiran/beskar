@@ -15,7 +15,6 @@ import (
 const testAttachment = "/api/v1/attachments/57a825c2-b600-48e4-a1b2-74eb7e5138e7"
 
 func TestAttachmentDownload(t *testing.T) {
-	t.Setenv("BESKAR_DEV_ALLOW_SELF_SIGNED", "1")
 	data := []byte("binary\x00attachment\xff\n")
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != testAttachment || r.Method != "GET" || r.Header.Get("Authorization") != "Bearer test-token" {
@@ -24,6 +23,7 @@ func TestAttachmentDownload(t *testing.T) {
 		_, _ = w.Write(data)
 	}))
 	defer server.Close()
+	trustBackendCertificate(t, server)
 	service := New(&config.AppConfig{ServerURL: server.URL}, func() string { return "test-token" })
 	dir := t.TempDir()
 	destination := filepath.Join(dir, "chosen.bin")
@@ -65,7 +65,6 @@ func TestRejectAttachmentPathsBeforeDownload(t *testing.T) {
 }
 
 func TestDownloadFailureDoesNotOpenDialog(t *testing.T) {
-	t.Setenv("BESKAR_DEV_ALLOW_SELF_SIGNED", "1")
 	for _, status := range []int{http.StatusForbidden, http.StatusFound, http.StatusOK} {
 		t.Run(http.StatusText(status), func(t *testing.T) {
 			server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -78,6 +77,7 @@ func TestDownloadFailureDoesNotOpenDialog(t *testing.T) {
 				}
 			}))
 			defer server.Close()
+			trustBackendCertificate(t, server)
 			service := New(&config.AppConfig{ServerURL: server.URL}, func() string { return "test-token" })
 			service.savePath = func(string) (string, error) { t.Error("dialog opened for failed download"); return "", nil }
 			if saved, err := service.SaveAttachment(context.Background(), testAttachment, "test"); err == nil || saved {

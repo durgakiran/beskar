@@ -9,7 +9,7 @@ import { setupDesktopDownloads } from '../app/core/desktop/downloads';
 import { downloadAttachmentBlob } from '../app/core/http/uploadAttachmentData';
 import { Call, Events } from '@wailsio/runtime';
 // @ts-ignore
-import { Logout } from '../wailsjs/beskar/desktop/auth/authservice';
+import { Logout } from '../wailsjs/beskar/desktop/auth/uiauthservice';
 
 async function startDesktop() {
     setupDesktopTransport(await Call.ByName('beskar/desktop/transport.Service.GetBaseURL'));

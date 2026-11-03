@@ -15,7 +15,6 @@ import (
 )
 
 func TestNativeTransport(t *testing.T) {
-	t.Setenv("BESKAR_DEV_ALLOW_SELF_SIGNED", "1")
 	backend := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Authorization") != "Bearer test-access" || r.Header.Get("Cookie") != "" {
 			t.Error("native credential was not used exclusively")
@@ -40,6 +39,7 @@ func TestNativeTransport(t *testing.T) {
 		_, _ = w.Write(body)
 	}))
 	defer backend.Close()
+	trustBackendCertificate(t, backend)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	token := "test-access"

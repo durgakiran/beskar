@@ -1,59 +1,79 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Flex, Spinner, Button, Heading, Text, Card } from '@radix-ui/themes';
 
 // @ts-ignore
 import { Events } from '@wailsio/runtime';
 // @ts-ignore
-import { IsAuthenticated, Login } from '../../../wailsjs/beskar/desktop/auth/authservice';
+import { GetStatus, IsAuthenticated, Login } from '../../../wailsjs/beskar/desktop/auth/uiauthservice';
 
 export default function AuthGuard({ children }: { children: React.ReactNode }) {
   const location = useLocation();
   const [status, setStatus] = useState<'loading' | 'ok' | 'unauthenticated'>('loading');
 
+  const [authMessage, setAuthMessage] = useState('');
+  const statusRevision = useRef(0);
+
   useEffect(() => {
-    const checkAuth = async () => {
+    let active = true;
+    const refreshStatus = async () => {
+      const revision = ++statusRevision.current;
       try {
-        const authed = await IsAuthenticated();
-        if (authed) {
-          setStatus('ok');
-        } else {
-          setStatus('unauthenticated');
-        }
-      } catch (err) {
+        const [authed, diagnostic] = await Promise.all([IsAuthenticated(), GetStatus()]);
+        if (!active || revision !== statusRevision.current) return;
+        setAuthMessage(diagnostic.message);
+        setStatus(authed && !diagnostic.requiresSignIn ? 'ok' : 'unauthenticated');
+      } catch {
+        if (!active || revision !== statusRevision.current) return;
+        setAuthMessage('Unable to read authentication status. Restart the app and try again.');
         setStatus('unauthenticated');
       }
     };
-    checkAuth();
+    const completedLogin = () => { setIsLoggingIn(false); void refreshStatus(); };
+    const cancelReady = Events.On('auth:ready', completedLogin);
+    const cancelLogout = Events.On('auth:logout', completedLogin);
+    const cancelStatus = Events.On('auth:status', () => { void refreshStatus(); });
+    void refreshStatus();
+    return () => {
+      active = false;
+      cancelReady?.(); cancelLogout?.(); cancelStatus?.();
+    };
   }, [location.pathname]);
+
+  const pendingLogin = useRef<ReturnType<typeof Login> | null>(null);
+
+  useEffect(() => () => {
+    const request = pendingLogin.current;
+    pendingLogin.current = null;
+    void request?.cancel();
+  }, []);
 
   const [loginError, setLoginError] = useState<string | null>(null);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
 
-  useEffect(() => {
-    const cancelReady = Events.On('auth:ready', () => {
-      setStatus('ok');
-      setIsLoggingIn(false);
-    });
-    const cancelLogout = Events.On('auth:logout', () => {
-      setStatus('unauthenticated');
-      setIsLoggingIn(false);
-    });
-    
-    return () => {
-      if (cancelReady) cancelReady();
-      if (cancelLogout) cancelLogout();
-    };
-  }, []);
-
   const handleLogin = () => {
     setIsLoggingIn(true);
     setLoginError(null);
-    Login().catch(err => {
-      console.error("Login failed:", err);
+    const request = Login();
+    pendingLogin.current = request;
+    request.then(() => {
+      if (pendingLogin.current !== request) return;
+      pendingLogin.current = null;
+      setIsLoggingIn(false);
+    }, err => {
+      if (pendingLogin.current !== request) return;
+      pendingLogin.current = null;
       setLoginError(String(err));
       setIsLoggingIn(false);
     });
+  };
+
+  const handleCancelLogin = () => {
+    const request = pendingLogin.current;
+    pendingLogin.current = null;
+    void request?.cancel();
+    setIsLoggingIn(false);
+    setLoginError(null);
   };
 
   if (status === 'loading') return (
@@ -76,9 +96,13 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
               {isLoggingIn ? <><Spinner /> Waiting for browser...</> : "Sign In"}
             </Button>
 
+            {isLoggingIn && <Button variant="soft" onClick={handleCancelLogin}>Cancel sign-in</Button>}
+
+            {authMessage && <Text role="alert" color="red" size="2">{authMessage}</Text>}
+
             {loginError && (
               <Text color="red" size="2">
-                Error launching browser: {loginError}
+                Sign-in failed: {loginError}
               </Text>
             )}
           </Flex>
@@ -87,5 +111,8 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
     );
   }
 
-  return <>{children}</>;
+  return <>
+    {children}
+    {authMessage && <div role="alert" style={{ position: 'fixed', bottom: 16, right: 16, maxWidth: 480, zIndex: 10000, padding: 16, border: '1px solid var(--amber-7)', borderRadius: 8, background: 'var(--amber-2)', color: 'var(--amber-12)', boxShadow: '0 2px 12px #0002' }}>{authMessage}</div>}
+  </>;
 }

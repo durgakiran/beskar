@@ -3,15 +3,15 @@ package config
 import (
 	"crypto/tls"
 	"net/http"
-	"os"
 )
 
-// NewHTTPTransport permits self-signed development certificates only when
-// explicitly enabled for this process. It does not change the OS trust store.
+// NewHTTPTransport verifies certificates in normal builds. Only beskar_dev
+// builds include the explicit process-level TLS exception.
 func NewHTTPTransport() *http.Transport {
 	transport := http.DefaultTransport.(*http.Transport).Clone()
-	transport.TLSClientConfig = &tls.Config{
-		InsecureSkipVerify: os.Getenv("BESKAR_DEV_ALLOW_SELF_SIGNED") == "1",
+	if transport.TLSClientConfig == nil {
+		transport.TLSClientConfig = &tls.Config{}
 	}
+	transport.TLSClientConfig.InsecureSkipVerify = allowDevelopmentTLSException()
 	return transport
 }

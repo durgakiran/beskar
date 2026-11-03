@@ -2,6 +2,7 @@ package auth
 
 import (
 	"encoding/json"
+	"errors"
 	"time"
 
 	"github.com/zalando/go-keyring"
@@ -10,12 +11,15 @@ import (
 const serviceName = "Beskar"
 const accountName = "user_tokens"
 
+var errCredentialsNotFound = keyring.ErrNotFound
+
 // TokenStore represents the tokens stored in the OS keychain.
 type TokenStore struct {
-	AccessToken  string    `json:"access_token"`
-	RefreshToken string    `json:"refresh_token"`
-	IDToken      string    `json:"id_token"`
-	Expiry       time.Time `json:"expiry"`
+	RefreshPending bool      `json:"refresh_pending,omitempty"`
+	AccessToken    string    `json:"access_token"`
+	RefreshToken   string    `json:"refresh_token"`
+	IDToken        string    `json:"id_token"`
+	Expiry         time.Time `json:"expiry"`
 }
 
 // SaveTokens stores the tokens in the OS keychain.
@@ -40,5 +44,9 @@ func LoadTokens() (TokenStore, error) {
 
 // ClearTokens removes the tokens from the OS keychain.
 func ClearTokens() error {
-	return keyring.Delete(serviceName, accountName)
+	err := keyring.Delete(serviceName, accountName)
+	if errors.Is(err, keyring.ErrNotFound) {
+		return nil // Concurrent cancellation/logout may already have deleted it.
+	}
+	return err
 }
