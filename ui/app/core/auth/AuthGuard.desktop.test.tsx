@@ -123,3 +123,14 @@ it('does not overwrite a new status with a stale status response', async () => {
   await act(async () => { oldStatus({ message: 'Old failure', requiresSignIn: true }); });
   expect(screen.getByRole('alert').textContent).toBe('New failure');
 });
+
+it.each([
+  ['credential_migration_required', 'Credential storage has been upgraded. Sign in again; the previous shared credentials were removed.'],
+  ['credential_context_mismatch', 'Saved credentials do not match this app, server or account. Sign in again.'],
+])('shows the %s notice without restoring the old workspace', async (code, message) => {
+  native.diagnostic.mockResolvedValue({ code, message, requiresSignIn: true });
+  await setup();
+  expect(screen.getByRole('alert').textContent).toBe(message);
+  expect(screen.queryByText('Workspace')).toBeNull();
+  expect(screen.getByRole('button', { name: 'Sign In' })).toBeTruthy();
+});

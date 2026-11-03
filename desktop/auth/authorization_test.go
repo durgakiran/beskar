@@ -37,7 +37,7 @@ func TestDesktopLoginRequestsAPIAudience(t *testing.T) {
 			}))
 			defer server.Close()
 			cfg := &config.AppConfig{ServerURL: server.URL, ZitadelURL: "https://identity.example", ClientID: "desktop+client"}
-			raw, err := loginAuthorizationURL(context.Background(), cfg, "pkce-challenge", "random-state", server.Client())
+			raw, err := loginAuthorizationURL(context.Background(), cfg, "pkce-challenge", "random-state", "test-nonce", server.Client())
 			if (err == nil) != tc.valid {
 				t.Fatalf("url=%s error=%v", raw, err)
 			}
@@ -49,7 +49,7 @@ func TestDesktopLoginRequestsAPIAudience(t *testing.T) {
 				t.Fatal(err)
 			}
 			params := u.Query()
-			if params.Get("state") != "random-state" {
+			if params.Get("state") != "random-state" || params.Get("nonce") != "test-nonce" {
 				t.Fatal("state missing")
 			}
 			if params.Get("client_id") != cfg.ClientID || params.Get("redirect_uri") != RedirectURI || params.Get("code_challenge") != "pkce-challenge" || params.Get("code_challenge_method") != "S256" {

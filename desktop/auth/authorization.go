@@ -12,7 +12,7 @@ import (
 
 // Read the API's public audience configuration before login, so newly issued
 // access tokens target that API. Existing grants require a fresh login.
-func loginAuthorizationURL(ctx context.Context, cfg *config.AppConfig, challenge, state string, client *http.Client) (string, error) {
+func loginAuthorizationURL(ctx context.Context, cfg *config.AppConfig, challenge, state, nonce string, client *http.Client) (string, error) {
 	serverOrigin, err := trustedOrigin(cfg.ServerURL)
 	if err != nil {
 		return "", err
@@ -49,6 +49,7 @@ func loginAuthorizationURL(ctx context.Context, cfg *config.AppConfig, challenge
 		"client_id": {cfg.ClientID}, "redirect_uri": {RedirectURI}, "response_type": {"code"},
 		"scope":          {"openid profile email offline_access urn:zitadel:iam:org:project:id:" + metadata.Audience + ":aud"},
 		"state":          {state},
+		"nonce":          {nonce},
 		"code_challenge": {challenge}, "code_challenge_method": {"S256"},
 	}
 	return issuerOrigin + "/oauth/v2/authorize?" + params.Encode(), nil

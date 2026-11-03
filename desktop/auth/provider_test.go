@@ -67,7 +67,7 @@ func TestProviderOperationsRejectAllRedirects(t *testing.T) {
 						t.Fatal("userinfo redirect accepted or hidden")
 					}
 				case "discovery":
-					if _, err := loginAuthorizationURL(context.Background(), s.cfg, "challenge", "state", source.Client()); err == nil {
+					if _, err := loginAuthorizationURL(context.Background(), s.cfg, "challenge", "state", "test-nonce", source.Client()); err == nil {
 						t.Fatal("discovery redirect accepted")
 					}
 				}
@@ -111,7 +111,7 @@ func TestProviderTimeoutCoversHeadersAndBodies(t *testing.T) {
 			case "discovery":
 				client := server.Client()
 				client.Timeout = 50 * time.Millisecond
-				if _, err := loginAuthorizationURL(context.Background(), s.cfg, "challenge", "state", client); err == nil {
+				if _, err := loginAuthorizationURL(context.Background(), s.cfg, "challenge", "state", "test-nonce", client); err == nil {
 					t.Fatal("discovery timeout hidden")
 				}
 			}
@@ -314,7 +314,7 @@ func TestConcurrentLogoutDoesNotHideUnconfirmedRevocation(t *testing.T) {
 func TestLoginStorageFailurePublishesSanitizedStatus(t *testing.T) {
 	store := &memoryCredentials{saveErr: errors.New("PRIVATE_SAVE_DETAIL"), clearErr: errors.New("PRIVATE_DELETE_DETAIL")}
 	s := &Manager{store: store, emit: func(string) {}}
-	err := s.adoptLogin(context.Background(), 0, tokenResponse{AccessToken: "PRIVATE_ACCESS", RefreshToken: "PRIVATE_REFRESH", ExpiresIn: 3600})
+	err := s.adoptLogin(context.Background(), 0, tokenResponse{AccessToken: "PRIVATE_ACCESS", RefreshToken: "PRIVATE_REFRESH", ExpiresIn: 3600, subject: "test-subject", nonce: "test-nonce"})
 	status := s.GetStatus()
 	if err == nil || status.Code != "credential_save_failed" || !status.RequiresSignIn || !strings.Contains(status.Message, "could not be removed") {
 		t.Fatal("login storage/cleanup failure hidden")
@@ -362,7 +362,7 @@ func TestPreviousLogoutFailureWarnsWithoutEndingNewLogin(t *testing.T) {
 	done := make(chan struct{})
 	go func() { defer close(done); _ = s.Logout() }()
 	waitClosed(t, started)
-	if err := s.adoptLogin(context.Background(), s.currentGeneration(), tokenResponse{AccessToken: "new-account", RefreshToken: "new-account-refresh", ExpiresIn: 3600}); err != nil {
+	if err := s.adoptLogin(context.Background(), s.currentGeneration(), tokenResponse{AccessToken: "new-account", RefreshToken: "new-account-refresh", ExpiresIn: 3600, subject: "test-subject", nonce: "test-nonce"}); err != nil {
 		t.Fatal(err)
 	}
 	close(release)

@@ -72,7 +72,7 @@ func TestStaleCallbackCannotConsumeNewLogin(t *testing.T) {
 	s.finishLogin(old)
 	current, _ := s.beginLogin(context.Background(), time.Minute)
 	defer s.finishLogin(current)
-	if old.state == current.state || old.verifier == current.verifier {
+	if old.state == current.state || old.verifier == current.verifier || old.nonce == current.nonce {
 		t.Fatal("login secrets reused")
 	}
 	s.HandleCallback(oldCallback)
@@ -217,7 +217,7 @@ func TestLoginCancellationInterruptsTokenExchange(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	done := make(chan error, 1)
-	go func() { done <- s.exchangeCode(ctx, "test-code", "test-verifier", s.currentGeneration()) }()
+	go func() { done <- s.exchangeCode(ctx, "test-code", "test-verifier", s.currentGeneration(), "test-nonce") }()
 	select {
 	case <-started:
 	case <-time.After(5 * time.Second):

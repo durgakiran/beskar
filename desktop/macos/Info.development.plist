@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleExecutable</key><string>teddox</string>
+    <key>CFBundleIdentifier</key><string>com.durgakiran.beskar.dev</string>
+    <key>CFBundleName</key><string>Teddox Development</string>
+    <key>CFBundlePackageType</key><string>APPL</string>
+    <key>CFBundleVersion</key><string>1</string>
+    <key>NSHighResolutionCapable</key><true/>
+    <key>CFBundleURLTypes</key>
+    <array><dict>
+        <key>CFBundleURLName</key><string>com.durgakiran.beskar.dev</string>
+        <key>CFBundleURLSchemes</key><array><string>teddox</string></array>
+        <key>CFBundleTypeRole</key><string>Viewer</string>
+    </dict></array>
+</dict>
+</plist>

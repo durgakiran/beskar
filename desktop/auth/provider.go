@@ -44,7 +44,7 @@ func trustedOrigin(raw string) (string, error) {
 		u.Fragment != "" || strings.ContainsAny(raw, "#\\ \t\r\n") {
 		return "", failure("invalid_configuration", "Authentication requires valid HTTPS server and identity-provider origins.")
 	}
-	return "https://" + u.Host, nil
+	return "https://" + strings.TrimSuffix(strings.ToLower(u.Host), ":443"), nil
 }
 
 func (s *Manager) requestBudget() time.Duration {
@@ -63,7 +63,7 @@ func (s *Manager) providerURL(path string) (string, error) {
 		return "", err
 	}
 	switch path {
-	case "/oauth/v2/token", "/oauth/v2/revoke", "/oidc/v1/userinfo":
+	case "/oauth/v2/token", "/oauth/v2/revoke", "/oidc/v1/userinfo", "/oauth/v2/keys":
 		return origin + path, nil
 	default:
 		return "", failure("invalid_configuration", "Unsupported identity-provider endpoint.")
@@ -82,10 +82,11 @@ func transportFailure(ctx context.Context, err error) *authFailure {
 }
 
 type tokenResponse struct {
-	AccessToken  string `json:"access_token"`
-	RefreshToken string `json:"refresh_token"`
-	IDToken      string `json:"id_token"`
-	ExpiresIn    int64  `json:"expires_in"`
+	subject, nonce string
+	AccessToken    string `json:"access_token"`
+	RefreshToken   string `json:"refresh_token"`
+	IDToken        string `json:"id_token"`
+	ExpiresIn      int64  `json:"expires_in"`
 }
 
 func decodeProviderJSON(body io.Reader, target any, limit int64) error {

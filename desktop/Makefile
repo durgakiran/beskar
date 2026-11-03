@@ -1,5 +1,7 @@
 .PHONY: dev dev-native build-dev build-production build-mac build-win build-linux test-tls
 
+RELEASE_TEAM_ID ?=
+
 dev:
 	wails3 dev
 
@@ -12,7 +14,7 @@ build-dev:
 	go build -tags beskar_dev -o bin/teddox-dev .
 
 build-production:
-	go build -tags '' -o bin/teddox-production .
+	go build -tags '' -ldflags '-X beskar/desktop/config.ReleaseTeamID=$(RELEASE_TEAM_ID)' -o bin/teddox-production .
 
 test-tls:
 	go test -tags '' ./config

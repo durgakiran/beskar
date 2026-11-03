@@ -23,6 +23,7 @@ type loginTransaction struct {
 	cancel              context.CancelFunc
 	stopAppCancellation func() bool
 	state, verifier     string
+	nonce               string
 	generation          uint64
 	responded           bool // protected by loginMu; consumed before delivering a callback
 	result              chan loginResult
@@ -42,8 +43,12 @@ func (s *Manager) beginLogin(ctx context.Context, timeout time.Duration) (*login
 	if err != nil {
 		return nil, err
 	}
+	nonce, err := GenerateState()
+	if err != nil {
+		return nil, err
+	}
 	ctx, cancel := context.WithTimeout(ctx, timeout)
-	tx := &loginTransaction{ctx: ctx, cancel: cancel, state: state, verifier: verifier, generation: s.currentGeneration(), result: make(chan loginResult, 1)}
+	tx := &loginTransaction{ctx: ctx, cancel: cancel, state: state, verifier: verifier, nonce: nonce, generation: s.currentGeneration(), result: make(chan loginResult, 1)}
 	if s.ctx != nil {
 		tx.stopAppCancellation = context.AfterFunc(s.ctx, cancel)
 	}
@@ -120,10 +125,17 @@ func (s *Manager) Login(ctx context.Context) error {
 	if s.cfg == nil || s.cfg.ZitadelURL == "" {
 		return errors.New("application not configured")
 	}
+	status := s.GetStatus()
+	switch status.Code {
+	case "credential_app_identity_invalid", "credential_migration_failed", "credential_configuration_invalid":
+		return errors.New(status.Message)
+	}
 	var generation uint64
+	var nonce string
 	return s.runLogin(ctx, loginTimeout, func(ctx context.Context, tx *loginTransaction) error {
 		generation = tx.generation
-		authURL, err := loginAuthorizationURL(ctx, s.cfg, GenerateCodeChallenge(tx.verifier), tx.state, &http.Client{
+		nonce = tx.nonce
+		authURL, err := loginAuthorizationURL(ctx, s.cfg, GenerateCodeChallenge(tx.verifier), tx.state, tx.nonce, &http.Client{
 			Transport: s.httpClient().Transport, Timeout: s.httpClient().Timeout,
 			CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 		})
@@ -138,7 +150,7 @@ func (s *Manager) Login(ctx context.Context) error {
 		}
 		return nil
 	}, func(ctx context.Context, code, verifier string) error {
-		return s.exchangeCode(ctx, code, verifier, generation)
+		return s.exchangeCode(ctx, code, verifier, generation, nonce)
 	})
 }
 
@@ -180,7 +192,7 @@ func loginContextError(err error) error {
 	return errors.New("login cancelled")
 }
 
-func (s *Manager) exchangeCode(ctx context.Context, code, verifier string, generation uint64) error {
+func (s *Manager) exchangeCode(ctx context.Context, code, verifier string, generation uint64, nonce string) error {
 	data := url.Values{}
 	data.Set("grant_type", "authorization_code")
 	data.Set("client_id", s.cfg.ClientID)
@@ -191,5 +203,10 @@ func (s *Manager) exchangeCode(ctx context.Context, code, verifier string, gener
 	if err != nil {
 		return err
 	}
+	subject, err := s.verifyTokenAccount(ctx, result, "", nonce)
+	if err != nil {
+		return err
+	}
+	result.subject, result.nonce = subject, nonce
 	return s.adoptLogin(ctx, generation, result)
 }

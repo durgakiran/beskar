@@ -94,7 +94,7 @@ func main() {
 	}
 
 	app := application.New(application.Options{
-		Name:       "Teddox",
+		Name:       config.ApplicationName,
 		OnShutdown: cancelApp,
 		Assets: application.AssetOptions{
 			Handler:    application.AssetFileServerFS(assets),
@@ -103,7 +103,7 @@ func main() {
 		Services: desktopServices(authService, configService),
 
 		SingleInstance: &application.SingleInstanceOptions{
-			UniqueID: "com.durgakiran.beskar",
+			UniqueID: config.ApplicationID,
 			OnSecondInstanceLaunch: func(data application.SecondInstanceData) {
 				if app := application.Get(); app != nil {
 					application.InvokeSync(app.Show)
@@ -138,7 +138,7 @@ func main() {
 	})
 
 	app.Window.NewWithOptions(application.WebviewWindowOptions{
-		Title:          "Teddox",
+		Title:          config.ApplicationName,
 		URL:            "/index.desktop.html",
 		EnableFileDrop: true,
 	})

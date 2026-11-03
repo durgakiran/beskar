@@ -32,11 +32,6 @@ type credentialStore interface {
 	Save(TokenStore) error
 	Clear() error
 }
-type keychainStore struct{}
-
-func (keychainStore) Load() (TokenStore, error)    { return LoadTokens() }
-func (keychainStore) Save(tokens TokenStore) error { return SaveTokens(tokens) }
-func (keychainStore) Clear() error                 { return ClearTokens() }
 
 // Manager owns native authentication state. Never register it as a Wails service;
 // only UIAuthService may be bound to the renderer. ctx/cfg and the dependencies
@@ -46,6 +41,7 @@ type Manager struct {
 	cfg                                *config.AppConfig
 	mu                                 sync.Mutex
 	accessToken, refreshToken, idToken string
+	subject, loginNonce                string
 	expiry                             time.Time
 	refreshAt                          time.Time
 	generation                         uint64
@@ -65,13 +61,14 @@ type Manager struct {
 	client         *http.Client
 	emit           func(string)
 	requestTimeout time.Duration
+	verifyAccount  func(context.Context, tokenResponse, string, string) (string, error)
 }
 
 func (s *Manager) storage() credentialStore {
 	if s.store != nil {
 		return s.store
 	}
-	return keychainStore{}
+	return unavailableStore{}
 }
 func (s *Manager) httpClient() *http.Client {
 	base := authClient
@@ -90,10 +87,39 @@ func (s *Manager) currentGeneration() uint64 { s.mu.Lock(); defer s.mu.Unlock();
 
 // Initialize restores a session without starting an additional worker on refresh.
 func (s *Manager) Initialize(ctx context.Context, cfg *config.AppConfig) {
-	s.ctx, s.cfg = ctx, cfg
+	s.ctx = ctx
+	if cfg != nil {
+		snapshot := *cfg
+		s.cfg = &snapshot
+	}
+	cfg = s.cfg
+	if s.store == nil {
+		scoped, err := newKeychainStore(cfg, nativeSecretBackend())
+		if err != nil {
+			s.reportStatus(s.currentGeneration(), signedOutStatus("credential_configuration_invalid", "Saved credentials cannot be used with this application configuration. Check the server settings and sign in again."))
+			return
+		}
+		s.store = scoped
+	}
+	if scoped, ok := s.store.(*keychainStore); ok {
+		expected, err := newKeychainStore(cfg, scoped.backend)
+		if err != nil || scoped.context != expected.context {
+			s.reportStatus(s.currentGeneration(), signedOutStatus("credential_context_mismatch", "Saved credentials do not match this app, server or account. Sign in again."))
+			return
+		}
+	}
 	tokens, err := s.storage().Load()
 	if err != nil {
-		if !errors.Is(err, errCredentialsNotFound) {
+		switch {
+		case errors.Is(err, errCredentialMigration):
+			s.reportStatus(s.currentGeneration(), signedOutStatus("credential_migration_required", "Credential storage has been upgraded. Sign in again; the previous shared credentials were removed."))
+		case errors.Is(err, errCredentialContext):
+			s.reportStatus(s.currentGeneration(), signedOutStatus("credential_context_mismatch", "Saved credentials do not match this app, server or account. Sign in again."))
+		case errors.Is(err, errCredentialAppIdentity):
+			s.reportStatus(s.currentGeneration(), signedOutStatus("credential_app_identity_invalid", "This app's signing identity could not be verified. Use a trusted signed build or an explicit development build."))
+		case errors.Is(err, errLegacyCleanup):
+			s.reportStatus(s.currentGeneration(), signedOutStatus("credential_migration_failed", "Unable to remove the old shared credentials. Check your operating system credential store and restart before signing in."))
+		case !errors.Is(err, errCredentialsNotFound):
 			s.reportStatus(s.currentGeneration(), signedOutStatus("credential_load_failed", "Unable to load saved credentials. Check your operating system credential store and sign in again."))
 		}
 		return
@@ -117,9 +143,10 @@ func (s *Manager) Initialize(ctx context.Context, cfg *config.AppConfig) {
 }
 
 func (s *Manager) snapshotLocked() TokenStore {
-	return TokenStore{AccessToken: s.accessToken, RefreshToken: s.refreshToken, IDToken: s.idToken, Expiry: s.expiry}
+	return TokenStore{Subject: s.subject, LoginNonce: s.loginNonce, AccessToken: s.accessToken, RefreshToken: s.refreshToken, IDToken: s.idToken, Expiry: s.expiry}
 }
 func (s *Manager) setTokensLocked(tokens TokenStore) {
+	s.subject, s.loginNonce = tokens.Subject, tokens.LoginNonce
 	s.accessToken, s.refreshToken, s.idToken, s.expiry = tokens.AccessToken, tokens.RefreshToken, tokens.IDToken, tokens.Expiry
 	// A fixed five-minute lead would immediately refresh every short-lived token.
 	lead := time.Until(tokens.Expiry) / 10
@@ -182,12 +209,15 @@ func (s *Manager) emitForSession(event string, generation uint64) {
 }
 
 func (s *Manager) adoptLogin(ctx context.Context, generation uint64, result tokenResponse) error {
+	if result.subject == "" || result.nonce == "" {
+		return failure("account_verification_failed", "Unable to verify the login account. Sign in again.")
+	}
 	s.mu.Lock()
 	if generation != s.generation || ctx.Err() != nil || s.appContext().Err() != nil {
 		s.mu.Unlock()
 		return errSessionChanged
 	}
-	tokens := TokenStore{AccessToken: result.AccessToken, RefreshToken: result.RefreshToken, IDToken: result.IDToken, Expiry: time.Now().Add(time.Duration(result.ExpiresIn) * time.Second)}
+	tokens := TokenStore{Subject: result.subject, LoginNonce: result.nonce, AccessToken: result.AccessToken, RefreshToken: result.RefreshToken, IDToken: result.IDToken, Expiry: time.Now().Add(time.Duration(result.ExpiresIn) * time.Second)}
 	// Serialize persistence with logout/refresh so late writes cannot restore tokens.
 	if err := s.storage().Save(tokens); err != nil {
 		_, next, clearErr := s.invalidateLocked()
@@ -440,12 +470,16 @@ func (s *Manager) doRefresh(generation uint64) error {
 			}
 			return nil, s.failRefresh(generation, "refresh_uncertain", "Token renewal could not be confirmed. Sign in again; the previous refresh token will not be retried.")
 		}
+		subject, verifyErr := s.verifyTokenAccount(ctx, result, old.Subject, old.LoginNonce)
+		if verifyErr != nil {
+			return nil, s.failRefresh(generation, "account_verification_failed", "Token renewal returned an unverified or different account. Sign in again.")
+		}
 		s.mu.Lock()
 		if !s.sessionActiveLocked(generation) || ctx.Err() != nil {
 			s.mu.Unlock()
 			return nil, errSessionChanged
 		}
-		tokens := TokenStore{AccessToken: result.AccessToken, RefreshToken: result.RefreshToken, IDToken: result.IDToken, Expiry: time.Now().Add(time.Duration(result.ExpiresIn) * time.Second)}
+		tokens := TokenStore{Subject: subject, LoginNonce: old.LoginNonce, AccessToken: result.AccessToken, RefreshToken: result.RefreshToken, IDToken: result.IDToken, Expiry: time.Now().Add(time.Duration(result.ExpiresIn) * time.Second)}
 		if tokens.RefreshToken == "" {
 			tokens.RefreshToken = old.RefreshToken
 		}

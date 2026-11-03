@@ -59,8 +59,8 @@ func testSession(t *testing.T, transport roundTripFunc) (*Manager, *memoryCreden
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	store := &memoryCredentials{}
-	s := &Manager{ctx: ctx, cfg: &config.AppConfig{ZitadelURL: "https://identity.test", ClientID: "test-client"}, store: store, client: &http.Client{Transport: transport}, emit: func(string) {}}
-	initial := TokenStore{AccessToken: "old-access", RefreshToken: "old-refresh", IDToken: "old-id", Expiry: time.Now().Add(-time.Minute)}
+	s := &Manager{ctx: ctx, cfg: &config.AppConfig{ZitadelURL: "https://identity.test", ClientID: "test-client"}, store: store, client: &http.Client{Transport: transport}, emit: func(string) {}, verifyAccount: func(_ context.Context, _ tokenResponse, subject, nonce string) (string, error) { return subject, nil }}
+	initial := TokenStore{Subject: "test-subject", LoginNonce: "test-nonce", AccessToken: "old-access", RefreshToken: "old-refresh", IDToken: "old-id", Expiry: time.Now().Add(-time.Minute)}
 	_ = store.Save(initial)
 	s.mu.Lock()
 	generation := s.installSessionLocked(initial)
@@ -210,7 +210,7 @@ func TestLogoutAndReplacementRejectLateRefresh(t *testing.T) {
 			if saved, _ := store.Load(); saved.RefreshToken != "" {
 				t.Fatal("logout retained saved credentials")
 			}
-			if err := s.adoptLogin(context.Background(), s.currentGeneration(), tokenResponse{AccessToken: "account-b", RefreshToken: "account-b-refresh", ExpiresIn: 3600}); err != nil {
+			if err := s.adoptLogin(context.Background(), s.currentGeneration(), tokenResponse{AccessToken: "account-b", RefreshToken: "account-b-refresh", ExpiresIn: 3600, subject: "test-subject", nonce: "test-nonce"}); err != nil {
 				t.Fatal(err)
 			}
 			close(release)
@@ -230,7 +230,7 @@ func TestLateLoginCannotResurrectLogout(t *testing.T) {
 	if err := s.Logout(); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.adoptLogin(context.Background(), generation, tokenResponse{AccessToken: "late-login", RefreshToken: "late-refresh", ExpiresIn: 3600}); !errors.Is(err, errSessionChanged) {
+	if err := s.adoptLogin(context.Background(), generation, tokenResponse{AccessToken: "late-login", RefreshToken: "late-refresh", ExpiresIn: 3600, subject: "test-subject", nonce: "test-nonce"}); !errors.Is(err, errSessionChanged) {
 		t.Fatal("stale login was accepted")
 	}
 	if saved, _ := store.Load(); saved.AccessToken != "" {
