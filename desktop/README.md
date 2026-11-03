@@ -2,6 +2,8 @@
 
 This is the desktop client for the application, built using [Wails v3](https://wails.io/) and React. It wraps the core UI and provides native OS integrations, deep linking, and a dedicated proxy middleware for authenticated API requests.
 
+Before distributing a production build, follow the [production-readiness guideline](../docs/runbooks/desktop-production-readiness.md). The current development build has documented token, callback, transport and collaboration-authorization blockers.
+
 ## Prerequisites
 
 Before building or running the desktop application, ensure you have the following installed on your machine:
@@ -47,7 +49,52 @@ To run the application in live development mode (which enables hot-reloading for
    ```
    *Note: You can also pass `-ldflags` to `wails3 dev` if you need to target a staging backend during development.*
 
+## Local development with self-signed HTTPS certificates
+
+Set `BESKAR_DEV_ALLOW_SELF_SIGNED=1` in the desktop process environment to
+allow the development server's self-signed certificates for login discovery,
+authentication requests, and the desktop API proxy:
+
+```bash
+BESKAR_DEV_ALLOW_SELF_SIGNED=1 go run .
+```
+
+Run this from `desktop` after building the desktop UI and copying `ui/dist`
+into `desktop/ui/dist`. With the variable unset, certificate verification is
+enabled. This process-only option disables certificate verification; use it
+only with development servers. It does not change browser or OS trust settings.
+
+The desktop process starts its own loopback HTTP/WebSocket bridge on a random
+port. API requests, draft saves, signaling, and live document updates use this
+bridge; backend tokens and TLS handling stay in Go. No separate local signaling
+server is needed. The listener accepts native origins and a per-run random path,
+and closes when the app exits.
+
+Attachment downloads from document controls and comment links use a native
+save dialog. Go downloads the authenticated attachment from the configured
+backend, enforces the 10 MB attachment limit, and writes only after a destination
+is selected. Cancelling does not create a file.
+
 ## Building and Packaging for Production
+
+### macOS development bundle without the Wails CLI
+
+After building the desktop UI, run from `desktop`:
+
+```bash
+mkdir -p ui/dist bin/Teddox.app/Contents/MacOS
+cp -R ../ui/dist/. ui/dist/
+go build -o bin/Teddox.app/Contents/MacOS/teddox .
+cp macos/Info.plist bin/Teddox.app/Contents/Info.plist
+codesign --force --deep --sign - bin/Teddox.app
+/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$PWD/bin/Teddox.app"
+BESKAR_DEV_ALLOW_SELF_SIGNED=1 bin/Teddox.app/Contents/MacOS/teddox
+```
+
+The bundle declares the `teddox://` URL scheme. Registration lets the browser
+return the login callback to this app. Keep the desktop process running during
+login because the PKCE verifier belongs to that process; after a restart, start
+a new login rather than reusing an old callback URL.
 
 To package the application into a standalone executable (e.g., `.exe` for Windows, `.app` for macOS):
 

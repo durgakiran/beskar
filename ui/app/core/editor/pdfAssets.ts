@@ -1,8 +1,11 @@
 import { isDesktop } from '../desktop/isDesktop';
-/** Uses the same media proxy as the editor, including desktop's fetch interceptor. */
+import { getDesktopTransportURL } from '../desktop/transport';
+/** Uses the authenticated media transport for stored images. */
 export async function resolvePdfImage(source: string): Promise<string> {
     const normalized = source.replace(/^[^?#]*?\/api\/v1\/media\//, '/api/v1/media/');
-    const url = new URL(normalized, window.location.href);
+    const native = isDesktop && normalized.startsWith('/api/v1/media/')
+        ? getDesktopTransportURL(normalized) : undefined;
+    const url = new URL(native || normalized, window.location.href);
     if (!['http:', 'https:', 'data:', 'blob:'].includes(url.protocol)) throw new Error('Unsupported image URL');
     const response = await fetch(url.href, {
         credentials: url.origin === window.location.origin ? 'same-origin' : 'omit',

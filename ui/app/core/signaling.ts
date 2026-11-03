@@ -18,9 +18,14 @@ function resolveBrowserWebSocketUrl(path: string): string {
 }
 
 export function getSignalingUrl(): string {
+    const native = getDesktopTransportURL('/ws');
+    if (native) return native.replace(/^http:/, 'ws:');
     return import.meta.env.VITE_SIGNALING_URL || resolveBrowserWebSocketUrl("/ws");
 }
 
 export function getCollaborationUrl(): string {
+    const native = getDesktopTransportURL('/collab');
+    if (native) return native.replace(/^http:/, 'ws:');
     return import.meta.env.VITE_COLLAB_URL || resolveBrowserWebSocketUrl("/collab");
 }
+import { getDesktopTransportURL } from './desktop/transport';

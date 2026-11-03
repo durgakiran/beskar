@@ -2,13 +2,11 @@ package auth
 
 import (
 	"context"
-	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
-	"os/exec"
 	"strings"
 	"time"
 
@@ -21,10 +19,8 @@ const (
 	RedirectURI = "teddox://callback"
 )
 
-var insecureClient = &http.Client{
-	Transport: &http.Transport{
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-	},
+var authClient = &http.Client{
+	Transport: config.NewHTTPTransport(),
 }
 
 // UserInfo represents the standard OIDC user claims.
@@ -107,6 +103,7 @@ func (s *AuthService) Login() error {
 	challenge := GenerateCodeChallenge(verifier)
 
 	authURL, err := loginAuthorizationURL(s.ctx, s.cfg, challenge, &http.Client{
+		Transport:     config.NewHTTPTransport(),
 		Timeout:       10 * time.Second,
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 	})
@@ -116,8 +113,7 @@ func (s *AuthService) Login() error {
 
 	s.loginCallbackChan = make(chan string, 1)
 
-	application.Get().Logger.Info("Opening URL: " + authURL)
-	if err := exec.Command("cmd", "/c", "start", "", strings.ReplaceAll(authURL, "&", "^&")).Start(); err != nil {
+	if err := application.Get().Browser.OpenURL(authURL); err != nil {
 		return err
 	}
 
@@ -143,7 +139,7 @@ func (s *AuthService) exchangeCode(code, verifier string) error {
 func (s *AuthService) fetchTokens(data url.Values) error {
 	req, _ := http.NewRequest("POST", s.cfg.ZitadelURL+"/oauth/v2/token", strings.NewReader(data.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	resp, err := insecureClient.Do(req)
+	resp, err := authClient.Do(req)
 	if err != nil {
 		return err
 	}
@@ -207,7 +203,7 @@ func (s *AuthService) revoke(token string) {
 	data.Set("token", token)
 	req, _ := http.NewRequest("POST", s.cfg.ZitadelURL+"/oauth/v2/revoke", strings.NewReader(data.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	resp, err := insecureClient.Do(req)
+	resp, err := authClient.Do(req)
 	if err == nil {
 		resp.Body.Close()
 	}
@@ -242,7 +238,7 @@ func (s *AuthService) GetUserInfo() UserInfo {
 	req, _ := http.NewRequest("GET", s.cfg.ZitadelURL+"/oidc/v1/userinfo", nil)
 	req.Header.Set("Authorization", "Bearer "+s.accessToken)
 
-	resp, err := insecureClient.Do(req)
+	resp, err := authClient.Do(req)
 	if err != nil || resp.StatusCode != 200 {
 		return UserInfo{}
 	}

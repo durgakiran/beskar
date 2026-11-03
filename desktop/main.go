@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"crypto/tls"
 	"embed"
 	"io/fs"
 	"log"
@@ -17,8 +16,10 @@ import (
 	"beskar/desktop/config"
 	"beskar/desktop/pdfexport"
 	"beskar/desktop/platform"
+	"beskar/desktop/transport"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
+	"github.com/wailsapp/wails/v3/pkg/events"
 )
 
 //go:embed all:ui/dist
@@ -27,7 +28,7 @@ var embeddedAssets embed.FS
 // APIProxyService is a placeholder for the API proxy service to be implemented later.
 type APIProxyService struct{}
 
-// ProxyMiddleware intercepts requests to /api/v1/media/ and proxies them to the backend with the auth token.
+// ProxyMiddleware forwards API and collaboration requests to the configured backend with the auth token.
 func ProxyMiddleware(authService *auth.AuthService, cfg *config.AppConfig) application.Middleware {
 	return func(next http.Handler) http.Handler {
 		targetStr := cfg.ServerURL
@@ -41,15 +42,13 @@ func ProxyMiddleware(authService *auth.AuthService, cfg *config.AppConfig) appli
 		}
 
 		proxy := httputil.NewSingleHostReverseProxy(targetURL)
-		proxy.Transport = &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-		}
-		
+		proxy.Transport = config.NewHTTPTransport()
+
 		originalDirector := proxy.Director
 		proxy.Director = func(req *http.Request) {
 			originalDirector(req)
 			req.Host = targetURL.Host
-			
+
 			// Inject the access token if available
 			token := authService.GetAccessToken()
 			if token != "" {
@@ -61,9 +60,9 @@ func ProxyMiddleware(authService *auth.AuthService, cfg *config.AppConfig) appli
 		}
 
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if strings.HasPrefix(r.URL.Path, "/api/v1/media/") || 
-			   strings.HasPrefix(r.URL.Path, "/ws") || 
-			   strings.HasPrefix(r.URL.Path, "/collab") {
+			if r.URL.Path == "/api/v1" || strings.HasPrefix(r.URL.Path, "/api/v1/") ||
+				strings.HasPrefix(r.URL.Path, "/ws") ||
+				strings.HasPrefix(r.URL.Path, "/collab") {
 				proxy.ServeHTTP(w, r)
 				return
 			}
@@ -107,6 +106,7 @@ func main() {
 			application.NewService(platform.NewNotificationService()),
 			application.NewService(&APIProxyService{}),
 			application.NewService(&pdfexport.Service{}),
+			application.NewService(transport.New(configService.Config, authService.GetAccessToken)),
 		},
 		Windows: application.WindowsOptions{
 			AdditionalBrowserArgs: []string{"--ignore-certificate-errors", "--disable-web-security"},
@@ -115,26 +115,36 @@ func main() {
 		SingleInstance: &application.SingleInstanceOptions{
 			UniqueID: "com.durgakiran.beskar",
 			OnSecondInstanceLaunch: func(data application.SecondInstanceData) {
-				log.Printf("Second instance launched with args: %v", data.Args)
 				if app := application.Get(); app != nil {
-					app.Show()
+					application.InvokeSync(app.Show)
 					if windows := app.Window.GetAll(); len(windows) > 0 {
 						windows[0].Show()
 						windows[0].Focus()
 					}
-					// Handle deep link passed as arg on Windows
+					// Windows/Linux and macOS second-instance relays pass URLs as args.
 					for _, arg := range data.Args {
-						if strings.HasPrefix(arg, "teddox://") {
-							if strings.HasPrefix(arg, "teddox://callback") {
-								authService.HandleCallback(arg)
-							} else {
-								app.Event.Emit("deep-link-opened", arg)
-							}
-						}
+						handleDeepLink(arg, authService.HandleCallback, func(route string) {
+							app.Event.Emit("deep-link-opened", route)
+						})
 					}
 				}
 			},
 		},
+	})
+
+	// macOS delivers URLs to a running app as native events, without argv.
+	app.Event.OnApplicationEvent(events.Common.ApplicationLaunchedWithUrl, func(e *application.ApplicationEvent) {
+		handleDeepLink(e.Context().URL(), func(raw string) {
+			log.Print("Received native desktop login callback")
+			authService.HandleCallback(raw)
+		}, func(route string) {
+			app.Event.Emit("deep-link-opened", route)
+		})
+		application.InvokeSync(app.Show)
+		if windows := app.Window.GetAll(); len(windows) > 0 {
+			windows[0].Show()
+			windows[0].Focus()
+		}
 	})
 
 	app.Window.NewWithOptions(application.WebviewWindowOptions{
@@ -146,7 +156,7 @@ func main() {
 	systemTray := app.SystemTray.New()
 	trayMenu := app.NewMenu()
 	trayMenu.Add("Open Teddox").OnClick(func(ctx *application.Context) {
-		app.Show()
+		application.InvokeSync(app.Show)
 		if windows := app.Window.GetAll(); len(windows) > 0 {
 			windows[0].Show()
 			windows[0].Focus()

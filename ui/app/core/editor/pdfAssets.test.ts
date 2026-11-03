@@ -1,9 +1,18 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { resolvePdfImage } from './pdfAssets';
-vi.mock('../desktop/isDesktop', () => ({ isDesktop: false }));
+const desktop = vi.hoisted(() => ({ isDesktop: false }));
+vi.mock('../desktop/isDesktop', () => desktop);
+vi.mock('../desktop/transport', () => ({ getDesktopTransportURL: (path: string) => `http://127.0.0.1:43210/session${path}` }));
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => { vi.unstubAllGlobals(); desktop.isDesktop = false; });
 describe('PDF image access', () => {
+    it('uses native HTTP transport instead of the unsupported wails scheme for desktop images', async () => {
+        desktop.isDesktop = true;
+        const fetch = vi.fn().mockResolvedValue({ ok: false });
+        vi.stubGlobal('fetch', fetch);
+        await expect(resolvePdfImage('/api/v1/media/image/asset')).rejects.toThrow('Image download failed');
+        expect(fetch).toHaveBeenCalledWith('http://127.0.0.1:43210/session/api/v1/media/image/asset', expect.any(Object));
+    });
     it('uses the same-origin media proxy for stored image URLs', async () => {
         const fetch = vi.fn().mockResolvedValue({ ok: false });
         vi.stubGlobal('fetch', fetch);
