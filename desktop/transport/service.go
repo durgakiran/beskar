@@ -57,15 +57,37 @@ func (s *Service) ServiceStartup(ctx context.Context, _ application.ServiceOptio
 		r.Host = target.Host
 		r.Header.Set("Origin", target.Scheme+"://"+target.Host)
 		r.Header.Del("Cookie")
+		r.Header.Del("Referer")
+		r.Header.Del("Forwarded")
+		r.Header.Del("X-Forwarded-Host")
+		r.Header.Del("X-Forwarded-Proto")
 	}
 	proxy.ModifyResponse = func(r *http.Response) error {
 		// Backend CORS is for the web client. The local bridge accepts only the
 		// native origin below, so never reflect a remote site's origin here.
 		r.Header.Del("Access-Control-Allow-Origin")
 		r.Header.Del("Access-Control-Allow-Credentials")
+		r.Header.Del("Set-Cookie")
+		// Never forward an upstream redirect containing the capability or send
+		// the renderer to an untrusted destination with native credentials.
+		if r.StatusCode >= 300 && r.StatusCode < 400 && r.Header.Get("Location") != "" {
+			return fmt.Errorf("native transport refuses upstream redirects")
+		}
+		r.Header.Set("Cache-Control", "no-store")
+		r.Header.Set("Content-Security-Policy", "default-src 'none'; sandbox")
 		return nil
 	}
 	s.server = &http.Server{ReadHeaderTimeout: 10 * time.Second, Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// The capability is only valid on this exact listener (DNS rebinding).
+		if r.Host != listener.Addr().String() {
+			http.Error(w, "native host required", http.StatusForbidden)
+			return
+		}
+		w.Header().Set("Referrer-Policy", "no-referrer")
+		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		// Authenticated bridge responses are data, never executable documents.
+		w.Header().Set("Content-Security-Policy", "default-src 'none'; sandbox")
 		path := strings.TrimPrefix(r.URL.Path, prefix)
 		if path == r.URL.Path || !(strings.HasPrefix(path, "/api/v1/") || path == "/ws" || path == "/collab") {
 			http.NotFound(w, r)

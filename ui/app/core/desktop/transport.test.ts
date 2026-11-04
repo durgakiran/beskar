@@ -17,7 +17,7 @@ describe('desktop native transport', () => {
         const { getSignalingUrl, getCollaborationUrl } = await import('../signaling');
         const init = { method: 'PUT', body: '{"data":"draft"}', headers: { 'Content-Type': 'application/json' } };
         await fetch('/api/v1/editor/update', init);
-        expect(nativeFetch).toHaveBeenCalledWith(`${base}/api/v1/editor/update`, init);
+        expect(nativeFetch).toHaveBeenCalledWith(`${base}/api/v1/editor/update`, { ...init, credentials: 'omit', referrerPolicy: 'no-referrer', redirect: 'error' });
         expect(getSignalingUrl()).toBe(base.replace('http:', 'ws:') + '/ws');
         expect(getCollaborationUrl()).toBe(base.replace('http:', 'ws:') + '/collab');
     });
@@ -35,7 +35,7 @@ describe('desktop native transport', () => {
         expect(forwarded.method).toBe('PUT');
         expect(forwarded.headers.get('X-Test')).toBe('preserved');
         expect(await forwarded.text()).toBe('draft-body');
-        expect(options).toBe(init);
+        expect(options).toEqual({ ...init, credentials: 'omit', referrerPolicy: 'no-referrer', redirect: 'error' });
     });
 
     it.each(['/wails/runtime', '/index.desktop.html', 'https://external.example/api/v1/media/file'])('does not intercept %s', async input => {

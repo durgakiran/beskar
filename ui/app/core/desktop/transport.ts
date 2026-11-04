@@ -1,6 +1,9 @@
 let transportBase: string | undefined;
 
 export function getDesktopTransportURL(path: string): string | undefined {
+    if (!(path.startsWith('/api/v1/') || path === '/ws' || path === '/collab') || /[\\#]/.test(path) || new URL(path, 'http://native').pathname !== path.split('?')[0]) {
+        throw new Error('Invalid native transport path');
+    }
     return transportBase && `${transportBase}${path}`;
 }
 
@@ -20,7 +23,7 @@ export function setupDesktopTransport(base: string) {
             return nativeFetch(input, init);
         }
         const destination = `${base}${url.pathname}${url.search}`;
-        if (!(input instanceof Request)) return nativeFetch(destination, init);
+        if (!(input instanceof Request)) return nativeFetch(destination, { ...init, credentials: 'omit', referrerPolicy: 'no-referrer', redirect: 'error' });
         const forwarded = new Request(destination, {
             method: input.method, headers: input.headers,
             body: input.body ? await input.clone().arrayBuffer() : undefined,
@@ -28,6 +31,6 @@ export function setupDesktopTransport(base: string) {
             referrerPolicy: input.referrerPolicy, integrity: input.integrity,
             keepalive: input.keepalive, signal: input.signal,
         });
-        return nativeFetch(forwarded, init);
+        return nativeFetch(forwarded, { ...init, credentials: 'omit', referrerPolicy: 'no-referrer', redirect: 'error' });
     };
 }

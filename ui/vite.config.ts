@@ -1,4 +1,5 @@
-import { defineConfig } from 'vite';
+import { defineConfig, loadEnv } from 'vite';
+import { securityPolicyPlugin } from './security-policy';
 import react from '@vitejs/plugin-react';
 import path from 'path';
 import { existsSync } from 'node:fs';
@@ -11,7 +12,7 @@ const hasWorkspaceEditor = ['index.mjs', 'styles.css', 'index.css']
   .every(file => existsSync(path.join(workspaceEditorDist, file)));
 
 export default defineConfig(({ mode }) => ({
-  plugins: [react()],
+  plugins: [react(), securityPolicyPlugin(mode === 'desktop', loadEnv(mode, process.cwd(), 'VITE_'))],
   // Desktop API requests use the native proxy and its runtime server config.
   ...(mode === 'desktop' ? {
     define: Object.fromEntries([

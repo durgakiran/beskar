@@ -435,7 +435,8 @@ test('HTML preview establishes restrictive CSP before user markup', () => {
   const preview = htmlPreview('<script>alert(1)</script>');
   assert.ok(preview.includes("script-src 'none'"));
   assert.ok(preview.includes("form-action 'none'"));
-  assert.ok(preview.indexOf('Content-Security-Policy') < preview.indexOf('<script>'));
+  assert.ok(!preview.includes('<script>'));
+  assert.ok(preview.includes('Content-Security-Policy'));
 });
 test('oversized Mermaid source is rejected before the renderer loads', async () => {
   await assert.rejects(
@@ -622,4 +623,23 @@ test('typing space after a rendered equation never reinterprets its serialized d
       assert.deepEqual(transaction.doc.toJSON(), doc.toJSON());
     }
   }
+});
+
+import { getEmbedUrlAndProvider, parseHttpsUrl } from '../src/nodes/embed/embed-providers';
+
+test('embeds accept exact HTTPS provider hosts and reject host/path impersonation', () => {
+  for (const url of [
+    'https://evil.example/framer.com/', 'https://framer.com.evil.example/',
+    'https://evil.example/?url=https://excalidraw.com/',
+    'https://framer.com@evil.example/', 'https://user:pass@framer.com/',
+    'https://framer.com:444/', 'javascript:alert(1)', 'http://framer.com/',
+    'https://app.durgakiran.com/', 'https://127.0.0.1/framer.com/',
+  ]) assert.equal(getEmbedUrlAndProvider(url), null, url);
+  for (const [url, expected] of [
+    ['https://youtu.be/dQw4w9WgXcQ', 'https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ'],
+    ['https://vimeo.com/123456', 'https://player.vimeo.com/video/123456'],
+    ['https://excalidraw.com/', 'https://excalidraw.com/'],
+    ['https://drive.google.com/file/d/test-id/view', 'https://drive.google.com/file/d/test-id/preview'],
+  ]) assert.equal(getEmbedUrlAndProvider(url)?.embedUrl, expected, url);
+  assert.equal(parseHttpsUrl('https://a:b@framer.com/'), null);
 });

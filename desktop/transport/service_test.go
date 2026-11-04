@@ -112,3 +112,50 @@ func TestNativeTransport(t *testing.T) {
 		t.Fatal("request without capability accepted")
 	}
 }
+
+func TestNativeBridgeIsolation(t *testing.T) {
+	calls := 0
+	backend := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		if r.Header.Get("Referer") != "" || r.Header.Get("Forwarded") != "" {
+			t.Error("capability metadata leaked upstream")
+		}
+		if r.URL.Path == "/api/v1/redirect" {
+			http.Redirect(w, r, "https://evil.example/", http.StatusFound)
+			return
+		}
+		w.Header().Set("Set-Cookie", "unexpected=credential")
+		w.Write([]byte("fixture"))
+	}))
+	defer backend.Close()
+	trustBackendCertificate(t, backend)
+	service := New(&config.AppConfig{ServerURL: backend.URL}, func() string { return "synthetic-token" })
+	if err := service.ServiceStartup(context.Background(), application.ServiceOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	defer service.ServiceShutdown()
+	request := func(path, host string) *http.Response {
+		req, _ := http.NewRequest("GET", service.GetBaseURL()+path, nil)
+		req.Header.Set("Origin", "wails://localhost")
+		req.Header.Set("Referer", service.GetBaseURL())
+		req.Header.Set("Forwarded", "host=evil.example")
+		if host != "" {
+			req.Host = host
+		}
+		res, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		res.Body.Close()
+		return res
+	}
+	if res := request("/api/v1/doc", "evil.example"); res.StatusCode != 403 || calls != 0 {
+		t.Fatal("DNS rebinding request reached backend")
+	}
+	if res := request("/api/v1/doc", ""); res.StatusCode != 200 || res.Header.Get("Set-Cookie") != "" || res.Header.Get("Cache-Control") != "no-store" || !strings.Contains(res.Header.Get("Content-Security-Policy"), "sandbox") {
+		t.Fatal("unsafe authenticated response headers")
+	}
+	if res := request("/api/v1/redirect", ""); res.StatusCode != 502 || res.Header.Get("Location") != "" {
+		t.Fatal("upstream redirect escaped bridge")
+	}
+}

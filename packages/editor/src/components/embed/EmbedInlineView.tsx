@@ -18,7 +18,7 @@ import {
   SiVimeo,
   SiYoutube,
 } from 'react-icons/si';
-import { getProviderName, parseHttpsUrl, resolveEmbedTitle } from '../../nodes/embed/embed-providers';
+import { getEmbedUrlAndProvider, getProviderName, parseHttpsUrl, resolveEmbedTitle } from '../../nodes/embed/embed-providers';
 
 function getHostLabel(rawUrl: string): string {
   const url = parseHttpsUrl(rawUrl);
@@ -55,13 +55,17 @@ function ProviderIcon({ provider }: { provider: string }) {
 }
 
 export function EmbedInlineView({ node, editor, updateAttributes, selected, getPos }: NodeViewProps) {
-  const { src, embedUrl, provider, title, error } = node.attrs as {
+  const { src, title, error } = node.attrs as {
     src: string;
     embedUrl: string;
     provider: string;
     title: string;
     error: string;
   };
+  // Revalidate every render, including remote CRDT updates and saved JSON.
+  const validatedEmbed = getEmbedUrlAndProvider(typeof src === 'string' ? src : '');
+  const embedUrl = validatedEmbed?.embedUrl || '';
+  const provider = validatedEmbed?.provider || '';
   const [resolvedTitle, setResolvedTitle] = useState(title || '');
   const [isLoadingTitle, setIsLoadingTitle] = useState(Boolean(src && !title));
   const providerName = getProviderName(provider);
@@ -114,7 +118,7 @@ export function EmbedInlineView({ node, editor, updateAttributes, selected, getP
 
   const openInNewTab = useCallback(() => {
     if (!src) return;
-    window.open(src, '_blank', 'noopener,noreferrer');
+    if (validatedEmbed) window.open(src, '_blank', 'noopener,noreferrer');
   }, [src]);
 
   const convertToBlock = useCallback(() => {

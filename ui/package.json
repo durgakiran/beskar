@@ -17,6 +17,8 @@
         "test": "vitest run",
         "test:phase3:coverage": "node ../docker/scripts/produce-phase-3-coverage.mjs ui",
         "test:watch": "vitest",
+        "test:security:build": "vite build --config vite.security-smoke.config.ts",
+        "test:security:serve": "node tests/security-smoke/server.mjs",
         "build:workers": "tsc -p tsconfig.worker.json && node -e \"require('fs').copyFileSync('workers/wasm_exec.js', 'public/workers/wasm_exec.js')\"",
         "watch:workers": "tsc -p tsconfig.worker.json --watch",
         "predev": "npm --prefix ../packages/editor run build:pdf",
@@ -83,7 +85,8 @@
         "prettier": "^3.1.1",
         "tailwindcss": "^3.4.15",
         "typescript": "^5.7.2",
-        "vitest": "4.1.7"
+        "vitest": "4.1.7",
+        "ws": "^8.20.0"
     },
     "overrides": {
         "@tiptap/core": "3.6.6",

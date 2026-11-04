@@ -7,6 +7,7 @@ export interface EmbedProviderMatch {
 interface EmbedProvider {
   id: string;
   name: string;
+  hosts: readonly string[];
   regex: RegExp;
   getEmbedUrl: (url: URL, match: RegExpMatchArray) => string;
   getTitleUrl?: (url: URL) => string;
@@ -19,6 +20,7 @@ function withHttps(url: URL, pathname: string, search = ''): string {
 export const EMBED_PROVIDERS: EmbedProvider[] = [
   {
     id: 'youtube',
+    hosts: ['youtube.com', 'www.youtube.com', 'm.youtube.com', 'youtu.be'],
     name: 'YouTube',
     regex: /(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([A-Za-z0-9_-]{6,})/,
     getEmbedUrl: (_url, match) => `https://www.youtube-nocookie.com/embed/${match[1]}`,
@@ -26,6 +28,7 @@ export const EMBED_PROVIDERS: EmbedProvider[] = [
   },
   {
     id: 'vimeo',
+    hosts: ['vimeo.com', 'www.vimeo.com', 'player.vimeo.com'],
     name: 'Vimeo',
     regex: /vimeo\.com\/(?:video\/)?(\d+)/,
     getEmbedUrl: (_url, match) => `https://player.vimeo.com/video/${match[1]}`,
@@ -33,6 +36,7 @@ export const EMBED_PROVIDERS: EmbedProvider[] = [
   },
   {
     id: 'loom',
+    hosts: ['loom.com', 'www.loom.com'],
     name: 'Loom',
     regex: /loom\.com\/(?:share|embed)\/([A-Za-z0-9]+)/,
     getEmbedUrl: (_url, match) => `https://www.loom.com/embed/${match[1]}`,
@@ -40,6 +44,7 @@ export const EMBED_PROVIDERS: EmbedProvider[] = [
   },
   {
     id: 'figma',
+    hosts: ['figma.com', 'www.figma.com'],
     name: 'Figma',
     regex: /figma\.com\/(?:file|design|proto|board)\//,
     getEmbedUrl: (_url, match) => `https://www.figma.com/embed?embed_host=beskar&url=${encodeURIComponent(match.input ?? '')}`,
@@ -47,6 +52,7 @@ export const EMBED_PROVIDERS: EmbedProvider[] = [
   },
   {
     id: 'miro',
+    hosts: ['miro.com', 'www.miro.com'],
     name: 'Miro',
     regex: /miro\.com\/app\/board\/([^/?#]+)/,
     getEmbedUrl: (_url, match) => `https://miro.com/app/live-embed/${match[1]}/`,
@@ -54,24 +60,28 @@ export const EMBED_PROVIDERS: EmbedProvider[] = [
   },
   {
     id: 'drawio',
+    hosts: ['app.diagrams.net', 'embed.diagrams.net', 'draw.io', 'www.draw.io'],
     name: 'Draw.io',
     regex: /(?:app\.diagrams\.net|embed\.diagrams\.net|draw\.io)/,
     getEmbedUrl: (url) => url.href,
   },
   {
     id: 'excalidraw',
+    hosts: ['excalidraw.com'],
     name: 'Excalidraw',
     regex: /excalidraw\.com\//,
     getEmbedUrl: (url) => url.href,
   },
   {
     id: 'framer',
+    hosts: ['framer.com', 'www.framer.com'],
     name: 'Framer',
     regex: /framer\.com\//,
     getEmbedUrl: (url) => url.href,
   },
   {
     id: 'airtable',
+    hosts: ['airtable.com', 'www.airtable.com'],
     name: 'Airtable',
     regex: /airtable\.com\/(?:embed\/)?(.+)/,
     getEmbedUrl: (url) => {
@@ -81,18 +91,21 @@ export const EMBED_PROVIDERS: EmbedProvider[] = [
   },
   {
     id: 'typeform',
+    hosts: ['typeform.com', 'www.typeform.com', 'form.typeform.com'],
     name: 'Typeform',
     regex: /(?:typeform\.com|form\.typeform\.com)\//,
     getEmbedUrl: (url) => url.href,
   },
   {
     id: 'gdrive',
+    hosts: ['drive.google.com'],
     name: 'Google Drive',
     regex: /drive\.google\.com\/file\/d\/([^/]+)/,
     getEmbedUrl: (_url, match) => `https://drive.google.com/file/d/${match[1]}/preview`,
   },
   {
     id: 'gsheets',
+    hosts: ['docs.google.com'],
     name: 'Google Sheets',
     regex: /docs\.google\.com\/spreadsheets\/d\/([^/]+)/,
     getEmbedUrl: (_url, match) => `https://docs.google.com/spreadsheets/d/${match[1]}/preview`,
@@ -100,12 +113,13 @@ export const EMBED_PROVIDERS: EmbedProvider[] = [
 ];
 
 export function parseHttpsUrl(rawUrl: string): URL | null {
+  if (typeof rawUrl !== 'string') return null;
   const trimmed = rawUrl.trim();
   if (!trimmed) return null;
 
   try {
     const url = new URL(trimmed);
-    return url.protocol === 'https:' ? url : null;
+    return url.protocol === 'https:' && !url.username && !url.password && !url.port ? url : null;
   } catch {
     return null;
   }
@@ -122,6 +136,9 @@ async function fetchEmbedTitle(endpoint: string): Promise<string | null> {
   try {
     const response = await fetch(endpoint, {
       signal: controller.signal,
+      credentials: 'omit',
+      referrerPolicy: 'no-referrer',
+      redirect: 'error',
       headers: {
         Accept: 'application/json',
       },
@@ -142,6 +159,7 @@ export function getEmbedUrlAndProvider(rawUrl: string): EmbedProviderMatch | nul
   if (!url) return null;
 
   for (const provider of EMBED_PROVIDERS) {
+    if (!provider.hosts.includes(url.hostname)) continue;
     const match = url.href.match(provider.regex);
     if (!match) continue;
 
@@ -168,9 +186,11 @@ export async function resolveEmbedTitle(rawUrl: string, providerId?: string): Pr
   const url = parseHttpsUrl(rawUrl);
   if (!url) return null;
 
+  const validated = getEmbedUrlAndProvider(rawUrl);
+  if (!validated || (providerId && providerId !== validated.provider)) return null;
   const provider = providerId
     ? EMBED_PROVIDERS.find((candidate) => candidate.id === providerId)
-    : EMBED_PROVIDERS.find((candidate) => candidate.regex.test(url.href));
+    : EMBED_PROVIDERS.find((candidate) => candidate.id === validated.provider);
 
   const candidateEndpoints = [
     provider?.getTitleUrl?.(url),

@@ -10,10 +10,13 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"os"
+	"runtime"
 	"strings"
 
 	"beskar/desktop/auth"
 	"beskar/desktop/config"
+	"beskar/desktop/security"
+	"beskar/desktop/transport"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/events"
@@ -78,6 +81,7 @@ func main() {
 	defer cancelApp()
 	configService := config.NewConfigService()
 	authService := &auth.Manager{}
+	nativeTransport := transport.New(configService.Config, authService.GetAccessToken)
 
 	// Check if started with a deep link
 	for _, arg := range os.Args {
@@ -98,9 +102,9 @@ func main() {
 		OnShutdown: cancelApp,
 		Assets: application.AssetOptions{
 			Handler:    application.AssetFileServerFS(assets),
-			Middleware: ProxyMiddleware(authService, configService.Config),
+			Middleware: securityMiddleware(nativeTransport, ProxyMiddleware(authService, configService.Config)),
 		},
-		Services: desktopServices(authService, configService),
+		Services: desktopServices(authService, configService, nativeTransport),
 
 		SingleInstance: &application.SingleInstanceOptions{
 			UniqueID: config.ApplicationID,
@@ -137,10 +141,21 @@ func main() {
 		}
 	})
 
-	app.Window.NewWithOptions(application.WebviewWindowOptions{
+	window := app.Window.NewWithOptions(application.WebviewWindowOptions{
 		Title:          config.ApplicationName,
 		URL:            "/index.desktop.html",
 		EnableFileDrop: true,
+	})
+
+	window.OnWindowEvent(events.Common.WindowRuntimeReady, func(_ *application.WindowEvent) {
+		if runtime.GOOS == "darwin" {
+			application.InvokeSync(func() {
+				if !security.InstallNavigationGuard(window.NativeWindow()) {
+					log.Print("Unable to enforce native navigation policy; closing application")
+					app.Quit()
+				}
+			})
+		}
 	})
 
 	systemTray := app.SystemTray.New()

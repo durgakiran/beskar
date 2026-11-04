@@ -5,6 +5,8 @@ import AppDesktop from './App.desktop';
 import '../app/global.css';
 import { setupApiClient } from '../app/core/http/setupApiClient';
 import { setupDesktopTransport } from '../app/core/desktop/transport';
+import { setupDesktopYouTube } from '../app/core/desktop/youtube';
+import { setupDesktopNavigation } from '../app/core/desktop/navigation';
 import { setupDesktopDownloads } from '../app/core/desktop/downloads';
 import { downloadAttachmentBlob } from '../app/core/http/uploadAttachmentData';
 import { Call, Events } from '@wailsio/runtime';
@@ -12,6 +14,8 @@ import { Call, Events } from '@wailsio/runtime';
 import { Logout } from '../wailsjs/beskar/desktop/auth/uiauthservice';
 
 async function startDesktop() {
+    setupDesktopNavigation();
+    await setupDesktopYouTube();
     setupDesktopTransport(await Call.ByName('beskar/desktop/transport.Service.GetBaseURL'));
     const resetAuthentication = setupApiClient(() => {
       void Logout().catch(error => console.error('Failed to clear expired desktop session:', error));
