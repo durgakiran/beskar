@@ -1,4 +1,4 @@
-//go:build darwin && cgo && !beskar_dev
+//go:build darwin && cgo && !beskar_dev && !beskar_alpha
 
 package auth
 

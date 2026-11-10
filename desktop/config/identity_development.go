@@ -1,4 +1,4 @@
-//go:build beskar_dev
+//go:build beskar_dev && !beskar_alpha
 
 package config
 

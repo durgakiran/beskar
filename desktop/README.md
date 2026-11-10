@@ -20,7 +20,7 @@ Before building or running the desktop application, ensure you have the followin
 
 The desktop application is designed to be environment-agnostic. Hardcoded URLs are avoided. Instead, we inject environment-specific URLs at build-time using Go's `ldflags`.
 
-The configuration variables exposed for injection are located in the `beskar/desktop/config` package:
+The configuration variables exposed for injection are located in the `beskar/desktop/config` package. The defaults below apply to the existing development/stable build policies; alpha uses `https://app.teddox.com`, `https://id.teddox.com` and a required production native client ID:
 - `DefaultServerURL`: The main API backend URL. (Default: `https://app.durgakiran.com`)
 - `DefaultZitadelURL`: The Zitadel Authentication server URL. (Default: `https://id.durgakiran.com`)
 - `DefaultClientID`: The OAuth Client ID used for authentication. (Default: `392021815213490183`)
@@ -105,6 +105,73 @@ backend, enforces the 10 MB attachment limit, and writes only after a destinatio
 is selected. Cancelling does not create a file.
 
 ## Building and Packaging for Production
+
+### Dedicated macOS alpha
+
+Alpha uses `-tags beskar_alpha`, name **Teddox Alpha**, bundle ID
+`com.durgakiran.beskar.alpha`, configuration under `Beskar/alpha/config.json`,
+and its own `com.durgakiran.beskar.alpha.credentials.v2` Keychain service.
+It keeps the native token manager, PKCE/state validation and refresh protections.
+It supports ad-hoc signing without the production Team ID requirement, while
+retaining native Keychain access controls. Production signing checks are unchanged.
+No dev/production configuration or tokens are automatically imported.
+
+Alpha always verifies HTTPS certificates and hostnames, even when
+`BESKAR_DEV_ALLOW_SELF_SIGNED=1`. Combining `beskar_alpha` and `beskar_dev`
+fails compilation. The self-signed local backend must use a trusted CA before
+alpha sign-in can work; the alpha has no TLS bypass.
+
+Install frontend/private-package dependencies from their lockfiles first and
+ensure any workspace package outputs selected by Vite were built from the same
+revision. On a Mac matching the desired architecture, from `desktop`:
+
+```bash
+cp alpha.env.example alpha.env
+# Edit alpha.env: set the native client ID, version/build and desired origins.
+bash scripts/package-mac-alpha.sh --env alpha.env --check
+bash scripts/package-mac-alpha.sh --env alpha.env
+# Equivalent packaging command:
+ALPHA_ENV_FILE=alpha.env make package-mac-alpha
+```
+
+Paths passed to `--env` are relative to the caller's working directory. From the
+repository root, use `bash desktop/scripts/package-mac-alpha.sh --env desktop/alpha.env`.
+The ignored `alpha.env` accepts only the six public keys in the example. It is
+parsed literally, never sourced or bundled; unknown keys, duplicate keys and
+invalid values fail before building. Explicit file values override inherited
+environment values. `--check` validates configuration without building or replacing
+UI assets. Increase the version and build number for each new package.
+Environment-only invocation remains supported, for example
+`ALPHA_CLIENT_ID=... ALPHA_VERSION=0.1.0-alpha.3 ALPHA_BUILD=3 make package-mac-alpha`.
+`ALPHA_CLIENT_ID=... make build-alpha` builds just the native binary from existing UI.
+
+The packaging target rebuilds the desktop frontend, replaces the generated
+`desktop/ui/dist`, builds the alpha app with controlled tags, ad-hoc signs it,
+and creates a DMG, `SHA256SUMS`, and `build-info.txt` under
+`desktop/bin/alpha/<version>/<architecture>/`. Existing version outputs are
+rejected. It currently targets macOS 15.0 or newer; older versions are unverified.
+Only the host architecture is built. Record successful hardware/OS tests before
+advertising support.
+
+Alpha defaults to `https://app.teddox.com` and `https://id.teddox.com`.
+`ALPHA_CLIENT_ID` is required for native builds and packages and must identify
+the production native public client, not the confidential browser client.
+Override origins through `ALPHA_API_ORIGIN` and `ALPHA_ISSUER_ORIGIN` when packaging
+if needed. Origins must be HTTPS DNS origins without paths.
+Client IDs are public identifiers, never client secrets. Alpha reapplies its
+compiled API/issuer/client configuration at startup so older saved alpha settings
+cannot silently retain development endpoints or a development client ID.
+The callback remains `teddox://callback`; when dev/alpha/prod coexist, macOS
+scheme selection must be tested and the browser must return to the instance
+that started login. Do not copy callbacks between processes.
+
+This package is not Developer ID signed or notarized. Testers may encounter
+Gatekeeper warnings and Keychain approval prompts after upgrades. Migration to
+the future signed production app requires fresh login; local draft migration
+is separate work. See [macOS release plan](../docs/runbooks/macos-release-plan.md)
+for alpha distribution through Cloudflare R2 and deferred release gates.
+Follow [production backend readiness](../docs/runbooks/teddox-alpha-backend-readiness.md)
+before building a distributable production alpha.
 
 ### macOS development bundle without the Wails CLI
 

@@ -1,8 +1,9 @@
-//go:build darwin && cgo && beskar_dev
+//go:build darwin && cgo && (beskar_dev || beskar_alpha)
 
 package auth
 
 import (
+	"beskar/desktop/config"
 	"crypto/rand"
 	"encoding/hex"
 	"os"
@@ -19,7 +20,7 @@ func TestNativeKeychainSyntheticRoundTrip(t *testing.T) {
 	if _, err := rand.Read(suffix[:]); err != nil {
 		t.Fatal(err)
 	}
-	service := "com.durgakiran.beskar.dev.test." + hex.EncodeToString(suffix[:])
+	service := config.ApplicationID + ".test." + hex.EncodeToString(suffix[:])
 	backend := nativeSecretBackend()
 	t.Cleanup(func() {
 		if err := deleteIfPresent(backend, service, "synthetic"); err != nil {

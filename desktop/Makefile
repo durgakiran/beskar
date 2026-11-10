@@ -1,7 +1,9 @@
-.PHONY: dev dev-native build-dev build-production build-mac build-win build-linux test-tls icons package-mac-dev
+.PHONY: dev dev-native build-dev build-alpha build-production build-mac build-win build-linux test-tls icons package-mac-dev package-mac-alpha
 .DEFAULT_GOAL := dev
 
 RELEASE_TEAM_ID ?=
+export ALPHA_CLIENT_ID
+export ALPHA_ENV_FILE
 DEV_BUNDLE := bin/Teddox Development.app
 
 # Generated assets are checked in; regeneration requires macOS AppKit.
@@ -31,12 +33,20 @@ dev-native:
 build-dev:
 	go build -tags beskar_dev -o bin/teddox-dev .
 
+build-alpha:
+	@case "$$ALPHA_CLIENT_ID" in ""|*[!a-zA-Z0-9_-]*) echo 'Set ALPHA_CLIENT_ID to the production native public-client ID' >&2; exit 1;; esac
+	GOFLAGS= go build -tags beskar_alpha -ldflags "-X beskar/desktop/config.DefaultClientID=$$ALPHA_CLIENT_ID" -o bin/teddox-alpha .
+
+package-mac-alpha:
+	@if [ -n "$$ALPHA_ENV_FILE" ]; then bash scripts/package-mac-alpha.sh --env "$$ALPHA_ENV_FILE"; else bash scripts/package-mac-alpha.sh; fi
+
 build-production:
 	go build -tags '' -ldflags '-X beskar/desktop/config.ReleaseTeamID=$(RELEASE_TEAM_ID)' -o bin/teddox-production .
 
 test-tls:
 	go test -tags '' ./config
 	go test -tags beskar_dev ./config
+	go test -tags beskar_alpha ./config
 
 build-mac:
 	wails3 build -platform darwin/universal
