@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/go-chi/cors"
 	"github.com/zitadel/oidc/v3/pkg/crypto"
 	"github.com/zitadel/zitadel-go/v3/pkg/authentication"
 )
@@ -25,7 +26,7 @@ func csrfFixture(t *testing.T) (*BrowserCSRF, *http.Cookie) {
 	return c, &http.Cookie{Name: "zitadel.session", Value: value}
 }
 
-func TestBrowserCSRFWrites(t *testing.T) {
+func TestBrowserCSRFAllMethods(t *testing.T) {
 	c, cookie := csrfFixture(t)
 	for _, tc := range []struct {
 		name, origin, referer, token, contentType string
@@ -48,7 +49,7 @@ func TestBrowserCSRFWrites(t *testing.T) {
 		{"no origin or referer", "", "", c.token("session"), "application/json", true, 403},
 		{"referer spoof", "", "https://app.example.com@evil.test/editor", c.token("session"), "application/json", true, 403},
 	} {
-		for _, method := range []string{"POST", "PUT", "PATCH", "DELETE"} {
+		for _, method := range []string{"GET", "HEAD", "OPTIONS", "POST", "PUT", "PATCH", "DELETE", "CUSTOM"} {
 			t.Run(tc.name+"/"+method, func(t *testing.T) {
 				req := httptest.NewRequest(method, "/api/v1/media/upload?csrf="+c.token("session"), strings.NewReader("unchanged body"))
 				if tc.cookie {
@@ -75,15 +76,8 @@ func TestBrowserCSRFWrites(t *testing.T) {
 	}
 }
 
-func TestBrowserCSRFReadAndBearerPaths(t *testing.T) {
+func TestBrowserCSRFBearerPaths(t *testing.T) {
 	c, _ := csrfFixture(t)
-	for _, method := range []string{"GET", "HEAD", "OPTIONS"} {
-		w := httptest.NewRecorder()
-		c.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(204) })).ServeHTTP(w, httptest.NewRequest(method, "/read", nil))
-		if w.Code != 204 {
-			t.Fatalf("%s blocked", method)
-		}
-	}
 	// The bearer validator alone decides whether an explicitly supplied credential
 	// is valid. Neither an invalid header nor a query token may fall back to cookies.
 	for _, token := range []string{"Bearer valid", "Bearer invalid"} {
@@ -119,6 +113,7 @@ func TestBrowserCSRFTokenEndpoint(t *testing.T) {
 		{c.origin, "same-origin", true, 200},
 		{"https://evil.example.com", "same-site", true, 403},
 		{"", "cross-site", true, 403},
+		{"", "same-site", true, 403},
 		{"null", "", true, 403},
 		{c.origin, "same-origin", false, 401},
 	} {
@@ -172,6 +167,109 @@ func TestBrowserCSRFRejectsInvalidConfiguration(t *testing.T) {
 	}
 	if _, err := NewBrowserCSRF("", "https://app.example.com"); err == nil {
 		t.Fatal("empty key accepted")
+	}
+}
+
+func TestBrowserCSRFNativeImages(t *testing.T) {
+	c, cookie := csrfFixture(t)
+	const preview = "/api/v2/editor/space/space/whiteboard/1/published/version/preview"
+	for _, tc := range []struct {
+		name, path, method, site, dest, origin, token string
+		status                                        int
+	}{
+		{"stored image", "/api/v1/media/image/id", "GET", "same-origin", "image", "", "", 204},
+		{"whiteboard image", "/api/v1/media/whiteboard-asset/1/hash", "GET", "same-origin", "image", "", "", 204},
+		{"preview", preview, "GET", "same-origin", "image", c.origin, "", 204},
+		{"asset content", "/api/v2/editor/space/space/whiteboard/1/assets/" + strings.Repeat("a", 64) + "/content", "GET", "same-origin", "image", "", "", 204},
+		{"cross-site", preview, "GET", "cross-site", "image", "", "", 403},
+		{"sibling site", preview, "GET", "same-site", "image", "", "", 403},
+		{"no metadata", preview, "GET", "", "image", c.origin, "", 403},
+		{"hostile origin", preview, "GET", "same-origin", "image", "https://evil.test", "", 403},
+		{"navigation", preview, "GET", "same-origin", "document", "", "", 403},
+		{"fetch needs token", preview, "GET", "same-origin", "empty", "", "", 403},
+		{"invalid token cannot fall back", preview, "GET", "same-origin", "image", "", "invalid", 403},
+		{"JSON endpoint cannot fall back", "/api/v1/editor/save", "GET", "same-origin", "image", "", "", 403},
+		{"method cannot fall back", preview, "POST", "same-origin", "image", "", "", 403},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(tc.method, tc.path, nil)
+			req.AddCookie(cookie)
+			if tc.site != "" {
+				req.Header.Set("Sec-Fetch-Site", tc.site)
+			}
+			if tc.dest != "" {
+				req.Header.Set("Sec-Fetch-Dest", tc.dest)
+			}
+			if tc.origin != "" {
+				req.Header.Set("Origin", tc.origin)
+			}
+			if tc.token != "" {
+				req.Header.Set("X-CSRF-Token", tc.token)
+			}
+			w := httptest.NewRecorder()
+			called := false
+			c.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { called = true; w.WriteHeader(204) })).ServeHTTP(w, req)
+			if w.Code != tc.status || called != (tc.status == 204) {
+				t.Fatalf("status=%d called=%v", w.Code, called)
+			}
+		})
+	}
+}
+
+func TestBrowserCSRFBootstrapOriginBeforeHandler(t *testing.T) {
+	c, _ := csrfFixture(t)
+	for _, tc := range []struct {
+		origin, site string
+		status       int
+	}{
+		{c.origin, "", 204},
+		{"", "same-origin", 204},
+		{"https://evil.test", "cross-site", 403},
+		{"", "same-site", 403},
+		{"", "cross-site", 403},
+		{"", "", 403},
+	} {
+		req := httptest.NewRequest("GET", "/api/v1/authenticated", nil)
+		if tc.origin != "" {
+			req.Header.Set("Origin", tc.origin)
+		}
+		if tc.site != "" {
+			req.Header.Set("Sec-Fetch-Site", tc.site)
+		}
+		w := httptest.NewRecorder()
+		c.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(204) })).ServeHTTP(w, req)
+		if w.Code != tc.status {
+			t.Fatalf("origin=%q site=%q status=%d", tc.origin, tc.site, w.Code)
+		}
+	}
+	// no-referrer must also work for protected fetches, with a valid token.
+	_, cookie := csrfFixture(t)
+	req := httptest.NewRequest("GET", "/api/v1/read", nil)
+	req.AddCookie(cookie)
+	req.Header.Set("Sec-Fetch-Site", "same-origin")
+	req.Header.Set("X-CSRF-Token", c.token("session"))
+	w := httptest.NewRecorder()
+	c.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(204) })).ServeHTTP(w, req)
+	if w.Code != 204 {
+		t.Fatal("same-origin fetch with no referrer was blocked")
+	}
+}
+
+func TestBrowserCSRFPreflightDoesNotReachApplication(t *testing.T) {
+	c, _ := csrfFixture(t)
+	called := false
+	handler := cors.Handler(cors.Options{
+		AllowedOrigins: []string{c.origin}, AllowedMethods: []string{"GET", "POST"},
+		AllowedHeaders: []string{"X-CSRF-Token"},
+	})(c.Middleware(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { called = true })))
+	req := httptest.NewRequest("OPTIONS", "/api/v1/read", nil)
+	req.Header.Set("Origin", c.origin)
+	req.Header.Set("Access-Control-Request-Method", "GET")
+	req.Header.Set("Access-Control-Request-Headers", "X-CSRF-Token")
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+	if w.Code >= 300 || called {
+		t.Fatalf("preflight status=%d reached application=%v", w.Code, called)
 	}
 }
 

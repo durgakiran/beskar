@@ -22,6 +22,15 @@ beforeEach(() => {
 describe('browser CSRF', () => {
     const tokenResponse = () => new Response(JSON.stringify({ csrfToken: 'session-token' }));
 
+    it.each(['GET', 'HEAD', 'OPTIONS'])('adds CSRF to %s API requests', async method => {
+        fetchMock.mockResolvedValueOnce(tokenResponse()).mockResolvedValueOnce(new Response(null, { status: 204 }));
+        setupApiClient();
+        await fetch('/api/v1/read', { method, credentials: 'include' });
+        expect(fetchMock).toHaveBeenCalledTimes(2);
+        expect(fetchMock.mock.calls[1][1]).toMatchObject({ method, credentials: 'include', redirect: 'error' });
+        expect(fetchMock.mock.calls[1][1].headers.get('X-CSRF-Token')).toBe('session-token');
+    });
+
     it('caches the token from the session check before the first write', async () => {
         const session = { status: 'success', data: { csrfToken: 'early-token' } };
         fetchMock.mockResolvedValueOnce(new Response(JSON.stringify(session)))
@@ -135,7 +144,7 @@ describe('browser CSRF', () => {
     });
 
     it.each([
-        ['/api/v1/read', {}],
+        ['/assets/logo.svg', {}],
         ['/api/v1/write', { method: 'POST', credentials: 'omit' }],
         ['/api/v1/write', { method: 'POST', headers: { Authorization: 'Bearer native' } }],
         ['https://outside.example/upload', { method: 'POST' }],

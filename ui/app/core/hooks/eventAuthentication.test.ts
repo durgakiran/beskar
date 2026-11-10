@@ -32,6 +32,16 @@ afterEach(() => {
     vi.unstubAllEnvs();
 });
 
+// Bootstrap is a separate request; retain API mock counts for reconnect checks.
+function installTransport(apiFetch: ReturnType<typeof vi.fn>) {
+    vi.stubGlobal('fetch', (input: RequestInfo | URL, init?: RequestInit) => {
+        if (String(input).endsWith('/auth/csrf')) {
+            return Promise.resolve(new Response(JSON.stringify({ csrfToken: 'stream-token' })));
+        }
+        return apiFetch(input, init);
+    });
+}
+
 const transports = [
     {
         name: 'comment SSE',
@@ -59,13 +69,14 @@ const transports = [
 describe.each(transports)('$name authentication', ({ useEvents, path, interval }) => {
     it('redirects on 401 and stops requests while navigation is pending', async () => {
         const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 401 }));
-        vi.stubGlobal('fetch', fetchMock);
+        installTransport(fetchMock);
         setupApiClient();
 
         await act(async () => { renderHook(useEvents); });
 
         expect(fetchMock.mock.calls[0][0]).toContain(path);
         expect(fetchMock.mock.calls[0][1].credentials).toBe('include');
+        expect(new Headers(fetchMock.mock.calls[0][1].headers).get('X-CSRF-Token')).toBe('stream-token');
         expect(fetchMock.mock.calls[0][1].signal.aborted).toBe(true);
         expect(location.href).toBe(loginUrl);
         await act(async () => { await vi.advanceTimersByTimeAsync(interval * 3); });
@@ -80,7 +91,7 @@ describe.each(transports)('$name authentication', ({ useEvents, path, interval }
             fetchMock.mockResolvedValueOnce(new Response(null, { status: Number(status) }));
         }
         fetchMock.mockResolvedValue(new Response(null, { status: 401 }));
-        vi.stubGlobal('fetch', fetchMock);
+        installTransport(fetchMock);
         setupApiClient();
 
         await act(async () => { renderHook(useEvents); });
@@ -95,9 +106,10 @@ describe.each(transports)('$name authentication', ({ useEvents, path, interval }
     it('ignores a late 401 after unmount', async () => {
         let resolve!: (response: Response) => void;
         const fetchMock = vi.fn().mockReturnValue(new Promise<Response>(done => { resolve = done; }));
-        vi.stubGlobal('fetch', fetchMock);
+        installTransport(fetchMock);
         setupApiClient();
         const { unmount } = renderHook(useEvents);
+        await act(async () => {});
         unmount();
 
         await act(async () => { resolve(new Response(null, { status: 401 })); });
@@ -112,7 +124,7 @@ describe.each(transports.slice(0, 2))('$name reconnect', ({ useEvents, interval 
         const fetchMock = vi.fn()
             .mockResolvedValueOnce(new Response(new ReadableStream({ start(controller) { controller.close(); } })))
             .mockResolvedValue(new Response(null, { status: 401 }));
-        vi.stubGlobal('fetch', fetchMock);
+        installTransport(fetchMock);
         setupApiClient();
 
         await act(async () => { renderHook(useEvents); });

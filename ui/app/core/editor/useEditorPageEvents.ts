@@ -1,7 +1,8 @@
 
 import { useEffect, useRef } from "react";
+import { getApiV1Base } from "../http/apiBase";
 
-const USER_URI = import.meta.env.VITE_USER_SERVER_URL?.replace(/\/+$/, "") || "";
+const USER_URI = getApiV1Base({ fallbackBase: import.meta.env.VITE_USER_SERVER_URL });
 
 export type PageEventV1 = {
     schemaVersion: number;

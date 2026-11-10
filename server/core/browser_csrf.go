@@ -8,6 +8,7 @@ import (
 	"errors"
 	"net/http"
 	"net/url"
+	"regexp"
 )
 
 // BrowserCSRF is used only on the cookie authentication branch. HMAC binds the
@@ -38,9 +39,17 @@ func (c *BrowserCSRF) trustedOrigin(r *http.Request) bool {
 		return len(values) == 1 && values[0] == c.origin
 	}
 	// Some clients omit Origin. Require a matching Referer in that case.
-	u, err := url.Parse(r.Referer())
-	return err == nil && u.User == nil && u.Scheme+"://"+u.Host == c.origin
+	if r.Referer() != "" {
+		u, err := url.Parse(r.Referer())
+		return err == nil && u.User == nil && u.Scheme+"://"+u.Host == c.origin
+	}
+	// The UI deliberately uses Referrer-Policy: no-referrer. Modern browsers
+	// supply Fetch Metadata on same-origin GETs and cannot forge this header.
+	values := r.Header.Values("Sec-Fetch-Site")
+	return len(values) == 1 && values[0] == "same-origin"
 }
+
+var browserImagePath = regexp.MustCompile(`^/api/v1/media/(image/[^/]+|whiteboard-asset/[^/]+/[^/]+)$|^/api/v2/editor/space/[^/]+/whiteboard/[^/]+/(published/[^/]+/preview|assets/[a-f0-9]{64}/content|published/[^/]+/assets/[a-f0-9]{64}/content)$`)
 
 func csrfFailure(w http.ResponseWriter) {
 	w.Header().Set("Cache-Control", "no-store")
@@ -53,13 +62,25 @@ func csrfFailure(w http.ResponseWriter) {
 
 func (c *BrowserCSRF) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.Method {
-		case http.MethodGet, http.MethodHead, http.MethodOptions:
+		// Session bootstrap must work before the browser knows its token. Check
+		// the initiating origin before authentication can perform any side effects.
+		if r.Method == http.MethodGet && r.URL.Path == "/api/v1/authenticated" {
+			if !c.trustedOrigin(r) {
+				csrfFailure(w)
+				return
+			}
 			next.ServeHTTP(w, r)
 			return
 		}
 		id := browserSessionID(r)
 		tokens := r.Header.Values("X-CSRF-Token")
+		// Native image elements cannot attach headers. This is a separate CSRF
+		// defense for a closed set of image routes, never a general GET exemption.
+		if id != "" && len(tokens) == 0 && r.Method == http.MethodGet && browserImagePath.MatchString(r.URL.Path) &&
+			r.Header.Get("Sec-Fetch-Dest") == "image" && r.Header.Get("Sec-Fetch-Site") == "same-origin" && c.trustedOrigin(r) {
+			next.ServeHTTP(w, r)
+			return
+		}
 		if id == "" || !c.trustedOrigin(r) || len(tokens) != 1 || !hmac.Equal([]byte(tokens[0]), []byte(c.token(id))) {
 			csrfFailure(w)
 			return
@@ -85,7 +106,7 @@ func (c *BrowserCSRF) SessionToken(w http.ResponseWriter, r *http.Request) (stri
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Add("Vary", "Cookie")
-	if (len(r.Header.Values("Origin")) != 0 || r.Referer() != "") && !c.trustedOrigin(r) || r.Header.Get("Sec-Fetch-Site") == "cross-site" {
+	if (len(r.Header.Values("Origin")) != 0 || r.Referer() != "") && !c.trustedOrigin(r) || r.Header.Get("Sec-Fetch-Site") == "cross-site" || r.Header.Get("Sec-Fetch-Site") == "same-site" {
 		csrfFailure(w)
 		return "", false
 	}

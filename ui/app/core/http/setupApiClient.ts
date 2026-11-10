@@ -43,6 +43,7 @@ export function setupApiClient(onUnauthorized: () => void = redirectToLogin, opt
 
     globalThis.fetch = async (input, init) => {
         const applicationRequest = isApplicationRequest(input);
+        const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url, pageUrl);
         if (applicationRequest && authenticationExpired) {
             // Callers may retry errors while navigation is pending. Never send those requests.
             throw new DOMException('Session expired', 'AbortError');
@@ -55,9 +56,14 @@ export function setupApiClient(onUnauthorized: () => void = redirectToLogin, opt
         const credentials = init?.credentials ?? (input instanceof Request ? input.credentials : 'same-origin');
         let response: Response | undefined;
         let csrfOrigin: string | undefined;
-        if (options.csrf !== false && applicationRequest && !['GET', 'HEAD', 'OPTIONS'].includes(method)
+        const apiRequest = /^\/api\/v[12](?:\/|$)/.test(url.pathname) || url.pathname === '/auth/logout'
+            || apiBases.some(base => {
+                const path = base.pathname.replace(/\/+$/, '');
+                return path !== '' && url.origin === base.origin && (url.pathname === path || url.pathname.startsWith(`${path}/`));
+            });
+        const sessionBootstrap = method === 'GET' && url.pathname === '/api/v1/authenticated';
+        if (options.csrf !== false && applicationRequest && apiRequest && !sessionBootstrap
             && credentials !== 'omit' && !headers.has('Authorization')) {
-            const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url, pageUrl);
             csrfOrigin = url.origin;
             const token = await csrfToken(csrfOrigin);
             signal?.throwIfAborted();
@@ -71,7 +77,6 @@ export function setupApiClient(onUnauthorized: () => void = redirectToLogin, opt
         response ??= await originalFetch(input, init);
         if (options.csrf !== false && applicationRequest && method === 'GET' && response.status === 200
             && credentials !== 'omit' && !headers.has('Authorization')) {
-            const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url, pageUrl);
             if (url.pathname === '/api/v1/authenticated') {
                 // AuthGuard awaits this request before mounting the workspace.
                 // Cache the session token first, without consuming its response.
