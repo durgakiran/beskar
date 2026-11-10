@@ -39,7 +39,7 @@ export function makeCommentApiHandler(documentId: string): CommentAPIHandler {
     getThreads: async (docIdToFetch) => {
       const target = docIdToFetch || documentId;
       if (!target) return [];
-      const response = await get(`${apiV1}/comment/documents/${target}/threads`);
+      const response = await get(`${apiV1}/comment/documents/${target}/threads?includeResolved=true`);
       return (response.data.data as any[]).map(mapBackendThread);
     },
 

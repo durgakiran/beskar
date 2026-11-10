@@ -524,6 +524,11 @@ func validateSession(r *http.Request) bool {
 	for _, cookie := range r.Cookies() {
 		req.AddCookie(cookie)
 	}
+	// The session bootstrap endpoint verifies the browser origin before running
+	// authentication. Preserve it when forwarding cookie-based WebSocket checks.
+	if origin := r.Header.Get("Origin"); origin != "" {
+		req.Header.Set("Origin", origin)
+	}
 
 	token := r.Header.Get("Authorization")
 	if token == "" {

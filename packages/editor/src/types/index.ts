@@ -270,6 +270,18 @@ export interface CommentAPIHandler {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
+/** Coordinates in viewport CSS pixels; native media has no editor/API privileges. */
+export interface YouTubeFrame {
+  x: number; y: number; width: number; height: number;
+  clipX: number; clipY: number; clipWidth: number; clipHeight: number;
+  viewportWidth: number; viewportHeight: number;
+}
+export interface YouTubeHandler {
+  show(id: string, videoID: string, frame: YouTubeFrame): Promise<void>;
+  hide(id: string): Promise<void>;
+  close(id: string): Promise<void>;
+}
+
 export interface EditorProps {
   initialContent?: any;
   editable?: boolean;
@@ -292,6 +304,7 @@ export interface EditorProps {
   imageHandler?: ImageAPIHandler;
   /** When set, file attachments (slash /file, paste, drop) are enabled. */
   attachmentHandler?: AttachmentAPIHandler;
+  youtubeHandler?: YouTubeHandler;
   /** Client-side max size; omit to skip the check. */
   maxAttachmentBytes?: number;
   onAttachmentRejected?: (reason: 'too_large', file: File) => void;

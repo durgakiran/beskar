@@ -1,3 +1,4 @@
+import { getDesktopYouTubeHandler } from '../desktop/youtube';
 import { attachmentPreview } from "./attachmentPreview";
 import { contentUrl } from 'app/core/whiteboard/v2/api';
 import React, { useCallback } from "react";
@@ -607,6 +608,7 @@ export function TipTap({
                         mentionHandler={mentionHandler}
                         initialContent={sanitizedContent}
                         imageHandler={imageHandler}
+                        youtubeHandler={getDesktopYouTubeHandler()}
                         attachmentHandler={attachmentHandler}
                         internalResourceHandler={internalResourceHandler}
                         externalLinkHandler={externalLinkHandler}
@@ -628,6 +630,7 @@ export function TipTap({
                         mentionHandler={mentionHandler}
                         initialContent={sanitizedContent}
                         imageHandler={imageHandler}
+                        youtubeHandler={getDesktopYouTubeHandler()}
                         attachmentHandler={attachmentHandler}
                         internalResourceHandler={internalResourceHandler}
                         externalLinkHandler={externalLinkHandler}

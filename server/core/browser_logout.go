@@ -3,6 +3,7 @@ package core
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/url"
@@ -42,6 +43,9 @@ func browserLogoutHandler(store *browserSessionStore, logout http.HandlerFunc, r
 			return
 		}
 		for key, values := range response.header {
+			if strings.EqualFold(key, "Location") || strings.EqualFold(key, "Content-Type") || strings.EqualFold(key, "Content-Length") {
+				continue
+			}
 			for _, value := range values {
 				w.Header().Add(key, value)
 			}
@@ -52,6 +56,13 @@ func browserLogoutHandler(store *browserSessionStore, logout http.HandlerFunc, r
 		status := response.status
 		if status == 0 {
 			status = 200
+		}
+		// Let the UI navigate after a successful POST. Fetch must not follow the
+		// SDK redirect to the provider's browser-only end-session endpoint.
+		if status >= 300 && status < 400 {
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]string{"redirect": response.header.Get("Location")})
+			return
 		}
 		w.WriteHeader(status)
 		_, _ = w.Write(response.body.Bytes())

@@ -163,12 +163,14 @@ func ZitadelLoginHandler() http.HandlerFunc {
 	}
 }
 
-func ZitadelAuthRouter(validator *BrowserAccessTokenValidator) http.Handler {
+func ZitadelAuthRouter(validator *BrowserAccessTokenValidator, csrf *BrowserCSRF) http.Handler {
 	r := chi.NewRouter()
 	r.Get("/register", ZitadelRegisterHandler())
 	r.Get("/login", ZitadelLoginHandler())
-	r.Get("/logout", browserLogoutHandler(browserSessions, ZitadelAuthenticator().Logout, validator.revokeSessionTokens))
-	r.Handle("/*", ZitadelAuthenticator())
+	r.Get("/csrf", csrf.TokenHandler)
+	r.Method(http.MethodPost, "/logout", csrf.Middleware(browserLogoutHandler(browserSessions, ZitadelAuthenticator().Logout, validator.revokeSessionTokens)))
+	// Mount only the callback: the SDK wildcard also exposes unprotected logout.
+	r.Get("/callback", ZitadelAuthenticator().Callback)
 	return r
 }
 

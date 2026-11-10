@@ -1,4 +1,5 @@
-import { defineConfig } from 'vite';
+import { defineConfig, loadEnv } from 'vite';
+import { securityPolicyPlugin } from './security-policy';
 import react from '@vitejs/plugin-react';
 import path from 'path';
 import { existsSync } from 'node:fs';
@@ -11,7 +12,14 @@ const hasWorkspaceEditor = ['index.mjs', 'styles.css', 'index.css']
   .every(file => existsSync(path.join(workspaceEditorDist, file)));
 
 export default defineConfig(({ mode }) => ({
-  plugins: [react()],
+  plugins: [react(), securityPolicyPlugin(mode === 'desktop', loadEnv(mode, process.cwd(), 'VITE_'))],
+  // Desktop API requests use the native proxy and its runtime server config.
+  ...(mode === 'desktop' ? {
+    define: Object.fromEntries([
+      'VITE_USER_SERVER_URL', 'VITE_EDITOR_SERVER_URL',
+      'VITE_API_BASE_URL', 'VITE_API_URL',
+    ].map(name => [`import.meta.env.${name}`, JSON.stringify('/api/v1')])),
+  } : {}),
   resolve: {
     alias: {
       '@durgakiran/editor/pdf': path.resolve(__dirname, '../packages/editor/dist/pdf.mjs'),

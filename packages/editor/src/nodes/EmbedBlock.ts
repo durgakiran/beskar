@@ -2,6 +2,7 @@
  * EmbedBlock — iframe-based external rich embeds from a trusted provider registry.
  */
 
+import type { YouTubeHandler } from '../types';
 import { Node, mergeAttributes } from '@tiptap/core';
 import { ReactNodeViewRenderer } from '@tiptap/react';
 import { Plugin } from '@tiptap/pm/state';
@@ -77,7 +78,8 @@ function replaceSelectionWithEmbedBlock(view: any, node: any): boolean {
   return true;
 }
 
-export const EmbedBlock = Node.create({
+export const EmbedBlock = Node.create<{ youtubeHandler?: YouTubeHandler }>({
+  addOptions() { return { youtubeHandler: undefined }; },
   name: 'embedBlock',
   priority: 1000,
   group: 'block',
@@ -134,15 +136,16 @@ export const EmbedBlock = Node.create({
 
   renderHTML({ node, HTMLAttributes }) {
     const { blockId, ...attributesWithoutBlockId } = HTMLAttributes as any;
-    const linkUrl = node.attrs.src || node.attrs.embedUrl || '';
+    const validated = getEmbedUrlAndProvider(node.attrs.src || '');
+    const linkUrl = validated ? node.attrs.src : '';
 
     return [
       'div',
       mergeAttributes(attributesWithoutBlockId, {
         'data-type': 'embed-block',
         'data-src': node.attrs.src,
-        'data-embed-url': node.attrs.embedUrl,
-        'data-provider': node.attrs.provider,
+        'data-embed-url': validated?.embedUrl || '',
+        'data-provider': validated?.provider || '',
         'data-title': node.attrs.title,
         'data-align': node.attrs.align,
         'data-height': node.attrs.height,

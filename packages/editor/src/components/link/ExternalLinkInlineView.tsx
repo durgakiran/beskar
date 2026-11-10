@@ -21,7 +21,13 @@ function getHostnameLabel(rawUrl: string): string {
 }
 
 export function ExternalLinkInlineView({ node, editor, updateAttributes, getPos, selected }: NodeViewProps) {
-  const href = String(node.attrs.href ?? '');
+  const rawHref = String(node.attrs.href ?? '');
+  const href = (() => {
+    try {
+      const url = new URL(rawHref);
+      return ['http:', 'https:'].includes(url.protocol) && !url.username && !url.password ? url.href : '';
+    } catch { return ''; }
+  })();
   const title = String(node.attrs.title ?? '');
   const siteName = String(node.attrs.siteName ?? '');
   const [error, setError] = useState('');

@@ -29,6 +29,9 @@ func TestWebSocketTracingPreservesHandshakeAndBinaryMessages(t *testing.T) {
 		hub = oldHub
 	}()
 	auth := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Origin") != "http://localhost:3000" {
+			t.Error("browser origin was not forwarded")
+		}
 		if r.Header.Get("Authorization") != "Bearer private-secret" {
 			t.Error("authentication credential was altered")
 		}
@@ -113,5 +116,26 @@ func TestWebSocketTracingPreservesHandshakeAndBinaryMessages(t *testing.T) {
 	}
 	if messages < 5 {
 		t.Fatalf("message spans missing: %d", messages)
+	}
+}
+
+func TestSessionValidationForwardsCookieAndOrigin(t *testing.T) {
+	auth := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/authenticated" || r.Header.Get("Origin") != "https://app.example.com" {
+			t.Error("session bootstrap lost its browser origin")
+		}
+		cookie, err := r.Cookie("zitadel.session")
+		if err != nil || cookie.Value != "test-session-cookie" {
+			t.Error("session cookie was not forwarded")
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer auth.Close()
+	t.Setenv("AUTH_SERVER_URL", auth.URL)
+	req := httptest.NewRequest("GET", "/ws", nil)
+	req.Header.Set("Origin", "https://app.example.com")
+	req.AddCookie(&http.Cookie{Name: "zitadel.session", Value: "test-session-cookie"})
+	if !validateSession(req) {
+		t.Fatal("cookie session validation failed")
 	}
 }

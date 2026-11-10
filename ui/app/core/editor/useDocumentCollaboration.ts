@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import type { Doc } from 'yjs';
 import { WebrtcProvider } from 'y-webrtc';
 import { getSignalingUrl } from 'app/core/signaling';
-import { isDesktop } from 'app/core/desktop/isDesktop';
 import { DocumentRealtimeRelay } from './DocumentRealtimeRelay';
 import { createDocumentSocketObserver } from './documentSocketLogging';
 
@@ -20,12 +19,7 @@ export function useDocumentCollaboration(doc: Doc, spaceId: string, pageId: stri
             // Let that finish before reopening the same room, including effect replay.
             await Promise.resolve();
             if (!active) return;
-            let url = getSignalingUrl();
-            if (isDesktop) {
-                const { GetAccessToken } = await import('../../../wailsjs/beskar/desktop/auth/authservice');
-                const token = await GetAccessToken();
-                if (token) url += `${url.includes('?') ? '&' : '?'}token=${encodeURIComponent(token)}`;
-            }
+            const url = getSignalingUrl();
             if (!active) return;
             const room = `document-v2:${spaceId}:${pageId}`;
             currentProvider = new WebrtcProvider(room, doc, { signaling: [url], filterBcConns: false });

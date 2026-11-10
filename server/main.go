@@ -144,6 +144,10 @@ func main() {
 	if err != nil {
 		logger().Fatal("Invalid browser access-token validation configuration", zap.Error(err))
 	}
+	csrf, err := core.NewBrowserCSRF(os.Getenv("KEY"), os.Getenv("SERVER_URL"))
+	if err != nil {
+		logger().Fatal("Invalid browser CSRF configuration", zap.Error(err))
+	}
 
 	bearerValidator, err := core.NewBearerAccessTokenValidator(browserTokenValidator, os.Getenv("ZITADEL_BEARER_CLIENT_IDS"))
 	if err != nil {
@@ -274,7 +278,7 @@ func main() {
 	// are application data and must never override the browser session.
 	authChain := func(allowQueryToken bool) func(http.Handler) http.Handler {
 		return func(next http.Handler) http.Handler {
-			return core.SelectAuthentication(browserTokenValidator.Middleware(next), bearerValidator.Middleware(next), allowQueryToken)
+			return core.SelectAuthentication(csrf.Middleware(browserTokenValidator.Middleware(next)), bearerValidator.Middleware(next), allowQueryToken)
 		}
 	}
 
@@ -292,8 +296,8 @@ func main() {
 	})
 
 	apidocs.Register(r)
-	r.Mount("/auth/", core.ZitadelAuthRouter(browserTokenValidator))
-	r.Mount("/api/v1", authChain(false)(auth.Router()))
+	r.Mount("/auth/", core.ZitadelAuthRouter(browserTokenValidator, csrf))
+	r.Mount("/api/v1", authChain(false)(auth.Router(csrf)))
 	r.Mount("/api/v1/media", authChain(true)(media.Router()))
 	r.Mount("/api/v1/attachments", authChain(true)(attachment.Router()))
 	r.Mount("/api/v1/profile", authChain(false)(profile.Router()))

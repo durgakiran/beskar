@@ -1,6 +1,7 @@
 import { post } from "./call";
 import { getApiOrigin, getApiV1Base } from "./apiBase";
 import { extractRequestErrorMessage } from "./errorMessage";
+import { isDesktop } from '../desktop/isDesktop';
 
 export interface AttachmentUploadResponse {
     attachmentId: string;
@@ -49,6 +50,12 @@ export async function uploadAttachmentData(file: File, pageId: number, options?:
 
 /** Authenticated download to a local file save (same pattern as editor chip). */
 export async function downloadAttachmentBlob(targetUrl: string, fileName: string): Promise<void> {
+    if (isDesktop) {
+        const { Call } = await import('@wailsio/runtime');
+        const path = new URL(targetUrl, window.location.href).pathname;
+        await Call.ByName('beskar/desktop/transport.Service.SaveAttachment', path, fileName || 'attachment');
+        return;
+    }
     const headers = new Headers();
     const res = await fetch(targetUrl, { headers, credentials: "include" });
     if (!res.ok) {

@@ -68,6 +68,8 @@ export type {
   ImageAPIHandler,
   ImageUploadResult,
   AttachmentAPIHandler,
+  YouTubeHandler,
+  YouTubeFrame,
   AttachmentPreviewHandler,
   AttachmentUploadResult,
   AttachmentUploadOptions,

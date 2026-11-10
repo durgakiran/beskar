@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -62,11 +63,14 @@ func TestBrowserLogoutFailureAndManualRetry(t *testing.T) {
 	f, second := redisFixture(t)
 	t.Setenv("KEY", redisSessionTestKey)
 	value, _ := crypto.EncryptAES("session", redisSessionTestKey)
-	req := httptest.NewRequest("GET", "/auth/logout", nil)
+	req := httptest.NewRequest("POST", "/auth/logout", nil)
 	req.AddCookie(&http.Cookie{Name: "zitadel.session", Value: value})
+	csrf, _ := NewBrowserCSRF(redisSessionTestKey, "https://app.example.com")
+	req.Header.Set("Origin", "https://app.example.com")
+	req.Header.Set("X-CSRF-Token", csrf.token("session"))
 	fail := true
 	calls := 0
-	handler := browserLogoutHandler(f.store, func(w http.ResponseWriter, r *http.Request) {
+	handler := csrf.Middleware(browserLogoutHandler(f.store, func(w http.ResponseWriter, r *http.Request) {
 		http.SetCookie(w, &http.Cookie{Name: "zitadel.session", MaxAge: -1})
 		http.Redirect(w, r, "https://identity.example/logout", 302)
 	}, func(ctx context.Context, s *browserAuthContext) error {
@@ -78,7 +82,7 @@ func TestBrowserLogoutFailureAndManualRetry(t *testing.T) {
 			return errors.New("provider unavailable")
 		}
 		return nil
-	})
+	}))
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, req)
 	if response.Code != 503 || response.Header().Get("Location") != "" || response.Header().Get("Set-Cookie") != "" {
@@ -96,7 +100,7 @@ func TestBrowserLogoutFailureAndManualRetry(t *testing.T) {
 	fail = false
 	response = httptest.NewRecorder()
 	handler.ServeHTTP(response, req)
-	if response.Code != 302 || response.Header().Get("Set-Cookie") == "" || calls != 2 {
+	if response.Code != 200 || response.Header().Get("Set-Cookie") == "" || calls != 2 || response.Header().Get("Location") != "" || !strings.Contains(response.Body.String(), "https://identity.example/logout") {
 		t.Fatal("manual retry failed")
 	}
 	if _, err := second.Get("session"); err == nil {
@@ -104,7 +108,7 @@ func TestBrowserLogoutFailureAndManualRetry(t *testing.T) {
 	}
 	response = httptest.NewRecorder()
 	handler.ServeHTTP(response, req)
-	if response.Code != 302 || calls != 2 {
+	if response.Code != 200 || calls != 2 {
 		t.Fatal("repeated logout not idempotent")
 	}
 }

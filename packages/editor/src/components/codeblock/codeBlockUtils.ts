@@ -1,3 +1,4 @@
+import DOMPurify from 'dompurify';
 import type { EditorState } from '@tiptap/pm/state';
 import { TextSelection } from '@tiptap/pm/state';
 import { common, createLowlight } from 'lowlight';
@@ -66,5 +67,14 @@ export async function copyCodeText(text: string) {
 
 /** Static HTML preview: opaque origin, no scripts, forms, navigation privileges or network. */
 export function htmlPreview(source: string) {
-  return `<!doctype html><html><head><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'none'; style-src 'unsafe-inline'; img-src data:; form-action 'none'; base-uri 'none'"><style>body{font:14px/1.5 system-ui;margin:16px;overflow-wrap:anywhere}img{max-width:100%}</style></head><body>${source}</body></html>`;
+  // Restrict to passive HTML before placing it in an opaque sandbox. In SSR,
+  // where a DOM sanitizer is unavailable, render the source as escaped text.
+  const safe = typeof DOMPurify.sanitize === 'function'
+    ? DOMPurify.sanitize(source, {
+        USE_PROFILES: { html: true },
+        FORBID_TAGS: ['meta', 'link', 'style', 'base', 'iframe', 'object', 'embed', 'form', 'input', 'button', 'video', 'audio', 'source'],
+        FORBID_ATTR: ['srcset', 'style', 'autofocus'],
+      })
+    : source.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+  return `<!doctype html><html><head><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'none'; style-src 'unsafe-inline'; img-src data:; form-action 'none'; base-uri 'none'"><style>body{font:14px/1.5 system-ui;margin:16px;overflow-wrap:anywhere}img{max-width:100%}</style></head><body>${safe}</body></html>`;
 }

@@ -2,6 +2,7 @@
  * EmbedBlockView — external iframe embed with themed input, toolbar, and height resize.
  */
 
+import { NativeYouTube } from './NativeYouTube';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button, Flex, Text, TextField } from '@radix-ui/themes';
 import { NodeViewWrapper } from '@tiptap/react';
@@ -33,7 +34,7 @@ function getHostLabel(rawUrl: string): string {
 }
 
 export function EmbedBlockView({ node, updateAttributes, selected, editor, getPos }: NodeViewProps) {
-  const { src, embedUrl, provider, align, height, error } = node.attrs as {
+  const { src, align, height, error } = node.attrs as {
     src: string;
     embedUrl: string;
     provider: string;
@@ -42,6 +43,11 @@ export function EmbedBlockView({ node, updateAttributes, selected, editor, getPo
     height: number;
     error: string;
   };
+  // Revalidate every render, including remote CRDT updates and saved JSON.
+  const validatedEmbed = getEmbedUrlAndProvider(typeof src === 'string' ? src : '');
+  const embedUrl = validatedEmbed?.embedUrl || '';
+  const provider = validatedEmbed?.provider || '';
+  const youtubeHandler = editor.extensionManager.extensions.find(extension => extension.name === 'embedBlock')?.options.youtubeHandler;
   const [inputValue, setInputValue] = useState(src || '');
   const [inputError, setInputError] = useState('');
   const [isEditing, setIsEditing] = useState(!src);
@@ -137,7 +143,7 @@ export function EmbedBlockView({ node, updateAttributes, selected, editor, getPo
 
   const openInNewTab = useCallback(() => {
     if (!src) return;
-    window.open(src, '_blank', 'noopener,noreferrer');
+    if (validatedEmbed) window.open(src, '_blank', 'noopener,noreferrer');
   }, [src]);
 
   const convertToInline = useCallback(() => {
@@ -310,6 +316,8 @@ export function EmbedBlockView({ node, updateAttributes, selected, editor, getPo
             </Button>
           )}
         </div>
+      ) : provider === 'youtube' && youtubeHandler ? (
+        <NativeYouTube videoID={new URL(embedUrl).pathname.split('/').pop()!} handler={youtubeHandler} onReady={() => setIframeStatus('loaded')} onError={() => setIframeStatus('blocked')} />
       ) : (
         <iframe
           title={`${providerName} embed`}

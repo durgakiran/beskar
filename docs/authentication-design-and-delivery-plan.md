@@ -8,7 +8,7 @@ Scope: browser session lifecycle, desktop authentication defects, and shared app
 
 ## Decision
 
-This section describes the target architecture. Current refresh uses encrypted Redis storage, deadline-capped TTLs, and shared refresh coordination. Synchronous provider revocation is implemented; POST/CSRF logout remains future work.
+This section describes the target architecture. Current refresh uses encrypted Redis storage, deadline-capped TTLs, and shared refresh coordination. Synchronous provider revocation is implemented; POST/CSRF logout is implemented.
 
 Keep Zitadel as the identity provider and authorization code + PKCE as the login protocol. Keep separate OIDC client registrations for browser and desktop. Share the authenticated-user contract, authorization checks, React state machine, and API error handling.
 
@@ -91,7 +91,7 @@ Each slice includes configuration, backend/native behavior, affected UI, automat
 
 ### 3. P0 — A browser session survives deploys, expires, and actually ends on logout
 
-**Status:** encrypted Redis storage, idle/absolute expiry, TTL cleanup, store-failure handling and cross-replica logout deletion implemented. Synchronous provider revocation is implemented; failure returns 503 and retains an authentication-blocked session for manual retry until its existing TTL expires. POST/CSRF logout and distinguishing user activity from polling remain unfinished. The current SDK cookie name is retained; do not mix old in-memory and new Redis replicas during rollout.
+**Status:** encrypted Redis storage, idle/absolute expiry, TTL cleanup, store-failure handling and cross-replica logout deletion implemented. Synchronous provider revocation is implemented; failure returns 503 and retains an authentication-blocked session for manual retry until its existing TTL expires. POST/CSRF logout is implemented; distinguishing user activity from polling remains unfinished. The current SDK cookie name is retained; do not mix old in-memory and new Redis replicas during rollout.
 
 **User outcome:** users remain signed in across an application restart or replica change; idle/absolute expiry is enforced; signing out makes the old cookie unusable.
 
@@ -131,9 +131,11 @@ Each slice includes configuration, backend/native behavior, affected UI, automat
 
 ### 6. P0 — Cross-site requests cannot mutate a browser user's workspace
 
+**Implementation (2026-11-10):** cookie API requests of every method now enforce session-bound HMAC CSRF tokens and exact origins from `SERVER_URL`; `GET /api/v1/authenticated` supplies the browser token before the workspace mounts, with `GET /auth/csrf` retained as a fallback. The shared fetch wrapper covers direct calls and multipart uploads; desktop bearer transport is exempt. Logout is POST-only and protected; the SDK wildcard route is removed. HMAC binding uses the existing shared key and session ID rather than adding a CSRF secret to Redis. See `authentication-current-sequence.md` for request behavior and coordinated deployment requirements.
+
 **User outcome:** normal editor, upload, invite, account, and logout actions work; forged requests from another site cannot perform those actions.
 
-**Deliver:** apply session-bound CSRF tokens and exact origin checks to all cookie-authenticated mutations, wiring every UI request helper and multipart upload. GET/HEAD routes must not mutate state. Keep browser traffic same-origin through the proxy and avoid wildcard credentialed CORS. Token-authenticated routes are exempt from cookie CSRF only after explicit bearer validation. OIDC callback and signed back-channel logout use their own protocol protections.
+**Deliver:** apply session-bound CSRF tokens and origin checks to cookie-authenticated API requests regardless of method, wiring every UI request helper, multipart upload, GET stream, and download. Keep bootstrap and native image transports explicit, with origin/Fetch Metadata CSRF controls rather than broad method exemptions. GET/HEAD routes must not mutate state. Keep browser traffic same-origin through the proxy and avoid wildcard credentialed CORS. Token-authenticated routes are exempt from cookie CSRF only after explicit bearer validation. OIDC callback and signed back-channel logout use their own protocol protections.
 
 **Acceptance:** browser create/edit/upload/invite/logout succeed; missing/incorrect CSRF token and hostile origins fail without side effects; a sibling subdomain cannot bypass protection; bearer desktop operations work; registration/callback remain functional. Inventory all mutation routes, including legacy forms, before completion.
 

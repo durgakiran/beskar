@@ -19,8 +19,12 @@ func getConfigPath() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	appDir := filepath.Join(configDir, "Beskar")
-	if err := os.MkdirAll(appDir, 0755); err != nil {
+	return configPath(configDir)
+}
+
+func configPath(configDir string) (string, error) {
+	appDir := filepath.Join(configDir, "Beskar", Environment)
+	if err := os.MkdirAll(appDir, 0700); err != nil {
 		return "", err
 	}
 	return filepath.Join(appDir, "config.json"), nil
@@ -62,5 +66,5 @@ func SaveConfig(config *AppConfig) error {
 		return err
 	}
 
-	return os.WriteFile(path, data, 0644)
+	return os.WriteFile(path, data, 0600)
 }

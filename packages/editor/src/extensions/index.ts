@@ -14,6 +14,7 @@ import { TaskList, TaskItem } from '@tiptap/extension-list';
 import { Extension, flattenExtensions, type Extensions } from '@tiptap/core';
 import type {
   AttachmentAPIHandler,
+  YouTubeHandler,
   AttachmentRef,
   ChildPagesHandler,
   CollaborationConfig,
@@ -146,6 +147,7 @@ export interface GetExtensionsOptions {
   features?: EditorFeatureOptions;
   imageHandler?: ImageAPIHandler;
   attachmentHandler?: AttachmentAPIHandler;
+  youtubeHandler?: YouTubeHandler;
   maxAttachmentBytes?: number;
   onAttachmentRejected?: (reason: 'too_large', file: File) => void;
   allowedMimeAccept?: string;
@@ -175,6 +177,7 @@ export function getExtensions(options: GetExtensionsOptions = {}): Extensions {
     features,
     imageHandler,
     attachmentHandler,
+    youtubeHandler,
     maxAttachmentBytes,
     onAttachmentRejected,
     allowedMimeAccept = '*',
@@ -275,7 +278,7 @@ export function getExtensions(options: GetExtensionsOptions = {}): Extensions {
     EmbedInline, // Inline embed chip with provider + resolved title
     ExternalLinkInline.configure({ linkHandler: externalLinkHandler }), // Inline chip for external non-embed links
     InternalDocInline.configure({ resourceHandler: internalResourceHandler }), // Inline chip for pasted Beskar document links
-    EmbedBlock, // External iframe embeds from supported providers
+    EmbedBlock.configure({ youtubeHandler }), // Isolated native player on supported desktops
     InternalLinkBlock.configure({ resourceHandler: internalResourceHandler }), // Beskar resource preview cards
     ChildPagesList.configure({ childPagesHandler }), // Current page child list
     MathBlock, // Custom math block for LaTeX formulas
