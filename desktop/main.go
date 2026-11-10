@@ -25,6 +25,9 @@ import (
 //go:embed all:ui/dist
 var embeddedAssets embed.FS
 
+//go:embed assets/teddox.png
+var applicationIcon []byte
+
 // APIProxyService is a placeholder for the API proxy service to be implemented later.
 type APIProxyService struct{}
 
@@ -99,6 +102,7 @@ func main() {
 
 	app := application.New(application.Options{
 		Name:       config.ApplicationName,
+		Icon:       applicationIcon,
 		OnShutdown: cancelApp,
 		Assets: application.AssetOptions{
 			Handler:    application.AssetFileServerFS(assets),

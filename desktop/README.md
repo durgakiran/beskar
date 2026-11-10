@@ -111,11 +111,9 @@ is selected. Cancelling does not create a file.
 After building the desktop UI, run from `desktop`:
 
 ```bash
-mkdir -p ui/dist "bin/Teddox Development.app/Contents/MacOS"
+mkdir -p ui/dist
 cp -R ../ui/dist/. ui/dist/
-go build -tags beskar_dev -o "bin/Teddox Development.app/Contents/MacOS/teddox" .
-cp macos/Info.development.plist "bin/Teddox Development.app/Contents/Info.plist"
-codesign --force --deep --sign - "bin/Teddox Development.app"
+make package-mac-dev
 /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$PWD/bin/Teddox Development.app"
 BESKAR_DEV_ALLOW_SELF_SIGNED=1 "bin/Teddox Development.app/Contents/MacOS/teddox"
 ```
@@ -124,6 +122,13 @@ The bundle declares the `teddox://` URL scheme. Registration lets the browser
 return the login callback to this app. Keep the desktop process running during
 login because the PKCE verifier belongs to that process; after a restart, start
 a new login rather than reusing an old callback URL.
+
+The desktop embeds `assets/teddox.png` for its runtime icon. macOS bundles also
+declare `teddox.icns` in their plist and must copy `assets/teddox.icns` into
+`Contents/Resources` before signing (including production packaging).
+Both assets use the existing Teddox mark from the web app. After changing
+`assets/teddox.svg`, run `make icons` on macOS to regenerate the PNG and all
+standard/Retina macOS icon sizes; ordinary builds use the checked-in assets.
 
 To package the application into a standalone executable (e.g., `.exe` for Windows, `.app` for macOS):
 

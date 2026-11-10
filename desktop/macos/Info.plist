@@ -5,6 +5,7 @@
     <key>CFBundleExecutable</key><string>teddox</string>
     <key>CFBundleIdentifier</key><string>com.durgakiran.beskar</string>
     <key>CFBundleName</key><string>Teddox</string>
+    <key>CFBundleIconFile</key><string>teddox.icns</string>
     <key>CFBundlePackageType</key><string>APPL</string>
     <key>CFBundleVersion</key><string>1</string>
     <key>NSHighResolutionCapable</key><true/>
