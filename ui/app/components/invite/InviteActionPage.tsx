@@ -10,7 +10,7 @@ import { mapQuotaErrorMessage } from "../../core/queries/quota";
 import { formatInviteRole, formatInviteTime, normalizeInviteStatus } from "./formatters";
 import type { InviteDecision, InviteDetails } from "./types";
 import { useInviteDecision } from "./useInviteDecision";
-import { useDesktopLogout } from "../../core/auth/useKeycloak";
+import { useDesktopLogout, useLogout } from "../../core/auth/useLogout";
 import { rememberInviteReturn } from "./inviteReturn";
 
 function BrandMark() {
@@ -258,14 +258,16 @@ function InviteAction({ searchParams }: { searchParams: URLSearchParams }) {
     const [selectedDecision, setSelectedDecision] = useState<InviteDecision | null>(initialDecision);
     const [localError, setLocalError] = useState<string | null>(null);
     const desktopLogout = useDesktopLogout();
+    const { logout, error: logoutError } = useLogout();
 
     const handleLogout = (e: React.MouseEvent) => {
+        e.preventDefault();
         // @ts-ignore
         if (window.wails) {
-            e.preventDefault();
             void desktopLogout();
         } else {
             rememberInviteReturn(`/invite/action?${searchParams.toString()}`);
+            void logout();
         }
     };
 
@@ -365,7 +367,7 @@ function InviteAction({ searchParams }: { searchParams: URLSearchParams }) {
                     copy="Sign out, then sign in with the email address that received this invitation."
                     actions={
                         <>
-                            <ActionButton tone="primary" href="/auth/logout" onClick={handleLogout}>
+                            <ActionButton tone="primary" onClick={handleLogout}>
                                 Switch account
                             </ActionButton>
                             <ActionButton tone="secondary" href="/user/notifications">
@@ -510,6 +512,7 @@ function InviteAction({ searchParams }: { searchParams: URLSearchParams }) {
     return (
         <div className="min-h-screen bg-[#fbfafc] text-neutral-900">
             <InviteHeader />
+            {logoutError && <div role="alert" className="mx-auto max-w-[1200px] p-4 text-red-700">{logoutError}</div>}
             {content}
         </div>
     );

@@ -71,13 +71,13 @@ describe("routed invitation journey with real HTTP hooks", () => {
         open();
         await screen.findByRole("heading", { name: "This invitation link is invalid" });
     });
-    it("uses real logout navigation and preserves the invitation", async () => {
+    it("posts logout and preserves the invitation", async () => {
         request.mockResolvedValue(json(null, 403));
         open();
-        const link = await screen.findByRole("link", { name: "Switch account" });
-        expect(link.getAttribute("href")).toBe("/auth/logout");
+        const link = await screen.findByRole("button", { name: "Switch account" });
         link.addEventListener("click", (event) => event.preventDefault());
         fireEvent.click(link);
+        expect(request).toHaveBeenLastCalledWith("/auth/logout", expect.objectContaining({ method: "POST" }));
         expect(consumeInviteReturn()).toBe("/invite/action?token=one");
         expect(consumeInviteReturn()).toBeNull();
     });

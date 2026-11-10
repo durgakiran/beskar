@@ -19,7 +19,7 @@ async function startDesktop() {
     setupDesktopTransport(await Call.ByName('beskar/desktop/transport.Service.GetBaseURL'));
     const resetAuthentication = setupApiClient(() => {
       void Logout().catch(error => console.error('Failed to clear expired desktop session:', error));
-    });
+    }, { csrf: false });
     Events.On('auth:ready', resetAuthentication);
     setupDesktopDownloads(downloadAttachmentBlob);
 

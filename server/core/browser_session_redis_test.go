@@ -314,14 +314,14 @@ func TestBrowserRedisCookieAcrossReplicasAndLogout(t *testing.T) {
 			t.Fatalf("replica returned %d", response.Code)
 		}
 	}
-	logoutRequest := httptest.NewRequest("GET", "/auth/logout", nil)
+	logoutRequest := httptest.NewRequest("POST", "/auth/logout", nil)
 	logoutRequest.AddCookie(&http.Cookie{Name: "zitadel.session", Value: value})
 	response := httptest.NewRecorder()
 	browserLogoutHandler(second, func(w http.ResponseWriter, r *http.Request) {
 		http.SetCookie(w, &http.Cookie{Name: "zitadel.session", MaxAge: -1, Path: "/", Secure: true, HttpOnly: true})
 		http.Redirect(w, r, "https://identity.example/logout", 302)
 	}, func(context.Context, *browserAuthContext) error { return nil }).ServeHTTP(response, logoutRequest)
-	if response.Code != 302 || response.Header().Get("Set-Cookie") == "" {
+	if response.Code != 200 || response.Header().Get("Set-Cookie") == "" {
 		t.Fatal("successful logout response lost")
 	}
 	request := httptest.NewRequest("GET", "/api/v1/authenticated", nil)

@@ -1,6 +1,6 @@
 import { useEffect, useMemo } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { useDesktopLogout } from "../core/auth/useKeycloak";
+import { useDesktopLogout, useLogout } from "../core/auth/useLogout";
 import { Response, useGet } from "@http/hooks";
 import { Icon } from "@components/ui/Icon";
 import DocumentSearch from "./DocumentSearch";
@@ -40,6 +40,7 @@ export default function MenuBar() {
     const navigate = useNavigate();
     const pathname = useLocation().pathname;
     const desktopLogout = useDesktopLogout();
+    const { logout, error: logoutError } = useLogout();
     const [{ data: res }, fetchUser] = useGet<Response<UserInfo>>("profile/details");
     const [{ data: notificationsData }, fetchNotifications] = useGet<Response<NotificationCounts>>("notifications/unread-count");
 
@@ -84,15 +85,17 @@ export default function MenuBar() {
                     if (window.wails) {
                         desktopLogout();
                     } else {
-                        window.location.href = "/auth/logout";
+                        void logout();
                     }
                 },
             },
         ],
-        [desktopLogout],
+        [desktopLogout, logout],
     );
 
     return (
+        <>
+        {logoutError && <div role="alert" className="fixed right-4 top-20 z-[70] rounded bg-white p-4 text-red-700 shadow">{logoutError}</div>}
         <Topbar
             className="fixed inset-x-0 top-0 z-[60]"
             brand="Teddox"
@@ -117,5 +120,6 @@ export default function MenuBar() {
                 </span>
             }
         />
+        </>
     );
 }

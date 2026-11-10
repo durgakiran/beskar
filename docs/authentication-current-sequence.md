@@ -1,6 +1,6 @@
 # Current Go-managed authentication sequence
 
-Reflects the local implementation as of 2026-09-21, after adding confidential-client authentication and browser access-token introspection. Live Zitadel configuration has not been verified. Browser refresh and synchronous logout token revocation are implemented locally; POST/CSRF logout remains unfinished.
+Reflects the local implementation as of 2026-11-10, including confidential-client authentication, browser access-token introspection, and browser CSRF enforcement. Live Zitadel configuration has not been verified. Browser refresh and synchronous logout token revocation are implemented locally; Logout now uses a CSRF-protected POST.
 
 All values below are dummy values. `Basic <base64(...)>` describes header construction, not a literal valid header. OAuth client ID/secret components are form-URL-encoded before concatenation and Base64 encoding. Query parameters are shown on separate lines for readability but form one URL. Discovery and signing-key fetches are omitted from the main diagrams; the OIDC SDK performs them.
 
@@ -40,6 +40,9 @@ sequenceDiagram
     Zitadel-->>GoServer: 200 user identity
     GoServer->>RedisStore: Store userinfo/tokens under generated session ID
     GoServer-->>Browser: Session cookie + 302 /space/demo
+    Browser->>GoServer: GET /api/v1/authenticated with session cookie
+    GoServer-->>Browser: Validated session response with CSRF token
+    Browser->>Browser: Cache CSRF token before mounting workspace
 ```
 
 ### 1. Begin login
@@ -258,3 +261,20 @@ Go saves the replacement credentials, then introspects `access-new-dummy` before
 The desktop discovers `api_audience` through `GET /.well-known/beskar` before login and requests that project's audience scope. It sends the returned access token, not the ID token, in `Authorization: Bearer ...`.
 
 `BearerAccessTokenValidator.Middleware` introspects the credential on every API request using the same issuer, audience and confidential introspection client as browser validation. It checks active status, subject, issuer, expiry/not-before, Bearer type and the `ZITADEL_BEARER_CLIENT_IDS` allowlist. Accepted claims become a typed bearer identity used by `GetUserInfo`; existing application-user lookup and resource permissions still run. A rejected token returns 401; provider failure returns 503. Neither falls back to cookie authentication. Legacy media query credentials use this same bearer validator.
+
+
+## Browser CSRF protection
+
+After login (and on reload), AuthGuard requests `GET /api/v1/authenticated` with the session cookie. For a validated browser session, this returns `{ "status": "success", "data": { "csrfToken": "..." } }` with `Cache-Control: no-store`. The shared fetch wrapper caches the token before resolving the request, so the workspace becomes interactive with the token already available. Bearer-authenticated callers retain the status-only response with `data: null`.
+
+`GET /auth/csrf` remains a fallback for requests outside the guarded workspace, an empty cache, or logout retries. It returns `{ "csrfToken": "..." }` with `Cache-Control: no-store`. The token is an HMAC-SHA256 of the unpredictable SDK session ID, using the shared `KEY` with a CSRF-specific context. It exposes neither the cookie nor the session ID, requires no Redis migration, and works across replicas. This endpoint can issue a token for an expired or ending session cookie so logout remains retryable; the token does not authenticate API requests.
+
+All cookie-authenticated API methods except GET, HEAD, and OPTIONS require the token in `X-CSRF-Token` and an exact trusted origin. The trusted origin comes from `SERVER_URL`, never the request Host or forwarded headers. If Origin is absent, Referer must match. Missing/invalid tokens and hostile origins return `403` with `code: "CSRF_FAILED"` before application handlers run. Bearer requests go through the existing bearer validator instead; they cannot fall back to cookies.
+
+The shared browser fetch wrapper covers API helpers, direct calls, v1/v2 editor operations, and multipart uploads. It preserves bodies and signals, caches the initial session-check token, shares concurrent fallback token bootstrap, and does not replay rejected mutations. A 403 clears its cached token for the next explicit retry. Native desktop transport disables browser token bootstrap and continues to use bearer authentication.
+
+`POST /auth/logout` requires CSRF verification. Successful revocation and session deletion clear the cookie and return `{ "redirect": "<provider logout URL>" }`; the UI then navigates to that URL. Provider/storage failures keep the session available for a manual logout retry and show an error. GET and other methods cannot reach SDK logout. Login, registration, and the OIDC callback retain their protocol protections.
+
+Deploy the server and UI together. Keep browser requests same-origin through the proxy and set `SERVER_URL` to the public browser URL (including a non-default port, if used). Existing open tabs need a reload before writing. The existing shared `KEY` must be at least 32 bytes. No new secret or session-store migration is required.
+
+The token endpoints rely on browser origin isolation: another website cannot read their responses through credentialed CORS, and token issuance rejects hostile Origin/Referer or cross-site Fetch Metadata. A server-side service with an actual valid session cookie can request a token and set its own Origin header; CSRF does not protect against stolen or deliberately shared session credentials.
