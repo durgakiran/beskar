@@ -68,20 +68,51 @@ done
 [[ -z "${GOFLAGS:-}" ]] || fail 'unset GOFLAGS; release tags are controlled by this script'
 
 OUTPUT_DIR="$DESKTOP_DIR/bin/alpha/$ALPHA_VERSION/$ALPHA_ARCH"
-[[ ! -e "$OUTPUT_DIR" ]] || fail 'version/architecture output already exists; choose a new version or move the old output'
 if [[ "$CHECK_ONLY" == true ]]; then
     echo "Alpha configuration valid: $ALPHA_VERSION / $ALPHA_ARCH"
     echo "API: $ALPHA_API_ORIGIN; issuer: $ALPHA_ISSUER_ORIGIN"
     echo "Output: $OUTPUT_DIR"
+    if [[ -e "$OUTPUT_DIR" ]]; then
+        echo 'Output already exists. Choose a new version or move the old output before rebuilding.'
+    fi
     exit 0
 fi
+[[ ! -e "$OUTPUT_DIR" ]] || fail 'version/architecture output already exists; choose a new version or move the old output'
+command -v node >/dev/null || fail 'missing Node.js 22'
+NODE_VERSION="$(node --version)"
+[[ "$NODE_VERSION" == v22.* ]] || fail "Node.js 22 is required to match the UI deployment (found $NODE_VERSION). Activate Node 22 and retry."
+[[ -n "${NPM_TOKEN:-}" ]] || fail 'export NPM_TOKEN with read access to the private GitHub packages'
+command -v rsync >/dev/null || fail 'missing rsync'
 mkdir -p "$DESKTOP_DIR/bin"
 WORK_DIR="$(mktemp -d "$DESKTOP_DIR/bin/.alpha-package.XXXXXX")"
 trap 'rm -rf "$WORK_DIR"' EXIT
 
-# Require dependencies installed from lockfiles beforehand. Always build fresh
-# desktop UI; never reuse the web build or the development app's cached assets.
-npm --prefix "$ROOT_DIR/ui" run build:desktop -- --outDir "$WORK_DIR/ui"
+# Match the deployment's registry build in an isolated tree. The desktop npm
+# hook builds the editor PDF entry from source, and Vite gets the main editor
+# from the lockfile because no prebuilt workspace editor output is present.
+UI_SOURCE="$WORK_DIR/frontend/ui"
+EDITOR_SOURCE="$WORK_DIR/frontend/packages/editor"
+mkdir -p "$UI_SOURCE" "$EDITOR_SOURCE" "$UI_SOURCE/public"
+rsync -a --exclude=node_modules --exclude=dist --exclude=.npmrc --exclude='.env*' \
+    --exclude='*.tsbuildinfo' --exclude='/public/workers' --exclude='/public/jbi.wasm' \
+    "$ROOT_DIR/ui/" "$UI_SOURCE/"
+cp "$ROOT_DIR/packages/editor/"{package.json,package-lock.json,tsconfig.json,tsup.pdf.config.ts} "$EDITOR_SOURCE/"
+rsync -a "$ROOT_DIR/packages/editor/src/" "$EDITOR_SOURCE/src/"
+
+# npm expands the token from the environment. The temporary config contains
+# only the reference and lives outside the frontend output directory.
+cat > "$WORK_DIR/npmrc" <<'EOF'
+registry=https://registry.npmjs.org/
+@durgakiran:registry=https://npm.pkg.github.com
+//npm.pkg.github.com/:_authToken=${NPM_TOKEN}
+EOF
+NPM_CONFIG_USERCONFIG="$WORK_DIR/npmrc" npm --prefix "$EDITOR_SOURCE" ci --ignore-scripts --include=dev
+NPM_CONFIG_USERCONFIG="$WORK_DIR/npmrc" npm --prefix "$UI_SOURCE" ci --include=dev
+
+(cd "$ROOT_DIR/jbi" && GOWORK=off GOOS=js GOARCH=wasm go build -o "$UI_SOURCE/public/jbi.wasm" .)
+cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" "$UI_SOURCE/workers/wasm_exec.js"
+npm --prefix "$UI_SOURCE" run build:workers
+npm --prefix "$UI_SOURCE" run build:desktop -- --outDir "$WORK_DIR/ui"
 [[ -f "$WORK_DIR/ui/index.desktop.html" ]] || fail 'desktop frontend entry point is missing'
 # The pinned Wails asset server discovers its filesystem root via index.html,
 # even when the window explicitly opens index.desktop.html. Both must be the
@@ -119,6 +150,7 @@ cat > "$WORK_DIR/build-info.txt" <<EOF
 version=$ALPHA_VERSION
 build=$ALPHA_BUILD
 architecture=$ALPHA_ARCH
+node_version=$NODE_VERSION
 minimum_macos=15.0
 source_revision=$REVISION
 source_state=$SOURCE_STATE

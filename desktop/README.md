@@ -121,9 +121,9 @@ Alpha always verifies HTTPS certificates and hostnames, even when
 fails compilation. The self-signed local backend must use a trusted CA before
 alpha sign-in can work; the alpha has no TLS bypass.
 
-Install frontend/private-package dependencies from their lockfiles first and
-ensure any workspace package outputs selected by Vite were built from the same
-revision. On a Mac matching the desired architecture, from `desktop`:
+Activate Node.js 22 to match the web deployment (`nvm use 22` if you use nvm).
+Export `NPM_TOKEN` with read access to the private GitHub packages. On a Mac
+matching the desired architecture, from `desktop`:
 
 ```bash
 cp alpha.env.example alpha.env
@@ -145,7 +145,9 @@ Environment-only invocation remains supported, for example
 `ALPHA_CLIENT_ID=... ALPHA_VERSION=0.1.0-alpha.3 ALPHA_BUILD=3 make package-mac-alpha`.
 `ALPHA_CLIENT_ID=... make build-alpha` builds just the native binary from existing UI.
 
-The packaging target rebuilds the desktop frontend, replaces the generated
+The packaging target runs fresh `npm ci` installs for the UI and editor PDF
+build in a temporary directory. It uses the lockfile's registry packages and
+rebuilds the workers, WASM and desktop frontend from source. It then replaces the generated
 `desktop/ui/dist`, builds the alpha app with controlled tags, ad-hoc signs it,
 and creates a DMG, `SHA256SUMS`, and `build-info.txt` under
 `desktop/bin/alpha/<version>/<architecture>/`. Existing version outputs are
@@ -169,9 +171,64 @@ This package is not Developer ID signed or notarized. Testers may encounter
 Gatekeeper warnings and Keychain approval prompts after upgrades. Migration to
 the future signed production app requires fresh login; local draft migration
 is separate work. See [macOS release plan](../docs/runbooks/macos-release-plan.md)
-for alpha distribution through Cloudflare R2 and deferred release gates.
+for alpha distribution and deferred release gates.
 Follow [production backend readiness](../docs/runbooks/teddox-alpha-backend-readiness.md)
 before building a distributable production alpha.
+
+### Publishing alpha packages to GitHub
+
+Use a GitHub prerelease for desktop alpha downloads until the move to Cloudflare
+R2. Sign in to GitHub CLI with write access to `durgakiran/beskar`. From the
+repository root, verify the build outputs and target the recorded source commit:
+
+```bash
+package_dir=desktop/bin/alpha/0.1.0-alpha.5/arm64
+source_revision=$(sed -n 's/^source_revision=//p' "$package_dir/build-info.txt")
+(cd "$package_dir" && shasum -a 256 -c SHA256SUMS) &&
+gh release create desktop-v0.1.0-alpha.5 \
+  "$package_dir/Teddox-0.1.0-alpha.5-macos-arm64.dmg" \
+  "$package_dir/SHA256SUMS" "$package_dir/build-info.txt" \
+  --repo durgakiran/beskar --target "$source_revision" \
+  --title 'Teddox Desktop 0.1.0-alpha.5' --prerelease --latest=false \
+  --notes 'Apple Silicon, macOS 15.0 or newer. Ad-hoc signed and not notarized.'
+```
+
+For later builds, update the version in the tag, title, directory, and filename.
+Include any outstanding acceptance checks in the release notes. Downloads in
+the public repository are publicly accessible.
+
+### Publishing alpha packages to Cloudflare R2 after migration
+
+From the repository root, verify the build outputs locally:
+
+```bash
+python3 desktop/scripts/publish-mac-alpha.py \
+  desktop/bin/alpha/0.1.0-alpha.3/arm64 --dry-run
+```
+
+Configure an AWS CLI profile with an R2 S3 access key scoped to **Object Read &
+Write** on the existing release bucket. The publisher uses normal AWS CLI
+credential resolution and does not read `alpha.env`.
+
+```bash
+AWS_PROFILE=teddox-r2 R2_ACCOUNT_ID='<cloudflare-account-id>' \
+  R2_BUCKET='<release-bucket>' \
+  R2_DOWNLOAD_BASE_URL='https://downloads.teddox.com' \
+  python3 desktop/scripts/publish-mac-alpha.py desktop/bin/alpha/0.1.0-alpha.3/arm64
+```
+
+Use the actual download hostname once it serves the bucket. Omit
+`R2_DOWNLOAD_BASE_URL` for private buckets. The script verifies every file from
+the R2 S3 API and, when a public origin is supplied, from the public URL using
+`curl`. It publishes the versioned DMG, checksum and release manifest before
+updating `channels/alpha.json`. Use a Cloudflare cache bypass rule for this
+channel path so clients see the current pointer.
+
+Supply both architecture directories in the same command when publishing both
+for a version. Retrying with the same files is safe. Existing versioned objects
+with different contents require a new version. If another publisher updates the
+channel during an upload, the conditional channel update fails. Review the
+current channel before retrying.
 
 ### macOS development bundle without the Wails CLI
 
