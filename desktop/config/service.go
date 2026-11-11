@@ -10,18 +10,31 @@ type ConfigService struct {
 	InitialRoute string
 }
 
-var (
-	DefaultServerURL  = "https://app.durgakiran.com"
-	DefaultZitadelURL = "https://id.durgakiran.com"
-	DefaultClientID   = "392021815213490183"
-)
-
 // NewConfigService creates a new ConfigService, loading the initial config.
 func NewConfigService() *ConfigService {
 	cfg, err := LoadConfig()
 	if err != nil {
 		fmt.Printf("Failed to load config, using default: %v\n", err)
 		cfg = &AppConfig{}
+	}
+	applyBuildDefaults(cfg)
+
+	// Save to disk to ensure it's persisted
+	_ = SaveConfig(cfg)
+
+	return &ConfigService{
+		Config: cfg,
+	}
+}
+
+func applyBuildDefaults(cfg *AppConfig) {
+	// Distributed alpha endpoints/client belong to its release configuration.
+	// Older local alpha profiles must not silently retain development endpoints.
+	if Environment == "alpha" {
+		cfg.ServerURL = DefaultServerURL
+		cfg.ZitadelURL = DefaultZitadelURL
+		cfg.ClientID = DefaultClientID
+		return
 	}
 
 	// Use injected build-time defaults if not present
@@ -33,13 +46,6 @@ func NewConfigService() *ConfigService {
 	}
 	if cfg.ClientID == "" || cfg.ClientID == "377926419071631362" {
 		cfg.ClientID = DefaultClientID
-	}
-
-	// Save to disk to ensure it's persisted
-	_ = SaveConfig(cfg)
-
-	return &ConfigService{
-		Config: cfg,
 	}
 }
 

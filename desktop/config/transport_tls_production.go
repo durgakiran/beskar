@@ -1,6 +1,6 @@
-//go:build !beskar_dev
+//go:build !beskar_dev || beskar_alpha
 
 package config
 
-// The production policy never consults the development environment variable.
+// Alpha and production never consult the development environment variable.
 func allowDevelopmentTLSException() bool { return false }

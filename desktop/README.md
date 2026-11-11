@@ -20,7 +20,7 @@ Before building or running the desktop application, ensure you have the followin
 
 The desktop application is designed to be environment-agnostic. Hardcoded URLs are avoided. Instead, we inject environment-specific URLs at build-time using Go's `ldflags`.
 
-The configuration variables exposed for injection are located in the `beskar/desktop/config` package:
+The configuration variables exposed for injection are located in the `beskar/desktop/config` package. The defaults below apply to the existing development/stable build policies; alpha uses `https://app.teddox.com`, `https://id.teddox.com` and a required production native client ID:
 - `DefaultServerURL`: The main API backend URL. (Default: `https://app.durgakiran.com`)
 - `DefaultZitadelURL`: The Zitadel Authentication server URL. (Default: `https://id.durgakiran.com`)
 - `DefaultClientID`: The OAuth Client ID used for authentication. (Default: `392021815213490183`)
@@ -105,6 +105,130 @@ backend, enforces the 10 MB attachment limit, and writes only after a destinatio
 is selected. Cancelling does not create a file.
 
 ## Building and Packaging for Production
+
+### Dedicated macOS alpha
+
+Alpha uses `-tags beskar_alpha`, name **Teddox Alpha**, bundle ID
+`com.durgakiran.beskar.alpha`, configuration under `Beskar/alpha/config.json`,
+and its own `com.durgakiran.beskar.alpha.credentials.v2` Keychain service.
+It keeps the native token manager, PKCE/state validation and refresh protections.
+It supports ad-hoc signing without the production Team ID requirement, while
+retaining native Keychain access controls. Production signing checks are unchanged.
+No dev/production configuration or tokens are automatically imported.
+
+Alpha always verifies HTTPS certificates and hostnames, even when
+`BESKAR_DEV_ALLOW_SELF_SIGNED=1`. Combining `beskar_alpha` and `beskar_dev`
+fails compilation. The self-signed local backend must use a trusted CA before
+alpha sign-in can work; the alpha has no TLS bypass.
+
+Activate Node.js 22 to match the web deployment (`nvm use 22` if you use nvm).
+Export `NPM_TOKEN` with read access to the private GitHub packages. On a Mac
+matching the desired architecture, from `desktop`:
+
+```bash
+cp alpha.env.example alpha.env
+# Edit alpha.env: set the native client ID, version/build and desired origins.
+bash scripts/package-mac-alpha.sh --env alpha.env --check
+bash scripts/package-mac-alpha.sh --env alpha.env
+# Equivalent packaging command:
+ALPHA_ENV_FILE=alpha.env make package-mac-alpha
+```
+
+Paths passed to `--env` are relative to the caller's working directory. From the
+repository root, use `bash desktop/scripts/package-mac-alpha.sh --env desktop/alpha.env`.
+The ignored `alpha.env` accepts only the six public keys in the example. It is
+parsed literally, never sourced or bundled; unknown keys, duplicate keys and
+invalid values fail before building. Explicit file values override inherited
+environment values. `--check` validates configuration without building or replacing
+UI assets. Increase the version and build number for each new package.
+Environment-only invocation remains supported, for example
+`ALPHA_CLIENT_ID=... ALPHA_VERSION=0.1.0-alpha.3 ALPHA_BUILD=3 make package-mac-alpha`.
+`ALPHA_CLIENT_ID=... make build-alpha` builds just the native binary from existing UI.
+
+The packaging target runs fresh `npm ci` installs for the UI and editor PDF
+build in a temporary directory. It uses the lockfile's registry packages and
+rebuilds the workers, WASM and desktop frontend from source. It then replaces the generated
+`desktop/ui/dist`, builds the alpha app with controlled tags, ad-hoc signs it,
+and creates a DMG, `SHA256SUMS`, and `build-info.txt` under
+`desktop/bin/alpha/<version>/<architecture>/`. Existing version outputs are
+rejected. It currently targets macOS 15.0 or newer; older versions are unverified.
+Only the host architecture is built. Record successful hardware/OS tests before
+advertising support.
+
+Alpha defaults to `https://app.teddox.com` and `https://id.teddox.com`.
+`ALPHA_CLIENT_ID` is required for native builds and packages and must identify
+the production native public client, not the confidential browser client.
+Override origins through `ALPHA_API_ORIGIN` and `ALPHA_ISSUER_ORIGIN` when packaging
+if needed. Origins must be HTTPS DNS origins without paths.
+Client IDs are public identifiers, never client secrets. Alpha reapplies its
+compiled API/issuer/client configuration at startup so older saved alpha settings
+cannot silently retain development endpoints or a development client ID.
+The callback remains `teddox://callback`; when dev/alpha/prod coexist, macOS
+scheme selection must be tested and the browser must return to the instance
+that started login. Do not copy callbacks between processes.
+
+This package is not Developer ID signed or notarized. Testers may encounter
+Gatekeeper warnings and Keychain approval prompts after upgrades. Migration to
+the future signed production app requires fresh login; local draft migration
+is separate work. See [macOS release plan](../docs/runbooks/macos-release-plan.md)
+for alpha distribution and deferred release gates.
+Follow [production backend readiness](../docs/runbooks/teddox-alpha-backend-readiness.md)
+before building a distributable production alpha.
+
+### Publishing alpha packages to GitHub
+
+Use a GitHub prerelease for desktop alpha downloads until the move to Cloudflare
+R2. Sign in to GitHub CLI with write access to `durgakiran/beskar`. From the
+repository root, verify the build outputs and target the recorded source commit:
+
+```bash
+package_dir=desktop/bin/alpha/0.1.0-alpha.5/arm64
+source_revision=$(sed -n 's/^source_revision=//p' "$package_dir/build-info.txt")
+(cd "$package_dir" && shasum -a 256 -c SHA256SUMS) &&
+gh release create desktop-v0.1.0-alpha.5 \
+  "$package_dir/Teddox-0.1.0-alpha.5-macos-arm64.dmg" \
+  "$package_dir/SHA256SUMS" "$package_dir/build-info.txt" \
+  --repo durgakiran/beskar --target "$source_revision" \
+  --title 'Teddox Desktop 0.1.0-alpha.5' --prerelease --latest=false \
+  --notes 'Apple Silicon, macOS 15.0 or newer. Ad-hoc signed and not notarized.'
+```
+
+For later builds, update the version in the tag, title, directory, and filename.
+Include any outstanding acceptance checks in the release notes. Downloads in
+the public repository are publicly accessible.
+
+### Publishing alpha packages to Cloudflare R2 after migration
+
+From the repository root, verify the build outputs locally:
+
+```bash
+python3 desktop/scripts/publish-mac-alpha.py \
+  desktop/bin/alpha/0.1.0-alpha.3/arm64 --dry-run
+```
+
+Configure an AWS CLI profile with an R2 S3 access key scoped to **Object Read &
+Write** on the existing release bucket. The publisher uses normal AWS CLI
+credential resolution and does not read `alpha.env`.
+
+```bash
+AWS_PROFILE=teddox-r2 R2_ACCOUNT_ID='<cloudflare-account-id>' \
+  R2_BUCKET='<release-bucket>' \
+  R2_DOWNLOAD_BASE_URL='https://downloads.teddox.com' \
+  python3 desktop/scripts/publish-mac-alpha.py desktop/bin/alpha/0.1.0-alpha.3/arm64
+```
+
+Use the actual download hostname once it serves the bucket. Omit
+`R2_DOWNLOAD_BASE_URL` for private buckets. The script verifies every file from
+the R2 S3 API and, when a public origin is supplied, from the public URL using
+`curl`. It publishes the versioned DMG, checksum and release manifest before
+updating `channels/alpha.json`. Use a Cloudflare cache bypass rule for this
+channel path so clients see the current pointer.
+
+Supply both architecture directories in the same command when publishing both
+for a version. Retrying with the same files is safe. Existing versioned objects
+with different contents require a new version. If another publisher updates the
+channel during an upload, the conditional channel update fails. Review the
+current channel before retrying.
 
 ### macOS development bundle without the Wails CLI
 

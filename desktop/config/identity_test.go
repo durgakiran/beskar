@@ -10,6 +10,9 @@ func TestBuildIdentityAndConfigurationIsolation(t *testing.T) {
 	if developmentBuild {
 		id, environment = "com.durgakiran.beskar.dev", "development"
 	}
+	if alphaBuild {
+		id, environment = "com.durgakiran.beskar.alpha", "alpha"
+	}
 	if ApplicationID != id || Environment != environment {
 		t.Fatal("unexpected build identity")
 	}

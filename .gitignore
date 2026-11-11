@@ -65,6 +65,7 @@ ui/dist
 output
 desktop/ui/dist
 desktop/bin
+desktop/*.env
 desktop.exe
 ui/scripts
 *.exe
