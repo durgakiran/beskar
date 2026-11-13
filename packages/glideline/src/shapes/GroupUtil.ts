@@ -6,6 +6,10 @@ export type GroupShape = GlideShape<Record<string, never>>;
 
 export class GroupUtil extends ShapeUtil<GroupShape> {
   static override readonly type = 'group';
+
+  override getConnectionAnchors() {
+    return [];
+  }
   static override readonly canContainChildren = true;
   static override readonly props = {};
 

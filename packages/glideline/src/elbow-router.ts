@@ -57,16 +57,15 @@ export function computeElbowPath(
   fromEdge: EdgeName,
   toEdge: EdgeName,
   bend = 0,
+  endpoints?: { start: Vec2; end: Vec2 },
 ): string {
-  // Overlap fallback
-  if (boxesOverlap(fromBounds, toBounds)) {
-    const start = edgePoint(fromBounds, fromEdge);
-    const end   = edgePoint(toBounds, toEdge);
-    return `M ${start.x} ${start.y} L ${end.x} ${end.y}`;
-  }
+  const start = endpoints?.start ?? edgePoint(fromBounds, fromEdge);
+  const end = endpoints?.end ?? edgePoint(toBounds, toEdge);
 
-  const start = edgePoint(fromBounds, fromEdge);
-  const end   = edgePoint(toBounds, toEdge);
+  // Overlap fallback still starts and ends at the chosen attachment points.
+  if (boxesOverlap(fromBounds, toBounds)) {
+    return pointsToPath([start, end]);
+  }
 
   const topology = `${fromEdge}→${toEdge}` as const;
 

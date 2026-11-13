@@ -4,7 +4,9 @@ import type { PointerDownEvent, PointerMoveEvent, PointerUpEvent, KeyDownEvent, 
 import type { ShapeId, Vec2, AnyRecord } from '../types.js';
 import { makeBox } from '../types.js';
 import type { ArrowShape, ArrowProps } from '../shapes/ArrowUtil.js';
-import type { BindingPreview, BindingPreviewCandidate } from '../editor.js';
+import type { BindingPreviewCandidate } from '../editor.js';
+import { buildArrowBindingRecord } from '../arrow-records.js';
+import { resolveBindingCandidate } from '../binding-candidate.js';
 import type { ResizeHandle, ResizeInfo } from '../shapes/ShapeUtil.js';
 import {
   applyMatrixToPoint,
@@ -29,29 +31,6 @@ function shouldConstrainResizeAspect(shape: import('../types.js').GlideShape, sh
 
 function dist(a: Vec2, b: Vec2): number {
   return Math.sqrt((b.x - a.x) ** 2 + (b.y - a.y) ** 2);
-}
-
-function buildBindingPreview(editor: StateNode['editor'], targetShape: { id: ShapeId; type: string; x: number; y: number }, point: Vec2, terminal: 'start' | 'end') {
-  const snapped = editor.transforms.getClosestConnectionAnchor(targetShape.id, point);
-
-  return {
-    terminal,
-    targetId: targetShape.id,
-    targetType: targetShape.type,
-    normalizedAnchor: snapped.normalizedAnchor,
-    point: snapped.point,
-    candidateAnchors: editor.transforms.getConnectionAnchors(targetShape.id),
-  };
-}
-
-function matchingPreview(
-  preview: BindingPreview | null,
-  terminal: 'start' | 'end',
-  targetId: ShapeId | null
-): BindingPreviewCandidate | null {
-  if (!preview || !targetId) return null;
-  if (preview.terminal === terminal && preview.targetId === targetId) return preview;
-  return null;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -613,121 +592,14 @@ class DraggingHandle extends StateNode {
         });
       } else {
         const term = this._handleType;
-        const initialTerminal = this._initialProps[term];
-        const dx = e.point.x - this._origin.x;
-        const dy = e.point.y - this._origin.y;
-
-        if (term === 'start') {
-          // Moving the start terminal: shape.x/y moves, start.point stays {0,0}
-          // end.point adjusts to keep end world position stable
-          // Use _origin as initial world arrow.x
-          const newArrowX = this._origin.x + dx;
-          const newArrowY = this._origin.y + dy;
-
-          // Simpler: new start world = cursor; new end local = old_world_end - cursor_world_start
-          const nextStartWorldX = e.point.x;
-          const nextStartWorldY = e.point.y;
-          const oldWorldEndX = this._initialEndWorld.x;
-          const oldWorldEndY = this._initialEndWorld.y;
-
-          const otherTerminal = 'end';
-          const otherBoundId = arrow.props[otherTerminal].boundShapeId;
-          const targetShape = this.editor.getTopShapeAtPoint(
-            e.point,
-            shape => shape.type !== 'arrow' && shape.id !== otherBoundId && shape.id !== this._arrowId,
-          );
-
-          let finalStartX = nextStartWorldX;
-          let finalStartY = nextStartWorldY;
-          let boundShapeId: ShapeId | null = null;
-          let normalizedAnchor = { x: 0.5, y: 0.5 };
-
-          if (targetShape) {
-            const preview = buildBindingPreview(this.editor, targetShape as any, e.point, 'start');
-            const snapped = { normalizedAnchor: preview.normalizedAnchor, point: preview.point };
-            finalStartX = snapped.point.x;
-            finalStartY = snapped.point.y;
-            boundShapeId = targetShape.id as ShapeId;
-            normalizedAnchor = snapped.normalizedAnchor;
-            this.editor.setBindingPreview(preview);
-          } else {
-            this.editor.clearBindingPreview();
-          }
-
-          const parentStart = this.editor.pageToParent(arrow.parentId, {
-            x: finalStartX,
-            y: finalStartY,
-          });
-          const parentEnd = this.editor.pageToParent(arrow.parentId, {
-            x: oldWorldEndX,
-            y: oldWorldEndY,
-          });
-          this.editor.updateShape(this._arrowId, {
-            x: parentStart.x,
-            y: parentStart.y,
-            props: {
-              ...arrow.props,
-              start: {
-                ...initialTerminal,
-                point: { x: 0, y: 0 },
-                boundShapeId,
-              },
-              end: {
-                ...arrow.props.end,
-                point: {
-                  x: parentEnd.x - parentStart.x,
-                  y: parentEnd.y - parentStart.y,
-                },
-              },
-            }
-          });
-        } else {
-          // Moving the end terminal: end.point changes (local offset)
-          const localEnd = this.editor.pageToLocal(this._arrowId, e.point);
-
-          const otherTerminal = 'start';
-          const otherBoundId = arrow.props[otherTerminal].boundShapeId;
-          const targetShape = this.editor.getTopShapeAtPoint(
-            e.point,
-            shape => shape.type !== 'arrow' && shape.id !== otherBoundId && shape.id !== this._arrowId,
-          );
-
-          let finalEndLocalX = localEnd.x;
-          let finalEndLocalY = localEnd.y;
-          let boundShapeId: ShapeId | null = null;
-          let normalizedAnchor = { x: 0.5, y: 0.5 };
-
-          if (targetShape) {
-            const preview = buildBindingPreview(this.editor, targetShape as any, e.point, 'end');
-            const snapped = { normalizedAnchor: preview.normalizedAnchor, point: preview.point };
-            const snappedLocal = this.editor.pageToLocal(this._arrowId, snapped.point);
-            finalEndLocalX = snappedLocal.x;
-            finalEndLocalY = snappedLocal.y;
-            boundShapeId = targetShape.id as ShapeId;
-            normalizedAnchor = snapped.normalizedAnchor;
-            this.editor.setBindingPreview(preview);
-          } else {
-            this.editor.clearBindingPreview();
-          }
-
-          this.editor.updateShape(this._arrowId, {
-            props: {
-              ...arrow.props,
-              end: {
-                ...arrow.props.end,
-                point: { x: finalEndLocalX, y: finalEndLocalY },
-                boundShapeId,
-                normalizedAnchor,
-              }
-            }
-          });
-        }
+        const candidate = this._resolveTerminal(arrow, term, e.point);
+        this.editor.setBindingPreview(candidate ? { ...candidate, terminal: term } : null);
+        this._positionTerminal(arrow, term, e.point, candidate);
       }
     }, { history: 'ignore' });
   }
 
   override onPointerUp(e: PointerUpEvent): void {
-    const activePreview = this.editor.bindingPreview.peek();
     this.editor.clearBindingPreview();
     const arrow = this.editor.getShape(this._arrowId) as ArrowShape;
     if (!arrow) {
@@ -735,8 +607,6 @@ class DraggingHandle extends StateNode {
       return;
     }
 
-    const finalProps = { ...arrow.props };
-    const finalEndWorld = this.editor.localToPage(this._arrowId, finalProps.end.point);
     let newBindingId: string | null = null;
 
     // Finalize bindings and the last pointer position as one publication. The
@@ -751,68 +621,21 @@ class DraggingHandle extends StateNode {
 
         if (this._handleType !== 'bend') {
           const term = this._handleType;
-          const otherTerminal = term === 'start' ? 'end' : 'start';
-          const otherBoundId = finalProps[otherTerminal].boundShapeId;
-          const targetShape = this.editor.getTopShapeAtPoint(
-            e.point,
-            shape => shape.type !== 'arrow' && shape.id !== otherBoundId && shape.id !== this._arrowId,
-          );
-
-          if (targetShape) {
-            const previewCandidate = matchingPreview(activePreview, term, targetShape.id as ShapeId);
-            const snapped = previewCandidate
-              ? { normalizedAnchor: previewCandidate.normalizedAnchor, point: previewCandidate.point }
-              : this.editor.transforms.getClosestConnectionAnchor(targetShape.id as ShapeId, e.point);
-
-            if (term === 'start') {
-              // World end = arrow.x + end.point (local)
-              const parentStart = this.editor.pageToParent(arrow.parentId, snapped.point);
-              const parentEnd = this.editor.pageToParent(arrow.parentId, finalEndWorld);
-              finalProps.start = {
-                boundShapeId: targetShape.id as ShapeId,
-                normalizedAnchor: snapped.normalizedAnchor,
-                point: { x: 0, y: 0 },
-              };
-              finalProps.end = {
-                ...finalProps.end,
-                point: {
-                  x: parentEnd.x - parentStart.x,
-                  y: parentEnd.y - parentStart.y,
-                },
-              };
-              // Update arrow world position to match new start anchor
-              this.editor.updateShape(this._arrowId, { x: parentStart.x, y: parentStart.y });
-            } else {
-              // end terminal: store as local offset from arrow.x/y
-              const snappedLocal = this.editor.pageToLocal(this._arrowId, snapped.point);
-              finalProps.end = {
-                boundShapeId: targetShape.id as ShapeId,
-                normalizedAnchor: snapped.normalizedAnchor,
-                point: {
-                  x: snappedLocal.x,
-                  y: snappedLocal.y,
-                },
-              };
-            }
-
-            const newBinding = {
-              id: this.editor.createBindingId('arrow'),
-              type: 'arrow',
+          const candidate = this._resolveTerminal(arrow, term, e.point);
+          this._positionTerminal(arrow, term, e.point, candidate);
+          if (candidate) {
+            newBindingId = this.editor.createBindingId('arrow');
+            this.editor.createBinding(buildArrowBindingRecord({
+              id: newBindingId,
               fromId: this._arrowId,
-              toId: targetShape.id,
-              meta: {},
-              props: {
-                terminal: term,
-                normalizedAnchor: snapped.normalizedAnchor,
-                fromEdge: this.editor.transforms.getAnchorPageEdge(targetShape.id as ShapeId, snapped.normalizedAnchor),
-              },
-            };
-            newBindingId = newBinding.id;
-            this.editor.createBinding(newBinding as any);
+              toId: candidate.targetId,
+              terminal: term,
+              normalizedAnchor: candidate.normalizedAnchor,
+              anchorMode: candidate.anchorMode,
+              fromEdge: this.editor.transforms.getAnchorPageEdge(candidate.targetId, candidate.normalizedAnchor, candidate.anchorMode),
+            }));
           }
         }
-
-        this.editor.updateShape(this._arrowId, { props: finalProps });
       },
       { history: 'ignore' },
     );
@@ -834,6 +657,39 @@ class DraggingHandle extends StateNode {
     this.parent!.transition('idle');
   }
 
+
+  private _resolveTerminal(arrow: ArrowShape, term: 'start' | 'end', pointer: Vec2) {
+    const other = term === 'start' ? 'end' : 'start';
+    return resolveBindingCandidate(this.editor, pointer, [this._arrowId, arrow.props[other].boundShapeId]);
+  }
+
+  private _positionTerminal(arrow: ArrowShape, term: 'start' | 'end', pointer: Vec2, candidate: BindingPreviewCandidate | null): void {
+    const point = candidate?.point ?? pointer;
+    const terminal = {
+      boundShapeId: candidate?.targetId ?? null,
+      normalizedAnchor: candidate?.normalizedAnchor ?? { x: 0.5, y: 0.5 },
+    };
+    if (term === 'start') {
+      const start = this.editor.pageToParent(arrow.parentId, point);
+      const end = this.editor.pageToParent(arrow.parentId, this._initialEndWorld);
+      this.editor.updateShape<ArrowShape>(this._arrowId, {
+        x: start.x,
+        y: start.y,
+        props: {
+          ...arrow.props,
+          start: { ...terminal, point: { x: 0, y: 0 } },
+          end: { ...arrow.props.end, point: { x: end.x - start.x, y: end.y - start.y } },
+        },
+      });
+    } else {
+      this.editor.updateShape<ArrowShape>(this._arrowId, {
+        props: {
+          ...arrow.props,
+          end: { ...terminal, point: this.editor.pageToLocal(this._arrowId, point) },
+        },
+      });
+    }
+  }
 
   override onKeyDown(e: KeyDownEvent): void {
     if (e.key === 'Escape') {

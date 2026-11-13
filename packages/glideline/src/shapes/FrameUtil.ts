@@ -1,3 +1,4 @@
+import { boundsAnchors, QUARTERS } from '../connection-anchors.js';
 /**
  * FrameUtil — container shape (Story 2.3)
  *
@@ -28,6 +29,10 @@ export type FrameShape = GlideShape<FrameProps>;
 
 export class FrameUtil extends ShapeUtil<FrameShape> {
   static override readonly type = 'frame';
+
+  override getConnectionAnchors() {
+    return boundsAnchors(QUARTERS);
+  }
   static override readonly canContainChildren = true;
 
   static override readonly props = {

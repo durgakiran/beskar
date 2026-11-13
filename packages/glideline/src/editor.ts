@@ -1,3 +1,4 @@
+import type { PageConnectionAnchor } from './connection-anchors.js';
 /**
  * Glideline — GlideEditor + createEditor() (Phase 2–4)
  *
@@ -89,16 +90,11 @@ interface UtilStatic {
   migrations?: import('./types.js').GlideMigrations;
 }
 
-export interface BindingPreviewAnchor {
-  normalizedAnchor: Vec2;
-  point: Vec2;
-}
+export type BindingPreviewAnchor = PageConnectionAnchor;
 
-export interface BindingPreviewCandidate {
+export interface BindingPreviewCandidate extends PageConnectionAnchor {
   targetId: ShapeId;
   targetType: string;
-  normalizedAnchor: Vec2;
-  point: Vec2;
   candidateAnchors: readonly BindingPreviewAnchor[];
 }
 
@@ -413,6 +409,7 @@ export class GlideEditor {
     this.interactions = new InteractionManager(store, this._localMutationCapability);
     this.transforms = new TransformService({
       getShape: id => this.getShape(id),
+      getConnectionAnchors: shape => this.getShapeUtil(shape.type).getConnectionAnchors(shape),
       getGeometry: shape => this.getShapeUtil(shape.type).getGeometry(shape as any),
       getVisualBounds: shape => this.getShapeUtil(shape.type).getVisualBounds(shape as any),
       getZoom: () => this.camera.signal.peek().z,

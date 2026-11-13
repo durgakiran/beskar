@@ -1001,6 +1001,7 @@ export function Canvas() {
   }, [editor, readOnly]);
 
   const onPointerLeave = useCallback(() => {
+    if (!isPointerDownRef.current) editor.clearBindingPreview();
     const awareness = controller.awarenessSignal.peek();
     if (awareness) {
       if (awarenessCursorFrameRef.current !== null) {
@@ -1010,7 +1011,7 @@ export function Canvas() {
       latestAwarenessCursorRef.current = null;
       awareness.setLocalStateField('canvasCursor', null);
     }
-  }, [controller]);
+  }, [controller, editor]);
 
   const cameraTransform = `matrix(${camera.z}, 0, 0, ${camera.z}, ${-camera.x * camera.z}, ${-camera.y * camera.z})`;
   const assetPlacementArmed = activeTool === 'asset' || undefined;

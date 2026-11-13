@@ -1,3 +1,4 @@
+import { boundsAnchors, MIDPOINT } from '../connection-anchors.js';
 /**
  * EllipseUtil — circle / oval shape (Phase A)
  *
@@ -119,6 +120,21 @@ const fontValidator = {
 
 export class EllipseUtil extends ShapeUtil<EllipseShape> {
   static override readonly type = 'ellipse';
+
+  override getConnectionAnchors(shape: EllipseShape) {
+    const { w, h } = shape.props;
+    return boundsAnchors(MIDPOINT).map(({ normalizedAnchor }) => {
+      const { x, y } = normalizedAnchor;
+      if (x === 0.5 || y === 0.5) return { normalizedAnchor };
+      return {
+        normalizedAnchor,
+        localPoint: {
+          x: w * (0.5 + (x - 0.5) * Math.SQRT1_2),
+          y: h * (0.5 + (y - 0.5) * Math.SQRT1_2),
+        },
+      };
+    });
+  }
 
   static override readonly props: GlideProps<EllipseProps> = {
     w:           T.number,

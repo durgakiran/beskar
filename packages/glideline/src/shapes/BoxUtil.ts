@@ -1,3 +1,4 @@
+import { boundsAnchors, QUARTERS } from '../connection-anchors.js';
 /**
  * BoxUtil — rectangle with label and corner radius (Story 2.3)
  *
@@ -44,6 +45,10 @@ export type BoxShape = GlideShape<BoxProps>;
 
 export class BoxUtil extends ShapeUtil<BoxShape> {
   static override readonly type = 'box';
+
+  override getConnectionAnchors() {
+    return boundsAnchors(QUARTERS);
+  }
 
   static override readonly props = {
     w:            T.number,
