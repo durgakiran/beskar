@@ -5,6 +5,7 @@ import {
   type GlideEditor,
   type GlideShape,
   type ResizeHandle,
+  type ShapeId,
 } from '@durgakiran/glideline';
 import { useGlideboardController } from './GlideboardContext.js';
 import { wbTheme } from './theme.js';
@@ -51,7 +52,7 @@ function getSelectionData(editor: GlideEditor) {
   const shapes: GlideShape[] = [];
   for (const id of selectedIds) {
     const shape = editor.getShapeSignal(id).value as GlideShape | null;
-    if (!shape) continue;
+    if (!shape || editor.isShapeEffectivelyHidden(id)) continue;
     const worldBounds = editor.getShapeWorldBounds(shape);
     boxes.push({
       minX: worldBounds.minX,
@@ -290,6 +291,35 @@ function drawCandidate(
   ctx.restore();
 }
 
+function drawSelectedShapeOutline(
+  editor: GlideEditor,
+  ctx: CanvasRenderingContext2D,
+  shape: GlideShape,
+  stroke: string,
+  zoom: number,
+) {
+  const id = shape.id as ShapeId;
+  ctx.save();
+
+  // Match the shape layer's clipping frame, in page coordinates.
+  const frame = editor.getClippingFrameAncestors(id)[0];
+  if (frame) {
+    const corners = editor.getShapeLocalOutline(frame.id as ShapeId)
+      .map(point => editor.localToPage(frame.id as ShapeId, point));
+    ctx.beginPath();
+    ctx.moveTo(corners[0]!.x, corners[0]!.y);
+    for (const point of corners.slice(1)) ctx.lineTo(point.x, point.y);
+    ctx.closePath();
+    ctx.clip();
+  }
+
+  const { a, b, c, d, e, f } = editor.getWorldTransform(id);
+  ctx.transform(a, b, c, d, e, f);
+  ctx.setLineDash([]);
+  drawGeometryOutline(editor, ctx, shape, stroke, 'transparent', 2, zoom);
+  ctx.restore();
+}
+
 function drawSelection(editor: GlideEditor, ctx: CanvasRenderingContext2D, zoom: number) {
   const selData = getSelectionData(editor);
   if (!selData || selData.boxes.length === 0) return;
@@ -389,6 +419,9 @@ function drawSelection(editor: GlideEditor, ctx: CanvasRenderingContext2D, zoom:
     return;
   }
 
+  const accent = resolveColor(wbTheme.accent);
+  for (const shape of shapes) drawSelectedShapeOutline(editor, ctx, shape, accent, zoom);
+
   const minX = Math.min(...boxes.map(box => box.minX));
   const minY = Math.min(...boxes.map(box => box.minY));
   const maxX = Math.max(...boxes.map(box => box.maxX));
@@ -407,7 +440,7 @@ function drawSelection(editor: GlideEditor, ctx: CanvasRenderingContext2D, zoom:
   }
 
   // Bounding dashed rect
-  ctx.strokeStyle = resolveColor(wbTheme.accent);
+  ctx.strokeStyle = accent;
   ctx.lineWidth = 1 / zoom;
   ctx.setLineDash([4 / zoom, 2 / zoom]);
   ctx.strokeRect(minX, minY, width, height);
@@ -627,8 +660,9 @@ export function CanvasOverlays() {
     }));
     subscribingBaseSignals = false;
     const disposeStore = editor.store.listen(changes => {
+      const selectedIds = editor.getSelectedShapeIds();
       const relevantIds = new Set<string>([
-        ...editor.getSelectedShapeIds(),
+        ...selectedIds,
         ...editor.interactions.changedIds,
       ]);
       const preview = editor.bindingPreview.peek();
@@ -636,12 +670,29 @@ export function CanvasOverlays() {
         relevantIds.add(preview.targetId);
         if (preview.sourceCandidate) relevantIds.add(preview.sourceCandidate.targetId);
       }
-      for (const selectedId of editor.getSelectedShapeIds()) {
+      const selectedGroups = new Set<string>();
+      for (const selectedId of selectedIds) {
+        for (const ancestor of editor.getAncestors(selectedId)) relevantIds.add(ancestor.id);
+        if (editor.getShape(selectedId)?.type === 'group') selectedGroups.add(selectedId);
         for (const binding of editor.getBindingsFromShape(selectedId)) {
+          relevantIds.add(binding.id);
           relevantIds.add(binding.toId);
         }
       }
-      if (changes.changedIds.some(id => relevantIds.has(id))) draw();
+      if (changes.changedIds.some(id => relevantIds.has(id))) {
+        draw();
+        return;
+      }
+      // Check both parents so deletion and moving a child out of a group
+      // refresh the group's outline as well as additions and moves within it.
+      if (selectedGroups.size > 0 && changes.deltas.some(({ before, after }) =>
+        [before, after].some(record => {
+          if (record?.['kind'] !== 'shape') return false;
+          const parentId = record['parentId'] as ShapeId;
+          return selectedGroups.has(parentId)
+            || editor.getAncestors(parentId).some(parent => selectedGroups.has(parent.id));
+        }),
+      )) draw();
     });
 
     const resizeObserver = typeof ResizeObserver === 'undefined'

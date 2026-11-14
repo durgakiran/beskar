@@ -331,7 +331,7 @@ export function WhiteboardApp({
         } else if (event.key.toLowerCase() === 'g' && ids.length > 0) {
           event.preventDefault();
           if (event.shiftKey) editor.ungroupShapes(ids);
-          else if (ids.length >= 2) editor.groupShapes(ids);
+          else if (editor.canGroupShapes(ids)) editor.groupShapes(ids);
         } else if (event.key.toLowerCase() === 'l' && ids.length > 0) {
           event.preventDefault();
           const lock = !ids.every(id => editor.getShape(id)?.isLocked);

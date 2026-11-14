@@ -1215,20 +1215,33 @@ export class GlideEditor {
     this._smartRouter.markDirty();
   }
 
-  groupShapes(ids: readonly ShapeId[]): ShapeId {
-    const shapes = [...new Set(ids)].map(id => {
+  private _getGroupableShapes(ids: readonly ShapeId[]): GlideShape[] | string {
+    const shapes: GlideShape[] = [];
+    for (const id of new Set(ids)) {
       const shape = this.getShape(id);
-      if (!shape) throw new Error(`GlideEditor: shape "${id}" not found`);
-      return shape;
-    });
-    if (shapes.length < 2) throw new Error('Grouping requires at least two shapes.');
+      if (!shape) return `GlideEditor: shape "${id}" not found`;
+      shapes.push(shape);
+    }
+    if (shapes.length < 2) return 'Grouping requires at least two shapes.';
     const parentId = shapes[0]!.parentId;
     if (shapes.some(shape => shape.parentId !== parentId)) {
-      throw new Error('Grouped shapes must be siblings under the same parent.');
+      return 'Grouped shapes must be siblings under the same parent.';
     }
     if (shapes.some(shape => this.isShapeEffectivelyLocked(shape.id as ShapeId))) {
-      throw new Error('Locked shapes cannot be grouped.');
+      return 'Locked shapes cannot be grouped.';
     }
+    return shapes;
+  }
+
+  /** Whether the supplied shapes can become direct members of the same group. */
+  canGroupShapes(ids: readonly ShapeId[]): boolean {
+    return typeof this._getGroupableShapes(ids) !== 'string';
+  }
+
+  groupShapes(ids: readonly ShapeId[]): ShapeId {
+    const shapes = this._getGroupableShapes(ids);
+    if (typeof shapes === 'string') throw new Error(shapes);
+    const parentId = shapes[0]!.parentId;
     const ordered = [...shapes].sort(compareSiblingOrder);
     const bounds = ordered.map(shape => this.getShapeVisualWorldBounds(shape));
     const minX = Math.min(...bounds.map(box => box.minX));
