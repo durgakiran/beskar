@@ -1103,6 +1103,18 @@ export class GlideEditor {
       newShape.props = { ...existing.props, ...(partial.props as any) };
     }
 
+    if (existing.type === 'arrow' && !partial.props) {
+      const props = existing['props'] as ArrowShape['props'];
+      const dx = newShape.x - Number(existing['x']);
+      const dy = newShape.y - Number(existing['y']);
+      if (props.manualRoute && (dx || dy)) {
+        newShape.props = {
+          ...props,
+          manualRoute: props.manualRoute.map(point => ({ ...point, x: point.x + dx, y: point.y + dy })),
+        };
+      }
+    }
+
     // Auto-expand/clamp height based on text content
     if (newShape.props && typeof newShape.props.h === 'number') {
       const minH = getMinHeightForShape(newShape);
@@ -1129,6 +1141,13 @@ export class GlideEditor {
         }
       },
     });
+  }
+
+  private _reparentArrowRoute(arrow: ArrowShape, parentId: PageId | ShapeId) {
+    return arrow.props.manualRoute?.map(point => ({
+      ...point,
+      ...this.pageToParent(parentId, this.parentToPage(arrow.parentId, point)),
+    })) ?? arrow.props.manualRoute;
   }
 
   /** Reparent shapes while preserving their page-space geometry. */
@@ -1192,6 +1211,7 @@ export class GlideEditor {
               rotation: 0,
               props: {
                 ...arrow.props,
+                ...(arrow.props.manualRoute ? { manualRoute: this._reparentArrowRoute(arrow, parentId) } : {}),
                 start: { ...arrow.props.start, point: { x: 0, y: 0 } },
                 end: {
                   ...arrow.props.end,
@@ -1249,13 +1269,6 @@ export class GlideEditor {
     const origin = this.pageToParent(parentId, { x: minX, y: minY });
     const groupId = this.createShapeId('group');
     const worlds = new Map(ordered.map(shape => [shape.id as ShapeId, this.getWorldTransform(shape.id as ShapeId)]));
-    const arrowPoints = new Map(ordered.filter(shape => shape.type === 'arrow').map(shape => [
-      shape.id as ShapeId,
-      {
-        start: this.localToPage(shape.id as ShapeId, (shape as ArrowShape).props.start.point),
-        end: this.localToPage(shape.id as ShapeId, (shape as ArrowShape).props.end.point),
-      },
-    ]));
     const childIndices = generateRebalancedOrderKeys(ordered.length);
 
     this.executeCommand({
@@ -1267,13 +1280,14 @@ export class GlideEditor {
           index: ordered[0]!.index, isLocked: false, isHidden: false, props: {}, meta: {},
         });
         ordered.forEach((shape, index) => {
-          const arrow = arrowPoints.get(shape.id as ShapeId);
-          if (shape.type === 'arrow' && arrow) {
-            const start = this.pageToParent(groupId, arrow.start);
-            const end = this.pageToParent(groupId, arrow.end);
+          if (shape.type === 'arrow') {
+            const arrow = shape as ArrowShape;
+            const start = this.pageToParent(groupId, this.localToPage(arrow.id as ShapeId, arrow.props.start.point));
+            const end = this.pageToParent(groupId, this.localToPage(arrow.id as ShapeId, arrow.props.end.point));
             tx.update(shape.id, record => ({ ...record, parentId: groupId, index: childIndices[index]!,
               x: start.x, y: start.y, rotation: 0,
               props: { ...(record['props'] as AnyRecord),
+                ...(arrow.props.manualRoute ? { manualRoute: this._reparentArrowRoute(arrow, groupId) } : {}),
                 start: { ...((record['props'] as AnyRecord)['start'] as AnyRecord), point: { x: 0, y: 0 } },
                 end: { ...((record['props'] as AnyRecord)['end'] as AnyRecord), point: { x: end.x - start.x, y: end.y - start.y } },
               },
@@ -1314,6 +1328,7 @@ export class GlideEditor {
       arrow: shape.type === 'arrow' ? {
         start: this.localToPage(shape.id as ShapeId, (shape as ArrowShape).props.start.point),
         end: this.localToPage(shape.id as ShapeId, (shape as ArrowShape).props.end.point),
+        manualRoute: this._reparentArrowRoute(shape as ArrowShape, this.getShape(shape.parentId as ShapeId)!.parentId),
       } : null,
     }));
 
@@ -1337,6 +1352,7 @@ export class GlideEditor {
               tx.update(item.shape.id, record => ({ ...record, parentId: container.parentId,
                 x: start.x, y: start.y, rotation: 0,
                 props: { ...(record['props'] as AnyRecord),
+                  ...(item.arrow.manualRoute ? { manualRoute: item.arrow.manualRoute } : {}),
                   start: { ...((record['props'] as AnyRecord)['start'] as AnyRecord), point: { x: 0, y: 0 } },
                   end: { ...((record['props'] as AnyRecord)['end'] as AnyRecord), point: { x: end.x - start.x, y: end.y - start.y } },
                 },
@@ -1478,6 +1494,10 @@ export class GlideEditor {
           x: start.x, y: start.y, rotation: 0,
           props: {
             ...arrow.props,
+            ...(arrow.props.manualRoute ? { manualRoute: arrow.props.manualRoute.map(point => ({
+              ...point,
+              ...this.pageToParent(arrow.parentId, reflect(this.parentToPage(arrow.parentId, point))),
+            })) } : {}),
             start: { ...arrow.props.start, point: { x: 0, y: 0 } },
             end: { ...arrow.props.end, point: { x: end.x - start.x, y: end.y - start.y } },
           },
@@ -2102,6 +2122,7 @@ export class GlideEditor {
           parentId: pageId, x: start.x, y: start.y, rotation: 0,
           props: {
             ...arrow.props,
+            ...(arrow.props.manualRoute ? { manualRoute: this._reparentArrowRoute(arrow, pageId) } : {}),
             start: { ...arrow.props.start, point: { x: 0, y: 0 } },
             end: { ...arrow.props.end, point: { x: end.x - start.x, y: end.y - start.y } },
           },
@@ -2190,6 +2211,12 @@ export class GlideEditor {
       if (!payload.rootIds.includes(record['id'] as ShapeId) || record['kind'] !== 'shape') continue;
       record['x'] = Number(record['x']) + offset.x;
       record['y'] = Number(record['y']) + offset.y;
+      if (record['type'] === 'arrow') {
+        const props = record['props'] as ArrowShape['props'];
+        if (props.manualRoute) {
+          props.manualRoute = props.manualRoute.map(point => ({ ...point, x: point.x + offset.x, y: point.y + offset.y }));
+        }
+      }
     }
 
     let report!: ImportReport;

@@ -360,6 +360,13 @@ function getMeasurementContext(): CanvasRenderingContext2D | null {
   return measurementContext;
 }
 
+export function measurePlainTextWidth(text: string, fontFamily: string, fontSize: number): number {
+  const ctx = getMeasurementContext();
+  if (ctx) ctx.font = `${fontSize}px ${fontFamily}`;
+  return text.split('\n').reduce((width, line) =>
+    Math.max(width, ctx?.measureText(line).width ?? line.length * fontSize * 0.6), 0);
+}
+
 /**
  * Estimate the wrapped height of a text block given a width, font, and font size.
  */

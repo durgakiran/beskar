@@ -1,12 +1,19 @@
+import { avoidRotatedOrthoTerminal, resolveManualOrthoPoints, simplifyOrthoRoute } from './ortho-editing.js';
 import { computeArcPath } from './arc-router.js';
 import type { GlideEditor } from './editor.js';
-import { computeFallbackLocalElbowPoints, getArrowBindingEdge } from './smart-router.js';
-import type { ArrowRouteStyle, ArrowShape } from './shapes/ArrowUtil.js';
-import { makeBox, type Box2d, type ShapeId, type Vec2 } from './types.js';
+import { computeFallbackLocalElbowPoints, getArrowBindingEdge, routeAroundConnectorTerminals } from './smart-router.js';
+import type { ArrowBinding, ArrowRouteStyle, ArrowShape } from './shapes/ArrowUtil.js';
+import { makeBox, type Box2d, type EdgeName, type PageId, type ShapeId, type Vec2 } from './types.js';
 
 const CURVE_SAMPLE_STEPS = 24;
 
-function getShapeBoundsInParent(editor: GlideEditor, id: ShapeId, parentId: string): Box2d {
+function facingEdge(point: Vec2, toward: Vec2, horizontal: boolean): EdgeName {
+  return horizontal
+    ? toward.x >= point.x ? 'right' : 'left'
+    : toward.y >= point.y ? 'bottom' : 'top';
+}
+
+function getShapeBoundsInParent(editor: GlideEditor, id: ShapeId, parentId: PageId | ShapeId): Box2d {
   const bounds = editor.getShapeLocalBounds(id);
   const points = [
     { x: bounds.minX, y: bounds.minY },
@@ -32,6 +39,8 @@ export interface ArrowRouteResult {
   fallbackReason?: string;
   routeTimeMs?: number;
   offset?: number;
+  /** Parent-space route including the vertices used by the route editor. */
+  orthoPoints?: NonNullable<ReturnType<typeof resolveManualOrthoPoints>>;
 }
 
 export function resolveArrowRoute(
@@ -55,8 +64,75 @@ export function resolveArrowRoute(
     };
   }
 
-  const fromEdge = getArrowBindingEdge(editor, shape.id as any, 'start', 'right');
-  const toEdge = getArrowBindingEdge(editor, shape.id as any, 'end', 'left');
+  let fromEdge: EdgeName = 'right';
+  let toEdge: EdgeName = 'left';
+  const fromShape = start.boundShapeId ? editor.getShape(start.boundShapeId) : undefined;
+  const toShape = end.boundShapeId ? editor.getShape(end.boundShapeId) : undefined;
+
+  if (routeStyle === 'ortho') {
+    // During a drag the terminal can be positioned before its binding is written.
+    const bindings = editor.getBindingsFromShape(shape.id as ShapeId)
+      .filter((binding): binding is ArrowBinding => binding.type === 'arrow');
+    const edgeFor = (terminal: 'start' | 'end', targetId: ShapeId, fallback: EdgeName) => {
+      const anchor = shape.props[terminal].normalizedAnchor;
+      const binding = bindings.find(binding => binding.toId === targetId && binding.props.terminal === terminal);
+      if (binding && binding.props.normalizedAnchor.x === anchor.x && binding.props.normalizedAnchor.y === anchor.y) {
+        return binding.props.fromEdge ?? fallback;
+      }
+      return editor.transforms.getAnchorPageEdge(targetId, anchor);
+    };
+    if (fromShape) fromEdge = edgeFor('start', fromShape.id, fromEdge);
+    if (toShape) toEdge = edgeFor('end', toShape.id, toEdge);
+    const horizontal = fromShape ? fromEdge === 'left' || fromEdge === 'right'
+      : toShape ? toEdge === 'left' || toEdge === 'right'
+        : Math.abs(end.point.x - start.point.x) >= Math.abs(end.point.y - start.point.y);
+    const sameAxisPosition = horizontal ? start.point.x === end.point.x : start.point.y === end.point.y;
+    if (!fromShape) fromEdge = toShape && sameAxisPosition
+      ? toEdge : facingEdge(start.point, end.point, horizontal);
+    if (!toShape) toEdge = fromShape && sameAxisPosition
+      ? fromEdge : facingEdge(end.point, start.point, horizontal);
+  } else {
+    fromEdge = getArrowBindingEdge(editor, shape.id as ShapeId, 'start', fromEdge);
+    toEdge = getArrowBindingEdge(editor, shape.id as ShapeId, 'end', toEdge);
+  }
+
+  const inParent = (point: Vec2) => ({ x: point.x + shape.x, y: point.y + shape.y });
+  const inLocal = (point: Vec2) => ({ x: point.x - shape.x, y: point.y - shape.y });
+  const fromBounds = fromShape && routeStyle === 'ortho' && getShapeBoundsInParent(editor, fromShape.id, shape.parentId);
+  const toBounds = toShape && routeStyle === 'ortho' && getShapeBoundsInParent(editor, toShape.id, shape.parentId);
+  const parentMatrix = routeStyle === 'ortho' ? editor.transforms.getParentWorldTransform(shape.parentId) : undefined;
+  const relativeRotation = (id: ShapeId) => {
+    const matrix = editor.getWorldTransform(id);
+    return Math.atan2(matrix.b, matrix.a) - Math.atan2(parentMatrix!.b, parentMatrix!.a);
+  };
+  const protectStart = !!fromBounds && Math.abs(Math.sin(relativeRotation(fromShape!.id) / 2)) > 1e-6;
+  const protectEnd = !!toBounds && Math.abs(Math.sin(relativeRotation(toShape!.id) / 2)) > 1e-6;
+  const protectAnchors = <T extends Vec2>(points: T[], keep?: (point: T | Vec2) => boolean) => {
+    let route: (T | Vec2)[] = points;
+    if (protectStart) route = avoidRotatedOrthoTerminal(route, fromEdge, fromBounds);
+    if (protectEnd) route = avoidRotatedOrthoTerminal([...route].reverse(), toEdge, toBounds).reverse();
+    return protectStart || protectEnd ? simplifyOrthoRoute(route, keep) : route;
+  };
+
+  if (routeStyle === 'ortho' && shape.props.manualRoute?.length) {
+    const manualRoute = shape.props.manualRoute;
+    const points = resolveManualOrthoPoints(
+      inParent(start.point), inParent(end.point), shape.props.manualRoute, fromEdge, toEdge,
+      fromBounds || undefined, toBounds || undefined,
+    );
+    if (points) {
+      const keepWaypoint = (point: (typeof points)[number]) =>
+        point.control !== undefined && manualRoute[point.control]?.kind === 'waypoint';
+      let orthoPoints = protectAnchors(points, keepWaypoint);
+      if (fromBounds && toBounds && !protectStart && !protectEnd) {
+        const repaired = routeAroundConnectorTerminals(orthoPoints, fromBounds, toBounds, fromEdge, toEdge, true);
+        if (repaired !== orthoPoints) orthoPoints = simplifyOrthoRoute(repaired, keepWaypoint);
+      }
+      const localPoints = orthoPoints.map(inLocal);
+      return { routeStyle, renderKind: 'polyline', path: pointsToPath(localPoints), localPoints,
+        worldPoints: localPoints.map(toPage), orthoPoints };
+    }
+  }
 
   if (routeStyle === 'smart') {
     const smartArgs: Parameters<GlideEditor['resolveSmartRouteForArrow']>[1] = {
@@ -87,37 +163,23 @@ export function resolveArrowRoute(
     return result;
   }
 
-  if (!start.boundShapeId || !end.boundShapeId) {
-    const localPoints = [start.point, end.point];
-    return {
-      routeStyle,
-      renderKind: 'polyline',
-      path: pointsToPath(localPoints),
-      localPoints,
-      worldPoints: localPoints.map(toPage),
-    };
-  }
-
-  const fromShape = editor.getShape(start.boundShapeId);
-  const toShape = editor.getShape(end.boundShapeId);
-  if (!fromShape || !toShape) {
-    const localPoints = [start.point, end.point];
-    return {
-      routeStyle,
-      renderKind: 'polyline',
-      path: pointsToPath(localPoints),
-      localPoints,
-      worldPoints: localPoints.map(toPage),
-    };
-  }
-
-  const localPoints = computeFallbackLocalElbowPoints(
+  const aligned = fromEdge === 'left' || fromEdge === 'right'
+    ? start.point.y === end.point.y : start.point.x === end.point.x;
+  const coincident = start.point.x === end.point.x && start.point.y === end.point.y;
+  const points = (!fromShape || !toShape) && (coincident || (aligned && fromEdge !== toEdge))
+    ? [start.point, end.point] : computeFallbackLocalElbowPoints(
     shape,
-    getShapeBoundsInParent(editor, fromShape.id as ShapeId, shape.parentId),
-    getShapeBoundsInParent(editor, toShape.id as ShapeId, shape.parentId),
+    fromBounds || makeBox(shape.x + start.point.x, shape.y + start.point.y, 0, 0),
+    toBounds || makeBox(shape.x + end.point.x, shape.y + end.point.y, 0, 0),
     fromEdge,
     toEdge,
   );
+  let localPoints = protectStart || protectEnd ? protectAnchors(points.map(inParent)).map(inLocal) : points;
+  if (fromBounds && toBounds && !protectStart && !protectEnd) {
+    const parentPoints = localPoints.map(inParent);
+    const repaired = routeAroundConnectorTerminals(parentPoints, fromBounds, toBounds, fromEdge, toEdge);
+    if (repaired !== parentPoints) localPoints = repaired.map(inLocal);
+  }
   const worldPoints = localPoints.map(toPage);
 
   return {

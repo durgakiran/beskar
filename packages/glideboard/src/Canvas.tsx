@@ -3,12 +3,15 @@ import { CanvasTextView } from '@durgakiran/canvas-text-editor/view';
 import type { CanvasRichTextDocument } from '@durgakiran/canvas-text-editor/model';
 import { projectCanvasRichTextToPlainText } from '@durgakiran/canvas-text-editor/model';
 import type {
+  ArrowShape,
+  ArrowUtil,
   GlideEditor,
   GlideShape,
   ShapeId,
   Vec2,
   LabelProps,
   RichTextDescriptor,
+  StateNode,
   TextEditSession,
 } from '@durgakiran/glideline';
 import { FONT_FAMILIES } from '@durgakiran/glideline';
@@ -28,10 +31,10 @@ const LazyCanvasTextEditor = React.lazy(async () => {
   return { default: module.CanvasTextEditor };
 });
 
-export function getCanvasToolCursor(tool: string | undefined, handleId: string | null, buttons = 0): string {
+export function getCanvasToolCursor(tool: string | undefined, handleId: string | null, buttons = 0, editor?: GlideEditor): string {
   if (tool === 'hand') return buttons === 1 ? 'grabbing' : 'grab';
-  if (tool === 'asset') return 'crosshair';
-  return handleId ? getCursorForHandle(handleId) : 'default';
+  if (tool === 'asset' || tool === 'line') return 'crosshair';
+  return handleId ? getCursorForHandle(handleId, editor) : 'default';
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -53,8 +56,8 @@ function pointsToSvgPath(points: Vec2[], closed = false): string {
 // caret. It is stripped at the draft boundary and is never persisted.
 const EMPTY_EDIT_MARKER = '\u00A0';
 
-function readEditingText(element: HTMLElement): string {
-  return (element.textContent ?? '').split(EMPTY_EDIT_MARKER).join('');
+function readEditingText(element: HTMLElement, multiline = false): string {
+  return ((multiline ? element.innerText : element.textContent) ?? '').split(EMPTY_EDIT_MARKER).join('');
 }
 
 function moveCaretToEnd(element: HTMLElement): void {
@@ -136,10 +139,12 @@ const ShapeLayer = memo(({
   id,
   zIndex,
   isEditing,
+  connectorEdit,
 }: {
   id: ShapeId;
   zIndex: number;
   isEditing: boolean;
+  connectorEdit?: TextEditSession;
 }) => {
   const controller = useGlideboardController();
   const editor = controller.editor;
@@ -147,16 +152,22 @@ const ShapeLayer = memo(({
   const shape = useSignalValue(sig as any) as GlideShape | null;
   const remoteTextEditingShapeIds = useSignalValue(controller.remoteTextEditingShapeIdsSignal);
   const isRemoteTextEditing = remoteTextEditingShapeIds?.has(id) ?? false;
-  useSignalValue(editor.getDocumentVersionSignal());
+  const documentVersion = useSignalValue(editor.getDocumentVersionSignal());
   useSignalValue(controller.collaborationTextVersionSignal);
   const svgRef = useRef<SVGSVGElement>(null);
 
+  const routeVersion = shape?.type === 'arrow' ? documentVersion : undefined;
   // Inject toSvg() geometry output into the per-shape <svg>
   useEffect(() => {
     if (!svgRef.current || !shape) return;
     const util = editor.getShapeUtil(shape.type);
     if ((util as any).toSvg) {
-      const el = (util as any).toSvg(shape);
+      const el = shape.type === 'arrow' && connectorEdit
+        ? (util as ArrowUtil).toSvg({
+            ...shape,
+            props: { ...shape.props, ...connectorEdit.pendingProps, label: connectorEdit.draft },
+          } as ArrowShape, true)
+        : (util as any).toSvg(shape);
       svgRef.current.innerHTML = '';
       if (el) {
         const defs = el.querySelector('defs');
@@ -166,7 +177,7 @@ const ShapeLayer = memo(({
         svgRef.current.appendChild(el);
       }
     }
-  }, [editor, shape]);
+  }, [editor, shape, routeVersion, connectorEdit]);
 
   const util = shape ? editor.getShapeUtil(shape.type) : null;
   const labelProps: LabelProps | null = (shape && util) ? ((util as any).getLabelProps?.(shape) ?? null) : null;
@@ -298,7 +309,7 @@ const ShapeLayer = memo(({
             justifyContent: labelProps.verticalAlign === 'center' ? 'center' : 'flex-start',
             pointerEvents: 'none',
             userSelect: 'none',
-            overflow: 'hidden',
+            overflow: shape.type === 'arrow' ? 'visible' : 'hidden',
             whiteSpace: (isTextType && !hasFixedWidth) ? 'pre' : 'pre-wrap',
             wordBreak: 'break-word',
             outline: 'none',
@@ -327,7 +338,7 @@ const EraserPreviewShape = memo(({ id, zoom }: { id: ShapeId; zoom: number }) =>
   const points = editor.transforms.getWorldOutline(id);
   if (points.length === 0) return null;
   const serialized = points.map(point => `${point.x},${point.y}`).join(' ');
-  const open = shape.type === 'arrow' || shape.type === 'freehand';
+  const open = shape.type === 'arrow' || shape.type === 'line' || shape.type === 'freehand';
   return open ? (
     <polyline
       points={serialized}
@@ -548,7 +559,7 @@ function TextEditingOverlay() {
   useEffect(() => {
     const editable = editableRef.current;
     if (!editable || !session) return;
-    if (readEditingText(editable) !== session.draft) {
+    if (readEditingText(editable, shape?.type === 'arrow') !== session.draft) {
       editable.textContent = session.draft || EMPTY_EDIT_MARKER;
     } else if (!session.draft && editable.textContent === '') {
       editable.textContent = EMPTY_EDIT_MARKER;
@@ -565,8 +576,9 @@ function TextEditingOverlay() {
   if (!session || !shape) return null;
 
   const util = editor.getShapeUtil(shape.type);
-  const layoutShape = session.pendingProps
-    ? { ...shape, props: { ...shape.props, ...session.pendingProps } }
+  const isConnector = shape.type === 'arrow';
+  const layoutShape = session.pendingProps || isConnector
+    ? { ...shape, props: { ...shape.props, ...session.pendingProps, ...(isConnector ? { label: session.draft } : {}) } }
     : shape;
   const labelProps = util.getLabelProps(layoutShape as any);
   if (!labelProps) return null;
@@ -619,7 +631,8 @@ function TextEditingOverlay() {
           minHeight: '1.35em',
           padding: 0,
           border: 0,
-          outline: conflicted ? '2px solid #ef4444' : '2px solid #4f8cff',
+          outline: conflicted ? '2px solid #ef4444' : isConnector ? 'none' : '2px solid #4f8cff',
+          boxShadow: isConnector ? `0 1px 0 ${wbTheme.accent}` : undefined,
           outlineOffset: 2,
           fontFamily: labelProps.fontFamily,
           fontSize: labelProps.fontSize,
@@ -633,7 +646,7 @@ function TextEditingOverlay() {
           overflow: 'visible',
           cursor: 'text',
           boxSizing: 'border-box',
-          lineHeight: 1.35,
+          lineHeight: labelProps.lineHeight ?? 1.35,
         }}
       >
         <div
@@ -656,7 +669,7 @@ function TextEditingOverlay() {
           }}
           onInput={event => {
             const editable = event.currentTarget;
-            const draft = readEditingText(editable);
+            const draft = readEditingText(editable, isConnector);
             editor.updateEditingDraft(draft);
             if (!draft && editable.textContent === '') {
               editable.textContent = EMPTY_EDIT_MARKER;
@@ -665,7 +678,7 @@ function TextEditingOverlay() {
           }}
           onCompositionStart={() => editor.setEditingComposition(true)}
           onCompositionEnd={event => {
-            const draft = readEditingText(event.currentTarget);
+            const draft = readEditingText(event.currentTarget, isConnector);
             event.currentTarget.textContent = draft || EMPTY_EDIT_MARKER;
             moveCaretToEnd(event.currentTarget);
             editor.updateEditingDraft(draft);
@@ -698,7 +711,7 @@ function TextEditingOverlay() {
             wordBreak: 'break-word',
             cursor: 'text',
             boxSizing: 'border-box',
-            lineHeight: 1.35,
+            lineHeight: labelProps.lineHeight ?? 1.35,
           }}
         />
       </div>
@@ -715,6 +728,7 @@ export function Canvas() {
   const editor = controller.editor;
   const camera = useSignalValue(editor.camera.signal)!;
   const editingId = useSignalValue(editor.editingShapeId);
+  const editingSession = useSignalValue(editor.textEditing.session);
   const readOnly = useSignalValue(controller.readOnlySignal) ?? false;
   const [viewportRevision, setViewportRevision] = useState(0);
   const viewportShapes = useViewportShapeEntries(editor, viewportRevision);
@@ -723,6 +737,7 @@ export function Canvas() {
   const isMiddleDraggingRef = useRef(false);
   const originalToolBeforeMiddleDragRef = useRef<string | null>(null);
   const isPointerDownRef = useRef(false);
+  const segmentDragCursorRef = useRef<string | null>(null);
   const awarenessCursorFrameRef = useRef<number | null>(null);
   const latestAwarenessCursorRef = useRef<Vec2 | null>(null);
   const activeTool = useSignalValue(editor.currentToolId);
@@ -829,6 +844,7 @@ export function Canvas() {
     }
 
     isPointerDownRef.current = true;
+    segmentDragCursorRef.current = null;
     controller.isCanvasDraggingRef.current = true;
     controller.activePointerIdRef.current = event.pointerId;
     containerRef.current!.setPointerCapture(event.pointerId);
@@ -850,6 +866,10 @@ export function Canvas() {
         target: 'handle',
         handleId,
       } as any);
+      if (handleId.startsWith('ortho-segment-')) {
+        segmentDragCursorRef.current = getCursorForHandle(handleId, editor);
+        containerRef.current!.style.cursor = segmentDragCursorRef.current;
+      }
       return;
     }
 
@@ -888,7 +908,10 @@ export function Canvas() {
       : getHandleAtPagePoint(editor, page.x, page.y);
     if (containerRef.current) {
       const currentTool = editor.currentToolId.peek();
-      containerRef.current.style.cursor = getCanvasToolCursor(currentTool, handleId, event.buttons);
+      const state = editor.getCurrentTool().current.constructor as typeof StateNode;
+      const segmentCursor = state.id === 'editingOrthoRoute' ? segmentDragCursorRef.current : null;
+      containerRef.current.style.cursor = state.id === 'draggingConnectorLabel' ? 'grabbing'
+        : segmentCursor ?? getCanvasToolCursor(currentTool, handleId, event.buttons, editor);
     }
     editor.dispatchEvent({
       type: 'pointerMove', point: page, screenPoint: screen,
@@ -957,6 +980,11 @@ export function Canvas() {
     if (deferredTool && !controller.readOnlySignal.peek()) {
       controller.setCurrentTool(deferredTool);
     }
+    if (segmentDragCursorRef.current && containerRef.current) {
+      segmentDragCursorRef.current = null;
+      const handleId = controller.readOnlySignal.peek() ? null : getHandleAtPagePoint(editor, page.x, page.y);
+      containerRef.current.style.cursor = getCanvasToolCursor(editor.currentToolId.peek(), handleId, event.buttons, editor);
+    }
   }, [controller, editor, getPagePoint]);
 
   const cancelPointerInteraction = useCallback((pointerId?: number) => {
@@ -977,6 +1005,10 @@ export function Canvas() {
       editor.dispatchEvent({ type: 'keyDown', key: 'Escape' } as any);
     }
     if (editor.interactions.active) editor.interactions.cancel();
+    if (segmentDragCursorRef.current && containerRef.current) {
+      segmentDragCursorRef.current = null;
+      containerRef.current.style.cursor = getCanvasToolCursor(editor.currentToolId.peek(), null);
+    }
     isMiddleDraggingRef.current = false;
     originalToolBeforeMiddleDragRef.current = null;
     controller.deferredToolRestoreRef.current = null;
@@ -1101,6 +1133,7 @@ export function Canvas() {
               id={id}
               zIndex={zIndex}
               isEditing={editingId === id}
+              connectorEdit={editingSession?.shapeId === id && editor.getShape(id)?.type === 'arrow' ? editingSession : undefined}
             />
           ))}
         </div>

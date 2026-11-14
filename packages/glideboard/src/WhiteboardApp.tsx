@@ -10,7 +10,7 @@ import { useSignalValue } from './useSignalValue.js';
 import { BackToContentButton } from './BackToContentButton.js';
 import { CollaborationCursors } from './CollaborationCursors.js';
 import { LayersPanel } from './LayersPanel.js';
-import { ContentIngressError, normalizeClipboardText, type ShapeId } from '@durgakiran/glideline';
+import { ContentIngressError, normalizeClipboardText, type ArrowShape, type ShapeId } from '@durgakiran/glideline';
 import {
   AssetFileValidationError,
   AssetImportPanel,
@@ -234,6 +234,16 @@ export function WhiteboardApp({
   const onContextMenu = (event: React.MouseEvent) => {
     if (readOnly) return;
     event.preventDefault();
+    const canvas = controller.getCanvasElement();
+    if (canvas?.contains(event.target as Node) && editor.getSelectedShapeIds().length <= 1) {
+      const bounds = canvas.getBoundingClientRect();
+      const hit = editor.getTopShapeAtPoint(editor.screenToPage({
+        x: event.clientX - bounds.left, y: event.clientY - bounds.top,
+      }));
+      if (hit?.type === 'arrow' && (hit as ArrowShape).props.routeStyle === 'ortho') {
+        editor.setSelectedShapeIds([hit.id as ShapeId]);
+      }
+    }
     setContextMenuPosition({ x: event.clientX, y: event.clientY });
   };
 

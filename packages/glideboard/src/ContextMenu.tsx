@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from 'react';
+import { getOrthoRouteMenu, type ArrowShape, type OrthoRoutePoint, type ShapeId } from '@durgakiran/glideline';
 import { useGlideboardController } from './GlideboardContext.js';
 import { wbTheme } from './theme.js';
 
@@ -33,6 +34,23 @@ export function ContextMenu({ position, onClose }: ContextMenuProps) {
   const allFrames = selectedShapes.length > 0 && selectedShapes.every(shape => shape!.type === 'frame');
   const allLocked = selectedShapes.length > 0 && selectedShapes.every(shape => shape!.isLocked);
   const allHidden = selectedShapes.length > 0 && selectedShapes.every(shape => shape!.isHidden);
+  const arrow = selectedShapes.length === 1 && selectedShapes[0]?.type === 'arrow'
+    ? selectedShapes[0] as ArrowShape : null;
+  const canvasBounds = controller.getCanvasElement()?.getBoundingClientRect();
+  const routeMenu = arrow && canvasBounds ? getOrthoRouteMenu(editor, arrow, editor.screenToPage({
+    x: position.x - canvasBounds.left, y: position.y - canvasBounds.top,
+  })) : null;
+  const editRoute = (label: string, manualRoute: OrthoRoutePoint[] | null) => {
+    const current = arrow && editor.getShape<ArrowShape>(arrow.id as ShapeId);
+    if (current?.props.routeStyle === 'ortho' && !editor.isShapeEffectivelyLocked(current.id as ShapeId)) {
+      editor.batch(label, () => {
+        editor.updateShape<ArrowShape>(current.id as ShapeId, {
+          props: { ...current.props, manualRoute, ...(manualRoute === null ? { bend: 0 } : {}) },
+        });
+      });
+    }
+    onClose();
+  };
 
   const handlePaste = () => {
     const canvas = controller.getCanvasElement();
@@ -67,6 +85,17 @@ export function ContextMenu({ position, onClose }: ContextMenuProps) {
       }}
       onContextMenu={event => event.preventDefault()}
     >
+      {routeMenu && (routeMenu.add || routeMenu.remove !== undefined || routeMenu.canReset) && (
+        <>
+          {routeMenu.add && <MenuItem label="Add waypoint" shortcut="" disabled={false}
+            onClick={() => editRoute('Add Connector Waypoint', routeMenu.add!)} />}
+          {routeMenu.remove !== undefined && <MenuItem label="Remove waypoint" shortcut="" disabled={false}
+            onClick={() => editRoute('Remove Connector Waypoint', routeMenu.remove ?? null)} />}
+          {routeMenu.canReset && <MenuItem label="Reset route" shortcut="" disabled={false}
+            onClick={() => editRoute('Reset Connector Route', null)} />}
+          <div style={{ height: 1, background: wbTheme.border, margin: '6px 0' }} />
+        </>
+      )}
       <MenuItem label="Copy" shortcut="Cmd+C" disabled={!hasSelection} onClick={() => { editor.copy(selectedIds); onClose(); }} />
       <MenuItem label="Paste" shortcut="Cmd+V" disabled={false} onClick={handlePaste} />
       <MenuItem label="Duplicate" shortcut="Cmd+D" disabled={!hasSelection} onClick={() => { editor.duplicateShapes(selectedIds, { x: 20, y: 20 }); onClose(); }} />
