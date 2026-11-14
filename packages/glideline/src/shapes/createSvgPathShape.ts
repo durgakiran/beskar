@@ -1,3 +1,4 @@
+import { createSvgLabel } from './TextUtil.js';
 import { ShapeUtil } from './ShapeUtil.js';
 import { StateNode } from '../state-node.js';
 import type {
@@ -8,7 +9,7 @@ import { T } from '../validators.js';
 import { defineMigrations } from '../migrations.js';
 import {
   StyleValidators, STROKE_WIDTHS, STROKE_DASH_ARRAYS,
-  svgFill, resolveColor, inlinePatternDefs, createTextForeignObjectForExport,
+  svgFill, resolveColor, inlinePatternDefs,
   FONT_FAMILIES, FONT_SIZES,
   type FillStyle, type StrokeStyle, type SizeStyle, type FontSize,
   type TextAlign, type Font, type LabelProps,
@@ -141,16 +142,10 @@ export function createSvgPathShape(def: CreateSvgPathShapeDef): {
     }
 
     override toSvgExport(shape: CustomPathShape): SVGElement {
-      const g = this.toSvg(shape) as SVGGElement;
-      const { props } = shape;
-      if (props.label) {
-        g.appendChild(createTextForeignObjectForExport({
-          x: 0, y: 0, w: props.w, h: props.h,
-          text: props.label, font: props.font, fontSize: props.fontSize,
-          textAlign: props.textAlign, color: props.labelColor, verticalAlign: 'center',
-        }));
-      }
-      return g;
+      const geometry = this.toSvg(shape);
+      const label = this.getLabelProps(shape);
+      if (label?.text) geometry.appendChild(createSvgLabel(label, this.getGeometry(shape).getBounds()));
+      return geometry;
     }
   }
 

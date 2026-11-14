@@ -13,7 +13,7 @@ import {
   FONT_FAMILIES, FONT_SIZES, StyleValidators, resolveColor,
   type LabelProps, type Font, type FontSize, type TextAlign,
 } from '../styles.js';
-import type { GlideShape, Validator } from '../types.js';
+import { makeBox, type GlideShape, type Validator } from '../types.js';
 import { Geometry2d, Rectangle2d } from '../geometry/index.js';
 
 export type TextSizeMode = 'auto' | 'fixed-width' | 'fixed';
@@ -100,79 +100,65 @@ interface SvgTextChar {
   marks: readonly Record<string, unknown>[];
 }
 
-function richTextRuns(snapshot: CanvasRichTextSnapshot | undefined, fallback: string): SvgTextRun[][] {
-  if (!snapshot) return fallback.split('\n').map(text => [{ text, marks: [] }]);
-  const lines: SvgTextRun[][] = [[]];
-  const current = () => lines[lines.length - 1]!;
-  const newline = () => lines.push([]);
-  const inline = (node: unknown) => {
-    if (!node || typeof node !== 'object') return;
-    const record = node as Record<string, unknown>;
-    if (record['type'] === 'text' && typeof record['text'] === 'string') {
-      current().push({
-        text: record['text'],
-        marks: Array.isArray(record['marks'])
-          ? record['marks'].filter(mark => Boolean(mark) && typeof mark === 'object') as Record<string, unknown>[]
-          : [],
-      });
-      return;
+interface SvgTextLine {
+  runs: SvgTextRun[];
+  depth: number;
+  marker?: string;
+}
+
+function richTextLines(snapshot: CanvasRichTextSnapshot | undefined, fallback: string): SvgTextLine[] {
+  if (!snapshot) return fallback.split('\n').map(text => ({ runs: [{ text, marks: [] }], depth: 0 }));
+  const lines: SvgTextLine[] = [];
+  const children = (node: Record<string, unknown>) =>
+    Array.isArray(node.content) ? node.content.filter((child): child is Record<string, unknown> =>
+      !!child && typeof child === 'object') : [];
+  const paragraph = (node: Record<string, unknown>, depth: number, marker?: string) => {
+    let line: SvgTextLine = { depth, runs: [], ...(marker ? { marker } : {}) };
+    lines.push(line);
+    for (const child of children(node)) {
+      if (child.type === 'hardBreak') {
+        line = { depth, runs: [] };
+        lines.push(line);
+      } else if (child.type === 'text' && typeof child.text === 'string') {
+        const marks = Array.isArray(child.marks) ? child.marks.filter(mark => !!mark && typeof mark === 'object') : [];
+        line.runs.push({ text: child.text, marks });
+      }
     }
-    if (record['type'] === 'hardBreak') {
-      newline();
-      return;
-    }
-    if (Array.isArray(record['content'])) record['content'].forEach(inline);
   };
-  const block = (node: unknown, prefix = '') => {
-    if (!node || typeof node !== 'object') return;
-    const record = node as Record<string, unknown>;
-    const type = record['type'];
-    if (type === 'paragraph') {
-      if (prefix) current().push({ text: prefix, marks: [] });
-      inline(record);
-      return;
-    }
-    if (type === 'bulletList' || type === 'orderedList') {
-      const start = type === 'orderedList'
-        && record['attrs'] && typeof record['attrs'] === 'object'
-        && typeof (record['attrs'] as Record<string, unknown>)['start'] === 'number'
-        ? Number((record['attrs'] as Record<string, unknown>)['start'])
-        : 1;
-      const items = Array.isArray(record['content']) ? record['content'] : [];
-      items.forEach((item, index) => {
-        if (current().length || lines.length > 1) newline();
-        block(item, type === 'bulletList' ? '• ' : `${start + index}. `);
+  const block = (node: Record<string, unknown>, depth = 0): void => {
+    if (node.type === 'paragraph') {
+      paragraph(node, depth);
+    } else if (node.type === 'bulletList' || node.type === 'orderedList') {
+      const start = (node.attrs as { start?: number } | undefined)?.start;
+      children(node).forEach((item, index) => {
+        const marker = node.type === 'orderedList' ? `${(Number.isFinite(start) ? start! : 1) + index}.`
+          : ['•', '◦', '▪'][depth % 3]!;
+        children(item).forEach((child, childIndex) => {
+          if (child.type === 'paragraph') paragraph(child, depth + 1, childIndex === 0 ? marker : undefined);
+          else block(child, depth + 1);
+        });
       });
-      return;
-    }
-    if (type === 'listItem') {
-      const children = Array.isArray(record['content']) ? record['content'] : [];
-      children.forEach((child, index) => {
-        if (index > 0) newline();
-        block(child, index === 0 ? prefix : '');
-      });
-      return;
-    }
-    if (Array.isArray(record['content'])) {
-      record['content'].forEach((child, index) => {
-        if (index > 0) newline();
-        block(child);
-      });
+    } else if (node.type === 'doc') {
+      children(node).forEach(child => block(child, depth));
     }
   };
   block(snapshot.doc);
-  return lines.length ? lines : [[{ text: fallback, marks: [] }]];
+  return lines.length ? lines : richTextLines(undefined, fallback);
 }
 
+const CODE_FONT = 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace';
+
 function measureRunText(text: string, marks: readonly Record<string, unknown>[], fontName: string, fontSize: number): number {
-  const markTypes = new Set(marks.map(mark => mark['type']));
-  const family = markTypes.has('code') ? FONT_FAMILIES.mono : fontName;
+  const markTypes = new Set(marks.map(mark => mark.type));
+  const code = markTypes.has('code');
+  const padding = code ? fontSize * 0.36 : 0;
+  const family = code ? CODE_FONT : fontName;
   const weight = markTypes.has('bold') ? '700 ' : '';
   const style = markTypes.has('italic') ? 'italic ' : '';
   const ctx = getMeasurementContext();
-  if (!ctx) return text.length * fontSize * (markTypes.has('bold') ? 0.63 : 0.6);
+  if (!ctx) return text.length * fontSize * (markTypes.has('bold') ? 0.63 : 0.6) + padding;
   ctx.font = `${style}${weight}${fontSize}px ${family}`;
-  return ctx.measureText(text).width;
+  return ctx.measureText(text).width + padding;
 }
 
 function charsToRuns(chars: readonly SvgTextChar[]): SvgTextRun[] {
@@ -203,16 +189,30 @@ function wrapRichTextRuns(
     while (remaining.length > 0) {
       let fit = 0;
       let width = 0;
-      let lastWhitespace = -1;
+      let runText = '';
+      let runWidth = 0;
+      let runMarks: SvgTextRun['marks'] | undefined;
+      let lastBreak = -1;
       for (let index = 0; index < remaining.length; index += 1) {
         const item = remaining[index]!;
-        const nextWidth = width + measureRunText(item.char, item.marks, fontName, fontSize);
+        if (item.marks !== runMarks) {
+          runMarks = item.marks;
+          runText = '';
+          runWidth = 0;
+        }
+        runText += item.char;
+        const measured = measureRunText(runText, item.marks, fontName, fontSize);
+        const nextWidth = width - runWidth + measured;
         if (index > 0 && nextWidth > maxWidth) break;
         width = nextWidth;
+        runWidth = measured;
         fit = index + 1;
-        if (/\s/.test(item.char)) lastWhitespace = index;
+        if (/\s/.test(item.char)) lastBreak = index;
+        else if (item.char === '-') lastBreak = index + 1;
       }
-      const breakAt = fit < remaining.length && lastWhitespace > 0 ? lastWhitespace : Math.max(1, fit);
+      const atWordBoundary = fit < remaining.length && /\s/.test(remaining[fit]!.char);
+      const breakAt = !atWordBoundary && fit < remaining.length && lastBreak > 0
+        ? lastBreak : Math.max(1, fit);
       const segment = remaining.slice(0, breakAt);
       wrapped.push(charsToRuns(segment));
       remaining = remaining.slice(breakAt);
@@ -225,6 +225,78 @@ function wrapRichTextRuns(
 export function wrapPlainTextLines(text: string, width: number, fontName: string, fontSize: number): string[] {
   const lines = text.split('\n').map(line => [{ text: line, marks: [] }]);
   return wrapRichTextRuns(lines, width, fontName, fontSize).map(line => line.map(run => run.text).join(''));
+}
+
+function getExportTextLayout(shape: TextShape) {
+  const { props } = shape;
+  const fontFamily = FONT_FAMILIES[props.font] ?? FONT_FAMILIES.sans;
+  const fontSize = (FONT_SIZES[props.fontSize] ?? FONT_SIZES.md) * (props.scale ?? 1);
+  const lines = richTextLines(props.richText, props.text).flatMap(line => {
+    if (props.sizeMode === 'auto') return [line];
+    const width = Math.max(1, props.w - line.depth * fontSize * 1.5);
+    return wrapRichTextRuns([line.runs], width, fontFamily, fontSize).map((runs, index) =>
+      index === 0 ? { ...line, runs } : { runs, depth: line.depth });
+  });
+  return { fontFamily, fontSize, lines };
+}
+
+function markAttribute(mark: Record<string, unknown>, name: string): string | undefined {
+  const value = (mark.attrs as Record<string, unknown> | undefined)?.[name];
+  return typeof value === 'string' ? value : undefined;
+}
+
+function safeTextLink(value: string | undefined): string | undefined {
+  if (!value || value.length > 2048 || /[\u0000-\u001f\u007f]/.test(value)) return;
+  try {
+    const url = new URL(value);
+    if (['http:', 'https:', 'mailto:'].includes(url.protocol)) return url.href;
+  } catch {
+    return;
+  }
+}
+
+function svgElement<K extends keyof SVGElementTagNameMap>(
+  name: K, attrs: Record<string, string | number> = {}, text?: string,
+): SVGElementTagNameMap[K] {
+  const element = document.createElementNS('http://www.w3.org/2000/svg', name);
+  for (const [key, value] of Object.entries(attrs)) {
+    if (key === 'xml:space') element.setAttributeNS('http://www.w3.org/XML/1998/namespace', key, String(value));
+    else element.setAttribute(key, String(value));
+  }
+  if (text !== undefined) element.textContent = text;
+  return element;
+}
+
+let labelClipId = 0;
+
+function clipSvgText(content: SVGElement, x: number, y: number, width: number, height: number): SVGElement {
+  const id = `glideline-label-clip-${++labelClipId}`;
+  const clip = svgElement('clipPath', { id });
+  clip.append(svgElement('rect', { x, y, width, height }));
+  const group = svgElement('g');
+  content.setAttribute('clip-path', `url(#${id})`);
+  group.append(clip, content);
+  return group;
+}
+
+export function createSvgLabel(label: LabelProps, bounds: { w: number; h: number }): SVGElement {
+  const x = label.x ?? label.padding;
+  const y = label.y ?? label.padding;
+  const w = label.w ?? Math.max(0, bounds.w - label.padding * 2);
+  const h = label.h ?? Math.max(0, bounds.h - label.padding * 2);
+  const lineHeight = label.fontSize * (label.lineHeight ?? 1.35);
+  const lines = wrapPlainTextLines(label.text, Math.max(1, w), label.fontFamily, label.fontSize);
+  const text = svgElement('text', {
+    'font-family': label.fontFamily, 'font-size': label.fontSize, fill: label.color,
+    'dominant-baseline': 'central', 'xml:space': 'preserve',
+    'text-anchor': label.textAlign === 'center' ? 'middle' : label.textAlign === 'right' ? 'end' : 'start',
+  });
+  const anchor = x + (label.textAlign === 'center' ? w / 2 : label.textAlign === 'right' ? w : 0);
+  const top = y + (label.verticalAlign === 'center' ? (h - lines.length * lineHeight) / 2 : 0);
+  lines.forEach((line, index) => {
+    text.append(svgElement('tspan', { x: anchor, y: top + (index + 0.5) * lineHeight }, line));
+  });
+  return lines.length * lineHeight <= h ? text : clipSvgText(text, x, y, w, h);
 }
 
 const richTextValidator: Validator<CanvasRichTextSnapshot | undefined> = {
@@ -479,51 +551,74 @@ export class TextUtil extends ShapeUtil<TextShape> {
     } as Partial<TextShape>;
   }
 
-  /** Full SVG export using deterministic text/tspan runs. */
+  override getVisualBounds(shape: TextShape) {
+    const bounds = this.getGeometry(shape).getBounds();
+    if (shape.props.sizeMode === 'fixed') return bounds;
+    const { lines, fontSize } = getExportTextLayout(shape);
+    const lineHeight = fontSize * shape.props.lineHeight;
+    return makeBox(bounds.x, bounds.y, bounds.w, Math.max(bounds.h, lines.length * lineHeight));
+  }
+
+  /** Export editable SVG text, preserving the board's list and inline formatting. */
   override toSvgExport(shape: TextShape): SVGElement {
-    const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    const g = svgElement('g');
     if (shape.props.opacity < 1) g.setAttribute('opacity', String(shape.props.opacity));
-    const fontName = FONT_FAMILIES[shape.props.font] ?? FONT_FAMILIES.sans;
-    const fontSize = (FONT_SIZES[shape.props.fontSize] ?? FONT_SIZES.md) * (shape.props.scale ?? 1);
-    const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-    const x = shape.props.textAlign === 'left' ? 0 : shape.props.textAlign === 'center' ? shape.props.w / 2 : shape.props.w;
-    text.setAttribute('x', String(x));
-    text.setAttribute('y', '0');
-    text.setAttribute('font-family', fontName);
-    text.setAttribute('font-size', String(fontSize));
-    text.setAttribute('fill', resolveColor(shape.props.color));
-    text.setAttribute('dominant-baseline', 'hanging');
-    text.setAttribute('text-anchor', shape.props.textAlign === 'left' ? 'start' : shape.props.textAlign === 'center' ? 'middle' : 'end');
-    const sourceRuns = richTextRuns(shape.props.richText, shape.props.text);
-    const exportRuns = shape.props.sizeMode === 'auto'
-      ? sourceRuns
-      : wrapRichTextRuns(sourceRuns, shape.props.w, fontName, fontSize);
-    exportRuns.forEach((line, index) => {
-      const lineElement = document.createElementNS('http://www.w3.org/2000/svg', 'tspan');
-      lineElement.setAttribute('x', String(x));
-      lineElement.setAttribute('dy', index === 0 ? '0' : String(fontSize * shape.props.lineHeight));
-      if (line.length === 0) lineElement.textContent = ' ';
-      line.forEach(run => {
-        const runElement = document.createElementNS('http://www.w3.org/2000/svg', 'tspan');
-        const markTypes = new Set(run.marks.map(mark => mark['type']));
-        if (markTypes.has('bold')) runElement.setAttribute('font-weight', '700');
-        if (markTypes.has('italic')) runElement.setAttribute('font-style', 'italic');
-        if (markTypes.has('code')) runElement.setAttribute('font-family', FONT_FAMILIES.mono);
-        if (markTypes.has('link')) runElement.setAttribute('text-decoration', 'underline');
-        const highlight = run.marks.find(mark => mark['type'] === 'highlight');
-        if (highlight) {
-          const attrs = highlight['attrs'] as Record<string, unknown> | undefined;
-          runElement.setAttribute('paint-order', 'stroke');
-          runElement.setAttribute('stroke', typeof attrs?.['color'] === 'string' ? attrs['color'] : '#fff3a3');
-          runElement.setAttribute('stroke-width', String(fontSize * 0.75));
-          runElement.setAttribute('stroke-linejoin', 'round');
-        }
-        runElement.textContent = run.text;
-        lineElement.appendChild(runElement);
-      });
-      text.appendChild(lineElement);
+    const { fontFamily, fontSize, lines } = getExportTextLayout(shape);
+    const lineHeight = fontSize * shape.props.lineHeight;
+    const text = svgElement('text', {
+      'font-family': fontFamily,
+      'font-size': fontSize,
+      fill: resolveColor(shape.props.color),
+      'dominant-baseline': 'central',
+      'xml:space': 'preserve',
     });
-    g.appendChild(text);
-    return g;
+
+    lines.forEach(({ runs, depth, marker }, index) => {
+      const y = (index + 0.5) * lineHeight;
+      const indent = depth * fontSize * 1.5;
+      const widths = runs.map(run => measureRunText(run.text, run.marks, fontFamily, fontSize));
+      const available = shape.props.w - indent;
+      const remaining = Math.max(0, available - widths.reduce((sum, width) => sum + width, 0));
+      let x = indent + (shape.props.textAlign === 'right' ? remaining : shape.props.textAlign === 'center' ? remaining / 2 : 0);
+      const line = svgElement('tspan', { x, y });
+      if (marker) {
+        line.append(svgElement('tspan', { x: indent - fontSize * 0.35, 'text-anchor': 'end' }, marker));
+      }
+      runs.forEach((run, runIndex) => {
+        const types = new Set(run.marks.map(mark => mark.type));
+        const code = types.has('code');
+        const width = widths[runIndex]!;
+        if (code) {
+          g.append(svgElement('rect', { x, y: y - fontSize / 2, width, height: fontSize, rx: 3, fill: '#000', 'fill-opacity': 0.07 }));
+        }
+        const highlight = run.marks.find(mark => mark.type === 'highlight');
+        if (highlight) {
+          const color = markAttribute(highlight, 'color');
+          g.append(svgElement('rect', {
+            x, y: y - fontSize / 2, width, height: fontSize,
+            fill: color && /^#[0-9a-f]{3}(?:[0-9a-f]{3})?$/i.test(color) ? color : '#fff3a3',
+          }));
+        }
+        const span = svgElement('tspan', { x: x + (code ? fontSize * 0.18 : 0) }, run.text);
+        if (types.has('bold')) span.setAttribute('font-weight', '700');
+        if (types.has('italic')) span.setAttribute('font-style', 'italic');
+        if (code) span.setAttribute('font-family', CODE_FONT);
+        const link = run.marks.find(mark => mark.type === 'link');
+        const href = link && safeTextLink(markAttribute(link, 'href'));
+        if (href) {
+          span.setAttribute('fill', '#175cd3');
+          span.setAttribute('text-decoration', 'underline');
+          const anchor = svgElement('a', { href, target: '_blank', rel: 'noopener noreferrer' });
+          anchor.append(span);
+          line.append(anchor);
+        } else {
+          line.append(span);
+        }
+        x += width;
+      });
+      text.append(line);
+    });
+    g.append(text);
+    return shape.props.sizeMode === 'fixed' ? clipSvgText(g, 0, 0, shape.props.w, shape.props.h) : g;
   }
 }
