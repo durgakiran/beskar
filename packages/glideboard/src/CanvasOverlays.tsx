@@ -4,6 +4,7 @@ import {
   getArrowBendHandlePoint,
   getOrthoHandles,
   type ArrowShape,
+  type ArrowUtil,
   type GlideEditor,
   type GlideShape,
   type ResizeHandle,
@@ -87,6 +88,7 @@ export function getCursorForHandle(handleId: string, editor?: GlideEditor): stri
   if (handleId.startsWith('ortho-segment-x-')) return 'ew-resize';
   if (handleId.startsWith('ortho-segment-y-')) return 'ns-resize';
   if (handleId.startsWith('ortho-waypoint-')) return 'move';
+  if (handleId === 'connector-label') return 'grab';
   if (handleId === 'rotate' || handleId === 'bend') {
     return 'grab';
   }
@@ -128,6 +130,7 @@ export function getHandleAtPagePoint(editor: GlideEditor, pageX: number, pageY: 
 
     if (single.type === 'line') return null;
     const arrow = single as ArrowShape;
+    if (isOverConnectorLabel(editor, arrow, { x: pageX, y: pageY })) return 'connector-label';
     if (arrow.props.routeStyle === 'ortho') {
       return getOrthoHandles(editor, arrow).find(({ point }) =>
         Math.hypot(pageX - point.x, pageY - point.y) * zoom <= 8,
@@ -235,6 +238,11 @@ export function getHandleAtPagePoint(editor: GlideEditor, pageX: number, pageY: 
   }
 
   return null;
+}
+
+function isOverConnectorLabel(editor: GlideEditor, arrow: ArrowShape, point: { x: number; y: number }): boolean {
+  const util = editor.getShapeUtil('arrow') as ArrowUtil;
+  return util.hitTestLabel(arrow, editor.pageToLocal(arrow.id, point));
 }
 
 function drawGeometryOutline(
@@ -385,6 +393,7 @@ function drawSelection(editor: GlideEditor, ctx: CanvasRenderingContext2D, zoom:
     ctx.restore();
 
     for (const { point, moveAxis } of arrow ? getOrthoHandles(editor, arrow) : []) {
+      if (isOverConnectorLabel(editor, arrow!, point)) continue;
       ctx.save();
       ctx.translate(point.x, point.y);
       if (moveAxis) {
@@ -410,7 +419,7 @@ function drawSelection(editor: GlideEditor, ctx: CanvasRenderingContext2D, zoom:
     }
 
     // Curve bend handle
-    if (bendPoint) {
+    if (bendPoint && arrow && !isOverConnectorLabel(editor, arrow, bendPoint)) {
       ctx.beginPath();
       ctx.arc(bendPoint.x, bendPoint.y, 5 / zoom, 0, 2 * Math.PI);
       ctx.fillStyle = resolveColor(wbTheme.accent);

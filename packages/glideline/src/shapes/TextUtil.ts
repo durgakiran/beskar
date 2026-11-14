@@ -222,6 +222,11 @@ function wrapRichTextRuns(
   return wrapped;
 }
 
+export function wrapPlainTextLines(text: string, width: number, fontName: string, fontSize: number): string[] {
+  const lines = text.split('\n').map(line => [{ text: line, marks: [] }]);
+  return wrapRichTextRuns(lines, width, fontName, fontSize).map(line => line.map(run => run.text).join(''));
+}
+
 const richTextValidator: Validator<CanvasRichTextSnapshot | undefined> = {
   validate(value: unknown) {
     if (value === undefined) return undefined;

@@ -3,7 +3,7 @@ import { signal } from '@preact/signals';
 import type { PointerDownEvent, PointerMoveEvent, PointerUpEvent, KeyDownEvent, DoubleClickEvent } from '../state-node.js';
 import type { ShapeId, Vec2, AnyRecord } from '../types.js';
 import { makeBox } from '../types.js';
-import type { ArrowShape, ArrowProps } from '../shapes/ArrowUtil.js';
+import type { ArrowShape, ArrowProps, ArrowUtil } from '../shapes/ArrowUtil.js';
 import type { LineShape } from '../shapes/LineUtil.js';
 import type { BindingPreviewCandidate } from '../editor.js';
 import { buildArrowBindingRecord } from '../arrow-records.js';
@@ -45,6 +45,16 @@ class Idle extends StateNode {
   override onPointerDown(e: PointerDownEvent): void {
     if (e.target === 'handle' && e.handleId) {
       const sel = this.editor.getSelectedShapeIds();
+      if (e.handleId === 'connector-label' && sel.length === 1) {
+        const arrow = this.editor.getShape<ArrowShape>(sel[0]!);
+        if (arrow?.type === 'arrow' && arrow.props.label && !this.editor.isShapeEffectivelyLocked(arrow.id)) {
+          const util = this.editor.getShapeUtil('arrow') as ArrowUtil;
+          const { x, y, w, h } = util.getLabelProps(arrow);
+          const center = this.editor.localToPage(arrow.id, { x: x + w / 2, y: y + h / 2 });
+          this.parent!.transition('draggingConnectorLabel', { id: arrow.id, origin: e.point, center, position: arrow.props.labelPosition });
+        }
+        return;
+      }
       if (e.handleId.startsWith('ortho-') && sel.length === 1) {
         const arrow = this.editor.getShape<ArrowShape>(sel[0]!);
         if (arrow?.type === 'arrow') {
@@ -798,6 +808,50 @@ class DraggingLineEndpoint extends StateNode {
   override onExit(): void { this.editor.cancelHistoryPreview(); }
 }
 
+class DraggingConnectorLabel extends StateNode {
+  static override readonly id = 'draggingConnectorLabel';
+
+  private info!: { id: ShapeId; origin: Vec2; center: Vec2; position: number };
+  private dragging = false;
+
+  override onEnter(info: DraggingConnectorLabel['info']): void {
+    this.info = info;
+    this.dragging = false;
+    this.editor.beginHistoryPreview();
+  }
+
+  override onPointerMove(event: PointerMoveEvent): void {
+    this.preview(event.point);
+  }
+
+  override onPointerUp(event: PointerUpEvent): void {
+    if (this.preview(event.point)) this.editor.recordHistoryPreview('Move Connector Label');
+    this.parent!.transition('idle');
+  }
+
+  override onPointerCancel(): void { this.parent!.transition('idle'); }
+  override onKeyDown(event: KeyDownEvent): void {
+    if (event.key === 'Escape') this.parent!.transition('idle');
+  }
+  override onExit(): void { this.editor.cancelHistoryPreview(); }
+
+  private preview(point: Vec2): boolean {
+    const { id, origin, center, position } = this.info;
+    if (!this.dragging && dist(point, origin) * this.editor.camera.signal.peek().z < DRAG_THRESHOLD) return false;
+    this.dragging = true;
+    const arrow = this.editor.getShape<ArrowShape>(id);
+    if (!arrow?.props.label || this.editor.isShapeEffectivelyLocked(id)) return false;
+    const util = this.editor.getShapeUtil('arrow') as ArrowUtil;
+    const next = util.getLabelPositionAtPoint(arrow, { x: center.x + point.x - origin.x, y: center.y + point.y - origin.y });
+    if (next !== arrow.props.labelPosition) {
+      this.editor.batch('Preview Connector Label', () => {
+        this.editor.updateShape<ArrowShape>(id, { props: { ...arrow.props, labelPosition: next } });
+      }, { history: 'ignore' });
+    }
+    return next !== position;
+  }
+}
+
 class EditingOrthoRoute extends StateNode {
   static override readonly id = 'editingOrthoRoute';
 
@@ -1376,6 +1430,7 @@ export class SelectTool extends StateNode {
     PointingCanvas,
     MarqueeSelecting,
     DraggingHandle,
+    DraggingConnectorLabel,
     DraggingLineEndpoint,
     EditingOrthoRoute,
     DraggingResize,

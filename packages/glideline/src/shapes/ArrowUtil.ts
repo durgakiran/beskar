@@ -27,9 +27,14 @@ import { Geometry2d, Polyline2d } from '../geometry/index.js';
 import { resolveArrowRoute } from '../arrow-routing.js';
 import {
   StyleValidators, STROKE_WIDTHS, STROKE_DASH_ARRAYS, resolveColor,
-  FONT_FAMILIES, FONT_SIZES, createTextForeignObjectForExport,
+  FONT_FAMILIES, FONT_SIZES, estimateTextHeight, measurePlainTextWidth,
   type StrokeStyle, type SizeStyle, type Font, type FontSize, type LabelProps,
 } from '../styles.js';
+import { wrapPlainTextLines } from './TextUtil.js';
+
+let connectorLabelMaskId = 0;
+const LABEL_MAX_WIDTH = 200;
+const LABEL_LINE_HEIGHT = 1.4;
 
 const ARROW_HIT_TEST_PADDING = 8;
 
@@ -298,11 +303,12 @@ export class ArrowUtil extends ShapeUtil<ArrowShape> {
   }
 
   override getVisualBounds(shape: ArrowShape): Box2d {
-    const bounds = this.getGeometry(shape).getBounds();
+    const points = this.getLocalPathPoints(shape);
+    const bounds = new Polyline2d(points, { boundsPadding: ARROW_HIT_TEST_PADDING }).getBounds();
     if (!shape.props.label) return bounds;
-    // The route-relative label is 160×40 and its center lies on the route.
-    // Inflating once avoids resolving a smart route a second time during indexing.
-    return makeBox(bounds.minX - 80, bounds.minY - 20, bounds.w + 160, bounds.h + 40);
+    const { x, y, w, h } = this.getLabelProps(shape, points);
+    const minX = Math.min(bounds.minX, x), minY = Math.min(bounds.minY, y);
+    return makeBox(minX, minY, Math.max(bounds.maxX, x + w) - minX, Math.max(bounds.maxY, y + h) - minY);
   }
 
   /** Arrows are resized via terminal handle drags, not the standard resize UI. */
@@ -338,25 +344,42 @@ export class ArrowUtil extends ShapeUtil<ArrowShape> {
     return resolveArrowRoute(this.editor as any, shape).localPoints;
   }
 
-  override getLabelProps(shape: ArrowShape): LabelProps {
+  override getLabelProps(shape: ArrowShape, points = this.getLocalPathPoints(shape)): LabelProps & {
+    x: number; y: number; w: number; h: number;
+  } {
     const point = pointAlongPolyline(
-      this.getLocalPathPoints(shape),
+      points,
       Math.max(0, Math.min(1, shape.props.labelPosition)),
     );
+    const text = shape.props.label;
+    const fontFamily = FONT_FAMILIES[shape.props.font] ?? FONT_FAMILIES.sans;
+    const fontSize = FONT_SIZES[shape.props.fontSize] ?? FONT_SIZES.md;
+    const w = Math.min(LABEL_MAX_WIDTH, Math.max(fontSize * 1.2, Math.ceil(measurePlainTextWidth(text, fontFamily, fontSize)) + 2));
+    const h = Math.max(fontSize * LABEL_LINE_HEIGHT, estimateTextHeight({ text, w, font: fontFamily, fontSize }));
     return {
-      text: shape.props.label,
-      fontFamily: FONT_FAMILIES[shape.props.font] ?? FONT_FAMILIES.sans,
-      fontSize: FONT_SIZES[shape.props.fontSize] ?? FONT_SIZES.md,
+      text,
+      fontFamily,
+      fontSize,
       color: resolveColor(shape.props.labelColor),
       textAlign: 'center',
       verticalAlign: 'center',
-      padding: 4,
-      x: point.x - 80,
-      y: point.y - 20,
-      w: 160,
-      h: 40,
-      background: 'white',
+      padding: 0,
+      lineHeight: LABEL_LINE_HEIGHT,
+      x: point.x - w / 2,
+      y: point.y - h / 2,
+      w,
+      h,
     };
+  }
+
+  hitTestLabel(shape: ArrowShape, point: Vec2): boolean {
+    if (!shape.props.label) return false;
+    const { x, y, w, h } = this.getLabelProps(shape);
+    return point.x >= x && point.x <= x + w && point.y >= y && point.y <= y + h;
+  }
+
+  getLabelPositionAtPoint(shape: ArrowShape, pagePoint: Vec2): number {
+    return nearestPositionAlongPolyline(resolveArrowRoute(this.editor as any, shape).worldPoints, pagePoint);
   }
 
   override getTextEditProps(
@@ -365,10 +388,7 @@ export class ArrowUtil extends ShapeUtil<ArrowShape> {
   ): Readonly<Record<string, unknown>> | null {
     if (shape.props.label) return null;
     return {
-      labelPosition: nearestPositionAlongPolyline(
-        resolveArrowRoute(this.editor as any, shape).worldPoints,
-        pagePoint,
-      ),
+      labelPosition: this.getLabelPositionAtPoint(shape, pagePoint),
     };
   }
 
@@ -395,7 +415,7 @@ export class ArrowUtil extends ShapeUtil<ArrowShape> {
    * start.point = {0,0}, end.point = local offset.
    */
   override hitTestPoint(shape: ArrowShape, point: Vec2): boolean {
-    return super.hitTestPoint(shape, point);
+    return super.hitTestPoint(shape, point) || this.hitTestLabel(shape, point);
   }
 
   /**
@@ -404,7 +424,7 @@ export class ArrowUtil extends ShapeUtil<ArrowShape> {
    * The parent <g transform="translate(shape.x, shape.y)"> in Canvas.tsx
    * provides world positioning.
    */
-  toSvg(shape: ArrowShape): SVGElement {
+  toSvg(shape: ArrowShape, editingLabel = false): SVGElement {
     const {
       arrowheadStart,
       arrowheadEnd,
@@ -433,6 +453,30 @@ export class ArrowUtil extends ShapeUtil<ArrowShape> {
     path.setAttribute('fill', 'none');
     if (dashArray !== 'none') {
       path.setAttribute('stroke-dasharray', dashArray);
+    }
+    if (editingLabel || shape.props.label.trim()) {
+      const label = this.getLabelProps(shape, route.localPoints);
+      const mask = document.createElementNS(g.namespaceURI, 'mask');
+      const id = `glideline-connector-label-${++connectorLabelMaskId}`;
+      const bounds = new Polyline2d(route.localPoints, { boundsPadding: strokeW + 2 }).getBounds();
+      mask.setAttribute('id', id);
+      mask.setAttribute('maskUnits', 'userSpaceOnUse');
+      for (const [name, value] of Object.entries({ x: bounds.x, y: bounds.y, width: bounds.w, height: bounds.h })) {
+        mask.setAttribute(name, String(value));
+      }
+      const visible = document.createElementNS(g.namespaceURI, 'rect');
+      for (const name of ['x', 'y', 'width', 'height']) visible.setAttribute(name, mask.getAttribute(name)!);
+      visible.setAttribute('fill', 'white');
+      const gap = document.createElementNS(g.namespaceURI, 'rect');
+      const padding = Math.max(3, strokeW / 2);
+      gap.setAttribute('x', String(label.x - padding));
+      gap.setAttribute('y', String(label.y - padding));
+      gap.setAttribute('width', String(label.w + padding * 2));
+      gap.setAttribute('height', String(label.h + padding * 2));
+      gap.setAttribute('fill', 'black');
+      mask.append(visible, gap);
+      g.appendChild(mask);
+      path.setAttribute('mask', `url(#${id})`);
     }
     g.appendChild(path);
 
@@ -467,19 +511,25 @@ export class ArrowUtil extends ShapeUtil<ArrowShape> {
     const g = this.toSvg(shape) as SVGGElement;
     if (!shape.props.label) return g;
     const layout = this.getLabelProps(shape);
-    g.appendChild(createTextForeignObjectForExport({
-      x: layout.x ?? 0,
-      y: layout.y ?? 0,
-      w: layout.w ?? 160,
-      h: layout.h ?? 40,
-      text: shape.props.label,
-      font: layout.fontFamily,
-      fontSize: layout.fontSize,
-      textAlign: 'center',
-      color: layout.color,
-      background: layout.background,
-      verticalAlign: 'center',
-    }));
+    const text = document.createElementNS(g.namespaceURI, 'text');
+    const x = String(layout.x + layout.w / 2);
+    const lineHeight = layout.fontSize * LABEL_LINE_HEIGHT;
+    const lines = wrapPlainTextLines(layout.text, layout.w, layout.fontFamily, layout.fontSize);
+    const firstY = layout.y + (layout.h - (lines.length - 1) * lineHeight) / 2;
+    text.setAttribute('font-family', layout.fontFamily);
+    text.setAttribute('font-size', String(layout.fontSize));
+    text.setAttribute('fill', layout.color);
+    text.setAttribute('text-anchor', 'middle');
+    text.setAttribute('dominant-baseline', 'central');
+    text.setAttribute('xml:space', 'preserve');
+    lines.forEach((line, index) => {
+      const span = document.createElementNS(g.namespaceURI, 'tspan');
+      span.setAttribute('x', x);
+      span.setAttribute('y', String(firstY + index * lineHeight));
+      span.textContent = line;
+      text.appendChild(span);
+    });
+    g.appendChild(text);
     return g;
   }
 }
