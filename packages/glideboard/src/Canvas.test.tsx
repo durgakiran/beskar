@@ -606,6 +606,31 @@ describe('Canvas viewport rendering', () => {
     }
   });
 
+  it.each([0, 2])('keeps a multi-selection when opening the context menu with pointer button %i', async (button) => {
+    const platform = vi.spyOn(navigator, 'platform', 'get').mockReturnValue('MacIntel');
+    const controller = new GlideboardController({ sessionKey: 'context-menu-selection' });
+    const { editor } = controller;
+    try {
+      const first = editor.createShape({ type: 'box', x: 100, y: 120 });
+      const second = editor.createShape({ type: 'box', x: 300, y: 120 });
+      editor.setSelectedShapeIds([first, second]);
+      const dispatch = vi.spyOn(editor, 'dispatchEvent');
+      const view = setupCanvas(controller);
+      const pointer = { button, ctrlKey: button === 0, pointerType: 'mouse', pointerId: 7, clientX: 30, clientY: 40 };
+      fireEvent.pointerDown(view.canvas, pointer);
+      fireEvent.contextMenu(view.canvas, pointer);
+      fireEvent.pointerUp(view.canvas, pointer);
+
+      expect(editor.getSelectedShapeIds()).toEqual([first, second]);
+      expect(dispatch).not.toHaveBeenCalled();
+      expect(view.canvas.setPointerCapture).not.toHaveBeenCalled();
+      view.unmount();
+    } finally {
+      platform.mockRestore();
+      await controller.dispose();
+    }
+  });
+
   it('cancels pending awareness and pointer interactions through loss, blur, and unmount', async () => {
     let pendingFrame: FrameRequestCallback | null = null;
     const cancelFrame = vi.fn();
