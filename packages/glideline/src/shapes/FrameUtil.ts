@@ -1,3 +1,4 @@
+import { createSvgLabel } from './TextUtil.js';
 import { boundsAnchors, QUARTERS } from '../connection-anchors.js';
 /**
  * FrameUtil — container shape (Story 2.3)
@@ -13,7 +14,7 @@ import { defineMigrations } from '../migrations.js';
 import { makeBox } from '../types.js';
 import type { GlideShape } from '../types.js';
 import { Geometry2d, Rectangle2d } from '../geometry/index.js';
-import { createTextForeignObjectForExport, type LabelProps } from '../styles.js';
+import { type LabelProps } from '../styles.js';
 
 export interface FrameProps {
   [key: string]: unknown;
@@ -137,20 +138,9 @@ export class FrameUtil extends ShapeUtil<FrameShape> {
   }
 
   override toSvgExport(shape: FrameShape): SVGElement {
-    const g = this.toSvg(shape);
+    const geometry = this.toSvg(shape);
     const label = this.getLabelProps(shape);
-    g.appendChild(createTextForeignObjectForExport({
-      x: label.x ?? 8,
-      y: label.y ?? -26,
-      w: label.w ?? Math.max(40, shape.props.w - 16),
-      h: label.h ?? 20,
-      text: shape.props.label,
-      font: label.fontFamily,
-      fontSize: label.fontSize,
-      textAlign: 'left',
-      color: label.color,
-      verticalAlign: 'center',
-    }));
-    return g;
+    if (label?.text) geometry.appendChild(createSvgLabel(label, this.getGeometry(shape).getBounds()));
+    return geometry;
   }
 }

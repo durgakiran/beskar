@@ -7,6 +7,7 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
+import { createEditor } from './editor';
 import { BoxUtil }   from './shapes/BoxUtil';
 import { TextUtil }  from './shapes/TextUtil';
 import { FrameUtil } from './shapes/FrameUtil';
@@ -193,8 +194,10 @@ describe('T2.3-04: toSvg returns SVGElement', () => {
     expect(svg).toContain('font-weight="700"');
     expect(svg).toContain('font-style="italic"');
     expect(svg).toContain('text-decoration="underline"');
-    expect(svg).toContain('paint-order="stroke"');
-    expect(svg).toContain('1. ');
+    expect(svg).toContain('href="https://example.com/"');
+    expect(svg).toContain('fill="#fff3a3"');
+    expect(svg).toContain('fill-opacity="0.07"');
+    expect(svg).toContain('>1.</tspan>');
   });
 
   it('TextUtil.toSvgExport wraps fixed-width rich runs without dropping marks', () => {
@@ -219,6 +222,21 @@ describe('T2.3-04: toSvg returns SVGElement', () => {
     expect(Array.from(lines).every(line => line.querySelector('[font-weight="700"]'))).toBe(true);
     expect(Array.from(lines).map(line => line.textContent).join('').replace(/\s/g, ''))
       .toBe('Boldwordswraphere');
+  });
+
+  it('exports shape labels with their line breaks and alignment', () => {
+    const editor = createEditor({ plugins: [{ id: 'boxes', shapes: [BoxUtil] }] });
+    const id = editor.createShape({
+      type: 'box', x: 0, y: 0,
+      props: { w: 180, h: 100, textAlign: 'right', label: 'Review request\nOwner: Design' },
+    });
+    const svg = new DOMParser().parseFromString(editor.exportToSvg([id]), 'image/svg+xml');
+    const label = svg.querySelector('text')!;
+    expect(label.getAttribute('text-anchor')).toBe('end');
+    const lines = Array.from(label.querySelectorAll('tspan'));
+    expect(lines.map(line => line.textContent)).toEqual(['Review request', 'Owner: Design']);
+    expect(lines.map(line => line.getAttribute('x'))).toEqual(['172', '172']);
+    expect(Number(lines[1]!.getAttribute('y'))).toBeGreaterThan(Number(lines[0]!.getAttribute('y')));
   });
 
   it('TextUtil scales standalone text proportionally without enabling wrapping', () => {

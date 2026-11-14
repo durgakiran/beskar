@@ -2956,9 +2956,6 @@ export class GlideEditor {
     const h = Math.max(1, maxY - minY);
 
     return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${minX} ${minY} ${w} ${h}" width="${w}" height="${h}">
-  <style>
-    text { font-family: Inter, system-ui, sans-serif; }
-  </style>
   ${clipDefs.size ? `<defs>${[...clipDefs.values()].join('')}</defs>` : ''}
   ${elements.join('\n  ')}
 </svg>`;

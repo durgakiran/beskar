@@ -1,3 +1,4 @@
+import { createSvgLabel } from './TextUtil.js';
 import { boundsAnchors, MIDPOINT } from '../connection-anchors.js';
 /**
  * EllipseUtil — circle / oval shape (Phase A)
@@ -28,7 +29,7 @@ import type { GlideShape, Vec2, GlideProps } from '../types.js';
 import { Geometry2d, Ellipse2d } from '../geometry/index.js';
 import {
   STROKE_WIDTHS, STROKE_DASH_ARRAYS,
-  svgFill, resolveColor, inlinePatternDefs, createTextForeignObjectForExport,
+  svgFill, resolveColor, inlinePatternDefs,
   FONT_FAMILIES, FONT_SIZES,
   type FillStyle, type StrokeStyle, type SizeStyle, type FontSize,
   type TextAlign, type Font, type LabelProps,
@@ -252,23 +253,12 @@ export class EllipseUtil extends ShapeUtil<EllipseShape> {
     };
   }
 
-  /** Full SVG for export — includes foreignObject text label. */
+  /** Full SVG for export — includes the shape label. */
   override toSvgExport(shape: EllipseShape): SVGElement {
-    const g = this.toSvg(shape) as SVGGElement;
-    const { props } = shape;
-    if (props.label) {
-      const fo = createTextForeignObjectForExport({
-        x: 0, y: 0, w: props.w, h: props.h,
-        text: props.label,
-        font: props.font,
-        fontSize: props.fontSize,
-        textAlign: props.textAlign,
-        color: props.labelColor,
-        verticalAlign: 'center',
-      });
-      g.appendChild(fo);
-    }
-    return g;
+    const geometry = this.toSvg(shape);
+    const label = this.getLabelProps(shape);
+    if (label?.text) geometry.appendChild(createSvgLabel(label, this.getGeometry(shape).getBounds()));
+    return geometry;
   }
 }
 

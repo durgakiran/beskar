@@ -1,3 +1,4 @@
+import { createSvgLabel } from './TextUtil.js';
 import {
   boundsAnchors, curvePoints, geometryAnchors, interpolate, MIDPOINT, polygonPoints, QUARTERS,
   segmentPoints, type ShapeConnectionAnchor,
@@ -9,7 +10,7 @@ import type { GlideShape, GlideProps, Vec2 } from '../types.js';
 import { Geometry2d, Polygon2d, Rectangle2d } from '../geometry/index.js';
 import {
   StyleValidators, STROKE_WIDTHS, STROKE_DASH_ARRAYS,
-  svgFill, resolveColor, inlinePatternDefs, createTextForeignObjectForExport,
+  svgFill, resolveColor, inlinePatternDefs,
   FONT_FAMILIES, FONT_SIZES,
   type FillStyle, type StrokeStyle, type SizeStyle, type FontSize,
   type TextAlign, type Font, type LabelProps,
@@ -173,23 +174,12 @@ abstract class BaseGeoShapeUtil<S extends GlideShape<GeoShapeProps>> extends Sha
     };
   }
 
-  /** Full SVG for export — includes foreignObject text label. */
+  /** Full SVG for export — includes the shape label. */
   override toSvgExport(shape: S): SVGElement {
-    const g = this.toSvg(shape) as SVGGElement;
-    const { props } = shape;
-    if (props.label) {
-      const fo = createTextForeignObjectForExport({
-        x: 0, y: 0, w: props.w, h: props.h,
-        text: props.label,
-        font: props.font,
-        fontSize: props.fontSize,
-        textAlign: props.textAlign,
-        color: props.labelColor,
-        verticalAlign: 'center',
-      });
-      g.appendChild(fo);
-    }
-    return g;
+    const geometry = this.toSvg(shape);
+    const label = this.getLabelProps(shape);
+    if (label?.text) geometry.appendChild(createSvgLabel(label, this.getGeometry(shape).getBounds()));
+    return geometry;
   }
 }
 
@@ -246,20 +236,10 @@ abstract class BasePathShapeUtil<S extends GlideShape<GeoShapeProps>> extends Sh
   }
 
   override toSvgExport(shape: S): SVGElement {
-    const g = this.toSvg(shape) as SVGGElement;
-    const { props } = shape;
-    if (props.label) {
-      g.appendChild(createTextForeignObjectForExport({
-        x: 0, y: 0, w: props.w, h: props.h,
-        text: props.label,
-        font: props.font,
-        fontSize: props.fontSize,
-        textAlign: props.textAlign,
-        color: props.labelColor,
-        verticalAlign: 'center',
-      }));
-    }
-    return g;
+    const geometry = this.toSvg(shape);
+    const label = this.getLabelProps(shape);
+    if (label?.text) geometry.appendChild(createSvgLabel(label, this.getGeometry(shape).getBounds()));
+    return geometry;
   }
 }
 
