@@ -1,6 +1,8 @@
 import React, { useEffect, useRef } from 'react';
 import {
+  type LineShape,
   getArrowBendHandlePoint,
+  getOrthoHandles,
   type ArrowShape,
   type GlideEditor,
   type GlideShape,
@@ -69,7 +71,22 @@ function getSelectionData(editor: GlideEditor) {
   return { boxes, shapes };
 }
 
-export function getCursorForHandle(handleId: string): string {
+const ORTHO_RESIZE_CURSORS = ['ew-resize', 'nwse-resize', 'ns-resize', 'nesw-resize'] as const;
+
+export function getCursorForHandle(handleId: string, editor?: GlideEditor): string {
+  if (editor && handleId.startsWith('ortho-segment-')) {
+    const [id] = editor.getSelectedShapeIds();
+    const arrow = id && editor.getShape(id);
+    if (arrow?.type === 'arrow') {
+      const { a, b, c, d } = editor.transforms.getParentWorldTransform(arrow.parentId);
+      const angle = handleId.startsWith('ortho-segment-x-') ? Math.atan2(b, a) : Math.atan2(d, c);
+      const direction = Math.round(angle / (Math.PI / 4));
+      return ORTHO_RESIZE_CURSORS[(direction + 4) % 4]!;
+    }
+  }
+  if (handleId.startsWith('ortho-segment-x-')) return 'ew-resize';
+  if (handleId.startsWith('ortho-segment-y-')) return 'ns-resize';
+  if (handleId.startsWith('ortho-waypoint-')) return 'move';
   if (handleId === 'rotate' || handleId === 'bend') {
     return 'grab';
   }
@@ -97,23 +114,26 @@ export function getHandleAtPagePoint(editor: GlideEditor, pageX: number, pageY: 
   const camera = editor.camera.signal.value;
   const zoom = camera.z;
 
-  // Single arrow check
-  if (shapes.length === 1 && shapes[0]?.type === 'arrow') {
-    const arrow = shapes[0] as ArrowShape;
-    const { start, end } = arrow.props;
-    const startWorld = editor.localToPage(arrow.id as any, start.point);
-    const endWorld = editor.localToPage(arrow.id as any, end.point);
+  const single = shapes.length === 1 ? shapes[0] : undefined;
+  if (single?.type === 'arrow' || single?.type === 'line') {
+    const { start, end } = getEndpointPositions(editor, single as ArrowShape | LineShape);
 
     // Start handle
-    const distStart = Math.hypot((pageX - startWorld.x) * zoom, (pageY - startWorld.y) * zoom);
+    const distStart = Math.hypot((pageX - start.x) * zoom, (pageY - start.y) * zoom);
     if (distStart <= 8) return 'start';
 
     // End handle
-    const distEnd = Math.hypot((pageX - endWorld.x) * zoom, (pageY - endWorld.y) * zoom);
+    const distEnd = Math.hypot((pageX - end.x) * zoom, (pageY - end.y) * zoom);
     if (distEnd <= 8) return 'end';
 
-    // Bend handle
-    const bendPoint = getArrowBendHandlePoint(editor as any, arrow);
+    if (single.type === 'line') return null;
+    const arrow = single as ArrowShape;
+    if (arrow.props.routeStyle === 'ortho') {
+      return getOrthoHandles(editor, arrow).find(({ point }) =>
+        Math.hypot(pageX - point.x, pageY - point.y) * zoom <= 8,
+      )?.id ?? null;
+    }
+    const bendPoint = getArrowBendHandlePoint(editor, arrow);
     if (bendPoint) {
       const distBend = Math.hypot((pageX - bendPoint.x) * zoom, (pageY - bendPoint.y) * zoom);
       if (distBend <= 8) return 'bend';
@@ -320,19 +340,25 @@ function drawSelectedShapeOutline(
   ctx.restore();
 }
 
+function getEndpointPositions(editor: GlideEditor, shape: ArrowShape | LineShape) {
+  const { start, end } = shape.props;
+  return {
+    start: editor.localToPage(shape.id, 'point' in start ? start.point : start),
+    end: editor.localToPage(shape.id, 'point' in end ? end.point : end),
+  };
+}
+
 function drawSelection(editor: GlideEditor, ctx: CanvasRenderingContext2D, zoom: number) {
   const selData = getSelectionData(editor);
   if (!selData || selData.boxes.length === 0) return;
 
   const { boxes, shapes } = selData;
 
-  // Single arrow drawing
-  if (shapes.length === 1 && shapes[0]?.type === 'arrow') {
-    const arrow = shapes[0] as ArrowShape;
-    const { start, end } = arrow.props;
-    const bendPoint = getArrowBendHandlePoint(editor as any, arrow);
-    const startWorld = editor.localToPage(arrow.id as any, start.point);
-    const endWorld = editor.localToPage(arrow.id as any, end.point);
+  const single = shapes.length === 1 ? shapes[0] : undefined;
+  if (single?.type === 'arrow' || single?.type === 'line') {
+    const arrow = single.type === 'arrow' ? single as ArrowShape : undefined;
+    const bendPoint = arrow && arrow.props.routeStyle !== 'ortho' ? getArrowBendHandlePoint(editor, arrow) : null;
+    const { start: startWorld, end: endWorld } = getEndpointPositions(editor, single as ArrowShape | LineShape);
 
     const hs = HANDLE_SIZE / zoom;
 
@@ -358,7 +384,32 @@ function drawSelection(editor: GlideEditor, ctx: CanvasRenderingContext2D, zoom:
     ctx.strokeRect(-hs / 2, -hs / 2, hs, hs);
     ctx.restore();
 
-    // Bend handle
+    for (const { point, moveAxis } of arrow ? getOrthoHandles(editor, arrow) : []) {
+      ctx.save();
+      ctx.translate(point.x, point.y);
+      if (moveAxis) {
+        const origin = editor.pageToParent(single.parentId, point);
+        const along = editor.parentToPage(single.parentId, {
+          x: origin.x + (moveAxis === 'y' ? 1 : 0),
+          y: origin.y + (moveAxis === 'x' ? 1 : 0),
+        });
+        ctx.rotate(Math.atan2(along.y - point.y, along.x - point.x));
+      }
+      const w = (moveAxis ? 14 : 8) / zoom;
+      const h = (moveAxis ? 6 : 8) / zoom;
+      if (moveAxis && ctx.roundRect) {
+        ctx.beginPath();
+        ctx.roundRect(-w / 2, -h / 2, w, h, h / 2);
+        ctx.fill();
+        ctx.stroke();
+      } else {
+        ctx.fillRect(-w / 2, -h / 2, w, h);
+        ctx.strokeRect(-w / 2, -h / 2, w, h);
+      }
+      ctx.restore();
+    }
+
+    // Curve bend handle
     if (bendPoint) {
       ctx.beginPath();
       ctx.arc(bendPoint.x, bendPoint.y, 5 / zoom, 0, 2 * Math.PI);

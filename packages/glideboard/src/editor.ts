@@ -1,5 +1,7 @@
 import {
   ArrowPlugin,
+  LinePlugin,
+  LineTool,
   BoxTool,
   DrawTool,
   EllipseTool,
@@ -65,6 +67,7 @@ export function createGlideboardEditorInstance(
       CoreShapesPlugin,
       GeoShapePlugin,
       ArrowPlugin,
+      LinePlugin,
       P1ShapesPlugin,
       AssetPlacementPlugin,
       ...extraPlugins,
@@ -78,6 +81,7 @@ export function createGlideboardEditorInstance(
       HexagonTool,
       StarTool,
       ArrowTool,
+      LineTool,
       HandTool,
       EllipseTool,
       TextTool,

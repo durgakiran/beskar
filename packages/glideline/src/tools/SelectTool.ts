@@ -4,9 +4,11 @@ import type { PointerDownEvent, PointerMoveEvent, PointerUpEvent, KeyDownEvent, 
 import type { ShapeId, Vec2, AnyRecord } from '../types.js';
 import { makeBox } from '../types.js';
 import type { ArrowShape, ArrowProps } from '../shapes/ArrowUtil.js';
+import type { LineShape } from '../shapes/LineUtil.js';
 import type { BindingPreviewCandidate } from '../editor.js';
 import { buildArrowBindingRecord } from '../arrow-records.js';
 import { resolveBindingCandidate } from '../binding-candidate.js';
+import { getOrthoDrag, pruneOrthoRouteAfterReconnect } from '../ortho-editing.js';
 import type { ResizeHandle, ResizeInfo } from '../shapes/ShapeUtil.js';
 import {
   applyMatrixToPoint,
@@ -43,12 +45,28 @@ class Idle extends StateNode {
   override onPointerDown(e: PointerDownEvent): void {
     if (e.target === 'handle' && e.handleId) {
       const sel = this.editor.getSelectedShapeIds();
+      if (e.handleId.startsWith('ortho-') && sel.length === 1) {
+        const arrow = this.editor.getShape<ArrowShape>(sel[0]!);
+        if (arrow?.type === 'arrow') {
+          const edit = getOrthoDrag(this.editor, arrow, e.handleId);
+          if (edit) this.parent!.transition('editingOrthoRoute', { arrow, origin: e.point, edit });
+        }
+        return;
+      }
       
       // Arrow handles
       if (['start', 'end', 'bend'].includes(e.handleId)) {
         if (sel.length === 1) {
           const id = sel[0]!;
           const shape = this.editor.getShape(id);
+          if (shape?.type === 'line' && (e.handleId === 'start' || e.handleId === 'end')) {
+            if (!this.editor.isShapeEffectivelyLocked(id)) {
+              this.parent!.transition('draggingLineEndpoint', {
+                line: shape as LineShape, endpoint: e.handleId, origin: e.point,
+              });
+            }
+            return;
+          }
           if (shape && shape.type === 'arrow') {
             const bindings = this.editor.getBindingsFromShape(id) || [];
             const b = bindings.find((b: any) => b.props.terminal === e.handleId);
@@ -635,6 +653,19 @@ class DraggingHandle extends StateNode {
               fromEdge: this.editor.transforms.getAnchorPageEdge(candidate.targetId, candidate.normalizedAnchor, candidate.anchorMode),
             }));
           }
+          const updated = this.editor.getShape<ArrowShape>(this._arrowId)!;
+          const previous = this._initialArrow.props[term];
+          const current = updated.props[term];
+          if (previous.boundShapeId !== current.boundShapeId
+            || previous.normalizedAnchor.x !== current.normalizedAnchor.x
+            || previous.normalizedAnchor.y !== current.normalizedAnchor.y
+            || this._initialArrow.x + previous.point.x !== updated.x + current.point.x
+            || this._initialArrow.y + previous.point.y !== updated.y + current.point.y) {
+            const manualRoute = pruneOrthoRouteAfterReconnect(this.editor, updated);
+            if (manualRoute !== undefined) {
+              this.editor.updateShape<ArrowShape>(this._arrowId, { props: { ...updated.props, manualRoute } });
+            }
+          }
         }
       },
       { history: 'ignore' },
@@ -716,8 +747,107 @@ class DraggingHandle extends StateNode {
 }
 
 // ─────────────────────────────────────────────────────────────
-// PointingCanvas
+// EditingOrthoRoute
 // ─────────────────────────────────────────────────────────────
+
+class DraggingLineEndpoint extends StateNode {
+  static override readonly id = 'draggingLineEndpoint';
+
+  private info!: { line: LineShape; endpoint: 'start' | 'end'; origin: Vec2 };
+  private fixedPage!: Vec2;
+  private initialTransform!: Matrix2d;
+
+  override onEnter(info: DraggingLineEndpoint['info']): void {
+    this.info = info;
+    const { line, endpoint } = info;
+    this.fixedPage = this.editor.localToPage(line.id, line.props[endpoint === 'start' ? 'end' : 'start']);
+    this.initialTransform = invertMatrix(this.editor.getWorldTransform(line.id));
+    this.editor.beginHistoryPreview();
+  }
+
+  override onPointerMove(event: PointerMoveEvent | PointerUpEvent): void {
+    const { line, endpoint, origin } = this.info;
+    const current = this.editor.getShape<LineShape>(line.id);
+    if (!current || this.editor.isShapeEffectivelyLocked(line.id)) return;
+    const initial = applyMatrixToPoint(this.initialTransform, origin);
+    const pointer = applyMatrixToPoint(this.initialTransform, event.point);
+    const oldPoint = line.props[endpoint];
+    const props = {
+      ...current.props,
+      [endpoint]: { x: oldPoint.x + pointer.x - initial.x, y: oldPoint.y + pointer.y - initial.y },
+    };
+    const fixedLocal = props[endpoint === 'start' ? 'end' : 'start'];
+    const placement = this.editor.transforms.getTranslationForLocalPoint(
+      { ...current, props }, fixedLocal, this.fixedPage,
+    );
+    this.editor.batch('Preview Line Endpoint', () => {
+      this.editor.updateShape<LineShape>(line.id, { ...placement, props });
+    }, { history: 'ignore' });
+  }
+
+  override onPointerUp(event: PointerUpEvent): void {
+    this.onPointerMove(event);
+    this.editor.recordHistoryPreview('Move Line Endpoint');
+    this.parent!.transition('idle');
+  }
+
+  override onPointerCancel(): void { this.parent!.transition('idle'); }
+  override onKeyDown(event: KeyDownEvent): void {
+    if (event.key === 'Escape') this.parent!.transition('idle');
+  }
+  override onExit(): void { this.editor.cancelHistoryPreview(); }
+}
+
+class EditingOrthoRoute extends StateNode {
+  static override readonly id = 'editingOrthoRoute';
+
+  private _info!: {
+    arrow: ArrowShape;
+    origin: Vec2;
+    edit: NonNullable<ReturnType<typeof getOrthoDrag>>;
+  };
+
+  override onEnter(info: EditingOrthoRoute['_info']): void {
+    this._info = info;
+    this.editor.beginHistoryPreview();
+  }
+
+  override onPointerMove(e: PointerMoveEvent): void {
+    this._preview(e.point);
+  }
+
+  override onPointerUp(e: PointerUpEvent): void {
+    if (this._preview(e.point)) this.editor.recordHistoryPreview('Edit Connector Route');
+    this.parent!.transition('idle');
+  }
+
+  override onPointerCancel(): void {
+    this.parent!.transition('idle');
+  }
+
+  override onKeyDown(e: KeyDownEvent): void {
+    if (e.key === 'Escape') this.parent!.transition('idle');
+  }
+
+  override onExit(): void {
+    this.editor.cancelHistoryPreview();
+  }
+
+  private _preview(pointer: Vec2): boolean {
+    const { arrow, origin, edit } = this._info;
+    const id = arrow.id as ShapeId;
+    const current = this.editor.getShape<ArrowShape>(id);
+    if (!current || current.props.routeStyle !== 'ortho' || this.editor.isShapeEffectivelyLocked(id)) return false;
+    const delta = this.editor.pageDeltaToParent(arrow.parentId, { x: pointer.x - origin.x, y: pointer.y - origin.y });
+    const manualRoute = edit(delta);
+    if (manualRoute === current.props.manualRoute) return manualRoute !== arrow.props.manualRoute;
+    const props = { ...current.props, manualRoute: manualRoute ?? null };
+    this.editor.batch('Preview Connector Route', () => {
+      this.editor.updateShape<ArrowShape>(id, { props });
+    }, { history: 'ignore' });
+    return manualRoute !== arrow.props.manualRoute;
+  }
+}
 
 class PointingCanvas extends StateNode {
   static override readonly id = 'pointingCanvas';
@@ -988,6 +1118,11 @@ class DraggingResize extends StateNode {
         this.editor.updateShape<ArrowShape>(id, {
           x: start.x, y: start.y, props: {
             ...arrow.props,
+            ...(arrow.props.manualRoute ? { manualRoute: arrow.props.manualRoute.map(point => ({
+              ...point,
+              ...this.editor.pageToParent(shape.parentId, applyMatrixToPoint(scaleWorld,
+                applyMatrixToPoint(initial.worldTransform, { x: point.x - arrow.x, y: point.y - arrow.y }))),
+            })) } : {}),
             start: { ...arrow.props.start, point: { x: 0, y: 0 } },
             end: { ...arrow.props.end, point: { x: end.x - start.x, y: end.y - start.y } },
           },
@@ -1206,6 +1341,11 @@ class DraggingRotation extends StateNode {
           x: start.x, y: start.y, rotation: 0,
           props: {
             ...arrow.props,
+            ...(arrow.props.manualRoute ? { manualRoute: arrow.props.manualRoute.map(point => ({
+              ...point,
+              ...this.editor.pageToParent(arrow.parentId, applyMatrixToPoint(orbit,
+                applyMatrixToPoint(initialWorld, { x: point.x - arrow.x, y: point.y - arrow.y }))),
+            })) } : {}),
             start: { ...arrow.props.start, point: { x: 0, y: 0 } },
             end: { ...arrow.props.end, point: { x: end.x - start.x, y: end.y - start.y } },
           },
@@ -1236,6 +1376,8 @@ export class SelectTool extends StateNode {
     PointingCanvas,
     MarqueeSelecting,
     DraggingHandle,
+    DraggingLineEndpoint,
+    EditingOrthoRoute,
     DraggingResize,
     DraggingRotation,
   ];
