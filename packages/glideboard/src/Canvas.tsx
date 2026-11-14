@@ -815,6 +815,10 @@ export function Canvas() {
 
   const onPointerDown = useCallback((event: React.PointerEvent) => {
     if (event.button !== 0 && event.button !== 1) return;
+    // macOS reports Control-click as a primary pointer press before contextmenu.
+    // Let that menu open without starting a canvas selection or transform.
+    if (event.button === 0 && event.ctrlKey && event.pointerType === 'mouse'
+      && navigator.platform.startsWith('Mac')) return;
 
     if (event.button === 1) {
       if (readOnly) return;
@@ -917,6 +921,7 @@ export function Canvas() {
   }, [controller, editingId]);
 
   const onPointerUp = useCallback((event: React.PointerEvent) => {
+    if (!isPointerDownRef.current || event.pointerId !== controller.activePointerIdRef.current) return;
     isPointerDownRef.current = false;
     controller.activePointerIdRef.current = null;
 

@@ -28,8 +28,7 @@ export function ContextMenu({ position, onClose }: ContextMenuProps) {
   const selectedIds = editor.getSelectedShapeIds();
   const hasSelection = selectedIds.length > 0;
   const selectedShapes = selectedIds.map(id => editor.getShape(id)).filter(Boolean);
-  const canGroup = selectedShapes.length >= 2
-    && selectedShapes.every(shape => shape!.parentId === selectedShapes[0]!.parentId);
+  const canGroup = editor.canGroupShapes(selectedIds);
   const allGroups = selectedShapes.length > 0 && selectedShapes.every(shape => shape!.type === 'group');
   const allFrames = selectedShapes.length > 0 && selectedShapes.every(shape => shape!.type === 'frame');
   const allLocked = selectedShapes.length > 0 && selectedShapes.every(shape => shape!.isLocked);

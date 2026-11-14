@@ -39,6 +39,35 @@ function createPng(width: number, height: number): Uint8Array {
 }
 
 describe('WhiteboardApp shortcut boundaries', () => {
+  it('groups siblings inside a frame but leaves a frame and its child selected', () => {
+    const controller = new GlideboardController({ sessionKey: 'frame-group-shortcut' });
+    const { editor } = controller;
+    try {
+      const frame = editor.createShape({ type: 'frame', x: 0, y: 0 });
+      const first = editor.createShape({ type: 'box', x: 20, y: 20, parentId: frame });
+      const second = editor.createShape({ type: 'box', x: 160, y: 20, parentId: frame });
+      const view = render(
+        <GlideboardProvider controller={controller}>
+          <WhiteboardApp />
+        </GlideboardProvider>,
+      );
+      const app = view.container.querySelector<HTMLElement>('[data-glideboard-role="app"]')!;
+
+      act(() => editor.setSelectedShapeIds([frame, first]));
+      fireEvent.keyDown(app, { key: 'g', ctrlKey: true });
+      expect(editor.getSelectedShapeIds()).toEqual([frame, first]);
+      expect(editor.getChildren(frame).map(shape => shape.id)).toEqual([first, second]);
+
+      act(() => editor.setSelectedShapeIds([first, second]));
+      fireEvent.keyDown(app, { key: 'g', ctrlKey: true });
+      const [groupId] = editor.getSelectedShapeIds();
+      expect(editor.getShape(groupId!)).toMatchObject({ type: 'group', parentId: frame });
+      expect(editor.getChildren(groupId!).map(shape => shape.id)).toEqual([first, second]);
+    } finally {
+      void controller.dispose();
+    }
+  });
+
   it('guards native capture and React shortcuts while raster drafts remain focused and uncommitted', () => {
     const controller = new GlideboardController({ sessionKey: 'asset-shortcut-boundary' });
     const captureKeys: string[] = [];
