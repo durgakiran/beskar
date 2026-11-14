@@ -9,7 +9,7 @@
  *   - Same edge (right→right, left→left, etc.): U-bend (5 segments)
  *   - Adjacent edges (right→top, top→right, etc.): L-path (2 turns)
  *
- * Overlap fallback: straight line.
+ * Callers can opt into elbow routing for overlapping bounds.
  */
 
 import type { Box2d, EdgeName, Vec2 } from './types.js';
@@ -42,7 +42,8 @@ function pointsToPath(pts: Vec2[]): string {
 
 /** Check whether two bounding boxes overlap. */
 function boxesOverlap(a: Box2d, b: Box2d): boolean {
-  return a.minX < b.maxX && a.maxX > b.minX &&
+  return a.w > 0 && a.h > 0 && b.w > 0 && b.h > 0 &&
+         a.minX < b.maxX && a.maxX > b.minX &&
          a.minY < b.maxY && a.maxY > b.minY;
 }
 
@@ -58,12 +59,13 @@ export function computeElbowPath(
   toEdge: EdgeName,
   bend = 0,
   endpoints?: { start: Vec2; end: Vec2 },
+  routeOverlap = false,
 ): string {
   const start = endpoints?.start ?? edgePoint(fromBounds, fromEdge);
   const end = endpoints?.end ?? edgePoint(toBounds, toEdge);
 
   // Overlap fallback still starts and ends at the chosen attachment points.
-  if (boxesOverlap(fromBounds, toBounds)) {
+  if (!routeOverlap && boxesOverlap(fromBounds, toBounds)) {
     return pointsToPath([start, end]);
   }
 

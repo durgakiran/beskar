@@ -1,3 +1,4 @@
+import type { OrthoRoutePoint } from '../ortho-editing.js';
 import type { ConnectionAnchorMode } from '../connection-anchors.js';
 /**
  * Glideline — ArrowUtil + ArrowBindingUtil (Phase 4, Story 4.4)
@@ -59,6 +60,7 @@ export interface ArrowProps {
   routeStyle: ArrowRouteStyle;
   /** Bend scalar for arc router. 0 = straight. */
   bend: number;
+  manualRoute?: OrthoRoutePoint[] | null;
   arrowheadStart: ArrowheadStyle;
   arrowheadEnd: ArrowheadStyle;
   color: string;
@@ -130,6 +132,17 @@ export class ArrowUtil extends ShapeUtil<ArrowShape> {
     end:         terminalValidator,
     routeStyle:  routeStyleValidator,
     bend:        T.number,
+    manualRoute: T.optional({
+      validate(value: unknown): OrthoRoutePoint[] | null {
+        if (value === null) return null;
+        if (!Array.isArray(value) || value.some(point => !point
+          || !Number.isFinite(point.x) || !Number.isFinite(point.y)
+          || !['bend', 'segment', 'waypoint'].includes(point.kind))) {
+          throw new Error('Arrow manualRoute must contain finite Ortho route points');
+        }
+        return value;
+      },
+    }),
     arrowheadStart: arrowheadStyleValidator,
     arrowheadEnd: arrowheadStyleValidator,
     color:       T.string,
@@ -305,6 +318,11 @@ export class ArrowUtil extends ShapeUtil<ArrowShape> {
       ...base,
       props: {
         ...arr.props,
+        ...(arr.props.manualRoute ? { manualRoute: arr.props.manualRoute.map(point => ({
+          ...point,
+          x: base.x + (point.x - arr.x) * scaleX,
+          y: base.y + (point.y - arr.y) * scaleY,
+        })) } : {}),
         end: {
           ...arr.props.end,
           point: {

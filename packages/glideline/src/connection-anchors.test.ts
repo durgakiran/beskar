@@ -94,7 +94,9 @@ describe('connector binding points', () => {
 
     const arrow = editor.getShape<ArrowShape>(editor.getSelectedShapeIds()[0]!)!;
     expect(editor.getBindingsFromShape(arrow.id as ShapeId).map(b => b.toId)).toEqual([inner, outer]);
-    expect(resolveArrowRoute(editor, arrow).worldPoints).toEqual([{ x: 125, y: 100 }, { x: 400, y: 80 }]);
+    expect(resolveArrowRoute(editor, arrow).worldPoints).toEqual([
+      { x: 125, y: 100 }, { x: 125, y: 80 }, { x: 400, y: 80 },
+    ]);
     expect(editor.bindingPreview.peek()).toBeNull();
   });
 

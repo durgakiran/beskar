@@ -147,6 +147,8 @@ export {
 } from './shapes/ArrowUtil.js';
 export type { ArrowProps, ArrowShape, ArrowTerminal, ArrowBindingProps, ArrowBinding, ArrowRouteStyle } from './shapes/ArrowUtil.js';
 export { ArrowTool, ArrowIdle } from './tools/ArrowTool.js';
+export { LineUtil, LinePlugin, type LineShape, type LineProps } from './shapes/LineUtil.js';
+export { LineTool } from './tools/LineTool.js';
 export {
   SmartRouterCache,
   getWorldBounds,
@@ -272,3 +274,6 @@ export type {
   MutationCapability,
   MutationCapabilityGrant,
 } from './mutation-policy.js';
+
+export { getOrthoHandles, getOrthoRouteMenu } from './ortho-editing.js';
+export type { OrthoHandle, OrthoRoutePoint } from './ortho-editing.js';

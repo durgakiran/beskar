@@ -60,12 +60,13 @@ const SHAPE_TOOLS: ToolDef[] = [
   { id: 'cylinder', label: 'Cylinder', icon: LuDatabase },
   { id: 'note', label: 'Note', icon: LuStickyNote },
   { id: 'callout', label: 'Callout', icon: LuMessageSquare },
+  { id: 'line', label: 'Line', icon: FiMinus },
 ];
 
 const SHAPE_TOOL_IDS = new Set(SHAPE_TOOLS.map(tool => tool.id));
 
 const ARROW_TOOLS: Array<ToolDef & { preset: ConnectorPreset }> = [
-  { id: 'connector-line', label: 'Line', shortcut: 'A', icon: FiMinus, preset: 'line' },
+  { id: 'connector-line', label: 'Plain Connector', shortcut: 'A', icon: FiMinus, preset: 'line' },
   { id: 'connector-arrow', label: 'Arrow', icon: FiArrowRight, preset: 'arrow' },
   { id: 'connector-double-arrow', label: 'Double Arrow', icon: FiRepeat, preset: 'double-arrow' },
 ];

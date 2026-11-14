@@ -9,6 +9,7 @@ import type {
   Vec2,
   LabelProps,
   RichTextDescriptor,
+  StateNode,
   TextEditSession,
 } from '@durgakiran/glideline';
 import { FONT_FAMILIES } from '@durgakiran/glideline';
@@ -28,10 +29,10 @@ const LazyCanvasTextEditor = React.lazy(async () => {
   return { default: module.CanvasTextEditor };
 });
 
-export function getCanvasToolCursor(tool: string | undefined, handleId: string | null, buttons = 0): string {
+export function getCanvasToolCursor(tool: string | undefined, handleId: string | null, buttons = 0, editor?: GlideEditor): string {
   if (tool === 'hand') return buttons === 1 ? 'grabbing' : 'grab';
-  if (tool === 'asset') return 'crosshair';
-  return handleId ? getCursorForHandle(handleId) : 'default';
+  if (tool === 'asset' || tool === 'line') return 'crosshair';
+  return handleId ? getCursorForHandle(handleId, editor) : 'default';
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -327,7 +328,7 @@ const EraserPreviewShape = memo(({ id, zoom }: { id: ShapeId; zoom: number }) =>
   const points = editor.transforms.getWorldOutline(id);
   if (points.length === 0) return null;
   const serialized = points.map(point => `${point.x},${point.y}`).join(' ');
-  const open = shape.type === 'arrow' || shape.type === 'freehand';
+  const open = shape.type === 'arrow' || shape.type === 'line' || shape.type === 'freehand';
   return open ? (
     <polyline
       points={serialized}
@@ -723,6 +724,7 @@ export function Canvas() {
   const isMiddleDraggingRef = useRef(false);
   const originalToolBeforeMiddleDragRef = useRef<string | null>(null);
   const isPointerDownRef = useRef(false);
+  const segmentDragCursorRef = useRef<string | null>(null);
   const awarenessCursorFrameRef = useRef<number | null>(null);
   const latestAwarenessCursorRef = useRef<Vec2 | null>(null);
   const activeTool = useSignalValue(editor.currentToolId);
@@ -829,6 +831,7 @@ export function Canvas() {
     }
 
     isPointerDownRef.current = true;
+    segmentDragCursorRef.current = null;
     controller.isCanvasDraggingRef.current = true;
     controller.activePointerIdRef.current = event.pointerId;
     containerRef.current!.setPointerCapture(event.pointerId);
@@ -850,6 +853,10 @@ export function Canvas() {
         target: 'handle',
         handleId,
       } as any);
+      if (handleId.startsWith('ortho-segment-')) {
+        segmentDragCursorRef.current = getCursorForHandle(handleId, editor);
+        containerRef.current!.style.cursor = segmentDragCursorRef.current;
+      }
       return;
     }
 
@@ -888,7 +895,9 @@ export function Canvas() {
       : getHandleAtPagePoint(editor, page.x, page.y);
     if (containerRef.current) {
       const currentTool = editor.currentToolId.peek();
-      containerRef.current.style.cursor = getCanvasToolCursor(currentTool, handleId, event.buttons);
+      const state = editor.getCurrentTool().current.constructor as typeof StateNode;
+      const segmentCursor = state.id === 'editingOrthoRoute' ? segmentDragCursorRef.current : null;
+      containerRef.current.style.cursor = segmentCursor ?? getCanvasToolCursor(currentTool, handleId, event.buttons, editor);
     }
     editor.dispatchEvent({
       type: 'pointerMove', point: page, screenPoint: screen,
@@ -957,6 +966,11 @@ export function Canvas() {
     if (deferredTool && !controller.readOnlySignal.peek()) {
       controller.setCurrentTool(deferredTool);
     }
+    if (segmentDragCursorRef.current && containerRef.current) {
+      segmentDragCursorRef.current = null;
+      const handleId = controller.readOnlySignal.peek() ? null : getHandleAtPagePoint(editor, page.x, page.y);
+      containerRef.current.style.cursor = getCanvasToolCursor(editor.currentToolId.peek(), handleId, event.buttons, editor);
+    }
   }, [controller, editor, getPagePoint]);
 
   const cancelPointerInteraction = useCallback((pointerId?: number) => {
@@ -977,6 +991,10 @@ export function Canvas() {
       editor.dispatchEvent({ type: 'keyDown', key: 'Escape' } as any);
     }
     if (editor.interactions.active) editor.interactions.cancel();
+    if (segmentDragCursorRef.current && containerRef.current) {
+      segmentDragCursorRef.current = null;
+      containerRef.current.style.cursor = getCanvasToolCursor(editor.currentToolId.peek(), null);
+    }
     isMiddleDraggingRef.current = false;
     originalToolBeforeMiddleDragRef.current = null;
     controller.deferredToolRestoreRef.current = null;

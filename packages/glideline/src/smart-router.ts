@@ -434,7 +434,9 @@ export function computeFallbackLocalElbowPoints(
     maxY: toBoundsWorld.maxY - arrow.y,
   };
 
-  return parseElbowPoints(computeElbowPath(fromBounds, toBounds, fromEdge, toEdge, arrow.props.bend, endpoints));
+  return parseElbowPoints(computeElbowPath(
+    fromBounds, toBounds, fromEdge, toEdge, arrow.props.bend, endpoints, arrow.props.routeStyle === 'ortho',
+  ));
 }
 
 export function offsetOrthogonalPolyline(points: Vec2[], offset: number): Vec2[] {
@@ -511,17 +513,75 @@ export function simplifyCollinear(points: Vec2[]): Vec2[] {
   return simplified;
 }
 
+/** Repair an elbow that crosses either of the two shapes it connects. */
+export function routeAroundConnectorTerminals(
+  points: Vec2[], from: Box2d, to: Box2d, fromEdge: EdgeName, toEdge: EdgeName,
+  preserveManualRoute = false,
+): Vec2[] {
+  if (from.minX < to.maxX && from.maxX > to.minX && from.minY < to.maxY && from.maxY > to.minY) return points;
+  const obstacles = [from, to];
+  if (points.slice(1).every((point, index) => segmentClear(points[index]!, point, obstacles))) return points;
+
+  const lead = (anchor: Vec2, box: Box2d, edge: EdgeName): Vec2 => {
+    switch (edge) {
+      case 'left': return { x: box.minX, y: anchor.y };
+      case 'right': return { x: box.maxX, y: anchor.y };
+      case 'top': return { x: anchor.x, y: box.minY };
+      case 'bottom': return { x: anchor.x, y: box.maxY };
+    }
+  };
+  const connect = (start: Vec2, end: Vec2, atStart: boolean, atEnd: boolean): Vec2[] | null => {
+    // Fall back to the outline when a manual vertex or a narrow gap
+    // leaves no room for clearance.
+    for (const padding of [12, 0]) {
+      const bounds = obstacles.map(box => expandBox(box, padding));
+      const startLead = atStart ? lead(start, bounds[0]!, fromEdge) : start;
+      const endLead = atEnd ? lead(end, bounds[1]!, toEdge) : end;
+      if (!segmentClear(start, startLead, [to]) || !segmentClear(end, endLead, [from])) continue;
+      const route = computeOrthogonalRoute({
+        start: startLead, end: endLead, obstacles: bounds, exactCoordinates: true,
+        deadline: Infinity, now: () => 0,
+      });
+      if (route) return simplifyCollinear([start, ...route, end]);
+    }
+    return null;
+  };
+
+  const start = points[0]!;
+  const end = points[points.length - 1]!;
+  if (!preserveManualRoute) return connect(start, end, true, true) ?? points;
+
+  // Work on the displayed route only. Controls covered by a terminal
+  // can reappear when the shape moves away.
+  const vertices = [start, ...points.slice(1, -1).filter(point =>
+    !obstacles.some(box => pointInsideBoxInterior(point, box))), end];
+  const repaired = [start];
+  for (let index = 1; index < vertices.length; index++) {
+    const a = vertices[index - 1]!, b = vertices[index]!;
+    const aligned = Math.abs(a.x - b.x) < EPSILON || Math.abs(a.y - b.y) < EPSILON;
+    if (aligned && segmentClear(a, b, obstacles)) {
+      repaired.push(b);
+      continue;
+    }
+    const bypass = connect(a, b, index === 1, index === vertices.length - 1);
+    if (!bypass) return points;
+    repaired.push(...bypass.slice(1, -1), b);
+  }
+  return repaired;
+}
+
 function computeOrthogonalRoute(args: {
   start: Vec2;
   end: Vec2;
   obstacles: Box2d[];
   deadline: number;
   now: () => number;
+  exactCoordinates?: boolean;
 }): Vec2[] | null {
-  const start = { x: round(args.start.x), y: round(args.start.y) };
-  const end = { x: round(args.end.x), y: round(args.end.y) };
-  const xs = uniqueSorted([start.x, end.x, ...args.obstacles.flatMap(box => [box.minX, box.maxX])]);
-  const ys = uniqueSorted([start.y, end.y, ...args.obstacles.flatMap(box => [box.minY, box.maxY])]);
+  const start = args.exactCoordinates ? args.start : { x: round(args.start.x), y: round(args.start.y) };
+  const end = args.exactCoordinates ? args.end : { x: round(args.end.x), y: round(args.end.y) };
+  const xs = uniqueSorted([start.x, end.x, ...args.obstacles.flatMap(box => [box.minX, box.maxX])], args.exactCoordinates);
+  const ys = uniqueSorted([start.y, end.y, ...args.obstacles.flatMap(box => [box.minY, box.maxY])], args.exactCoordinates);
   const nodeCount = xs.length * ys.length;
   if (nodeCount === 0 || nodeCount > MAX_GRID_NODES) {
     return null;
@@ -662,8 +722,8 @@ function decodeAxis(state: number): number {
   return state % 3;
 }
 
-function uniqueSorted(values: number[]): number[] {
-  return Array.from(new Set(values.map(round))).sort((a, b) => a - b);
+function uniqueSorted(values: number[], exact = false): number[] {
+  return Array.from(new Set(exact ? values : values.map(round))).sort((a, b) => a - b);
 }
 
 function expandBox(box: Box2d, padding: number): Box2d {
