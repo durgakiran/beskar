@@ -385,6 +385,7 @@ const TOOL_DEFINITIONS = [
           toId: fromId,
           terminal: 'start',
           normalizedAnchor: start.normalizedAnchor,
+          anchorMode: start.anchorMode,
           fromEdge: start.fromEdge,
         }));
         editor.createBinding(buildArrowBindingRecord({
@@ -392,6 +393,7 @@ const TOOL_DEFINITIONS = [
           toId: toId,
           terminal: 'end',
           normalizedAnchor: end.normalizedAnchor,
+          anchorMode: end.anchorMode,
           fromEdge: end.fromEdge,
         }));
         editor.updateShape(fromId, { x: fromShape.x });
@@ -489,8 +491,8 @@ const TOOL_DEFINITIONS = [
           };
 
           editor.createShape(arrow as unknown as AnyRecord);
-          editor.createBinding(buildArrowBindingRecord({ fromId: arrowId, toId: fromCanvasId, terminal: 'start', normalizedAnchor: start.normalizedAnchor, fromEdge: start.fromEdge }));
-          editor.createBinding(buildArrowBindingRecord({ fromId: arrowId, toId: toCanvasId,   terminal: 'end',   normalizedAnchor: end.normalizedAnchor, fromEdge: end.fromEdge }));
+          editor.createBinding(buildArrowBindingRecord({ fromId: arrowId, toId: fromCanvasId, terminal: 'start', normalizedAnchor: start.normalizedAnchor, anchorMode: start.anchorMode, fromEdge: start.fromEdge }));
+          editor.createBinding(buildArrowBindingRecord({ fromId: arrowId, toId: toCanvasId,   terminal: 'end',   normalizedAnchor: end.normalizedAnchor, anchorMode: end.anchorMode, fromEdge: end.fromEdge }));
           editor.updateShape(fromCanvasId, { x: fromShape.x });
           editor.updateShape(toCanvasId,   { x: toShape.x });
         }

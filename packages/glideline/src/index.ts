@@ -31,6 +31,7 @@ export {
   matrixToSvg,
 } from './transform.js';
 export type { Matrix2d } from './transform.js';
+export type { ConnectionAnchorMode, PageConnectionAnchor, ShapeConnectionAnchor } from './connection-anchors.js';
 
 // Validators
 export { T } from './validators.js';

@@ -1,3 +1,4 @@
+import { boundsAnchors, MIDPOINT } from '../connection-anchors.js';
 /**
  * TextUtil — auto-sizing text block (Story 2.3)
  *
@@ -258,6 +259,10 @@ const positiveNumber: Validator<number> = {
 
 export class TextUtil extends ShapeUtil<TextShape> {
   static override readonly type = 'text';
+
+  override getConnectionAnchors() {
+    return boundsAnchors(MIDPOINT, false);
+  }
 
   static override readonly props = {
     text:     T.string,

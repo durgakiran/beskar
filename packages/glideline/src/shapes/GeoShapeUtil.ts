@@ -1,3 +1,7 @@
+import {
+  boundsAnchors, curvePoints, geometryAnchors, interpolate, MIDPOINT, polygonPoints, QUARTERS,
+  segmentPoints, type ShapeConnectionAnchor,
+} from '../connection-anchors.js';
 import { ShapeUtil } from './ShapeUtil.js';
 import { T } from '../validators.js';
 import { defineMigrations } from '../migrations.js';
@@ -104,6 +108,21 @@ abstract class BaseGeoShapeUtil<S extends GlideShape<GeoShapeProps>> extends Sha
   }
 
   protected abstract getVertices(shape: S): Vec2[];
+
+  protected get anchorFractions(): readonly number[] { return MIDPOINT; }
+  protected get hasVariableAnchorGeometry(): boolean { return false; }
+
+  override getConnectionAnchors(shape: S): readonly ShapeConnectionAnchor[] {
+    const { w, h } = shape.props;
+    const points = (width: number, height: number) =>
+      polygonPoints(this.getVertices({ ...shape, props: { ...shape.props, w: width, h: height } }), this.anchorFractions);
+    if (this.hasVariableAnchorGeometry) return geometryAnchors(w, h, points);
+    const reference = { ...shape, props: { ...shape.props, w: 1, h: 1 } };
+    const bounds = this.getGeometry(reference).getBounds();
+    return points(1, 1).map(p => ({
+      normalizedAnchor: { x: (p.x - bounds.minX) / bounds.w, y: (p.y - bounds.minY) / bounds.h },
+    }));
+  }
 
   override getGeometry(shape: S): Geometry2d {
     return new Polygon2d(this.getVertices(shape));
@@ -273,6 +292,7 @@ export class DiamondUtil extends BaseGeoShapeUtil<DiamondShape> {
 
 export class HexagonUtil extends BaseGeoShapeUtil<HexagonShape> {
   static override readonly type = 'hexagon';
+  protected override get hasVariableAnchorGeometry(): boolean { return true; }
 
   protected override getVertices(shape: HexagonShape): Vec2[] {
     const { w, h } = shape.props;
@@ -290,6 +310,7 @@ export class HexagonUtil extends BaseGeoShapeUtil<HexagonShape> {
 
 export class StarUtil extends BaseGeoShapeUtil<StarShape> {
   static override readonly type = 'star';
+  protected override get anchorFractions(): readonly number[] { return []; }
 
   protected override getVertices(shape: StarShape): Vec2[] {
     const { w, h } = shape.props;
@@ -324,10 +345,29 @@ export class RoundedRectUtil extends BaseGeoShapeUtil<RoundedRectShape> {
     return [{ x: 0, y: 0 }, { x: w, y: 0 }, { x: w, y: h }, { x: 0, y: h }];
   }
 
+  private cornerRadius(w: number, h: number): number { return Math.min(w, h) * 0.15; }
+
+  override getConnectionAnchors(shape: RoundedRectShape): readonly ShapeConnectionAnchor[] {
+    const { w, h } = shape.props;
+    const r = this.cornerRadius(w, h);
+    return boundsAnchors(QUARTERS).map(({ normalizedAnchor }) => {
+      const { x, y } = normalizedAnchor;
+      const corner = (x === 0 || x === 1) && (y === 0 || y === 1);
+      const inset = r * (1 - Math.SQRT1_2);
+      const localPoint = corner
+        ? { x: x === 0 ? inset : w - inset, y: y === 0 ? inset : h - inset }
+        : {
+            x: x === 0 || x === 1 ? x * w : r + x * (w - 2 * r),
+            y: y === 0 || y === 1 ? y * h : r + y * (h - 2 * r),
+          };
+      return { normalizedAnchor, localPoint };
+    });
+  }
+
   override toSvg(shape: RoundedRectShape): SVGElement {
     const { props } = shape;
     const { w, h } = props;
-    const rx = Math.min(w, h) * 0.15;
+    const rx = this.cornerRadius(w, h);
     const strokeW = STROKE_WIDTHS[props.strokeWidth];
     const fillColor = svgFill(props.fillStyle, resolveColor(props.color), shape.id);
     const strokeColor = resolveColor(props.color);
@@ -358,6 +398,7 @@ export class RoundedRectUtil extends BaseGeoShapeUtil<RoundedRectShape> {
 export type ParallelogramShape = GlideShape<GeoShapeProps>;
 export class ParallelogramUtil extends BaseGeoShapeUtil<ParallelogramShape> {
   static override readonly type = 'parallelogram';
+  protected override get anchorFractions(): readonly number[] { return QUARTERS; }
   protected override getVertices(shape: ParallelogramShape): Vec2[] {
     const { w, h } = shape.props;
     const skew = w * 0.2;
@@ -382,23 +423,63 @@ export class ChevronUtil extends BaseGeoShapeUtil<ChevronShape> {
 export type DocumentShape = GlideShape<GeoShapeProps>;
 export class DocumentUtil extends BasePathShapeUtil<DocumentShape> {
   static override readonly type = 'document';
-  protected override getPathD(w: number, h: number): string {
-    const waveH = h * 0.12;
-    const waveY = h - waveH;
+  private wave(w: number, h: number) {
+    const y = h * 0.88;
     return [
-      'M 0 0', `L ${w} 0`, `L ${w} ${waveY}`,
-      `C ${w * 0.75} ${waveY} ${w * 0.75} ${h} ${w * 0.5} ${h}`,
-      `C ${w * 0.25} ${h} ${w * 0.25} ${waveY} 0 ${waveY}`, 'Z',
-    ].join(' ');
+      [{ x: w, y }, { x: w * 0.75, y }, { x: w * 0.75, y: h }, { x: w * 0.5, y: h }],
+      [{ x: w * 0.5, y: h }, { x: w * 0.25, y: h }, { x: w * 0.25, y }, { x: 0, y }],
+    ] as const;
+  }
+
+  protected override getPathD(w: number, h: number): string {
+    const wave = this.wave(w, h);
+    const svg = ({ x, y }: Vec2) => `${x} ${y}`;
+    return `M 0 0 L ${w} 0 L ${svg(wave[0][0])} ${wave.map(([, ...points]) => 'C ' + points.map(svg).join(' ')).join(' ')} Z`;
+  }
+
+  override getConnectionAnchors(shape: DocumentShape): readonly ShapeConnectionAnchor[] {
+    return geometryAnchors(shape.props.w, shape.props.h, (w, h) => {
+      const wave = this.wave(w, h);
+      const topLeft = { x: 0, y: 0 }, topRight = { x: w, y: 0 };
+      const bottomRight = wave[0][0], bottomLeft = wave[1][3];
+      const fractions = [0.25, 0.75];
+      return [
+        topLeft, topRight, bottomRight, bottomLeft,
+        ...segmentPoints(topLeft, topRight, fractions),
+        ...segmentPoints(topRight, bottomRight, fractions),
+        ...segmentPoints(bottomLeft, topLeft, fractions),
+        ...curvePoints(t => {
+          const [a, b, c, d] = wave[t < 0.5 ? 0 : 1];
+          const u = t < 0.5 ? t * 2 : t * 2 - 1;
+          const ab = interpolate(a, b, u), bc = interpolate(b, c, u), cd = interpolate(c, d, u);
+          return interpolate(interpolate(ab, bc, u), interpolate(bc, cd, u), u);
+        }, fractions),
+      ];
+    });
   }
 }
 
 export type CylinderShape = GlideShape<GeoShapeProps>;
 export class CylinderUtil extends BasePathShapeUtil<CylinderShape> {
   static override readonly type = 'cylinder';
+
+  private capRadius(h: number): number { return h * 0.12; }
+
+  override getConnectionAnchors(shape: CylinderShape): readonly ShapeConnectionAnchor[] {
+    return geometryAnchors(shape.props.w, shape.props.h, (w, h) => {
+      const r = this.capRadius(h);
+      return [
+        ...[0, w].flatMap(x => segmentPoints({ x, y: r }, { x, y: h - r }, QUARTERS)),
+        ...[r, h - r].flatMap((y, i) => curvePoints(t => ({
+          x: (1 + Math.cos(Math.PI * t)) * w / 2,
+          y: y + (i === 0 ? -1 : 1) * r * Math.sin(Math.PI * t),
+        }), QUARTERS)),
+      ];
+    });
+  }
   protected override getPathD(w: number, h: number): string {
     const rx = w / 2;
-    const ry = h * 0.12;
+    const ry = this.capRadius(h);
     const topY = ry;
     const botY = h - ry;
     return [
@@ -410,7 +491,7 @@ export class CylinderUtil extends BasePathShapeUtil<CylinderShape> {
     const g = super.toSvg(shape) as SVGGElement;
     const { props } = shape;
     const rx = props.w / 2;
-    const ry = props.h * 0.12;
+    const ry = this.capRadius(props.h);
     const rim = document.createElementNS('http://www.w3.org/2000/svg', 'ellipse');
     rim.setAttribute('cx', String(rx));
     rim.setAttribute('cy', String(ry));
@@ -429,14 +510,23 @@ export class CylinderUtil extends BasePathShapeUtil<CylinderShape> {
 export type NoteShape = GlideShape<GeoShapeProps>;
 export class NoteUtil extends BasePathShapeUtil<NoteShape> {
   static override readonly type = 'note';
+
+  private foldSize(w: number, h: number): number { return Math.min(w * 0.2, h * 0.2, 24); }
+
+  override getConnectionAnchors(shape: NoteShape): readonly ShapeConnectionAnchor[] {
+    return geometryAnchors(shape.props.w, shape.props.h, (w, h) => {
+      const f = this.foldSize(w, h);
+      return polygonPoints([{ x: 0, y: 0 }, { x: w - f, y: 0 }, { x: w, y: f }, { x: w, y: h }, { x: 0, y: h }], MIDPOINT);
+    });
+  }
   protected override getPathD(w: number, h: number): string {
-    const fold = Math.min(w * 0.2, h * 0.2, 24);
+    const fold = this.foldSize(w, h);
     return ['M 0 0', `L ${w - fold} 0`, `L ${w} ${fold}`, `L ${w} ${h}`, `L 0 ${h}`, 'Z'].join(' ');
   }
   override toSvg(shape: NoteShape): SVGElement {
     const g = super.toSvg(shape) as SVGGElement;
     const { props } = shape;
-    const fold = Math.min(props.w * 0.2, props.h * 0.2, 24);
+    const fold = this.foldSize(props.w, props.h);
     const crease = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
     crease.setAttribute('points', `${props.w - fold},0 ${props.w - fold},${fold} ${props.w},${fold}`);
     crease.setAttribute('fill', 'none');
@@ -452,17 +542,31 @@ export class NoteUtil extends BasePathShapeUtil<NoteShape> {
 export type CalloutShape = GlideShape<GeoShapeProps>;
 export class CalloutUtil extends BasePathShapeUtil<CalloutShape> {
   static override readonly type = 'callout';
-  protected override getPathD(w: number, h: number): string {
-    const rx = Math.min(w, h) * 0.12;
-    const tailW = w * 0.15;
-    const tailH = h * 0.2;
+  private outlineDimensions(w: number, h: number) {
     const tailX = w * 0.2;
-    const bodyH = h - tailH;
+    const halfTail = w * 0.15 / 2;
+    return { rx: Math.min(w, h) * 0.12, left: tailX - halfTail, right: tailX + halfTail, bodyH: h * 0.8 };
+  }
+
+  override getConnectionAnchors(shape: CalloutShape): readonly ShapeConnectionAnchor[] {
+    return geometryAnchors(shape.props.w, shape.props.h, (w, h) => {
+      const { rx, left, right, bodyH } = this.outlineDimensions(w, h);
+      return [
+        ...segmentPoints({ x: rx, y: 0 }, { x: w - rx, y: 0 }, QUARTERS),
+        { x: 0, y: bodyH / 2 }, { x: w, y: bodyH / 2 },
+        { x: (left + rx) / 2, y: bodyH }, { x: (right + w - rx) / 2, y: bodyH },
+        { x: left, y: h },
+      ];
+    });
+  }
+
+  protected override getPathD(w: number, h: number): string {
+    const { rx, left, right, bodyH } = this.outlineDimensions(w, h);
     return [
       `M ${rx} 0`, `L ${w - rx} 0`, `Q ${w} 0 ${w} ${rx}`,
       `L ${w} ${bodyH - rx}`, `Q ${w} ${bodyH} ${w - rx} ${bodyH}`,
-      `L ${tailX + tailW / 2} ${bodyH}`, `L ${tailX - tailW * 0.5} ${h}`,
-      `L ${tailX - tailW / 2} ${bodyH}`, `L ${rx} ${bodyH}`,
+      `L ${right} ${bodyH}`, `L ${left} ${h}`,
+      `L ${left} ${bodyH}`, `L ${rx} ${bodyH}`,
       `Q 0 ${bodyH} 0 ${bodyH - rx}`, `L 0 ${rx}`, `Q 0 0 ${rx} 0`, 'Z',
     ].join(' ');
   }

@@ -10,6 +10,7 @@ import type {
   GlideShape, GlideBinding, Box2d, Vec2, GlideProps, GlideMigrations, ShapeId,
   RecordReferenceDescriptor,
 } from '../types.js';
+import { boundsAnchors, MIDPOINT, type ShapeConnectionAnchor } from '../connection-anchors.js';
 import type { Geometry2d } from '../geometry/index.js';
 import { getMinHeightForShape, type LabelProps } from '../styles.js';
 import type { EditableTextValue } from '../text-edit.js';
@@ -90,6 +91,11 @@ export abstract class ShapeUtil<S extends GlideShape<object> = GlideShape> {
 
   /** Intrinsic geometry in shape-local space. Page geometry comes from TransformService. */
   abstract getGeometry(shape: S): Geometry2d;
+
+  /** Default connection points. Override to supply shape-specific points or opt out. */
+  getConnectionAnchors(_shape: S): readonly ShapeConnectionAnchor[] {
+    return boundsAnchors(MIDPOINT);
+  }
 
   /** Override for non-rectangular shapes. Default: AABB check. */
   hitTestPoint(shape: S, point: Vec2): boolean {

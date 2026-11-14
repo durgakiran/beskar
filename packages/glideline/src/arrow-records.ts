@@ -1,3 +1,4 @@
+import type { ConnectionAnchorMode } from './connection-anchors.js';
 import type { GlideEditor } from './editor.js';
 import { type AnyRecord, type EdgeName, type PageId, type ShapeId, pid, sid, type Vec2 } from './types.js';
 import { RecordIdService } from './id.js';
@@ -14,6 +15,7 @@ const DEFAULT_CURVE_BEND = 0.3;
 export interface ResolvedConnectionTerminal {
   shapeId: ShapeId;
   normalizedAnchor: Vec2;
+  anchorMode?: ConnectionAnchorMode;
   point: Vec2;
   fromEdge: 'top' | 'right' | 'bottom' | 'left';
 }
@@ -72,6 +74,7 @@ export function buildArrowBindingRecord(args: {
   toId: ShapeId;
   terminal: 'start' | 'end';
   normalizedAnchor: Vec2;
+  anchorMode?: ConnectionAnchorMode | undefined;
   fromEdge?: EdgeName;
 }): AnyRecord {
   return {
@@ -83,6 +86,7 @@ export function buildArrowBindingRecord(args: {
     props: {
       terminal: args.terminal,
       normalizedAnchor: args.normalizedAnchor,
+      ...(args.anchorMode ? { anchorMode: args.anchorMode } : {}),
       fromEdge: args.fromEdge ?? anchorToEdge(args.normalizedAnchor),
     },
   };
@@ -97,11 +101,11 @@ export function resolveConnectionTerminal(
   if (!shape) return null;
 
   const snapped = editor.transforms.getClosestConnectionAnchor(shapeId, point);
+  if (!snapped) return null;
   return {
+    ...snapped,
     shapeId,
-    normalizedAnchor: snapped.normalizedAnchor,
-    point: snapped.point,
-    fromEdge: editor.transforms.getAnchorPageEdge(shapeId, snapped.normalizedAnchor),
+    fromEdge: editor.transforms.getAnchorPageEdge(shapeId, snapped.normalizedAnchor, snapped.anchorMode),
   };
 }
 

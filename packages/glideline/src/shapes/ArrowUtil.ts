@@ -1,3 +1,4 @@
+import type { ConnectionAnchorMode } from '../connection-anchors.js';
 /**
  * Glideline — ArrowUtil + ArrowBindingUtil (Phase 4, Story 4.4)
  *
@@ -115,6 +116,10 @@ const arrowheadStyleValidator = {
 
 export class ArrowUtil extends ShapeUtil<ArrowShape> {
   static override readonly type = 'arrow';
+
+  override getConnectionAnchors() {
+    return [];
+  }
   static override readonly references = [
     { path: '/props/start/boundShapeId', targetKind: 'shape', onDetach: 'null' },
     { path: '/props/end/boundShapeId', targetKind: 'shape', onDetach: 'null' },
@@ -602,8 +607,9 @@ export interface ArrowBindingProps {
   [key: string]: unknown;
   /** 'start' or 'end' — which terminal of the arrow is bound */
   terminal: 'start' | 'end';
-  /** [0..1] anchor within target shape bounds */
+  /** Bounds coordinates, or reference outline coordinates in geometry mode. */
   normalizedAnchor: Vec2;
+  anchorMode?: ConnectionAnchorMode | undefined;
   /** Closest edge of target from this anchor (derived, not stored as float) */
   fromEdge: EdgeName;
 }
@@ -696,6 +702,7 @@ export class ArrowBindingUtil extends BindingUtil<ArrowBinding> {
         return v as Vec2;
       },
     },
+    anchorMode: T.optional(T.literal('geometry')),
     fromEdge: {
       validate(v: unknown): EdgeName {
         if (!['top', 'right', 'bottom', 'left'].includes(v as string)) {
@@ -731,49 +738,28 @@ export class ArrowBindingUtil extends BindingUtil<ArrowBinding> {
     const targetShape = editor.getShape(binding.toId);
     if (!targetShape) return;
 
-    const { normalizedAnchor, terminal } = binding.props;
-    const worldPoint = editor.transforms.normalizedAnchorToPage(binding.toId as ShapeId, normalizedAnchor);
-    const fromEdge = editor.transforms.getAnchorPageEdge(binding.toId as ShapeId, normalizedAnchor);
-
-    const terminalData = arrow.props[terminal];
+    const { normalizedAnchor, anchorMode, terminal } = binding.props;
+    const worldPoint = editor.transforms.resolveConnectionAnchor(targetShape.id as ShapeId, normalizedAnchor, anchorMode);
+    const fromEdge = editor.transforms.getAnchorPageEdge(targetShape.id as ShapeId, normalizedAnchor, anchorMode);
+    const terminalData = { ...arrow.props[terminal], normalizedAnchor, boundShapeId: targetShape.id as ShapeId };
 
     if (terminal === 'start') {
-      // Start terminal: shape.x/y IS the world position of start.
-      // Keep end visually stable by recomputing its local offset.
-      const currentEndWorldX = arrow.x + arrow.props.end.point.x;
-      const currentEndWorldY = arrow.y + arrow.props.end.point.y;
-      const newEndLocalX = currentEndWorldX - worldPoint.x;
-      const newEndLocalY = currentEndWorldY - worldPoint.y;
-
-      editor.updateShape<ArrowShape>(binding.fromId as ShapeId, {
-        x: worldPoint.x,
-        y: worldPoint.y,
+      const start = editor.pageToParent(arrow.parentId, worldPoint);
+      const end = editor.pageToParent(arrow.parentId, editor.localToPage(arrow.id as ShapeId, arrow.props.end.point));
+      editor.updateShape<ArrowShape>(arrow.id as ShapeId, {
+        x: start.x,
+        y: start.y,
         props: {
           ...arrow.props,
-          start: {
-            ...terminalData,
-            point: { x: 0, y: 0 },
-            boundShapeId: binding.toId as ShapeId,
-          },
-          end: {
-            ...arrow.props.end,
-            point: { x: newEndLocalX, y: newEndLocalY },
-          },
+          start: { ...terminalData, point: { x: 0, y: 0 } },
+          end: { ...arrow.props.end, point: { x: end.x - start.x, y: end.y - start.y } },
         },
       });
     } else {
-      // End terminal: compute local offset from arrow origin
-      const localX = worldPoint.x - arrow.x;
-      const localY = worldPoint.y - arrow.y;
-
-      editor.updateShape<ArrowShape>(binding.fromId as ShapeId, {
+      editor.updateShape<ArrowShape>(arrow.id as ShapeId, {
         props: {
           ...arrow.props,
-          [terminal]: {
-            ...terminalData,
-            point: { x: localX, y: localY },
-            boundShapeId: binding.toId as ShapeId,
-          },
+          end: { ...terminalData, point: editor.pageToLocal(arrow.id as ShapeId, worldPoint) },
         },
       });
     }

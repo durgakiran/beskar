@@ -127,6 +127,10 @@ export function catmullRomPath(pts: Vec2[], isClosed: boolean): string {
 export class FreehandUtil extends ShapeUtil<FreehandShape> {
   static override readonly type = 'freehand';
 
+  override getConnectionAnchors() {
+    return [];
+  }
+
   override canEditLabel(_shape: FreehandShape): boolean { return false; }
 
   static override readonly props: GlideProps<FreehandProps> = {

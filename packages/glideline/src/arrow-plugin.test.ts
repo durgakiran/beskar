@@ -446,7 +446,7 @@ describe('Arrow handle dragging via SelectTool', () => {
       targetId: sid('bxPreview'),
       targetType: 'box',
     });
-    expect(ed.bindingPreview.peek()?.candidateAnchors).toHaveLength(4);
+    expect(ed.bindingPreview.peek()?.candidateAnchors).toHaveLength(16);
 
     ed.dispatchEvent({ type: 'pointerMove', point: { x: 200, y: 200 } });
     expect(ed.bindingPreview.peek()).toBeNull();
@@ -508,7 +508,7 @@ describe('Arrow handle dragging via SelectTool', () => {
     expect(arr.props.end.point).toEqual({ x: 250, y: 250 });
   });
 
-  it('commits the previewed end anchor even if pointerUp drifts toward another edge', () => {
+  it('resolves a different end anchor when the release sample moves to it', () => {
     const ed = makeEditor();
     getMutableStoreForTesting(ed).put([
       box('bxSource3', 0, 0, 100, 100),
@@ -529,8 +529,8 @@ describe('Arrow handle dragging via SelectTool', () => {
 
     const all = ed.getShapesInBox({ minX: -1000, minY: -1000, maxX: 1000, maxY: 1000 });
     const arr = all.find(s => s.type === 'arrow') as ArrowShape;
-    expect(arr.props.end.normalizedAnchor).toEqual({ x: 0.5, y: 0 });
-    expect(arr.props.end.point).toEqual({ x: 250, y: 250 });
+    expect(arr.props.end.normalizedAnchor).toEqual({ x: 1, y: 0.5 });
+    expect(arr.props.end.point).toEqual({ x: 300, y: 300 });
   });
 
   it('supports selecting and dragging bend handles of orthogonal (ortho) arrows', () => {
@@ -597,7 +597,7 @@ describe('Arrow handle dragging via SelectTool', () => {
     });
   });
 
-  it('commits the previewed handle anchor even if pointerUp drifts toward another edge', () => {
+  it('resolves the handle anchor again at the release position', () => {
     const ed = makeEditor();
     getMutableStoreForTesting(ed).put([
       box('bxHandleTarget', 200, 200, 100, 100),
@@ -618,8 +618,8 @@ describe('Arrow handle dragging via SelectTool', () => {
     ed.dispatchEvent({ type: 'pointerUp', point: { x: 300, y: 240 } });
 
     const updated = ed.getShape<ArrowShape>(sid('arrHandlePreview'))!;
-    expect(updated.props.end.normalizedAnchor).toEqual({ x: 0.5, y: 0 });
-    expect(updated.props.end.point).toEqual({ x: 250, y: 200 });
+    expect(updated.props.end.normalizedAnchor).toEqual({ x: 1, y: 0.5 });
+    expect(updated.props.end.point).toEqual({ x: 300, y: 250 });
   });
 
   it('supports drawing arrows from canvas (no bound shapes)', () => {

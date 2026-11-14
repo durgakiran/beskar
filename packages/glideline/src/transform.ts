@@ -1,3 +1,4 @@
+import { closestConnectionAnchor, type ConnectionAnchorMode, type PageConnectionAnchor, type ShapeConnectionAnchor } from './connection-anchors.js';
 import type { Geometry2d } from './geometry/index.js';
 import { STROKE_WIDTHS, type SizeStyle } from './styles.js';
 import { makeBox, type Box2d, type EdgeName, type GlideShape, type PageId, type ShapeId, type Vec2 } from './types.js';
@@ -72,6 +73,7 @@ export function matrixToSvg(matrix: Matrix2d): string {
 
 interface TransformHost {
   getShape(id: ShapeId): GlideShape | undefined;
+  getConnectionAnchors(shape: GlideShape): readonly ShapeConnectionAnchor[];
   getGeometry(shape: GlideShape): Geometry2d;
   getVisualBounds(shape: GlideShape): Box2d;
   getZoom(): number;
@@ -311,36 +313,32 @@ export class TransformService {
     });
   }
 
-  getConnectionAnchors(id: ShapeId): readonly { normalizedAnchor: Vec2; point: Vec2 }[] {
-    const anchors = [
-      { x: 0.5, y: 0 },
-      { x: 1, y: 0.5 },
-      { x: 0.5, y: 1 },
-      { x: 0, y: 0.5 },
-    ];
-    return Object.freeze(anchors.map(normalizedAnchor => ({
-      normalizedAnchor,
-      point: this.normalizedAnchorToPage(id, normalizedAnchor),
-    })));
+  getConnectionAnchors(id: ShapeId): readonly PageConnectionAnchor[] {
+    const shape = this.requireShape(id);
+    return this.host.getConnectionAnchors(shape).map(({ normalizedAnchor, localPoint }) =>
+      localPoint
+        ? { normalizedAnchor, point: this.localToPage(id, localPoint), anchorMode: 'geometry' }
+        : { normalizedAnchor, point: this.normalizedAnchorToPage(id, normalizedAnchor) },
+    );
   }
 
-  getClosestConnectionAnchor(id: ShapeId, point: Vec2): { normalizedAnchor: Vec2; point: Vec2 } {
-    const anchors = this.getConnectionAnchors(id);
-    let closest = anchors[0]!;
-    let distance = Number.POSITIVE_INFINITY;
-    for (const anchor of anchors) {
-      const candidateDistance = Math.hypot(anchor.point.x - point.x, anchor.point.y - point.y);
-      if (candidateDistance < distance) {
-        closest = anchor;
-        distance = candidateDistance;
-      }
+  resolveConnectionAnchor(id: ShapeId, anchor: Vec2, mode?: ConnectionAnchorMode): Vec2 {
+    if (mode === 'geometry') {
+      const definition = this.host.getConnectionAnchors(this.requireShape(id)).find(
+        ({ normalizedAnchor: p }) => Math.abs(p.x - anchor.x) < 1e-9 && Math.abs(p.y - anchor.y) < 1e-9,
+      );
+      if (definition?.localPoint) return this.localToPage(id, definition.localPoint);
     }
-    return closest;
+    return this.normalizedAnchorToPage(id, anchor);
   }
 
-  getAnchorPageEdge(id: ShapeId, anchor: Vec2): EdgeName {
+  getClosestConnectionAnchor(id: ShapeId, point: Vec2): PageConnectionAnchor | undefined {
+    return closestConnectionAnchor(this.getConnectionAnchors(id), point);
+  }
+
+  getAnchorPageEdge(id: ShapeId, anchor: Vec2, mode?: ConnectionAnchorMode): EdgeName {
+    const point = this.resolveConnectionAnchor(id, anchor, mode);
     const center = this.normalizedAnchorToPage(id, { x: 0.5, y: 0.5 });
-    const point = this.normalizedAnchorToPage(id, anchor);
     const dx = point.x - center.x;
     const dy = point.y - center.y;
     if (Math.abs(dx) >= Math.abs(dy)) return dx >= 0 ? 'right' : 'left';

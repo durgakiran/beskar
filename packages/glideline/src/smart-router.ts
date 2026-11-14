@@ -403,6 +403,7 @@ export function getFallbackElbowPoints(
     toBoundsWorld,
     fromEdge,
     toEdge,
+    { start: startWorld, end: endWorld },
   );
 }
 
@@ -412,6 +413,7 @@ export function computeFallbackLocalElbowPoints(
   toBoundsWorld: Box2d,
   fromEdge: EdgeName,
   toEdge: EdgeName,
+  endpoints = { start: arrow.props.start.point, end: arrow.props.end.point },
 ): Vec2[] {
   const fromBounds = {
     ...fromBoundsWorld,
@@ -432,7 +434,7 @@ export function computeFallbackLocalElbowPoints(
     maxY: toBoundsWorld.maxY - arrow.y,
   };
 
-  return parseElbowPoints(computeElbowPath(fromBounds, toBounds, fromEdge, toEdge, arrow.props.bend));
+  return parseElbowPoints(computeElbowPath(fromBounds, toBounds, fromEdge, toEdge, arrow.props.bend, endpoints));
 }
 
 export function offsetOrthogonalPolyline(points: Vec2[], offset: number): Vec2[] {
