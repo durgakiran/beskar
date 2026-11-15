@@ -267,7 +267,8 @@ describe('WhiteboardApp shortcut boundaries', () => {
       expect(controller.assetImportJobsSignal.peek()).toHaveLength(2);
       expect(controller.assetImportJobsSignal.peek()[1]).toMatchObject({ status: 'complete', shapeId: svgShapeId });
       expect(controller.editor.getSelectedShapeIds()).toEqual([svgShapeId]);
-      expect(view.getByLabelText('Theme color')).toBeTruthy();
+      expect(view.getByRole('group', { name: 'SVG color mode' })).toBeTruthy();
+      expect(view.queryByLabelText('Theme color')).toBeNull();
       expect(view.queryByLabelText('Crop X')).toBeNull();
     } finally {
       await controller.dispose();
@@ -357,6 +358,52 @@ describe('WhiteboardApp shortcut boundaries', () => {
       selectBoth();
       fireEvent.keyDown(app, { key: 'Escape' });
       expect(controller.editor.getSelectedShapeIds()).toEqual([]);
+    } finally {
+      vi.unstubAllGlobals();
+      await controller.dispose();
+    }
+  });
+
+  it('copies and deletes multiple selected objects from the toolbar next to Undo and Redo', async () => {
+    const controller = new GlideboardController({
+      sessionKey: 'selection-actions',
+      assetStorage: {
+        prepare: async () => { throw new Error('Unexpected asset import'); },
+        resolve: () => null,
+        download: async () => { throw new Error('Unexpected asset download'); },
+        retainReferences: async () => undefined,
+      },
+    });
+    const first = controller.editor.createShape({ type: 'box', x: 0, y: 0 });
+    const second = controller.editor.createShape({ type: 'ellipse', x: 100, y: 0 });
+    controller.editor.setSelectedShapeIds([first, second]);
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText } });
+    try {
+      const view = render(
+        <GlideboardProvider controller={controller}>
+          <WhiteboardApp />
+        </GlideboardProvider>,
+      );
+      const copy = view.getByRole('button', { name: 'Copy', exact: true });
+      const remove = view.getByRole('button', { name: 'Delete', exact: true });
+      expect(view.getByRole('button', { name: 'Redo' }).nextElementSibling).toBe(copy);
+      expect(copy.nextElementSibling).toBe(remove);
+      fireEvent.click(copy);
+      await waitFor(() => expect(writeText).toHaveBeenCalledOnce());
+
+      fireEvent.click(remove);
+      expect(shapeRecords(controller)).toHaveLength(0);
+      expect((copy as HTMLButtonElement).disabled).toBe(true);
+      expect((remove as HTMLButtonElement).disabled).toBe(true);
+
+      act(() => controller.editor.undo());
+      expect(controller.editor.getShape(first)).toBeDefined();
+      expect(controller.editor.getShape(second)).toBeDefined();
+
+      let pasted: string[] = [];
+      act(() => { pasted = controller.editor.paste({ x: 200, y: 0 }); });
+      expect(pasted).toHaveLength(2);
     } finally {
       vi.unstubAllGlobals();
       await controller.dispose();

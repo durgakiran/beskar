@@ -23,8 +23,6 @@ function frameRecord(id: ShapeId, origin: Vec2, point: Vec2) {
       w: Math.max(1, Math.abs(point.x - origin.x)),
       h: Math.max(1, Math.abs(point.y - origin.y)),
       label: 'Frame',
-      color: '#313244',
-      clipContent: false,
     },
   };
 }
@@ -56,8 +54,11 @@ class Drawing extends StateNode {
     this.id = this.editor.createShapeId('frame');
 
     this.editor.beginHistoryPreview();
-    this.editor.batch('Frame Preview', () => this.editor.createShape(frameRecord(this.id, info.origin, info.current)),
-      { history: 'ignore' });
+    const frame = frameRecord(this.id, info.origin, info.current);
+    this.editor.batch('Frame Preview', () => this.editor.createShape({
+      ...frame,
+      props: { ...frame.props, color: this.editor.activeStyles.peek()['frameColor'] ?? '#313244' },
+    }), { history: 'ignore' });
   }
 
   override onPointerMove(event: PointerMoveEvent): void {

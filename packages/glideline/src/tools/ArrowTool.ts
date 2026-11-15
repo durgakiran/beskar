@@ -66,14 +66,25 @@ class Drawing extends StateNode {
       arrowheadStart,
       arrowheadEnd,
     });
-    if (arrowRouteStyle === 'ortho' && this.editor.activeStyles.peek().strokeStyle === 'sketch') {
-      arrow.props.strokeStyle = 'sketch';
-    }
-    arrow.props.start = terminalAt(ORIGIN, this._source);
+    const { end, bend, label, labelPosition } = arrow.props;
+    const strokeStyle = this.editor.activeStyles.peek().strokeStyle;
 
     this.editor.beginHistoryPreview();
     this.editor.batch('Arrow Preview', () => {
-      this.editor.createShape(arrow as unknown as AnyRecord);
+      this.editor.createShape({
+        ...arrow,
+        props: {
+          start: terminalAt(ORIGIN, this._source),
+          end,
+          routeStyle: arrowRouteStyle,
+          bend,
+          arrowheadStart,
+          arrowheadEnd,
+          label,
+          labelPosition,
+          ...(arrowRouteStyle !== 'ortho' && strokeStyle === 'sketch' ? { strokeStyle: 'solid' } : {}),
+        },
+      } as unknown as AnyRecord);
     }, { history: 'ignore' });
   }
 
