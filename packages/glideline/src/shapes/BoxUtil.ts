@@ -1,3 +1,4 @@
+import { addSketchOutline, rectangleOutline, sketchOutlinePath } from '../sketch-stroke.js';
 import { createSvgLabel } from './TextUtil.js';
 import { boundsAnchors, QUARTERS } from '../connection-anchors.js';
 /**
@@ -46,6 +47,8 @@ export type BoxShape = GlideShape<BoxProps>;
 
 export class BoxUtil extends ShapeUtil<BoxShape> {
   static override readonly type = 'box';
+
+  override supportsSketchStroke(): boolean { return true; }
 
   override getConnectionAnchors() {
     return boundsAnchors(QUARTERS);
@@ -153,6 +156,10 @@ export class BoxUtil extends ShapeUtil<BoxShape> {
     }
 
     g.appendChild(rect);
+    if (props.strokeStyle === 'sketch') {
+      const outline = rectangleOutline(props.w, props.h, props.cornerRadius);
+      addSketchOutline(rect, shape.id, (seed, strength) => sketchOutlinePath(outline, seed, strength));
+    }
     return g;
   }
 

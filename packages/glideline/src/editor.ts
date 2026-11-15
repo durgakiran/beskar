@@ -1,3 +1,4 @@
+import { applyBoardSvgFont, boardFontSvgStyles, FONT_FAMILIES, loadBoardFonts } from './board-fonts.js';
 import type { PageConnectionAnchor } from './connection-anchors.js';
 /**
  * Glideline — GlideEditor + createEditor() (Phase 2–4)
@@ -45,7 +46,7 @@ import { buildAIContext, type AIContextSnapshot } from './ai-context.js';
 import { getWorldBounds, SmartRouterCache, type SmartRouteResolution, type SmartRoutingSnapshot } from './smart-router.js';
 import type { GlideShape, GlideBinding, GlidePage, GlideAsset, ShapeId, BindingId, PageId, Vec2, Box2d, AnyRecord } from './types.js';
 import type { GlideEvent } from './state-node.js';
-import { getMinHeightForShape } from './styles.js';
+import { getMinHeightForShape, STROKE_WIDTHS, type SizeStyle } from './styles.js';
 import { RecordIdService } from './id.js';
 import { InteractionManager } from './interaction.js';
 import {
@@ -2830,6 +2831,7 @@ export class GlideEditor {
     shapeIds: ShapeId[],
     options: PortableSvgExportOptions,
   ): Promise<string> {
+    await loadBoardFonts();
     const assets = new Map<string, GlideAsset>();
     const visit = (id: ShapeId) => {
       const shape = this.getShape(id);
@@ -2906,15 +2908,20 @@ export class GlideEditor {
     let maxY = explicitViewBox?.maxY ?? -Infinity;
     const elements: string[] = [];
     const clipDefs = new Map<string, string>();
+    const usedFonts = new Set<string>();
 
     for (const shape of shapes) {
       const util = this.getShapeUtil(shape.type);
       const box = this.getShapeVisualWorldBounds(shape);
       if (!explicitViewBox) {
-        if (box.minX < minX) minX = box.minX;
-        if (box.minY < minY) minY = box.minY;
-        if (box.maxX > maxX) maxX = box.maxX;
-        if (box.maxY > maxY) maxY = box.maxY;
+        // Sketch can paint outside the exact outline. Keep that ink inside the SVG viewBox.
+        const padding = shape.props['strokeStyle'] === 'sketch' && util.supportsSketchStroke(shape)
+          ? 4 + (STROKE_WIDTHS[shape.props['strokeWidth'] as SizeStyle] ?? 2.5) / 2
+          : 0;
+        minX = Math.min(minX, box.minX - padding);
+        minY = Math.min(minY, box.minY - padding);
+        maxX = Math.max(maxX, box.maxX + padding);
+        maxY = Math.max(maxY, box.maxY + padding);
       }
 
       const exportFn = (util as any).toSvgExport || (util as any).toSvg;
@@ -2922,6 +2929,10 @@ export class GlideEditor {
         const svgEl = exportFn.call(util, shape);
         if (svgEl) {
           this._prepareSvgElementForExport(svgEl);
+          if (svgEl.hasAttribute('font-family')) applyBoardSvgFont(svgEl, usedFonts);
+          for (const text of svgEl.querySelectorAll<SVGElement>('[font-family]')) {
+            applyBoardSvgFont(text, usedFonts);
+          }
           const wrapper = document.createElementNS('http://www.w3.org/2000/svg', 'g');
           wrapper.setAttribute('transform', matrixToSvg(this.transforms.getWorldTransform(shape.id as ShapeId)));
           wrapper.appendChild(svgEl);
@@ -2954,8 +2965,10 @@ export class GlideEditor {
 
     const w = Math.max(1, maxX - minX);
     const h = Math.max(1, maxY - minY);
+    const fontCss = boardFontSvgStyles(usedFonts);
 
     return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${minX} ${minY} ${w} ${h}" width="${w}" height="${h}">
+  ${fontCss ? `<style>${fontCss}</style>` : ''}
   ${clipDefs.size ? `<defs>${[...clipDefs.values()].join('')}</defs>` : ''}
   ${elements.join('\n  ')}
 </svg>`;
@@ -3040,7 +3053,7 @@ export class GlideEditor {
       replacement.setAttribute('y', String(y + height / 2));
       replacement.setAttribute('text-anchor', 'middle');
       replacement.setAttribute('dominant-baseline', 'middle');
-      replacement.setAttribute('font-family', div?.style.fontFamily || 'Inter, system-ui, sans-serif');
+      replacement.setAttribute('font-family', div?.style.fontFamily || FONT_FAMILIES.sans);
       replacement.setAttribute('font-size', div?.style.fontSize || '14px');
       replacement.setAttribute('fill', div?.style.color || '#111827');
       replacement.textContent = content ? content.replace(/\s+/g, ' ') : '';

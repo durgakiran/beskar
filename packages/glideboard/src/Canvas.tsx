@@ -14,7 +14,7 @@ import type {
   StateNode,
   TextEditSession,
 } from '@durgakiran/glideline';
-import { FONT_FAMILIES } from '@durgakiran/glideline';
+import { boardFontStyle } from '@durgakiran/glideline';
 import { CanvasOverlays, getHandleAtPagePoint, getCursorForHandle } from './CanvasOverlays.js';
 import { useGlideboardController } from './GlideboardContext.js';
 import { wbTheme } from './theme.js';
@@ -246,7 +246,7 @@ const ShapeLayer = memo(({
             height: richText.h,
             minWidth: richText.sizeMode === 'auto' ? 1 : undefined,
             overflow: richText.sizeMode === 'fixed' ? 'hidden' : 'visible',
-            fontFamily: richText.fontFamily,
+            ...boardFontStyle(richText.fontFamily),
             fontSize: richText.fontSize,
             color: richText.color,
             opacity: typeof shape.props['opacity'] === 'number' ? shape.props['opacity'] : 1,
@@ -297,7 +297,7 @@ const ShapeLayer = memo(({
             top: labelProps.y ?? labelProps.padding,
             width: labelProps.w ?? (isTextType && !hasFixedWidth ? 'max-content' : Math.max(0, localBounds.w - labelProps.padding * 2)),
             height: labelProps.h ?? (isTextType ? 'auto' : Math.max(0, localBounds.h - labelProps.padding * 2)),
-            fontFamily: labelProps.fontFamily,
+            ...boardFontStyle(labelProps.fontFamily),
             fontSize: labelProps.fontSize,
             color: labelProps.color,
             opacity: typeof shape.props['opacity'] === 'number' ? shape.props['opacity'] : 1,
@@ -518,7 +518,7 @@ function RichTextEditingOverlay({
           minHeight: descriptor.fontSize * descriptor.lineHeight,
           outline: session.status === 'conflicted' ? '2px solid #ef4444' : '2px solid #4f8cff',
           outlineOffset: 2,
-          fontFamily: descriptor.fontFamily,
+          ...boardFontStyle(descriptor.fontFamily),
           fontSize: descriptor.fontSize,
           color: descriptor.color,
           opacity: typeof shape.props['opacity'] === 'number' ? shape.props['opacity'] : 1,
@@ -634,7 +634,7 @@ function TextEditingOverlay() {
           outline: conflicted ? '2px solid #ef4444' : isConnector ? 'none' : '2px solid #4f8cff',
           boxShadow: isConnector ? `0 1px 0 ${wbTheme.accent}` : undefined,
           outlineOffset: 2,
-          fontFamily: labelProps.fontFamily,
+          ...boardFontStyle(labelProps.fontFamily),
           fontSize: labelProps.fontSize,
           color: labelProps.color,
           opacity: typeof shape.props['opacity'] === 'number' ? shape.props['opacity'] : 1,

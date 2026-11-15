@@ -1,0 +1,63 @@
+.sketch-comparison {
+  padding: 24px clamp(16px, 3vw, 40px);
+  background: #f5f6fa;
+  color: #222633;
+  min-height: calc(100vh - 43px);
+  box-sizing: border-box;
+}
+
+.sketch-comparison-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 0 auto 20px;
+  max-width: 1250px;
+}
+
+.sketch-comparison h1 { font-size: 26px; margin: 0 0 5px; }
+.sketch-comparison h2 { font-size: 17px; margin: 0 0 4px; }
+.sketch-comparison p { font-size: 13px; color: #4b566a; margin: 0; }
+
+.sketch-comparison button {
+  padding: 8px 13px;
+  border: 1px solid #c9d1df;
+  border-radius: 6px;
+  background: white;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.sketch-comparison-grid {
+  display: grid;
+  max-width: 1250px;
+  margin: 0 auto;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.sketch-comparison-panel {
+  min-width: 0;
+  border: 1px solid #d8dfea;
+  border-radius: 12px;
+  background: #fff;
+  overflow: hidden;
+}
+
+.sketch-comparison-panel header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 13px 16px;
+  border-bottom: 1px solid #d8dfea;
+}
+
+.sketch-comparison-board { position: relative; height: 500px; }
+
+@media (max-width: 1020px) {
+  .sketch-comparison-grid { grid-template-columns: 1fr; }
+}

@@ -1,3 +1,5 @@
+import { boardFontStyle, FONT_FAMILIES, type Font } from './board-fonts.js';
+export { FONT_FAMILIES, type Font } from './board-fonts.js';
 /**
  * Glideline — Style system (Phase A)
  *
@@ -41,11 +43,12 @@ export function resolveColor(color: string): string {
 // ─────────────────────────────────────────────────────────────
 
 export type FillStyle   = 'none' | 'semi' | 'solid' | 'pattern' | 'lined';
-export type StrokeStyle = 'solid' | 'dashed' | 'dotted';
+export const STROKE_STYLES = ['solid', 'dashed', 'dotted', 'sketch'] as const;
+export type StrokeStyle = typeof STROKE_STYLES[number];
+export type StandardStrokeStyle = Exclude<StrokeStyle, 'sketch'>;
 export type SizeStyle   = 'thin' | 'medium' | 'thick' | 'xl';
 export type FontSize    = 'sm' | 'md' | 'lg' | 'xl';
 export type TextAlign   = 'left' | 'center' | 'right';
-export type Font        = 'draw' | 'sans' | 'serif' | 'mono';
 
 // ─────────────────────────────────────────────────────────────
 // Pixel-value lookup tables
@@ -65,16 +68,10 @@ export const FONT_SIZES: Record<FontSize, number> = {
   xl: 32,
 };
 
-export const FONT_FAMILIES: Record<Font, string> = {
-  draw:  '"Shantell Sans", cursive',
-  sans:  'Inter, system-ui, sans-serif',
-  serif: 'Georgia, serif',
-  mono:  '"Fira Code", monospace',
-};
-
 /** Dash-array for dashed/dotted strokes as [dashLen, gapLen]. */
 export const STROKE_DASH_ARRAYS: Record<StrokeStyle, string> = {
   solid:  'none',
+  sketch: 'none',
   dashed: '8 4',
   dotted: '1 6',
 };
@@ -101,8 +98,14 @@ export const StyleValidators = {
   },
   strokeStyle: {
     validate(v: unknown): StrokeStyle {
-      if (!['solid', 'dashed', 'dotted'].includes(v as string)) throw new Error(`strokeStyle must be solid|dashed|dotted, got "${v}"`);
+      if (!STROKE_STYLES.includes(v as StrokeStyle)) throw new Error(`Invalid strokeStyle "${v}"`);
       return v as StrokeStyle;
+    },
+  },
+  standardStrokeStyle: {
+    validate(v: unknown): StandardStrokeStyle {
+      if (v === 'sketch') throw new Error('Sketch stroke is unsupported for this shape');
+      return StyleValidators.strokeStyle.validate(v) as StandardStrokeStyle;
     },
   },
   strokeWidth: {
@@ -331,7 +334,7 @@ export function createTextForeignObjectForExport(opts: {
   div.style.alignItems = opts.verticalAlign === 'top' ? 'flex-start' : 'center';
   div.style.justifyContent = opts.textAlign === 'left' ? 'flex-start' : opts.textAlign === 'right' ? 'flex-end' : 'center';
   div.style.fontSize = typeof opts.fontSize === 'number' ? `${opts.fontSize}px` : `${FONT_SIZES[opts.fontSize as FontSize]}px`;
-  div.style.fontFamily = (FONT_FAMILIES as any)[opts.font] || opts.font;
+  Object.assign(div.style, boardFontStyle(FONT_FAMILIES[opts.font as Font] ?? opts.font));
   div.style.color = resolveColor(opts.color) ?? opts.color;
   if (opts.background) div.style.background = resolveColor(opts.background) ?? opts.background;
   div.style.textAlign = opts.textAlign;

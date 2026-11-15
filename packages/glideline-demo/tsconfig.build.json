@@ -2,6 +2,7 @@
   "extends": "./tsconfig.json",
   "include": [
     "src/GlideboardDemo.tsx",
+    "src/SketchComparisonDemo.tsx",
     "src/demo-asset-storage.ts",
     "src/CollaborationDemo.tsx",
     "src/collaboration-demo-transport.ts"

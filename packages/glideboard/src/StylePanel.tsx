@@ -13,6 +13,10 @@ import {
 } from 'react-icons/fi';
 import {
   TLDRAW_COLORS,
+  STROKE_STYLES,
+  FONT_FAMILIES,
+  boardFontStyle,
+  type StrokeStyle,
   type GlideShape,
   type ShapeId,
 } from '@durgakiran/glideline';
@@ -428,7 +432,12 @@ function FillPreview({ kind }: { kind: string }) {
   );
 }
 
-function StrokePreview({ style, width = 2 }: { style: 'solid' | 'dashed' | 'dotted'; width?: number }) {
+function StrokePreview({ style, width = 2 }: { style: StrokeStyle; width?: number }) {
+  if (style === 'sketch') {
+    return <svg width="16" height="10" viewBox="0 0 16 10" aria-hidden="true">
+      <path d="M1 5 C5 1 10 9 15 5" fill="none" stroke="currentColor" strokeWidth={width} strokeLinecap="round" />
+    </svg>;
+  }
   return <span style={{ width: 16, borderTop: `${width}px ${style} currentColor` }} />;
 }
 
@@ -483,6 +492,7 @@ function CoreStyleControls({
   showOpacity,
   showFill,
   showStrokeStyle,
+  showSketch,
   showStrokeWidth,
   showPressure,
   showFont,
@@ -511,6 +521,7 @@ function CoreStyleControls({
   showOpacity: boolean;
   showFill: boolean;
   showStrokeStyle: boolean;
+  showSketch: boolean;
   showStrokeWidth: boolean;
   showPressure: boolean;
   showFont: boolean;
@@ -519,7 +530,7 @@ function CoreStyleControls({
   onColor: (value: string) => void;
   onOpacity: (value: number) => void;
   onFill: (value: string) => void;
-  onStrokePresentation: (value: 'solid' | 'dashed' | 'dotted' | 'pressure') => void;
+  onStrokePresentation: (value: StrokeStyle | 'pressure') => void;
   onStrokeWidth: (value: string) => void;
   onFont: (value: string) => void;
   onFontSize: (value: string) => void;
@@ -558,7 +569,7 @@ function CoreStyleControls({
       ) : null}
       {showStrokeStyle ? (
         <div role="group" aria-label={mode === 'default' ? 'Default stroke style' : 'Stroke style'} style={optionGridStyle}>
-          {(['solid', 'dashed', 'dotted'] as const).map(kind => (
+          {STROKE_STYLES.filter(kind => kind !== 'sketch' || showSketch).map(kind => (
             <VisualStyleButton key={kind} label={`${kind[0]!.toUpperCase()}${kind.slice(1)} stroke`}
               active={!pressureSensitive && strokeStyle === kind} onClick={() => onStrokePresentation(kind)}>
               <StrokePreview style={kind} />
@@ -588,16 +599,16 @@ function CoreStyleControls({
       {showFont ? (
         <div role="group" aria-label={mode === 'default' ? 'Default font family' : 'Font family'} style={optionGridStyle}>
           <VisualStyleButton label="Draw font" active={font === 'draw'} onClick={() => onFont('draw')}>
-            <span style={{ fontFamily: '"Shantell Sans", cursive', fontSize: 10 }}>Aa</span>
+            <span style={{ ...boardFontStyle(FONT_FAMILIES.draw), fontSize: 10 }}>Aa</span>
           </VisualStyleButton>
           <VisualStyleButton label="Sans font" active={font === 'sans'} onClick={() => onFont('sans')}>
-            <span style={{ fontFamily: 'Inter, system-ui, sans-serif', fontSize: 10 }}>Aa</span>
+            <span style={{ ...boardFontStyle(FONT_FAMILIES.sans), fontSize: 10 }}>Aa</span>
           </VisualStyleButton>
           <VisualStyleButton label="Serif font" active={font === 'serif'} onClick={() => onFont('serif')}>
-            <span style={{ fontFamily: 'Georgia, serif', fontSize: 10 }}>Aa</span>
+            <span style={{ ...boardFontStyle(FONT_FAMILIES.serif), fontSize: 10 }}>Aa</span>
           </VisualStyleButton>
           <VisualStyleButton label="Mono font" active={font === 'mono'} onClick={() => onFont('mono')}>
-            <span style={{ fontFamily: '"Fira Code", monospace', fontSize: 10 }}>Aa</span>
+            <span style={{ ...boardFontStyle(FONT_FAMILIES.mono), fontSize: 10 }}>Aa</span>
           </VisualStyleButton>
         </div>
       ) : null}
@@ -973,7 +984,7 @@ export function StylePanel() {
     });
   };
 
-  const updateStrokePresentation = (value: 'solid' | 'dashed' | 'dotted' | 'pressure') => {
+  const updateStrokePresentation = (value: StrokeStyle | 'pressure') => {
     if (value === 'pressure') {
       updateProp('strokeStyle', 'solid');
       updateProp('pressureSensitive', true);
@@ -1134,6 +1145,7 @@ export function StylePanel() {
         showOpacity={isDefault || supportedKeys.has('opacity')}
         showFill={showAppearanceDefaults && (isDefault || supportedKeys.has('fillStyle'))}
         showStrokeStyle={showAppearanceDefaults && (isDefault || supportedKeys.has('strokeStyle'))}
+        showSketch={isDefault || shapes.every(shape => editor.getShapeUtil(shape).supportsSketchStroke(shape))}
         showStrokeWidth={showAppearanceDefaults && (isDefault || supportedKeys.has('strokeWidth'))}
         showPressure={isDefault || supportedKeys.has('pressureSensitive')}
         showFont={isDefault || supportedKeys.has('font')}

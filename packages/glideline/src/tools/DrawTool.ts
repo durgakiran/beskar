@@ -62,6 +62,11 @@ class Drawing extends StateNode {
   private _pressureSensitive = false;
   private _simulatePressure = false;
 
+  private get strokeStyle() {
+    const stroke = this.editor.activeStyles.value.strokeStyle;
+    return stroke === 'sketch' ? 'solid' : stroke ?? 'solid';
+  }
+
   override onEnter(info: PointerDownEvent): void {
     this._pressureSensitive = this.editor.activeStyles.value.pressureSensitive === true;
     this._simulatePressure = this._pressureSensitive && info.pointerType !== 'pen';
@@ -86,7 +91,7 @@ class Drawing extends StateNode {
         props: {
           points:     [firstPt],
           strokeWidth: this.editor.activeStyles.value.strokeWidth ?? 'medium',
-          strokeStyle: this.editor.activeStyles.value.strokeStyle ?? 'solid',
+          strokeStyle: this.strokeStyle,
           pressureSensitive: this._pressureSensitive,
           simulatePressure: this._simulatePressure,
           opacity:    1,
@@ -114,7 +119,7 @@ class Drawing extends StateNode {
         props: {
           points:     this._points,
           strokeWidth: this.editor.activeStyles.value.strokeWidth ?? 'medium',
-          strokeStyle: this.editor.activeStyles.value.strokeStyle ?? 'solid',
+          strokeStyle: this.strokeStyle,
           pressureSensitive: this._pressureSensitive,
           simulatePressure: this._simulatePressure,
           opacity:    1,
@@ -181,7 +186,7 @@ class Drawing extends StateNode {
         props: {
           points:     pts,
           strokeWidth: this.editor.activeStyles.value.strokeWidth ?? 'medium',
-          strokeStyle: this.editor.activeStyles.value.strokeStyle ?? 'solid',
+          strokeStyle: this.strokeStyle,
           pressureSensitive: this._pressureSensitive,
           simulatePressure: this._simulatePressure,
           opacity:    1,
