@@ -50,13 +50,7 @@ class Idle extends StateNode {
         props: {
           w:         W,
           h:         H,
-          color:     'yellow',
-          opacity:   1,
-          text:      '',
-          font:      'sans',
-          fontSize:  'md',
-          textAlign: 'left',
-          textColor: '#1e1e1e',
+          color: this.editor.activeStyles.peek()['stickyNoteColor'] ?? 'yellow',
         },
       });
     });

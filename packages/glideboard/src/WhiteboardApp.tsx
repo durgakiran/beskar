@@ -279,7 +279,9 @@ export function WhiteboardApp({
 
   const copyPortableSelection = (ids: readonly ShapeId[]) => {
     editor.copy([...ids]);
-    return writePortableSelection(ids);
+    void writePortableSelection(ids).catch(error => {
+      console.warn('[Glideboard] Unable to write portable clipboard data', error);
+    });
   };
 
   const onKeyDown = (event: React.KeyboardEvent) => {
@@ -321,9 +323,7 @@ export function WhiteboardApp({
           editor.selectAll();
         } else if (event.key === 'c' && ids.length > 0) {
           event.preventDefault();
-          void copyPortableSelection(ids).catch(error => {
-            console.warn('[Glideboard] Unable to write portable clipboard data', error);
-          });
+          copyPortableSelection(ids);
         } else if (event.key === 'x' && ids.length > 0) {
           event.preventDefault();
           let portableWrite = Promise.resolve();
@@ -677,6 +677,7 @@ export function WhiteboardApp({
           setAssetsOpen(open => !open);
         }}
         onRequestAssetImport={requestAssetImport}
+        onCopy={copyPortableSelection}
       /> : null}
       {layersOpen ? <LayersPanel /> : null}
       {assetsOpen && assetLibraryProvider ? (

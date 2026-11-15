@@ -106,7 +106,7 @@ test('selected raster and SVG imports expose inspectors without leaking focused 
   await chooseFiles(page, board.getByTitle('Import image'), [svgFile('inspector.svg')]);
   await expect(board.locator('[data-import-status="complete"]', { hasText: 'inspector.svg' })).toBeVisible();
   await expect(inspector.getByRole('group', { name: 'SVG color mode' })).toBeVisible();
-  await expect(inspector.getByLabel('Theme color')).toBeDisabled();
+  await expect(inspector.getByLabel('Theme color')).toHaveCount(0);
   await inspector.getByRole('button', { name: 'Monochrome' }).click();
   await expect(inspector.getByLabel('Theme color')).toBeEnabled();
   await expect(inspector.getByRole('spinbutton', { name: 'Crop X' })).toHaveCount(0);

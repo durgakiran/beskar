@@ -47,7 +47,7 @@ class Idle extends StateNode {
         meta:     {},
         props: {
           text:     '',
-          textAlign: 'left',
+          textAlign: this.editor.activeStyles.peek()['standaloneTextAlign'] ?? 'left',
         },
       });
     });

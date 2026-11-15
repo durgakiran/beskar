@@ -1,20 +1,19 @@
 import React from 'react';
+import type { ShapeId } from '@durgakiran/glideline';
 import {
+  FiCopy,
   FiMousePointer,
-  FiMove,
   FiSquare,
   FiCircle,
   FiTriangle,
   FiHexagon,
   FiStar,
   FiType,
-  FiFileText,
-  FiPenTool,
   FiMinus,
   FiArrowRight,
-  FiRepeat,
   FiRotateCcw,
   FiRotateCw,
+  FiTrash2,
   FiLayout,
   FiLayers,
   FiImage,
@@ -22,6 +21,8 @@ import {
 } from 'react-icons/fi';
 import {
   LuEraser,
+  LuHand,
+  LuPencil,
   LuDiamond,
   LuRectangleHorizontal,
   LuDatabase,
@@ -37,6 +38,7 @@ import { useGlideboardController } from './GlideboardContext.js';
 import type { ConnectorPreset } from './GlideboardController.js';
 import { wbTheme } from './theme.js';
 import { useSignalValue } from './useSignalValue.js';
+import { useSelectedShapes } from './hooks/useSelectedShapes.js';
 import type { GlideboardToolbarLayout } from './types.js';
 
 interface ToolDef {
@@ -44,6 +46,24 @@ interface ToolDef {
   label: string;
   shortcut?: string;
   icon: React.ComponentType<any>;
+}
+
+function ParallelogramIcon() {
+  return <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true">
+    <path d="M7 5h14l-4 14H3z" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
+  </svg>;
+}
+
+function PlainConnectorIcon() {
+  return <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true">
+    <path d="M3 17h9V7h9" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>;
+}
+
+function DoubleArrowIcon() {
+  return <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true">
+    <path d="M3 12h18M8 7l-5 5 5 5m8-10 5 5-5 5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>;
 }
 
 const SHAPE_TOOLS: ToolDef[] = [
@@ -54,7 +74,7 @@ const SHAPE_TOOLS: ToolDef[] = [
   { id: 'hexagon', label: 'Hexagon', icon: FiHexagon },
   { id: 'star', label: 'Star', icon: FiStar },
   { id: 'rounded-rect', label: 'Rounded Rect', icon: LuRectangleHorizontal },
-  { id: 'parallelogram', label: 'Parallelogram', icon: FiSquare },
+  { id: 'parallelogram', label: 'Parallelogram', icon: ParallelogramIcon },
   { id: 'chevron', label: 'Chevron', icon: LuChevronsRight },
   { id: 'document', label: 'Document', icon: LuFileOutput },
   { id: 'cylinder', label: 'Cylinder', icon: LuDatabase },
@@ -66,22 +86,39 @@ const SHAPE_TOOLS: ToolDef[] = [
 const SHAPE_TOOL_IDS = new Set(SHAPE_TOOLS.map(tool => tool.id));
 
 const ARROW_TOOLS: Array<ToolDef & { preset: ConnectorPreset }> = [
-  { id: 'connector-line', label: 'Plain Connector', shortcut: 'A', icon: FiMinus, preset: 'line' },
+  { id: 'connector-line', label: 'Plain Connector', shortcut: 'A', icon: PlainConnectorIcon, preset: 'line' },
   { id: 'connector-arrow', label: 'Arrow', icon: FiArrowRight, preset: 'arrow' },
-  { id: 'connector-double-arrow', label: 'Double Arrow', icon: FiRepeat, preset: 'double-arrow' },
+  { id: 'connector-double-arrow', label: 'Double Arrow', icon: DoubleArrowIcon, preset: 'double-arrow' },
 ];
 
 const TOOLS: ToolDef[] = [
   { id: 'select', label: 'Select', shortcut: 'V', icon: FiMousePointer },
-  { id: 'hand', label: 'Hand', shortcut: 'H', icon: FiMove },
+  { id: 'hand', label: 'Hand', shortcut: 'H', icon: LuHand },
   { id: 'shape-picker', label: 'Shapes', shortcut: 'R', icon: FiSquare },
   { id: 'text', label: 'Text', shortcut: 'T', icon: FiType },
-  { id: 'sticky-note', label: 'Sticky', shortcut: 'S', icon: FiFileText },
+  { id: 'sticky-note', label: 'Sticky', shortcut: 'S', icon: LuStickyNote },
   { id: 'frame', label: 'Frame', shortcut: 'F', icon: FiLayout },
-  { id: 'draw', label: 'Draw', shortcut: 'D', icon: FiPenTool },
+  { id: 'draw', label: 'Draw', shortcut: 'D', icon: LuPencil },
   { id: 'eraser', label: 'Eraser', shortcut: 'X', icon: LuEraser },
   { id: 'arrow-picker', label: 'Arrow', shortcut: 'A', icon: FiArrowRight },
 ];
+
+export function creationShapeType(tool: string): string | null {
+  if (tool === 'draw') return 'freehand';
+  if (SHAPE_TOOL_IDS.has(tool) || ['arrow', 'text', 'sticky-note', 'frame'].includes(tool)) return tool;
+  return null;
+}
+
+export function boardObjectName(type: string): string {
+  if (type === 'arrow') return 'Connector';
+  if (type === 'sticky-note') return 'Sticky note';
+  if (type === 'raster-image') return 'Image';
+  if (type === 'sanitized-svg') return 'SVG';
+  if (type === 'freehand' || type === 'draw') return 'Draw';
+  return SHAPE_TOOLS.find(tool => tool.id === type)?.label
+    ?? TOOLS.find(tool => tool.id === type)?.label
+    ?? type.replace(/[-_]/g, ' ').replace(/^./, letter => letter.toUpperCase());
+}
 
 const buttonStyle: React.CSSProperties = {
   display: 'flex',
@@ -140,7 +177,12 @@ function ToolbarButtonStyles() {
   );
 }
 
-function ToolButton({ tool, active, onClick }: { tool: ToolDef; active: boolean; onClick: (event: React.MouseEvent<HTMLButtonElement>) => void }) {
+function ToolButton({ tool, active, disabled = false, onClick }: {
+  tool: ToolDef;
+  active: boolean;
+  disabled?: boolean;
+  onClick: (event: React.MouseEvent<HTMLButtonElement>) => void;
+}) {
   const controller = useGlideboardController();
   const Icon = tool.icon;
   return (
@@ -151,10 +193,13 @@ function ToolButton({ tool, active, onClick }: { tool: ToolDef; active: boolean;
       data-glideboard-tool={tool.id}
       aria-label={tool.label}
       title={tool.shortcut ? `${tool.label} (${tool.shortcut})` : tool.label}
+      disabled={disabled}
       onClick={onClick}
       style={{
         ...buttonStyle,
         color: active ? wbTheme.accentText : wbTheme.textSoft,
+        opacity: disabled ? 0.4 : 1,
+        cursor: disabled ? 'default' : buttonStyle.cursor,
       }}
     >
       <Icon size={16} />
@@ -333,6 +378,7 @@ export function Toolbar({
   onToggleLayers,
   onToggleAssets,
   onRequestAssetImport,
+  onCopy,
 }: {
   layout?: GlideboardToolbarLayout;
   layersOpen?: boolean;
@@ -342,12 +388,23 @@ export function Toolbar({
   onToggleLayers?: () => void;
   onToggleAssets?: () => void;
   onRequestAssetImport?: (trigger: HTMLElement) => void;
+  onCopy?: (ids: readonly ShapeId[]) => void;
 }) {
   const controller = useGlideboardController();
   const { editor } = controller;
   const activeTool = useSignalValue(editor.currentToolId) ?? 'select';
   const currentArrowPreset = useSignalValue(controller.arrowPresetSignal) ?? 'arrow';
   const snapSettings = useSignalValue(editor.snapping.settings)!;
+  const selectedShapes = useSelectedShapes();
+  const editingSession = useSignalValue(editor.textEditing.session);
+  const labelTargetId = useSignalValue(controller.textStyleTargetIdSignal);
+  const selectedIds = selectedShapes.map(shape => shape.id as ShapeId);
+  const targetsLabel = selectedShapes.length === 1
+    && selectedShapes[0]!.type !== 'text' && selectedShapes[0]!.id === labelTargetId;
+  const canActOnSelection = selectedIds.length > 0 && !editingSession && !targetsLabel;
+  const canDeleteShape = (id: ShapeId): boolean => !editor.isShapeEffectivelyLocked(id)
+    && editor.getChildren(id).every(child => canDeleteShape(child.id as ShapeId));
+  const canDelete = canActOnSelection && selectedIds.every(canDeleteShape);
   const toolbarRef = React.useRef<HTMLDivElement>(null);
   const [isShapePickerOpen, setIsShapePickerOpen] = React.useState(false);
   const [isArrowPickerOpen, setIsArrowPickerOpen] = React.useState(false);
@@ -444,6 +501,15 @@ export function Toolbar({
       {!readOnly ? separator : null}
       {!readOnly ? <ToolButton tool={{ id: 'undo', label: 'Undo', shortcut: '⌘Z', icon: FiRotateCcw }} active={false} onClick={() => editor.undo()} /> : null}
       {!readOnly ? <ToolButton tool={{ id: 'redo', label: 'Redo', shortcut: '⌘⇧Z', icon: FiRotateCw }} active={false} onClick={() => editor.redo()} /> : null}
+      {!readOnly && <>
+        <ToolButton tool={{ id: 'copy', label: 'Copy', icon: FiCopy }} active={false}
+          disabled={!canActOnSelection} onClick={() => {
+            if (onCopy) onCopy(selectedIds);
+            else editor.copy(selectedIds);
+          }} />
+        <ToolButton tool={{ id: 'delete', label: 'Delete', icon: FiTrash2 }} active={false}
+          disabled={!canDelete} onClick={() => editor.deleteShapes(selectedIds)} />
+      </>}
       {assetsAvailable ? <ToolButton tool={{ id: 'assets', label: 'Assets', icon: FiGrid }} active={assetsOpen} onClick={() => onToggleAssets?.()} /> : null}
       {!readOnly ? <ToolButton tool={{ id: 'layers', label: 'Layers', icon: FiLayers }} active={layersOpen} onClick={() => onToggleLayers?.()} /> : null}
       {separator}
@@ -522,7 +588,7 @@ export function Toolbar({
       {layout === 'split' ? (
         <div data-glideboard-role="toolbar-actions" data-glideboard-toolbar-part="actions" style={{
           ...surfaceStyle, position: 'absolute', left: 60, top: 12,
-          flexDirection: 'row', maxWidth: 'calc(100% - 72px)',
+          flexDirection: 'row', maxWidth: 'calc(100% - 72px)', overflowX: 'auto',
         }}>{actionControls}</div>
       ) : null}
     </div>

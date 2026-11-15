@@ -1,9 +1,8 @@
-import React, { useMemo } from 'react';
+import React from 'react';
 import {
   FiAlignCenter,
   FiAlignLeft,
   FiAlignRight,
-  FiActivity,
   FiDownload,
   FiLock,
   FiRefreshCw,
@@ -26,6 +25,7 @@ import type {
   ArrowRouteStyle,
   ArrowheadStyle,
 } from './GlideboardController.js';
+import { boardObjectName, creationShapeType } from './Toolbar.js';
 import { wbTheme } from './theme.js';
 import { useSignalValue } from './useSignalValue.js';
 import { GLIDEBOARD_ASSET_ACCEPT, readAssetImportRequest } from './AssetImportPanel.js';
@@ -279,6 +279,27 @@ function VisualStyleButton({
   );
 }
 
+const ROUTE_OPTIONS = [
+  { value: 'curve', label: 'Curve', path: 'M2 15C5 15 6 3 18 3' },
+  { value: 'ortho', label: 'Ortho', path: 'M2 15H9V4H18' },
+  { value: 'smart', label: 'Smart', path: 'M2 13H4V4H16V13H18' },
+] as const;
+
+const ARROWHEAD_OPTIONS = [
+  { value: 'none', label: 'None' },
+  { value: 'arrow', label: 'Arrow' },
+] as const;
+
+function ArrowheadPreview({ terminal, style }: { terminal: 'start' | 'end'; style: ArrowheadStyle }) {
+  return (
+    <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor"
+      strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M2 10H18" />
+      {style === 'arrow' && <path d={terminal === 'start' ? 'M6 6L2 10L6 14' : 'M14 6L18 10L14 14'} />}
+    </svg>
+  );
+}
+
 function StyleOptionStyles() {
   return (
     <style>{`
@@ -445,15 +466,15 @@ function OpacityControl({
   label,
   value,
   onChange,
-  padding = 0,
 }: {
   label: string;
-  value: number;
+  value: number | typeof MIXED;
   onChange: (value: number) => void;
-  padding?: React.CSSProperties['padding'];
 }) {
+  const mixed = value === MIXED;
+  const sliderValue = mixed ? 0.6 : value;
   return (
-    <label style={{ display: 'grid', gridTemplateColumns: '1fr 30px', alignItems: 'center', gap: 4, padding }}>
+    <label style={{ display: 'grid', gridTemplateColumns: '1fr 34px', alignItems: 'center', gap: 4, width: '100%' }}>
       <input
         className="glideboard-opacity-slider"
         aria-label={label}
@@ -461,30 +482,53 @@ function OpacityControl({
         min={0.1}
         max={1}
         step={0.1}
-        value={value}
+        value={sliderValue}
+        aria-valuetext={mixed ? 'Mixed' : Math.round(sliderValue * 100) + '%'}
         onChange={event => onChange(Number(event.target.value))}
+        onPointerUp={mixed ? event => onChange(Number(event.currentTarget.value)) : undefined}
         style={{
           width: '100%',
-          '--glideboard-opacity-percent': `${value * 100}%`,
+          '--glideboard-opacity-percent': mixed ? '0%' : sliderValue * 100 + '%',
         } as React.CSSProperties}
       />
       <output style={{ fontSize: 10, color: wbTheme.textSoft, textAlign: 'right' }}>
-        {Math.round(value * 100)}%
+        {mixed ? 'Mixed' : Math.round(sliderValue * 100) + '%'}
       </output>
     </label>
   );
 }
 
-type CoreStyleMode = 'default' | 'shape' | 'text';
+const MIXED = Symbol('mixed style');
+
+function commonValue(values: readonly unknown[]): unknown {
+  const first = values[0];
+  return values.every(value => Object.is(value, first)) ? first : MIXED;
+}
+
+function StyleGroup({ label, value, grid = false, children }: {
+  label: string;
+  value: unknown;
+  grid?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <div role="group" aria-label={label}>
+      <div style={{ ...sectionTitleStyle, margin: '4px 4px 2px', display: 'flex', justifyContent: 'space-between', gap: 4 }}>
+        <span aria-hidden>{label}</span>
+        {value === MIXED && <span style={{ textTransform: 'none', letterSpacing: 0 }}>Mixed</span>}
+      </div>
+      <div style={grid ? optionGridStyle : { ...rowStyle, flexWrap: 'wrap', padding: '0 4px' }}>{children}</div>
+    </div>
+  );
+}
 
 function CoreStyleControls({
-  mode,
+  colorLabel,
   color,
   opacity,
   fillStyle,
-  strokeStyle,
   strokeWidth,
-  pressureSensitive,
+  strokePresentation,
   font,
   fontSize,
   textAlign,
@@ -507,13 +551,12 @@ function CoreStyleControls({
   onFontSize,
   onTextAlign,
 }: {
-  mode: CoreStyleMode;
+  colorLabel: string;
   color: unknown;
-  opacity: number;
+  opacity: number | typeof MIXED;
   fillStyle: unknown;
-  strokeStyle: unknown;
   strokeWidth: unknown;
-  pressureSensitive: boolean;
+  strokePresentation: unknown;
   font: unknown;
   fontSize: unknown;
   textAlign: unknown;
@@ -536,53 +579,57 @@ function CoreStyleControls({
   onFontSize: (value: string) => void;
   onTextAlign: (value: string) => void;
 }) {
-  const colorLabel = mode === 'default' ? 'Default color' : mode === 'text' ? 'Text color' : 'Shape color';
   const hasAppearance = showFill || showStrokeStyle || showStrokeWidth;
-  const hasTypography = showFont || showFontSize || showTextAlign;
   return (
     <div data-glideboard-role="core-style-controls" style={{ display: 'contents' }}>
       {showColor ? (
-        <div role="group" aria-label={colorLabel} style={optionGridStyle}>
+        <StyleGroup label={colorLabel} value={color} grid>
           {Object.entries(TLDRAW_COLORS).map(([name, hex]) => (
             <ColorOptionButton key={name} name={name} hex={hex}
               active={color === name || color === hex} onClick={() => onColor(name)} />
           ))}
-        </div>
+        </StyleGroup>
       ) : null}
       {showOpacity ? (
-        <OpacityControl label={mode === 'default' ? 'Default opacity' : 'Shape opacity'}
-          value={opacity} onChange={onOpacity} padding={mode === 'default' ? '0 8px' : 0} />
+        <StyleGroup label="Opacity" value={undefined}>
+          <OpacityControl label="Opacity"
+            value={opacity} onChange={onOpacity} />
+        </StyleGroup>
       ) : null}
       {showOpacity && hasAppearance ? (
         <div data-glideboard-role="style-options-divider" data-divider-section="color-appearance"
-          style={{ height: 1, background: wbTheme.border, marginTop: mode === 'default' ? 4 : 0 }} />
+          style={{ height: 1, background: wbTheme.border, marginTop: 4 }} />
       ) : null}
       {showFill ? (
-        <div role="group" aria-label={mode === 'default' ? 'Default fill' : 'Fill'} style={optionGridStyle}>
+        <StyleGroup label="Fill" value={fillStyle} grid>
           {(['none', 'semi', 'solid', 'pattern', 'lined'] as const).map(kind => (
             <VisualStyleButton key={kind} label={`${kind[0]!.toUpperCase()}${kind.slice(1)} fill`}
               active={fillStyle === kind} onClick={() => onFill(kind)}>
               <FillPreview kind={kind} />
             </VisualStyleButton>
           ))}
-        </div>
+        </StyleGroup>
       ) : null}
       {showStrokeStyle ? (
-        <div role="group" aria-label={mode === 'default' ? 'Default stroke style' : 'Stroke style'} style={optionGridStyle}>
+        <StyleGroup label="Stroke style" value={strokePresentation} grid>
           {STROKE_STYLES.filter(kind => kind !== 'sketch' || showSketch).map(kind => (
             <VisualStyleButton key={kind} label={`${kind[0]!.toUpperCase()}${kind.slice(1)} stroke`}
-              active={!pressureSensitive && strokeStyle === kind} onClick={() => onStrokePresentation(kind)}>
+              active={strokePresentation === kind} onClick={() => onStrokePresentation(kind)}>
               <StrokePreview style={kind} />
             </VisualStyleButton>
           ))}
           {showPressure ? (
-            <VisualStyleButton label="Pressure-sensitive stroke" active={pressureSensitive}
-              onClick={() => onStrokePresentation('pressure')}><FiActivity size={14} /></VisualStyleButton>
+            <VisualStyleButton label="Pressure-sensitive stroke" active={strokePresentation === 'pressure'}
+              onClick={() => onStrokePresentation('pressure')}>
+              <svg width="16" height="14" viewBox="0 0 16 14" aria-hidden="true">
+                <path d="M1 11C6 10 9 2 14 3C17 4 14 8 11 8C7 8 5 12 1 11Z" fill="currentColor" />
+              </svg>
+            </VisualStyleButton>
           ) : null}
-        </div>
+        </StyleGroup>
       ) : null}
       {showStrokeWidth ? (
-        <div role="group" aria-label={mode === 'default' ? 'Default stroke width' : 'Stroke width'} style={optionGridStyle}>
+        <StyleGroup label="Stroke width" value={strokeWidth} grid>
           {([['thin', 1.5], ['medium', 2.5], ['thick', 3.5], ['xl', 5]] as const).map(([kind, width]) => (
             <VisualStyleButton key={kind}
               label={`${kind === 'xl' ? 'Extra large' : `${kind[0]!.toUpperCase()}${kind.slice(1)}`} stroke width`}
@@ -590,14 +637,10 @@ function CoreStyleControls({
               <StrokePreview style="solid" width={width} />
             </VisualStyleButton>
           ))}
-        </div>
-      ) : null}
-      {hasTypography ? (
-        <div data-glideboard-role="style-options-divider" data-divider-section="appearance-typography"
-          style={{ height: 1, background: wbTheme.border }} />
+        </StyleGroup>
       ) : null}
       {showFont ? (
-        <div role="group" aria-label={mode === 'default' ? 'Default font family' : 'Font family'} style={optionGridStyle}>
+        <StyleGroup label="Font family" value={font} grid>
           <VisualStyleButton label="Draw font" active={font === 'draw'} onClick={() => onFont('draw')}>
             <span style={{ ...boardFontStyle(FONT_FAMILIES.draw), fontSize: 10 }}>Aa</span>
           </VisualStyleButton>
@@ -610,22 +653,22 @@ function CoreStyleControls({
           <VisualStyleButton label="Mono font" active={font === 'mono'} onClick={() => onFont('mono')}>
             <span style={{ ...boardFontStyle(FONT_FAMILIES.mono), fontSize: 10 }}>Aa</span>
           </VisualStyleButton>
-        </div>
+        </StyleGroup>
       ) : null}
       {showFontSize ? (
-        <div role="group" aria-label={mode === 'default' ? 'Default font size' : 'Font size'} style={optionGridStyle}>
+        <StyleGroup label="Font size" value={fontSize} grid>
           <VisualStyleButton label="Small font" active={fontSize === 'sm'} onClick={() => onFontSize('sm')}><span style={{ fontSize: 9 }}>S</span></VisualStyleButton>
           <VisualStyleButton label="Medium font" active={fontSize === 'md'} onClick={() => onFontSize('md')}><span style={{ fontSize: 10 }}>M</span></VisualStyleButton>
           <VisualStyleButton label="Large font" active={fontSize === 'lg'} onClick={() => onFontSize('lg')}><span style={{ fontSize: 11 }}>L</span></VisualStyleButton>
           <VisualStyleButton label="Extra large font" active={fontSize === 'xl'} onClick={() => onFontSize('xl')}><span style={{ fontSize: 11 }}>XL</span></VisualStyleButton>
-        </div>
+        </StyleGroup>
       ) : null}
       {showTextAlign ? (
-        <div role="group" aria-label={mode === 'default' ? 'Default label alignment' : 'Label alignment'} style={optionGridStyle}>
+        <StyleGroup label="Alignment" value={textAlign} grid>
           <VisualStyleButton label="Align labels left" active={textAlign === 'left'} onClick={() => onTextAlign('left')}><FiAlignLeft size={14} /></VisualStyleButton>
           <VisualStyleButton label="Center labels" active={textAlign === 'center'} onClick={() => onTextAlign('center')}><FiAlignCenter size={14} /></VisualStyleButton>
           <VisualStyleButton label="Align labels right" active={textAlign === 'right'} onClick={() => onTextAlign('right')}><FiAlignRight size={14} /></VisualStyleButton>
-        </div>
+        </StyleGroup>
       ) : null}
     </div>
   );
@@ -667,8 +710,13 @@ export function PositionSizeBar() {
   const { editor } = controller;
   const selectedShapes = useSelectedShapes();
   const editingSession = useSignalValue(editor.textEditing.session);
+  const labelTarget = useSignalValue(controller.textStyleTargetIdSignal);
   const selected = selectedShapes.length === 1 && !editingSession ? selectedShapes[0]! : null;
-  if (!selected) return null;
+  if (!selected || (selected.id === labelTarget && selected.type !== 'text')
+    || editor.isShapeEffectivelyLocked(selected.id as ShapeId)
+    || (selected.type === 'arrow' && editor.getBindingsFromShape(selected.id as ShapeId).length > 0)) return null;
+  const util = editor.getShapeUtil(selected);
+  const canRotate = !util.hideRotateHandle(selected);
 
   const selectedWorld = editor.getShapeVisualWorldBounds(selected);
   const selectedLocal = editor.getShapeLocalBounds(selected.id as ShapeId);
@@ -678,7 +726,7 @@ export function PositionSizeBar() {
   const lockAspect = selectedAsset
     ? selectedAsset.props['aspectLocked'] !== false
     : selected.meta['aspectLocked'] === true;
-  const canResizePrecisely = selected.type !== 'group' && selected.type !== 'arrow';
+  const canResizePrecisely = canResizeFromInspector(editor, selected);
   const toggleAspectLock = () => {
     if (selectedAsset) {
       editor.updateShape(selectedAsset.id as ShapeId, {
@@ -716,20 +764,24 @@ export function PositionSizeBar() {
         onCommit={x => editor.setShapePrecision(selected.id as ShapeId, { x })} />
       <NumericField label="Y" value={selectedWorld.minY}
         onCommit={y => editor.setShapePrecision(selected.id as ShapeId, { y })} />
-      <NumericField label="W" value={selectedLocal.w} disabled={!canResizePrecisely}
-        onCommit={w => editor.setShapePrecision(selected.id as ShapeId, { w, lockAspect })} />
-      <NumericField label="H" value={selectedLocal.h} disabled={!canResizePrecisely}
-        onCommit={h => editor.setShapePrecision(selected.id as ShapeId, { h, lockAspect })} />
-      <NumericField label="°" value={selected.rotation * 180 / Math.PI} disabled={selected.type === 'arrow'}
-        onCommit={degrees => editor.setShapePrecision(selected.id as ShapeId, { rotation: degrees * Math.PI / 180 })} />
-      <button title={lockAspect ? 'Unlock aspect ratio' : 'Lock aspect ratio'} aria-label="Aspect ratio"
-        aria-pressed={lockAspect} onClick={toggleAspectLock}
-        style={{ ...buttonStyleSmall, width: 28, flex: '0 0 28px' }}>
-        {lockAspect ? <FiLock size={13} /> : <FiUnlock size={13} />}
-      </button>
-      <button title="Reset rotation" aria-label="Reset rotation"
-        onClick={() => editor.setShapePrecision(selected.id as ShapeId, { rotation: 0 })}
-        style={{ ...buttonStyleSmall, width: 28, flex: '0 0 28px' }}><FiRotateCcw size={13} /></button>
+      {canResizePrecisely && <>
+        <NumericField label="W" value={selectedLocal.w}
+          onCommit={w => editor.setShapePrecision(selected.id as ShapeId, { w, lockAspect })} />
+        <NumericField label="H" value={selectedLocal.h}
+          onCommit={h => editor.setShapePrecision(selected.id as ShapeId, { h, lockAspect })} />
+        <button title={lockAspect ? 'Unlock aspect ratio' : 'Lock aspect ratio'} aria-label="Aspect ratio"
+          aria-pressed={lockAspect} onClick={toggleAspectLock}
+          style={{ ...buttonStyleSmall, width: 28, flex: '0 0 28px' }}>
+          {lockAspect ? <FiLock size={13} /> : <FiUnlock size={13} />}
+        </button>
+      </>}
+      {canRotate && <>
+        <NumericField label="°" value={selected.rotation * 180 / Math.PI}
+          onCommit={degrees => editor.setShapePrecision(selected.id as ShapeId, { rotation: degrees * Math.PI / 180 })} />
+        <button title="Reset rotation" aria-label="Reset rotation"
+          onClick={() => editor.setShapePrecision(selected.id as ShapeId, { rotation: 0 })}
+          style={{ ...buttonStyleSmall, width: 28, flex: '0 0 28px' }}><FiRotateCcw size={13} /></button>
+      </>}
     </div>
   );
 }
@@ -845,6 +897,16 @@ function RasterCropControls({
   );
 }
 
+function textColorKey(shape: GlideShape): string {
+  if (shape.type === 'sticky-note') return 'textColor';
+  if (shape.type === 'text') return 'color';
+  return 'labelColor';
+}
+
+function canResizeFromInspector(editor: ReturnType<typeof useGlideboardController>['editor'], shape: GlideShape) {
+  return shape.type !== 'group' && !editor.getShapeUtil(shape).hideResizeHandles(shape);
+}
+
 export function StylePanel() {
   const controller = useGlideboardController();
   const { editor } = controller;
@@ -856,155 +918,121 @@ export function StylePanel() {
   const textStyleTargetId = useSignalValue(controller.textStyleTargetIdSignal);
   const shapes = editingShape ? [editingShape] : selectedShapes;
   const activeStyles = useSignalValue(editor.activeStyles);
-  const textOnly = Boolean(editingShape)
-    || (shapes.length > 0 && shapes.every(shape => shape.type === 'text'))
-    || (
-      selectedShapes.length === 1
-      && selectedShapes[0]!.id === textStyleTargetId
-    );
-  const selected = selectedShapes.length === 1 ? selectedShapes[0]! : null;
+  const activeTool = useSignalValue(editor.currentToolId) ?? 'select';
+  const toolRoute = useSignalValue(controller.arrowRouteStyleSignal);
+  const toolArrowheadStart = useSignalValue(controller.arrowheadStartSignal);
+  const toolArrowheadEnd = useSignalValue(controller.arrowheadEndSignal);
+  const isDefault = shapes.length === 0;
+  const creationType = isDefault ? creationShapeType(activeTool) : null;
+  const creationUtil = creationType ? editor.getShapeUtil(creationType) : null;
+  const creationDefaults = creationUtil?.getDefaultProps() ?? {};
+  const standaloneText = creationType === 'text' || shapes.length > 0 && shapes.every(shape => shape.type === 'text');
+  const labelTarget = !standaloneText && Boolean(editingShape || (
+    shapes.length === 1 && shapes[0]!.id === textStyleTargetId
+  ));
+  const textOnly = standaloneText || labelTarget;
+  const selected = shapes.length === 1 ? shapes[0]! : null;
   const selectedAsset = selected?.type === 'raster-image' || selected?.type === 'sanitized-svg'
     ? selected
     : null;
-  const canMatchSizes = selectedShapes.length >= 2
-    && selectedShapes.every(shape => shape.type !== 'group' && shape.type !== 'arrow');
+  const locked = shapes.some(shape => editor.isShapeEffectivelyLocked(shape.id as ShapeId));
+  const selectedIds = selectedShapes.map(shape => shape.id as ShapeId);
+  const selectedIdSet = new Set(selectedIds);
+  const transformRoots = selectedShapes.filter(shape => !editor.getAncestors(shape.id as ShapeId)
+    .some(parent => selectedIdSet.has(parent.id as ShapeId)));
+  const canArrange = !locked && transformRoots.length >= 2;
+  const canMatchSizes = canArrange && transformRoots.every(shape => canResizeFromInspector(editor, shape));
 
-  const supportedKeys = useMemo(() => {
-    const keys = new Set<string>();
-    shapes.forEach(shape => {
-      Object.keys(shape.props).forEach(key => keys.add(key));
-    });
-    return keys;
-  }, [shapes]);
-  const getCommonValue = (key: string) => {
-    if (shapes.length === 0) {
-      return activeStyles ? activeStyles[key] : undefined;
-    }
-    let value: unknown = undefined;
-    let first = true;
-    for (const shape of shapes) {
-      if (key in shape.props) {
-        if (first) {
-          value = shape.props[key];
-          first = false;
-        } else if (value !== shape.props[key]) {
-          return undefined;
-        }
-      }
-    }
-    return value;
-  };
+  // Defaults also describe capabilities for records saved before a style was added.
+  const shapeStyles = shapes.map(shape => ({
+    ...editor.getShapeUtil(shape).getDefaultProps(),
+    ...shape.props,
+  }));
+  const supports = (key: string) => isDefault ? key in creationDefaults
+    : shapeStyles.every(styles => key in styles);
+  const getCommonValue = (key: string) => isDefault ? activeStyles?.[key] ?? creationDefaults[key]
+    : commonValue(shapeStyles.map(styles => styles[key]));
 
-  const updateProp = (key: string, value: unknown) => {
-    editor.activeStyles.value = {
-      ...editor.activeStyles.value,
-      [key]: value,
-    };
+  const updateProps = (props: Record<string, unknown>, label = 'Style change') => {
     if (shapes.length > 0) {
-      editor.batch('Style change', () => {
-        for (const shape of shapes) {
-          if (key in shape.props) {
-            editor.updateShape(shape.id as ShapeId, {
-              props: { [key]: value },
-            });
-          }
-        }
+      editor.batch(label, () => {
+        for (const shape of shapes) editor.updateShape(shape.id as ShapeId, { props });
       });
     }
+    editor.activeStyles.value = { ...editor.activeStyles.peek(), ...props };
   };
-
-  const color = getCommonValue('color');
-  const fillStyle = getCommonValue('fillStyle');
-  const strokeStyle = getCommonValue('strokeStyle');
-  const strokeWidth = getCommonValue('strokeWidth');
-  const pressureSensitive = getCommonValue('pressureSensitive') === true;
-  const opacity = Number(getCommonValue('opacity') ?? 1);
-  const font = getCommonValue('font');
-  const fontSize = getCommonValue('fontSize');
-  const textAlign = getCommonValue('textAlign');
-  const routeStyle = getCommonValue('routeStyle');
-  const arrowheadStart = getCommonValue('arrowheadStart');
-  const arrowheadEnd = getCommonValue('arrowheadEnd');
-  const clipContent = getCommonValue('clipContent');
-
-  const getCommonTextColor = () => {
-    let value: unknown = undefined;
-    let first = true;
-    for (const shape of shapes) {
-      const key = 'labelColor' in shape.props ? 'labelColor' : 'color';
-      if (!(key in shape.props)) continue;
-      if (first) {
-        value = shape.props[key];
-        first = false;
-      } else if (value !== shape.props[key]) {
-        return undefined;
-      }
+  const updateProp = (key: string, value: unknown) => updateProps({ [key]: value });
+  const supportsTextColor = isDefault ? supports('color') : shapeStyles.every(
+    (styles, index) => textColorKey(shapes[index]!) in styles,
+  );
+  const textColor = isDefault ? getCommonValue('color') : commonValue(
+    shapeStyles.map((styles, index) => styles[textColorKey(shapes[index]!)]),
+  );
+  const updateTextColor = (value: string) => updateProp(selected ? textColorKey(selected) : 'color', value);
+  const targetType = selected?.type ?? creationType;
+  const bodyColorDefault = targetType === 'sticky-note' ? 'stickyNoteColor'
+    : targetType === 'frame' ? 'frameColor'
+    : 'color';
+  const bodyColor = isDefault
+    ? activeStyles?.[bodyColorDefault] ?? creationDefaults['color']
+    : getCommonValue('color');
+  const updateBodyColor = (value: string) => {
+    if (!isDefault || bodyColorDefault === 'color') updateProp('color', value);
+    if (bodyColorDefault !== 'color') {
+      editor.activeStyles.value = { ...editor.activeStyles.peek(), [bodyColorDefault]: value };
     }
-    return shapes.length === 0
-      ? activeStyles?.['labelColor'] ?? activeStyles?.['color']
-      : value;
   };
-  const textColor = getCommonTextColor();
-  const supportsTextColor = shapes.length === 0 || shapes.some(shape => (
-    'labelColor' in shape.props || 'color' in shape.props
-  ));
-
-  const updateTextColor = (value: unknown) => {
-    editor.activeStyles.value = {
-      ...editor.activeStyles.value,
-      color: value,
-      labelColor: value,
-    };
-    if (shapes.length === 0) return;
-    editor.batch('Text color change', () => {
-      for (const shape of shapes) {
-        const key = 'labelColor' in shape.props ? 'labelColor' : 'color';
-        if (key in shape.props) {
-          editor.updateShape(shape.id as ShapeId, { props: { [key]: value } });
-        }
-      }
-    });
+  const opacity = getCommonValue('opacity');
+  const routeStyle = isDefault ? toolRoute : getCommonValue('routeStyle');
+  const arrowheadStart = isDefault ? toolArrowheadStart : getCommonValue('arrowheadStart');
+  const arrowheadEnd = isDefault ? toolArrowheadEnd : getCommonValue('arrowheadEnd');
+  const clipContent = getCommonValue('clipContent');
+  const supportsPressure = supports('pressureSensitive');
+  const showSketch = isDefault
+    ? Boolean(creationType === 'arrow' ? toolRoute === 'ortho' : creationUtil?.supportsSketchStroke({
+      type: creationType,
+      props: creationDefaults,
+    } as GlideShape))
+    : shapes.every(shape => editor.getShapeUtil(shape).supportsSketchStroke(shape));
+  const strokePresentation = (styles: Record<string, unknown>, supportsSketch: boolean) => {
+    if (styles['pressureSensitive'] === true) return 'pressure';
+    if (styles['strokeStyle'] === 'sketch' && !supportsSketch) return 'solid';
+    return styles['strokeStyle'];
   };
-
-  const updateShapeColor = (value: unknown) => {
-    editor.activeStyles.value = {
-      ...editor.activeStyles.value,
-      color: value,
-      labelColor: value,
-    };
-    editor.batch('Shape color change', () => {
-      for (const shape of shapes) {
-        const props: Record<string, unknown> = {};
-        if ('color' in shape.props) props['color'] = value;
-        if ('labelColor' in shape.props) props['labelColor'] = value;
-        if (Object.keys(props).length > 0) {
-          editor.updateShape(shape.id as ShapeId, { props });
-        }
-      }
-    });
-  };
+  const currentStroke = isDefault
+    ? strokePresentation({
+      strokeStyle: getCommonValue('strokeStyle'),
+      pressureSensitive: supportsPressure && getCommonValue('pressureSensitive'),
+    }, showSketch)
+    : commonValue(shapeStyles.map((styles, index) => strokePresentation(
+      styles, editor.getShapeUtil(shapes[index]!).supportsSketchStroke(shapes[index]!),
+    )));
 
   const updateStrokePresentation = (value: StrokeStyle | 'pressure') => {
-    if (value === 'pressure') {
-      updateProp('strokeStyle', 'solid');
-      updateProp('pressureSensitive', true);
+    const props: Record<string, unknown> = { strokeStyle: value === 'pressure' ? 'solid' : value };
+    if (supportsPressure) props['pressureSensitive'] = value === 'pressure';
+    // A shared stroke style must also take effect on pressure-enabled strokes.
+    if (!supportsPressure && shapeStyles.some(styles => styles['pressureSensitive'] === true)) {
+      editor.batch('Stroke style change', () => {
+        shapes.forEach((shape, index) => editor.updateShape(shape.id as ShapeId, {
+          props: 'pressureSensitive' in shapeStyles[index]! ? { ...props, pressureSensitive: false } : props,
+        }));
+      });
+      editor.activeStyles.value = { ...editor.activeStyles.peek(), ...props };
       return;
     }
-    updateProp('strokeStyle', value);
-    if (shapes.length === 0 || supportedKeys.has('pressureSensitive')) {
-      updateProp('pressureSensitive', false);
-    }
+    updateProps(props);
   };
 
   const updateArrowRoute = (value: ArrowRouteStyle) => {
     controller.setArrowRouteStyle(value);
-    updateProp('routeStyle', value);
+    if (!isDefault) updateProp('routeStyle', value);
   };
 
   const updateArrowhead = (terminal: 'start' | 'end', value: ArrowheadStyle) => {
     if (terminal === 'start') controller.setArrowheadStart(value);
     else controller.setArrowheadEnd(value);
-    updateProp(terminal === 'start' ? 'arrowheadStart' : 'arrowheadEnd', value);
+    if (!isDefault) updateProp(terminal === 'start' ? 'arrowheadStart' : 'arrowheadEnd', value);
   };
 
   const updateAssetProp = (id: ShapeId, key: string, value: unknown) => {
@@ -1013,10 +1041,10 @@ export function StylePanel() {
     editor.updateShape(id, { props: { [key]: value } });
   };
 
-  const isDefault = shapes.length === 0;
-  const coreMode: CoreStyleMode = isDefault ? 'default' : textOnly ? 'text' : 'shape';
-  const showAppearanceDefaults = isDefault || !textOnly;
-
+  if (isDefault && !creationType) return null;
+  const targetSuffix = labelTarget ? selected?.type === 'frame' ? ' title' : ' label' : '';
+  const title = selected ? boardObjectName(selected.type) + targetSuffix
+    : isDefault ? boardObjectName(activeTool) + ' defaults' : shapes.length + ' selected';
 
   return (
     <div
@@ -1035,6 +1063,11 @@ export function StylePanel() {
       }}
     >
       <StyleOptionStyles />
+      <div role="heading" aria-level={2}
+        style={{ fontSize: 12, fontWeight: 650, padding: '8px 6px 5px', borderBottom: '1px solid ' + wbTheme.border }}>
+        {title}
+      </div>
+      {locked ? <div style={{ padding: 6, fontSize: 11, color: wbTheme.textSoft }}>Locked selection</div> : <>
       {selectedAsset && !editingShape ? (
         <div
           data-glideboard-role="asset-inspector"
@@ -1046,7 +1079,6 @@ export function StylePanel() {
           onKeyDown={event => event.stopPropagation()}
           onKeyUp={event => event.stopPropagation()}
         >
-          <div style={sectionTitleStyle}>Asset</div>
 		  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
 			<AssetLifecycleCommands key={`commands:${selectedAsset.id}`} shapeId={selectedAsset.id as ShapeId} />
 			<AltTextField
@@ -1081,7 +1113,7 @@ export function StylePanel() {
                     >Monochrome</IconButton>
                   </div>
                 </div>
-                <label style={{ display: 'grid', gridTemplateColumns: '1fr 32px', alignItems: 'center', gap: 8,
+                {selectedAsset.props['colorMode'] === 'monochrome' && <label style={{ display: 'grid', gridTemplateColumns: '1fr 32px', alignItems: 'center', gap: 8,
                   fontSize: 10, color: wbTheme.textSoft }}>
                   Theme color
                   <input
@@ -1089,7 +1121,6 @@ export function StylePanel() {
                     aria-label="Theme color"
                     type="color"
                     value={String(selectedAsset.props['themeColor'] ?? '#000000').slice(0, 7)}
-                    disabled={selectedAsset.props['colorMode'] !== 'monochrome'}
                     onInput={event => updateAssetProp(
                       selectedAsset.id as ShapeId,
                       'themeColor',
@@ -1097,63 +1128,36 @@ export function StylePanel() {
                     )}
                     style={{ width: 32, height: 26, padding: 2, borderRadius: 4, border: `1px solid ${wbTheme.border}` }}
                   />
-                </label>
+                </label>}
               </>
             )}
           </div>
         </div>
       ) : null}
 
-      {selectedShapes.length >= 2 && !editingShape ? (
-        <div>
-          <div style={sectionTitleStyle}>Arrange</div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 4 }}>
-            <button title="Align left" style={buttonStyleSmall} onClick={() => editor.alignShapes(selectedShapes.map(s => s.id as ShapeId), 'left')}>Left</button>
-            <button title="Align horizontal centers" style={buttonStyleSmall} onClick={() => editor.alignShapes(selectedShapes.map(s => s.id as ShapeId), 'center-x')}>H Mid</button>
-            <button title="Align right" style={buttonStyleSmall} onClick={() => editor.alignShapes(selectedShapes.map(s => s.id as ShapeId), 'right')}>Right</button>
-            <button title="Align top" style={buttonStyleSmall} onClick={() => editor.alignShapes(selectedShapes.map(s => s.id as ShapeId), 'top')}>Top</button>
-            <button title="Align vertical centers" style={buttonStyleSmall} onClick={() => editor.alignShapes(selectedShapes.map(s => s.id as ShapeId), 'center-y')}>V Mid</button>
-            <button title="Align bottom" style={buttonStyleSmall} onClick={() => editor.alignShapes(selectedShapes.map(s => s.id as ShapeId), 'bottom')}>Bottom</button>
-            <button title="Distribute horizontal gaps" disabled={selectedShapes.length < 3} style={buttonStyleSmall}
-              onClick={() => editor.distributeShapes(selectedShapes.map(s => s.id as ShapeId), 'horizontal')}>H Gap</button>
-            <button title="Distribute vertical gaps" disabled={selectedShapes.length < 3} style={buttonStyleSmall}
-              onClick={() => editor.distributeShapes(selectedShapes.map(s => s.id as ShapeId), 'vertical')}>V Gap</button>
-            <button title="Tidy into a row" style={buttonStyleSmall}
-              onClick={() => editor.tidyShapes(selectedShapes.map(s => s.id as ShapeId), 'row')}>Tidy</button>
-            <button title="Match width" disabled={!canMatchSizes} style={buttonStyleSmall}
-              onClick={() => editor.matchShapeSizes(selectedShapes.map(s => s.id as ShapeId), 'width')}>Width</button>
-            <button title="Match height" disabled={!canMatchSizes} style={buttonStyleSmall}
-              onClick={() => editor.matchShapeSizes(selectedShapes.map(s => s.id as ShapeId), 'height')}>Height</button>
-            <button title="Match size" disabled={!canMatchSizes} style={buttonStyleSmall}
-              onClick={() => editor.matchShapeSizes(selectedShapes.map(s => s.id as ShapeId), 'both')}>Size</button>
-          </div>
-        </div>
-      ) : null}
-
       <CoreStyleControls
-        mode={coreMode}
-        color={textOnly ? textColor : color}
-        opacity={opacity}
-        fillStyle={fillStyle}
-        strokeStyle={strokeStyle}
-        strokeWidth={strokeWidth}
-        pressureSensitive={pressureSensitive}
-        font={font}
-        fontSize={fontSize}
-        textAlign={textAlign}
-        showColor={isDefault || (textOnly ? supportsTextColor : supportedKeys.has('color'))}
-        showOpacity={isDefault || supportedKeys.has('opacity')}
-        showFill={showAppearanceDefaults && (isDefault || supportedKeys.has('fillStyle'))}
-        showStrokeStyle={showAppearanceDefaults && (isDefault || supportedKeys.has('strokeStyle'))}
-        showSketch={isDefault || shapes.every(shape => editor.getShapeUtil(shape).supportsSketchStroke(shape))}
-        showStrokeWidth={showAppearanceDefaults && (isDefault || supportedKeys.has('strokeWidth'))}
-        showPressure={isDefault || supportedKeys.has('pressureSensitive')}
-        showFont={isDefault || supportedKeys.has('font')}
-        showFontSize={isDefault || supportedKeys.has('fontSize')}
-        showTextAlign={isDefault || supportedKeys.has('textAlign')}
+        colorLabel={textOnly ? 'Text color' : targetType === 'sticky-note' ? 'Background' : 'Color'}
+        color={textOnly ? textColor : bodyColor}
+        opacity={opacity === MIXED ? MIXED : Number(opacity ?? 1)}
+        fillStyle={getCommonValue('fillStyle')}
+        strokeWidth={getCommonValue('strokeWidth')}
+        strokePresentation={currentStroke}
+        font={getCommonValue('font')}
+        fontSize={getCommonValue('fontSize')}
+        textAlign={creationType === 'text' ? activeStyles?.['standaloneTextAlign'] ?? 'left' : getCommonValue('textAlign')}
+        showColor={textOnly ? supportsTextColor : supports('color') && !shapes.some(shape => shape.type === 'text')}
+        showOpacity={!labelTarget && supports('opacity')}
+        showFill={!textOnly && supports('fillStyle')}
+        showStrokeStyle={!textOnly && supports('strokeStyle')}
+        showSketch={showSketch}
+        showStrokeWidth={!textOnly && supports('strokeWidth')}
+        showPressure={supportsPressure}
+        showFont={(textOnly || creationType === 'sticky-note') && supports('font')}
+        showFontSize={(textOnly || creationType === 'sticky-note') && supports('fontSize')}
+        showTextAlign={(textOnly || creationType === 'sticky-note') && supports('textAlign')}
         onColor={value => {
           if (textOnly) updateTextColor(value);
-          else updateShapeColor(value);
+          else updateBodyColor(value);
         }}
         onOpacity={value => updateProp('opacity', value)}
         onFill={value => updateProp('fillStyle', value)}
@@ -1161,50 +1165,74 @@ export function StylePanel() {
         onStrokeWidth={value => updateProp('strokeWidth', value)}
         onFont={value => updateProp('font', value)}
         onFontSize={value => updateProp('fontSize', value)}
-        onTextAlign={value => updateProp('textAlign', value)}
+        onTextAlign={value => updateProp(creationType === 'text' ? 'standaloneTextAlign' : 'textAlign', value)}
       />
 
-      {!textOnly && supportedKeys.has('routeStyle') ? (
-        <div>
-          <div style={sectionTitleStyle}>Arrow Route</div>
-          <div style={rowStyle}>
-            <IconButton active={routeStyle === 'curve'} onClick={() => updateArrowRoute('curve')}>Curve</IconButton>
-            <IconButton active={routeStyle === 'ortho'} onClick={() => updateArrowRoute('ortho')}>Ortho</IconButton>
-            <IconButton active={routeStyle === 'smart'} onClick={() => updateArrowRoute('smart')}>Smart</IconButton>
-          </div>
-        </div>
+      {!textOnly && supports('routeStyle') ? (
+        <StyleGroup label="Route" value={routeStyle} grid>
+          {ROUTE_OPTIONS.map(({ value, label, path }) => (
+            <VisualStyleButton key={value} label={label} active={routeStyle === value} onClick={() => updateArrowRoute(value)}>
+              <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor"
+                strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d={path} />
+                {value === 'smart' && <rect x="7" y="8" width="6" height="6" rx="1" />}
+              </svg>
+            </VisualStyleButton>
+          ))}
+        </StyleGroup>
       ) : null}
 
-      {!textOnly && supportedKeys.has('arrowheadStart') ? (
-        <div>
-          <div style={sectionTitleStyle}>Start Arrowhead</div>
-          <div style={rowStyle}>
-            <IconButton active={arrowheadStart === 'none'} onClick={() => updateArrowhead('start', 'none')}>None</IconButton>
-            <IconButton active={arrowheadStart === 'arrow'} onClick={() => updateArrowhead('start', 'arrow')}>Arrow</IconButton>
-          </div>
-        </div>
-      ) : null}
+      {!textOnly && ([
+        { terminal: 'start', label: 'Start arrowhead', prop: 'arrowheadStart', current: arrowheadStart },
+        { terminal: 'end', label: 'End arrowhead', prop: 'arrowheadEnd', current: arrowheadEnd },
+      ] as const).filter(({ prop }) => supports(prop)).map(({ terminal, label, current }) => (
+        <StyleGroup key={terminal} label={label} value={current} grid>
+          {ARROWHEAD_OPTIONS.map(({ value, label }) => (
+            <VisualStyleButton key={value} label={label} active={current === value} onClick={() => updateArrowhead(terminal, value)}>
+              <ArrowheadPreview terminal={terminal} style={value} />
+            </VisualStyleButton>
+          ))}
+        </StyleGroup>
+      ))}
 
-      {!textOnly && supportedKeys.has('arrowheadEnd') ? (
-        <div>
-          <div style={sectionTitleStyle}>End Arrowhead</div>
-          <div style={rowStyle}>
-            <IconButton active={arrowheadEnd === 'none'} onClick={() => updateArrowhead('end', 'none')}>None</IconButton>
-            <IconButton active={arrowheadEnd === 'arrow'} onClick={() => updateArrowhead('end', 'arrow')}>Arrow</IconButton>
-          </div>
-        </div>
-      ) : null}
-
-      {supportedKeys.has('clipContent') ? (
-        <div>
-          <div style={sectionTitleStyle}>Frame Content</div>
-          <div style={rowStyle}>
-            <IconButton active={!clipContent} onClick={() => updateProp('clipContent', false)}>Overflow</IconButton>
+      {!textOnly && supports('clipContent') ? (
+        <StyleGroup label="Frame content" value={clipContent}>
+            <IconButton active={clipContent === false} onClick={() => updateProp('clipContent', false)}>Overflow</IconButton>
             <IconButton active={clipContent === true} onClick={() => updateProp('clipContent', true)}>Clip</IconButton>
+        </StyleGroup>
+      ) : null}
+
+      {canArrange && !editingShape ? (
+        <div>
+          <div style={sectionTitleStyle}>Arrange</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 4 }}>
+            <button title="Align left" style={buttonStyleSmall} onClick={() => editor.alignShapes(selectedIds, 'left')}>Left</button>
+            <button title="Align horizontal centers" style={buttonStyleSmall} onClick={() => editor.alignShapes(selectedIds, 'center-x')}>H Mid</button>
+            <button title="Align right" style={buttonStyleSmall} onClick={() => editor.alignShapes(selectedIds, 'right')}>Right</button>
+            <button title="Align top" style={buttonStyleSmall} onClick={() => editor.alignShapes(selectedIds, 'top')}>Top</button>
+            <button title="Align vertical centers" style={buttonStyleSmall} onClick={() => editor.alignShapes(selectedIds, 'center-y')}>V Mid</button>
+            <button title="Align bottom" style={buttonStyleSmall} onClick={() => editor.alignShapes(selectedIds, 'bottom')}>Bottom</button>
+            {transformRoots.length >= 3 && <>
+            <button title="Distribute horizontal gaps" style={buttonStyleSmall}
+              onClick={() => editor.distributeShapes(selectedIds, 'horizontal')}>H Gap</button>
+            <button title="Distribute vertical gaps" style={buttonStyleSmall}
+              onClick={() => editor.distributeShapes(selectedIds, 'vertical')}>V Gap</button>
+            </>}
+            <button title="Tidy into a row" style={buttonStyleSmall}
+              onClick={() => editor.tidyShapes(selectedIds, 'row')}>Tidy</button>
+            {canMatchSizes && <>
+            <button title="Match width" style={buttonStyleSmall}
+              onClick={() => editor.matchShapeSizes(selectedIds, 'width')}>Width</button>
+            <button title="Match height" style={buttonStyleSmall}
+              onClick={() => editor.matchShapeSizes(selectedIds, 'height')}>Height</button>
+            <button title="Match size" style={buttonStyleSmall}
+              onClick={() => editor.matchShapeSizes(selectedIds, 'both')}>Size</button>
+            </>}
           </div>
         </div>
       ) : null}
 
+      </>}
     </div>
   );
 }

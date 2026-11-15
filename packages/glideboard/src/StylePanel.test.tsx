@@ -1,5 +1,5 @@
 import React from 'react';
-import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ArrowUtil, type AnyRecord } from '@durgakiran/glideline';
 import { GlideboardProvider } from './GlideboardContext';
@@ -46,65 +46,33 @@ function importTestAsset(controller: GlideboardController, type: 'raster-image' 
 }
 
 describe('StylePanel text targeting', () => {
-  it('uses compact icon controls for default styles when nothing is selected', () => {
+  it('shows only the active creation tool defaults and keeps navigation tools clear', () => {
     const controller = new GlideboardController({ sessionKey: 'compact-default-style-panel' });
     try {
       const view = renderPanel(controller);
+      expect(view.queryByRole('group', { name: 'Color' })).toBeNull();
 
-      expect(view.getByRole('group', { name: 'Default color' })).toBeDefined();
-      expect(view.getByRole('group', { name: 'Default fill' })).toBeDefined();
-      expect(view.getByRole('group', { name: 'Default stroke style' })).toBeDefined();
-      expect(view.getByRole('group', { name: 'Default stroke width' })).toBeDefined();
-      expect(view.getByRole('group', { name: 'Default font family' })).toBeDefined();
-      expect(view.getByRole('group', { name: 'Default font size' })).toBeDefined();
-      expect(view.getByRole('group', { name: 'Default label alignment' })).toBeDefined();
-      expect(view.queryByText('Stroke / Fill Color')).toBeNull();
-
-      const panel = view.container.querySelector<HTMLElement>('[data-glideboard-role="default-style-panel"]')!;
-      expect(panel.querySelectorAll('[data-glideboard-role="core-style-controls"]')).toHaveLength(1);
-      expect(panel.style.width).toBe('148px');
-      expect(panel.style.top).toBe('12px');
-      expect(panel.style.right).toBe('12px');
-      expect(view.getByRole('group', { name: 'Default color' }).style.gridTemplateColumns)
-        .toBe('repeat(5, 28px)');
-      expect(view.getByRole('group', { name: 'Default color' }).querySelectorAll('button')).toHaveLength(15);
-      expect(view.getByRole('button', { name: 'pink' })).toBeDefined();
-      expect(view.getByRole('group', { name: 'Default stroke style' }).style.gridTemplateColumns)
-        .toBe('repeat(5, 28px)');
-      const pressureButton = view.getByRole('button', { name: 'Pressure-sensitive stroke' });
-      expect(pressureButton.style.width).toBe('28px');
-      expect(pressureButton.className).toContain('glideboard-style-option');
-      expect(view.queryByRole('group', { name: 'Grid and snapping' })).toBeNull();
-      expect(view.container.querySelectorAll('[data-fill-preview="pattern"] circle')).toHaveLength(9);
-      expect(view.container.querySelectorAll('[data-fill-preview="lined"] line')).toHaveLength(4);
-      expect(view.container.querySelector('[data-fill-preview="pattern"] rect:last-child')?.getAttribute('stroke'))
-        .toBe('var(--gray-12, #221f26)');
-      expect(view.getByRole('slider', { name: 'Default opacity' }).className).toContain('glideboard-opacity-slider');
-
-      fireEvent.click(view.getByRole('button', { name: 'blue' }));
-      expect(view.container.querySelector('[data-fill-preview="pattern"] rect:last-child')?.getAttribute('stroke'))
-        .toBe('var(--gray-12, #221f26)');
+      act(() => controller.setCurrentTool('box'));
+      expect(view.getByRole('heading', { name: 'Rectangle defaults' })).toBeDefined();
+      expect(view.getByRole('group', { name: 'Fill' })).toBeDefined();
+      expect(view.queryByRole('button', { name: 'Pressure-sensitive stroke' })).toBeNull();
+      expect(view.queryByRole('group', { name: 'Font family' })).toBeNull();
       fireEvent.click(view.getByRole('button', { name: 'Pattern fill' }));
+
+      act(() => controller.setCurrentTool('draw'));
+      expect(view.getByRole('heading', { name: 'Draw defaults' })).toBeDefined();
+      expect(view.queryByRole('group', { name: 'Fill' })).toBeNull();
+      expect(view.queryByRole('button', { name: 'Sketch stroke' })).toBeNull();
       fireEvent.click(view.getByRole('button', { name: 'Pressure-sensitive stroke' }));
       expect(controller.editor.activeStyles.peek()).toMatchObject({
-        strokeStyle: 'solid',
-        pressureSensitive: true,
+        strokeStyle: 'solid', pressureSensitive: true, fillStyle: 'pattern',
       });
-      fireEvent.click(view.getByRole('button', { name: 'Dashed stroke' }));
-      fireEvent.click(view.getByRole('button', { name: 'Thick stroke width' }));
-      fireEvent.click(view.getByRole('button', { name: 'Center labels' }));
-      fireEvent.change(view.getByRole('slider', { name: 'Default opacity' }), { target: { value: '0.6' } });
 
-      expect(controller.editor.activeStyles.peek()).toMatchObject({
-        color: 'blue',
-        labelColor: 'blue',
-        fillStyle: 'pattern',
-        strokeStyle: 'dashed',
-        pressureSensitive: false,
-        strokeWidth: 'thick',
-        textAlign: 'center',
-        opacity: 0.6,
-      });
+      act(() => controller.setCurrentTool('text'));
+      expect(view.getByRole('group', { name: 'Font family' })).toBeDefined();
+      expect(view.queryByRole('group', { name: 'Stroke style' })).toBeNull();
+      act(() => controller.setCurrentTool('hand'));
+      expect(view.queryByRole('group', { name: 'Color' })).toBeNull();
     } finally {
       void controller.dispose();
     }
@@ -122,30 +90,17 @@ describe('StylePanel text targeting', () => {
       controller.editor.setSelectedShapeIds([id]);
       const view = renderPanel(controller);
 
-      expect(view.queryByText('Text Color')).toBeNull();
-      expect(view.queryByText('Font Family')).toBeNull();
-      expect(view.queryByText('Font Size')).toBeNull();
-      expect(view.queryByText('Stroke / Fill Color')).toBeNull();
-      expect(view.queryByText('Stroke Width')).toBeNull();
-      expect(view.queryByText('Fill')).toBeNull();
-      const panel = view.container.querySelector<HTMLElement>('[data-glideboard-role="selected-style-panel"]')!;
-      expect(panel.querySelectorAll('[data-glideboard-role="core-style-controls"]')).toHaveLength(1);
-      expect(panel.style.width).toBe('148px');
-      expect(panel.style.padding).toBe('0px');
-      expect(panel.style.gap).toBe('0');
-      expect(view.getByRole('group', { name: 'Text color' }).style.gridTemplateColumns)
-        .toBe('repeat(5, 28px)');
-      expect(view.getByRole('group', { name: 'Font family' }).style.gridTemplateColumns)
-        .toBe('repeat(5, 28px)');
+      expect(view.getByRole('heading', { name: 'Text' })).toBeDefined();
+      expect(view.queryByRole('group', { name: 'Fill' })).toBeNull();
+      expect(view.queryByRole('group', { name: 'Stroke width' })).toBeNull();
+      expect(view.getByRole('group', { name: 'Text color' })).toBeDefined();
+      expect(view.getByRole('group', { name: 'Font family' })).toBeDefined();
       expect(view.getByRole('button', { name: 'Sans font' }).getAttribute('data-isactive')).toBe('true');
-      const opacitySlider = view.getByRole('slider', { name: 'Shape opacity' });
-      const dividers = view.container.querySelectorAll('[data-glideboard-role="style-options-divider"]');
-      expect(dividers).toHaveLength(1);
-      expect(dividers[0]?.getAttribute('data-divider-section')).toBe('appearance-typography');
+      const opacitySlider = view.getByRole('slider', { name: 'Opacity' });
       fireEvent.click(view.getByRole('button', { name: 'pink' }));
       fireEvent.change(opacitySlider, { target: { value: '0.5' } });
       expect(controller.editor.getShape(id)?.props).toMatchObject({ color: 'pink', opacity: 0.5 });
-      expect(controller.editor.activeStyles.peek()).toMatchObject({ color: 'pink', labelColor: 'pink', opacity: 0.5 });
+      expect(controller.editor.activeStyles.peek()).toMatchObject({ color: 'pink', opacity: 0.5 });
       expect(view.queryByRole('group', { name: 'Grid and snapping' })).toBeNull();
       expect(view.queryByRole('checkbox')).toBeNull();
     } finally {
@@ -168,7 +123,8 @@ describe('StylePanel text targeting', () => {
 
       expect(view.queryByText('Text Color')).toBeNull();
       expect(view.queryByText('Fill')).toBeNull();
-      expect(view.getByRole('slider', { name: 'Shape opacity' })).toBeDefined();
+      expect(view.queryByRole('slider', { name: 'Opacity' })).toBeNull();
+      expect(view.getByRole('heading', { name: 'Rectangle label' })).toBeDefined();
 
       act(() => controller.editor.startEditing(id));
       expect(controller.editor.getSelectedShapeIds()).toEqual([]);
@@ -180,11 +136,8 @@ describe('StylePanel text targeting', () => {
       expect(controller.editor.editingShapeId.peek()).toBe(id);
       fireEvent.click(tomato);
       expect(controller.editor.getShape(id)?.props.labelColor).toBe('tomato');
-      fireEvent.change(view.getByRole('slider', { name: 'Shape opacity' }), { target: { value: '0.6' } });
-      expect(controller.editor.getShape(id)?.props.opacity).toBe(0.6);
-      expect(controller.editor.activeStyles.peek()).toMatchObject({
-        color: 'tomato', labelColor: 'tomato', opacity: 0.6,
-      });
+      expect(controller.editor.getShape(id)?.props).toMatchObject({ color: 'black', opacity: 1 });
+      expect(controller.editor.activeStyles.peek()).toMatchObject({ labelColor: 'tomato' });
       act(() => controller.editor.cancelEditing(false));
     } finally {
       void controller.dispose();
@@ -430,16 +383,15 @@ describe('StylePanel asset inspector', () => {
           <StylePanel />
         </GlideboardProvider>,
       );
-      const themeColor = view.getByLabelText('Theme color') as HTMLInputElement;
       const native = view.getByRole('button', { name: 'Native' });
       const monochrome = view.getByRole('button', { name: 'Monochrome' });
 
-      expect(themeColor.disabled).toBe(true);
+      expect(view.queryByLabelText('Theme color')).toBeNull();
       expect(native.getAttribute('aria-pressed')).toBe('true');
       expect(monochrome.getAttribute('aria-pressed')).toBe('false');
       fireEvent.click(monochrome);
       expect(controller.editor.getShape(id)?.props.colorMode).toBe('monochrome');
-      expect(themeColor.disabled).toBe(false);
+      const themeColor = view.getByLabelText('Theme color');
       expect(native.getAttribute('aria-pressed')).toBe('false');
       expect(monochrome.getAttribute('aria-pressed')).toBe('true');
       fireEvent.input(themeColor, { target: { value: '#12ab34' } });
@@ -456,7 +408,7 @@ describe('StylePanel asset inspector', () => {
 
       fireEvent.click(native);
       expect(controller.editor.getShape(id)?.props.colorMode).toBe('native');
-      expect(themeColor.disabled).toBe(true);
+      expect(view.queryByLabelText('Theme color')).toBeNull();
       expect(native.getAttribute('aria-pressed')).toBe('true');
       expect(monochrome.getAttribute('aria-pressed')).toBe('false');
     } finally {
@@ -475,42 +427,29 @@ describe('StylePanel command coverage', () => {
       controller.editor.setSelectedShapeIds([id]);
       const view = renderPanel(controller);
 
-      const slider = view.getByRole('slider', { name: 'Shape opacity' });
+      const slider = view.getByRole('slider', { name: 'Opacity' });
       expect(slider.getAttribute('value')).toBe('0.8');
       expect(view.queryByText('Stroke / Fill Color')).toBeNull();
       expect(view.queryByText('Text Color')).toBeNull();
-      const colorGroup = view.getByRole('group', { name: 'Shape color' });
+      const colorGroup = view.getByRole('group', { name: 'Color' });
       expect(colorGroup.compareDocumentPosition(slider) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
       const divider = view.container.querySelector<HTMLElement>('[data-glideboard-role="style-options-divider"]')!;
       const fill = view.getByRole('group', { name: 'Fill' });
       const strokeStyle = view.getByRole('group', { name: 'Stroke style' });
       const strokeWidth = view.getByRole('group', { name: 'Stroke width' });
-      const typographyDivider = view.container.querySelector<HTMLElement>('[data-divider-section="appearance-typography"]')!;
-      const fontFamily = view.getByRole('group', { name: 'Font family' });
-      const fontSize = view.getByRole('group', { name: 'Font size' });
-      const textAlign = view.getByRole('group', { name: 'Label alignment' });
       expect(slider.compareDocumentPosition(divider) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
       expect(divider.compareDocumentPosition(fill) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
       expect(fill.compareDocumentPosition(strokeStyle) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
       expect(strokeStyle.compareDocumentPosition(strokeWidth) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-      expect(strokeWidth.compareDocumentPosition(typographyDivider) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-      expect(typographyDivider.compareDocumentPosition(fontFamily) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-      expect(fontFamily.compareDocumentPosition(fontSize) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-      expect(fontSize.compareDocumentPosition(textAlign) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-      expect(view.queryByText('Fill')).toBeNull();
-      expect(view.queryByText('Stroke Style')).toBeNull();
-      expect(view.queryByText('Stroke Width')).toBeNull();
-      expect(view.queryByText('Font Family')).toBeNull();
-      expect(view.queryByText('Font Size')).toBeNull();
-      expect(view.queryByText('Text Align')).toBeNull();
+      expect(view.queryByRole('group', { name: 'Font family' })).toBeNull();
       fireEvent.click(view.getByRole('button', { name: 'pink' }));
       fireEvent.change(slider, { target: { value: '0.4' } });
 
       expect(controller.editor.getShape(id)?.props).toMatchObject({
-        color: 'pink', labelColor: 'pink', opacity: 0.4,
+        color: 'pink', labelColor: 'black', opacity: 0.4,
       });
       expect(controller.editor.activeStyles.peek()).toMatchObject({
-        color: 'pink', labelColor: 'pink', opacity: 0.4,
+        color: 'pink', labelColor: 'black', opacity: 0.4,
       });
       expect(view.getByText('40%')).toBeDefined();
       const panel = view.container.querySelector<HTMLElement>('[data-glideboard-role="selected-style-panel"]')!;
@@ -579,23 +518,33 @@ describe('StylePanel command coverage', () => {
     }
   });
 
-  it('updates default drawing styles without a selection', () => {
-    const controller = new GlideboardController({ sessionKey: 'default-style-controls' });
+  it('shows shared controls and applies a mixed value to the entire selection', () => {
+    const controller = new GlideboardController({ sessionKey: 'mixed-style-controls' });
     try {
-      const view = renderPanel(controller);
-
-      for (const label of [
-        'None fill', 'Semi fill', 'Solid fill', 'Pattern fill', 'Lined fill',
-        'Thin stroke width', 'Medium stroke width', 'Thick stroke width', 'Extra large stroke width',
-        'Dashed stroke', 'Dotted stroke', 'Pressure-sensitive stroke',
-      ]) fireEvent.click(view.getByRole('button', { name: label }));
-      fireEvent.click(view.getAllByTitle('tomato')[0]!);
-      fireEvent.click(view.getAllByTitle('blue')[0]!);
-
-      expect(controller.editor.activeStyles.peek()).toMatchObject({
-        color: 'blue', fillStyle: 'lined', strokeStyle: 'solid', strokeWidth: 'xl',
-        pressureSensitive: true,
+      const box = controller.editor.createShape({
+        type: 'box', x: 0, y: 0, props: { color: 'blue', opacity: 0.5, strokeWidth: 'thin' },
       });
+      const arrow = controller.editor.createShape({
+        type: 'arrow', x: 100, y: 200, props: { color: 'red', opacity: 0.8, strokeWidth: 'thick' },
+      });
+      controller.editor.setSelectedShapeIds([box, arrow]);
+      const view = renderPanel(controller);
+      expect(view.getByRole('heading', { name: '2 selected' })).toBeDefined();
+      expect(view.queryByRole('group', { name: 'Fill' })).toBeNull();
+      expect(view.queryByRole('group', { name: 'Route' })).toBeNull();
+      expect(view.queryByRole('button', { name: 'Pressure-sensitive stroke' })).toBeNull();
+
+      const width = within(view.getByRole('group', { name: 'Stroke width' }));
+      const opacity = view.getByRole('slider', { name: 'Opacity' });
+      expect(width.getByText('Mixed')).toBeDefined();
+      expect(opacity.getAttribute('aria-valuetext')).toBe('Mixed');
+      fireEvent.click(width.getByRole('button', { name: 'Medium stroke width' }));
+      fireEvent.change(opacity, { target: { value: '0.7' } });
+      expect(width.queryByText('Mixed')).toBeNull();
+      expect(opacity.getAttribute('aria-valuetext')).toBe('70%');
+      for (const id of [box, arrow]) {
+        expect(controller.editor.getShape(id)?.props).toMatchObject({ strokeWidth: 'medium', opacity: 0.7 });
+      }
     } finally {
       void controller.dispose();
     }
@@ -665,6 +614,8 @@ describe('StylePanel command coverage', () => {
 
       const labeledBox = controller.editor.createShape({ type: 'box', x: 0, y: 0, props: { label: 'Aligned' } });
       act(() => controller.editor.setSelectedShapeIds([labeledBox]));
+      expect(view.queryByRole('group', { name: 'Font family' })).toBeNull();
+      act(() => { controller.textStyleTargetIdSignal.value = labeledBox; });
       for (const label of ['Align labels left', 'Center labels', 'Align labels right']) {
         fireEvent.click(view.getByRole('button', { name: label }));
       }
