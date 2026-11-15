@@ -10,7 +10,7 @@ import { useSignalValue } from './useSignalValue.js';
 import { BackToContentButton } from './BackToContentButton.js';
 import { CollaborationCursors } from './CollaborationCursors.js';
 import { LayersPanel } from './LayersPanel.js';
-import { ContentIngressError, normalizeClipboardText, type ArrowShape, type ShapeId } from '@durgakiran/glideline';
+import { BOARD_MONO_FEATURES, FONT_FAMILIES, ContentIngressError, normalizeClipboardText, type ArrowShape, type ShapeId } from '@durgakiran/glideline';
 import {
   AssetFileValidationError,
   AssetImportPanel,
@@ -510,6 +510,12 @@ export function WhiteboardApp({
       }}
     >
       <style>{`
+        [data-glideboard-role="app"] .canvas-text-view code,
+        [data-glideboard-role="app"] .canvas-text-editor__content code {
+          font-family: ${FONT_FAMILIES.mono};
+          font-variant-ligatures: none;
+          font-feature-settings: ${BOARD_MONO_FEATURES};
+        }
         @keyframes glideboard-placement-spin { to { transform: rotate(360deg); } }
         [data-glideboard-role="asset-placement-status"][data-placement-status="pending"] > span:first-child svg {
           animation: glideboard-placement-spin 900ms linear infinite;

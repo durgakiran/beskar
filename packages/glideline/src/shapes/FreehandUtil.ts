@@ -137,7 +137,7 @@ export class FreehandUtil extends ShapeUtil<FreehandShape> {
     points:      pointsValidator,
     color:       T.string,
     strokeWidth: StyleValidators.strokeWidth,
-    strokeStyle: StyleValidators.strokeStyle,
+    strokeStyle: StyleValidators.standardStrokeStyle,
     pressureSensitive: T.boolean,
     simulatePressure: T.boolean,
     opacity:     T.number,

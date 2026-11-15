@@ -34,7 +34,7 @@ export class LineUtil extends ShapeUtil<LineShape> {
     end: point,
     color: T.string,
     opacity: T.number,
-    strokeStyle: StyleValidators.strokeStyle,
+    strokeStyle: StyleValidators.standardStrokeStyle,
     strokeWidth: StyleValidators.strokeWidth,
   };
 

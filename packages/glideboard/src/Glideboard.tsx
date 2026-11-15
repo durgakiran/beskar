@@ -1,3 +1,4 @@
+import { loadBoardFonts } from '@durgakiran/glideline';
 import React from 'react';
 import { WhiteboardApp } from './WhiteboardApp.js';
 import { GlideboardController } from './GlideboardController.js';
@@ -155,9 +156,11 @@ function GlideboardSession({
     // React 18 StrictMode discards the first render and replays mount effects.
     // Construct after that replay so plugins install exactly once and no
     // abandoned controller can leak plugin side effects.
-    queueMicrotask(() => {
+    queueMicrotask(async () => {
       if (!active) return;
       try {
+        await loadBoardFonts();
+        if (!active) return;
         const startup = startupOptionsRef.current;
         ownedController = new GlideboardController({
           sessionKey: resolvedSessionKey,

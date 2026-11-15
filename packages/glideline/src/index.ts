@@ -177,11 +177,13 @@ export {
 } from './mcp.js';
 export type { CanvasToolName, CanvasToolResult, CanvasToolError, CanvasToolManifestEntry } from './mcp.js';
 
+export { BOARD_MONO_FEATURES, boardFontStyle, loadBoardFonts } from './board-fonts.js';
+
 // Phase A — Style system
 export {
   TLDRAW_COLORS, resolveColor, hexWithOpacity, svgFill,
   STROKE_WIDTHS, FONT_SIZES, FONT_FAMILIES,
-  STROKE_DASH_ARRAYS, FILL_OPACITIES,
+  STROKE_STYLES, STROKE_DASH_ARRAYS, FILL_OPACITIES,
   inlinePatternDefs, getPatternId, getShapePatternId,
   createTextForeignObjectForExport,
 } from './styles.js';

@@ -54,7 +54,7 @@ function getMeasurementContext() {
 }
 
 /** Estimate text bounding box from exact font metrics. */
-function estimateBounds(text: string, fontSize: number, fontName: string = 'Inter, system-ui, sans-serif', lineHeight = 1.35): { w: number; h: number } {
+function estimateBounds(text: string, fontSize: number, fontName: string = FONT_FAMILIES.sans, lineHeight = 1.35): { w: number; h: number } {
   const lines = text.split('\n');
   const h = Math.max(fontSize * lineHeight, lines.length * fontSize * lineHeight);
 
@@ -146,7 +146,7 @@ function richTextLines(snapshot: CanvasRichTextSnapshot | undefined, fallback: s
   return lines.length ? lines : richTextLines(undefined, fallback);
 }
 
-const CODE_FONT = 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace';
+const CODE_FONT = FONT_FAMILIES.mono;
 
 function measureRunText(text: string, marks: readonly Record<string, unknown>[], fontName: string, fontSize: number): number {
   const markTypes = new Set(marks.map(mark => mark.type));
@@ -554,9 +554,16 @@ export class TextUtil extends ShapeUtil<TextShape> {
   override getVisualBounds(shape: TextShape) {
     const bounds = this.getGeometry(shape).getBounds();
     if (shape.props.sizeMode === 'fixed') return bounds;
-    const { lines, fontSize } = getExportTextLayout(shape);
+    const { lines, fontFamily, fontSize } = getExportTextLayout(shape);
     const lineHeight = fontSize * shape.props.lineHeight;
-    return makeBox(bounds.x, bounds.y, bounds.w, Math.max(bounds.h, lines.length * lineHeight));
+    const width = shape.props.sizeMode === 'auto'
+      ? lines.reduce((max, { depth, runs }) => {
+        const measured = runs.reduce((sum, run) =>
+          sum + measureRunText(run.text, run.marks, fontFamily, fontSize), 0);
+        return Math.max(max, depth * fontSize * 1.5 + measured);
+      }, bounds.w)
+      : bounds.w;
+    return makeBox(bounds.x, bounds.y, width, Math.max(bounds.h, lines.length * lineHeight));
   }
 
   /** Export editable SVG text, preserving the board's list and inline formatting. */

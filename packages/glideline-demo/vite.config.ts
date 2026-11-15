@@ -16,10 +16,10 @@ export default defineConfig({
       { find: 'yjs', replacement: resolve(__dirname, 'node_modules/yjs') },
       { find: 'y-protocols', replacement: resolve(__dirname, 'node_modules/y-protocols') },
     ],
-    dedupe: ['react', 'react-dom', 'yjs', 'y-protocols'],
+    dedupe: ['@durgakiran/glideline', 'react', 'react-dom', 'yjs', 'y-protocols'],
   },
   optimizeDeps: {
-    include: ['@durgakiran/glideline', '@durgakiran/glideboard'],
+    include: ['@durgakiran/glideline', '@durgakiran/glideboard', 'roughjs'],
   },
   build: {
     commonjsOptions: {

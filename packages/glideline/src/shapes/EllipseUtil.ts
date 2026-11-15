@@ -1,3 +1,4 @@
+import { addSketchOutline, sketchEllipse } from '../sketch-stroke.js';
 import { createSvgLabel } from './TextUtil.js';
 import { boundsAnchors, MIDPOINT } from '../connection-anchors.js';
 /**
@@ -8,7 +9,7 @@ import { boundsAnchors, MIDPOINT } from '../connection-anchors.js';
  *   color         — fill colour key or hex
  *   opacity       — 0–1 overall opacity
  *   fillStyle     — none | semi | solid | pattern
- *   strokeStyle   — solid | dashed | dotted
+ *   strokeStyle   — solid | dashed | dotted | sketch
  *   strokeWidth   — thin | medium | thick | xl
  *   label         — centre text label
  *   labelColor    — text colour (defaults to black or white by contrast)
@@ -28,7 +29,7 @@ import { makeBox } from '../types.js';
 import type { GlideShape, Vec2, GlideProps } from '../types.js';
 import { Geometry2d, Ellipse2d } from '../geometry/index.js';
 import {
-  STROKE_WIDTHS, STROKE_DASH_ARRAYS,
+  STROKE_WIDTHS, STROKE_DASH_ARRAYS, StyleValidators,
   svgFill, resolveColor, inlinePatternDefs,
   FONT_FAMILIES, FONT_SIZES,
   type FillStyle, type StrokeStyle, type SizeStyle, type FontSize,
@@ -67,15 +68,6 @@ const fillStyleValidator = {
       throw new Error(`fillStyle must be none|semi|solid|pattern|lined, got "${v}"`);
     }
     return v as FillStyle;
-  },
-};
-
-const strokeStyleValidator = {
-  validate(v: unknown): StrokeStyle {
-    if (!['solid', 'dashed', 'dotted'].includes(v as string)) {
-      throw new Error(`strokeStyle must be solid|dashed|dotted, got "${v}"`);
-    }
-    return v as StrokeStyle;
   },
 };
 
@@ -122,6 +114,8 @@ const fontValidator = {
 export class EllipseUtil extends ShapeUtil<EllipseShape> {
   static override readonly type = 'ellipse';
 
+  override supportsSketchStroke(): boolean { return true; }
+
   override getConnectionAnchors(shape: EllipseShape) {
     const { w, h } = shape.props;
     return boundsAnchors(MIDPOINT).map(({ normalizedAnchor }) => {
@@ -143,7 +137,7 @@ export class EllipseUtil extends ShapeUtil<EllipseShape> {
     color:       T.string,
     opacity:     T.number,
     fillStyle:   fillStyleValidator,
-    strokeStyle: strokeStyleValidator,
+    strokeStyle: StyleValidators.strokeStyle,
     strokeWidth: sizeStyleValidator,
     label:       T.string,
     labelColor:  T.string,
@@ -236,6 +230,7 @@ export class EllipseUtil extends ShapeUtil<EllipseShape> {
       }
     }
     g.appendChild(ellipse);
+    if (props.strokeStyle === 'sketch') addSketchOutline(ellipse, shape.id, seed => sketchEllipse(rx, ry, seed));
     return g;
   }
 

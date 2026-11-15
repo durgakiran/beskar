@@ -9,9 +9,11 @@ import RBushDemo from './RBushDemo';
 import ShapesDemo from './ShapesDemo';
 import Phase3Demo from './Phase3Demo';
 import CollaborationDemo from './CollaborationDemo';
+import SketchComparisonDemo from './SketchComparisonDemo';
 
 const TABS = [
   { id: 'whiteboard', label: '🎨 Whiteboard',         component: GlideboardDemo },
+  { id: 'sketch', label: 'Sketch Comparison', component: SketchComparisonDemo },
   { id: 'collaboration', label: 'Collaboration',       component: CollaborationDemo },
   { id: 'phase5',     label: 'Phase 5 — Performance', component: Phase5Demo },
   { id: 'phase4',     label: 'Phase 4 — Arrows',      component: Phase4Demo  },

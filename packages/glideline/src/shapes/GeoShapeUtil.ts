@@ -1,3 +1,4 @@
+import { addSketchOutline, polygonOutline, rectangleOutline, sketchEllipse, sketchOutlinePath } from '../sketch-stroke.js';
 import { createSvgLabel } from './TextUtil.js';
 import {
   boundsAnchors, curvePoints, geometryAnchors, interpolate, MIDPOINT, polygonPoints, QUARTERS,
@@ -104,6 +105,8 @@ abstract class BaseGeoShapeUtil<S extends GlideShape<GeoShapeProps>> extends Sha
   static override readonly props = GEO_SHAPE_PROPS;
   static override readonly migrations = GEO_SHAPE_MIGRATIONS;
 
+  override supportsSketchStroke(): boolean { return true; }
+
   override getDefaultProps(): GeoShapeProps {
     return getDefaultGeoShapeProps();
   }
@@ -157,6 +160,10 @@ abstract class BaseGeoShapeUtil<S extends GlideShape<GeoShapeProps>> extends Sha
       }
     }
     g.appendChild(polygon);
+    if (props.strokeStyle === 'sketch') {
+      const outline = polygonOutline(points);
+      addSketchOutline(polygon, shape.id, (seed, strength) => sketchOutlinePath(outline, seed, strength));
+    }
     return g;
   }
 
@@ -187,6 +194,8 @@ abstract class BasePathShapeUtil<S extends GlideShape<GeoShapeProps>> extends Sh
   static override readonly props = GEO_SHAPE_PROPS;
   static override readonly migrations = GEO_SHAPE_MIGRATIONS;
 
+  override supportsSketchStroke(): boolean { return true; }
+
   override getDefaultProps(): GeoShapeProps {
     return getDefaultGeoShapeProps();
   }
@@ -211,7 +220,8 @@ abstract class BasePathShapeUtil<S extends GlideShape<GeoShapeProps>> extends Sh
     if (defs) g.appendChild(defs);
 
     const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-    path.setAttribute('d', this.getPathD(props.w, props.h));
+    const outline = this.getPathD(props.w, props.h);
+    path.setAttribute('d', outline);
     path.setAttribute('fill', fillColor);
     path.setAttribute('stroke', strokeColor);
     path.setAttribute('stroke-width', String(strokeW));
@@ -219,6 +229,9 @@ abstract class BasePathShapeUtil<S extends GlideShape<GeoShapeProps>> extends Sh
     path.setAttribute('stroke-linecap', 'round');
     if (dashArray !== 'none') path.setAttribute('stroke-dasharray', dashArray);
     g.appendChild(path);
+    if (props.strokeStyle === 'sketch') {
+      addSketchOutline(path, shape.id, (seed, strength) => sketchOutlinePath(outline, seed, strength));
+    }
     return g;
   }
 
@@ -371,6 +384,10 @@ export class RoundedRectUtil extends BaseGeoShapeUtil<RoundedRectShape> {
       if (props.strokeStyle === 'dotted') rect.setAttribute('stroke-linecap', 'round');
     }
     g.appendChild(rect);
+    if (props.strokeStyle === 'sketch') {
+      const outline = rectangleOutline(w, h, rx);
+      addSketchOutline(rect, shape.id, (seed, strength) => sketchOutlinePath(outline, seed, strength));
+    }
     return g;
   }
 }
@@ -483,6 +500,9 @@ export class CylinderUtil extends BasePathShapeUtil<CylinderShape> {
     const dashArray = STROKE_DASH_ARRAYS[props.strokeStyle];
     if (dashArray !== 'none') rim.setAttribute('stroke-dasharray', dashArray);
     g.appendChild(rim);
+    if (props.strokeStyle === 'sketch') {
+      addSketchOutline(rim, `${shape.id}:rim`, seed => sketchEllipse(rx, ry, seed, rx, ry));
+    }
     return g;
   }
 }
@@ -515,6 +535,12 @@ export class NoteUtil extends BasePathShapeUtil<NoteShape> {
     const dashArray = STROKE_DASH_ARRAYS[props.strokeStyle];
     if (dashArray !== 'none') crease.setAttribute('stroke-dasharray', dashArray);
     g.appendChild(crease);
+    if (props.strokeStyle === 'sketch') {
+      const outline = polygonOutline([
+        { x: props.w - fold, y: 0 }, { x: props.w - fold, y: fold }, { x: props.w, y: fold },
+      ], false);
+      addSketchOutline(crease, `${shape.id}:crease`, (seed, strength) => sketchOutlinePath(outline, seed, strength));
+    }
     return g;
   }
 }

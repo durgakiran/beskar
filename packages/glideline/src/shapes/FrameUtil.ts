@@ -1,3 +1,4 @@
+import { FONT_FAMILIES } from '../board-fonts.js';
 import { createSvgLabel } from './TextUtil.js';
 import { boundsAnchors, QUARTERS } from '../connection-anchors.js';
 /**
@@ -93,7 +94,7 @@ export class FrameUtil extends ShapeUtil<FrameShape> {
   override getLabelProps(shape: FrameShape): LabelProps {
     return {
       text: shape.props.label,
-      fontFamily: 'Inter, system-ui, sans-serif',
+      fontFamily: FONT_FAMILIES.sans,
       fontSize: 13,
       color: shape.props.color,
       textAlign: 'left',

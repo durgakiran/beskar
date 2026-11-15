@@ -1,3 +1,4 @@
+import { sketchPolyline } from '../sketch-stroke.js';
 import type { OrthoRoutePoint } from '../ortho-editing.js';
 import type { ConnectionAnchorMode } from '../connection-anchors.js';
 /**
@@ -418,6 +419,10 @@ export class ArrowUtil extends ShapeUtil<ArrowShape> {
     return super.hitTestPoint(shape, point) || this.hitTestLabel(shape, point);
   }
 
+  override supportsSketchStroke(shape: ArrowShape): boolean {
+    return shape.props.routeStyle === 'ortho';
+  }
+
   /**
    * Draw the arrow in local space.
    * start.point = {0,0} (local origin); end.point = local offset.
@@ -447,7 +452,13 @@ export class ArrowUtil extends ShapeUtil<ArrowShape> {
     if (opacity < 1) g.setAttribute('opacity', String(opacity));
 
     const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-    path.setAttribute('d', pathStr);
+    const sketch = strokeStyle === 'sketch' && this.supportsSketchStroke(shape);
+    path.setAttribute('d', sketch ? sketchPolyline(route.localPoints, shape.id) : pathStr);
+    if (sketch) {
+      path.setAttribute('class', 'glideline-sketch-shaft');
+      path.setAttribute('stroke-linecap', 'round');
+      path.setAttribute('stroke-linejoin', 'round');
+    }
     path.setAttribute('stroke', strokeC);
     path.setAttribute('stroke-width', String(strokeW));
     path.setAttribute('fill', 'none');

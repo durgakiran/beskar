@@ -66,6 +66,9 @@ class Drawing extends StateNode {
       arrowheadStart,
       arrowheadEnd,
     });
+    if (arrowRouteStyle === 'ortho' && this.editor.activeStyles.peek().strokeStyle === 'sketch') {
+      arrow.props.strokeStyle = 'sketch';
+    }
     arrow.props.start = terminalAt(ORIGIN, this._source);
 
     this.editor.beginHistoryPreview();

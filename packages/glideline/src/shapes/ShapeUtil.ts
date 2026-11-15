@@ -86,6 +86,8 @@ export abstract class ShapeUtil<S extends GlideShape<object> = GlideShape> {
   /** Injected by the editor after registration. */
   editor!: ShapeUtilEditor;
 
+  supportsSketchStroke(_shape: S): boolean { return false; }
+
   /** Return default props when creating a new shape. */
   abstract getDefaultProps(): S['props'];
 

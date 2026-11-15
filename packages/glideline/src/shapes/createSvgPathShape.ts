@@ -64,7 +64,7 @@ export function createSvgPathShape(def: CreateSvgPathShapeDef): {
       color: T.string,
       opacity: T.number,
       fillStyle: StyleValidators.fillStyle,
-      strokeStyle: StyleValidators.strokeStyle,
+      strokeStyle: StyleValidators.standardStrokeStyle,
       strokeWidth: StyleValidators.strokeWidth,
       label: T.string,
       labelColor: T.string,
