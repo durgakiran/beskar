@@ -45,5 +45,35 @@ await page.getByRole('menuitemcheckbox',{name:'Wrap lines'}).click();
 assert(saved===await page.evaluate(()=>JSON.stringify(window.codeReader.getJSON())),'reader options never mutate document');
 await reader.getByRole('button',{name:'Preview',exact:true}).click();
 assert(await reader.frameLocator('iframe').getByRole('heading',{name:'Hello preview'}).isVisible(),'HTML preview');
-await page.evaluate(()=>{window.codeBrowserResults='PASS: language keyboard search, copy, caption, wrap, line numbers, duplicate and unique IDs, Tab/Shift-Tab, Escape, collapse, reader copy and immutable preferences, HTML preview'});
+await page.evaluate(() => {
+  const diagram = (direction, count) => ({
+    type: 'codeBlock',
+    attrs: { language: 'mermaid' },
+    content: [{
+      type: 'text',
+      text: `flowchart ${direction}\n  ` + Array.from({ length: count }, (_, i) => `N${i}[Step ${i + 1}]`).join(' --> '),
+    }],
+  });
+  window.codeEditor.commands.setContent({ type: 'doc', content: [diagram('TD', 45), diagram('LR', 18)] });
+});
+for (const [index, orientation] of ['tall', 'wide'].entries()) {
+  const block = edit.locator('.code-block-view').nth(index);
+  await block.getByRole('button', { name: 'Preview', exact: true }).click();
+  const image = block.locator('.mermaid-inline-frame img');
+  await image.evaluate(img => img.decode());
+  await block.getByRole('button', { name: 'Open diagram' }).waitFor();
+  const fits = await image.evaluate(img => {
+    const bounds = img.getBoundingClientRect();
+    const frame = img.parentElement.getBoundingClientRect();
+    const source = decodeURIComponent(img.getAttribute('src').split(',')[1]);
+    const svg = new DOMParser().parseFromString(source, 'image/svg+xml').documentElement;
+    const [, , width, height] = svg.getAttribute('viewBox').trim().split(/\s+/).map(Number);
+    return bounds.width > 0 && bounds.height > 0
+      && bounds.width <= frame.width + 1 && bounds.height <= frame.height + 1
+      && bounds.height <= Math.min(320, window.innerHeight * 0.45) + 1
+      && Math.abs(bounds.width - bounds.height * width / height) < 2;
+  });
+  assert(fits, `${orientation} Mermaid diagram fits inline without clipping or distortion`);
+}
+await page.evaluate(()=>{window.codeBrowserResults='PASS: language keyboard search, copy, caption, wrap, line numbers, duplicate and unique IDs, Tab/Shift-Tab, Escape, collapse, reader copy and immutable preferences, HTML preview, tall and wide Mermaid previews'});
 }
