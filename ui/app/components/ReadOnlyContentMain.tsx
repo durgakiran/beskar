@@ -42,6 +42,8 @@ interface ReadOnlyContentMainProps {
     onEdit: () => void;
     onDelete: () => void;
     children: ReactNode;
+    layout?: "document" | "whiteboard";
+    toolbarAction?: ReactNode;
     attachments?: ReactNode;
     onExportPdf?: () => void;
     exportDisabled?: boolean;
@@ -175,7 +177,7 @@ function MobileActionDock({
     };
 
     return (
-        <div ref={ref} className="readonly-action-dock md:hidden">
+        <div ref={ref} className="readonly-action-dock md:!hidden">
             {actionsOpen ? (
                 <div className="readonly-action-menu">
                     {capabilities.canShare ? (
@@ -263,6 +265,8 @@ export default function ReadOnlyContentMain({
     onEdit,
     onDelete,
     children,
+    layout = "document",
+    toolbarAction,
     attachments,
     onExportPdf,
     exportDisabled,
@@ -298,14 +302,55 @@ export default function ReadOnlyContentMain({
         }
     };
 
+    const isWhiteboard = layout === "whiteboard";
+    const pageActions = (
+        <div className="hidden shrink-0 items-center gap-2 md:flex">
+            {capabilities.canShare ? (
+                <button
+                    type="button"
+                    aria-label={linkCopied ? "Page link copied" : "Copy page link"}
+                    title={linkCopied ? "Page link copied" : "Copy page link"}
+                    onClick={copyPageLink}
+                    className="inline-flex items-center gap-2 rounded-[8px] bg-[#f5f4f6] px-[14px] py-[8px] text-[13px] font-medium text-[#605c67] transition-colors hover:bg-[#ece9ef]"
+                >
+                    {linkCopied ? <FiCheck size={14} /> : <FiShare2 size={14} />}
+                    {linkCopied ? "Copied" : "Share"}
+                </button>
+            ) : null}
+            {capabilities.canEdit ? (
+                <button
+                    type="button"
+                    aria-label="Edit"
+                    disabled={archived}
+                    onClick={onEdit}
+                    className="inline-flex items-center gap-2 rounded-[8px] bg-[#f5f4f6] px-[14px] py-[8px] text-[13px] font-medium text-[#605c67] transition-colors hover:bg-[#ece9ef] disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                    <FiEdit3 size={14} />
+                    Edit
+                </button>
+            ) : null}
+            {(capabilities.canDelete || capabilities.canComment || onExportPdf) ? (
+                <KebabMenu
+                    canComment={capabilities.canComment}
+                    canDelete={capabilities.canDelete}
+                    isCommentsOpen={isCommentsOpen}
+                    onComments={onOpenComments}
+                    onDelete={onDelete}
+                    onExportPdf={onExportPdf}
+                    exportDisabled={exportDisabled}
+                />
+            ) : null}
+        </div>
+    );
+
     return (
-        <Box className={`readonly-content-page relative min-h-full bg-[#fbfafc] ${commentPresentation === "bottom-sheet" ? "readonly-comments-mobile" : ""}`}>
-            <Box className="mx-auto w-full max-w-[1180px] px-4 py-4 md:px-8 md:py-6">
-                <Flex direction="column" gap="5" className="relative md:gap-7">
-                    <Box className="relative z-[120]">
+        <Box className={`readonly-content-page relative bg-[#fbfafc] ${isWhiteboard ? "h-full min-h-[420px]" : "min-h-full"} ${commentPresentation === "bottom-sheet" ? "readonly-comments-mobile" : ""}`}>
+            <Box className={`mx-auto w-full px-4 py-4 md:px-8 md:py-6 ${isWhiteboard ? "h-full" : "max-w-[1180px]"}`}>
+                <Flex direction="column" gap="5" className={`relative md:gap-7 ${isWhiteboard ? "h-full" : ""}`}>
+                    <Box className="relative z-[120] shrink-0">
                         <Flex direction="column" gap="4" className="md:gap-6">
-                            <Flex align="start" justify="between" gap="4" className="hidden md:flex">
-                                <Flex align="center" gap="2" className="min-w-0">
+                            <Flex align="center" justify="between" gap="3">
+                                <Flex align="center" gap="2" className="hidden min-w-0 md:flex">
                                     <FiFileText size={15} className="shrink-0 text-[#605c67]" />
                                     <Flex align="center" gap="2" wrap="wrap" className="min-w-0 text-[13px]">
                                         {orderedBreadcrumbs.map((crumb, index) => (
@@ -328,54 +373,19 @@ export default function ReadOnlyContentMain({
                                     </Flex>
                                 </Flex>
 
-                                <Flex align="center" gap="2" className="shrink-0">
-                                    {capabilities.canShare ? (
-                                        <button
-                                            type="button"
-                                            aria-label={linkCopied ? "Page link copied" : "Copy page link"}
-                                            title={linkCopied ? "Page link copied" : "Copy page link"}
-                                            onClick={copyPageLink}
-                                            className="inline-flex items-center gap-2 rounded-[8px] bg-[#f5f4f6] px-[14px] py-[8px] text-[13px] font-medium text-[#605c67] transition-colors hover:bg-[#ece9ef]"
-                                        >
-                                            {linkCopied ? <FiCheck size={14} /> : <FiShare2 size={14} />}
-                                            {linkCopied ? "Copied" : "Share"}
-                                        </button>
-                                    ) : null}
-                                    {capabilities.canEdit ? (
-                                        <button
-                                            type="button"
-                                            disabled={archived}
-                                            onClick={onEdit}
-                                            className="inline-flex items-center gap-2 rounded-[8px] bg-[#f5f4f6] px-[14px] py-[8px] text-[13px] font-medium text-[#605c67] transition-colors hover:bg-[#ece9ef] disabled:cursor-not-allowed disabled:opacity-50"
-                                        >
-                                            <FiEdit3 size={14} />
-                                            Edit
-                                        </button>
-                                    ) : null}
-                                    {(capabilities.canDelete || capabilities.canComment || onExportPdf) ? (
-                                        <KebabMenu
-                                            canComment={capabilities.canComment}
-                                            canDelete={capabilities.canDelete}
-                                            isCommentsOpen={isCommentsOpen}
-                                            onComments={onOpenComments}
-                                            onDelete={onDelete}
-                                            onExportPdf={onExportPdf}
-                                            exportDisabled={exportDisabled}
-                                        />
-                                    ) : null}
-                                </Flex>
-                            </Flex>
-
-                            <Box className="md:hidden">
-                                <div className="text-[13px] font-medium text-[#898492]">
+                                <div className="min-w-0 break-words text-[13px] font-medium text-[#898492] md:hidden">
                                     {orderedBreadcrumbs.map((crumb) => crumb.title).join(" / ")}
                                 </div>
-                            </Box>
+                                <div className="flex shrink-0 items-center gap-2 empty:hidden">
+                                    {toolbarAction}
+                                    {pageActions}
+                                </div>
+                            </Flex>
 
-                            <Box className="w-full pr-0 xl:pr-24 pl-[40px]">
+                            <Box className="w-full pl-[40px] xl:pr-24">
                                 <Flex direction="column" gap="2">
                                     <Flex align="center" gap="3" wrap="wrap">
-                                        <h1 className="text-[28px] font-semibold leading-[1.15] tracking-[-0.01em] text-[#221f26] md:text-[38px]">
+                                        <h1 className="min-w-0 [overflow-wrap:anywhere] text-[28px] font-semibold leading-[1.15] tracking-[-0.01em] text-[#221f26] md:text-[38px]">
                                             {title || "Untitled"}
                                         </h1>
                                         {archived ? (
@@ -390,7 +400,9 @@ export default function ReadOnlyContentMain({
                         </Flex>
                     </Box>
 
-                    <Box className="relative w-full pr-0 xl:pr-24">
+                    <Box className={`relative w-full ${isWhiteboard
+                        ? "isolate min-h-0 flex-1 overflow-hidden rounded-[18px] border border-[#d4d1da] bg-white"
+                        : "xl:pr-24"}`}>
                         {children}
                     </Box>
 
@@ -403,7 +415,7 @@ export default function ReadOnlyContentMain({
             </Box>
 
             <MobileActionDock
-                capabilities={capabilities}
+                capabilities={archived ? { ...capabilities, canEdit: false } : capabilities}
                 linkCopied={linkCopied}
                 isCommentsOpen={isCommentsOpen}
                 onEdit={onEdit}

@@ -244,6 +244,10 @@ export default function Page() {
                             />
                         ) : undefined
                     }
+                    layout={pageType === "whiteboard" ? "whiteboard" : "document"}
+                    toolbarAction={pageType === "whiteboard" && metadata?.data.contentApiVersion === 2 ? (
+                        <WhiteboardHistoryV2 key={`${spaceId}:${page}`} spaceId={spaceId} pageId={page} canRestore={Boolean(shellCapabilities?.canEdit && !viewData.space?.archivedAt)} onRestored={onEdit} />
+                    ) : undefined}
                     isCommentsOpen={pageType === "document" ? isSidePanelOpen : false}
                     commentPresentation={commentPresentation}
                     onOpenComments={() => {
@@ -254,14 +258,12 @@ export default function Page() {
                     onEdit={onEdit}
                     onDelete={onDelete}
                 >
-                    {metadata?.data.contentApiVersion === 2 && <Flex justify="end" mb="3"><WhiteboardHistoryV2 key={`${spaceId}:${page}`} spaceId={spaceId} pageId={page} canRestore={Boolean(shellCapabilities?.canEdit && !viewData.space?.archivedAt)} onRestored={onEdit} /></Flex>}
                     {pageType === "whiteboard" ? (
-                        <Box
-                            className="overflow-hidden rounded-[18px] border border-[#d4d1da] bg-white shadow-[0_10px_30px_rgba(11,10,42,0.04)]"
-                            style={{ height: "72vh", minHeight: "540px" }}
-                        >
-                            {metadata?.data.contentApiVersion === 2 ? <WhiteboardPreviewV2 key={`${spaceId}:${page}`} spaceId={spaceId} pageId={page} onTitle={setPublishedTitle} /> : <Suspense fallback={<Spinner />}><WhiteboardEditor key={page} slug={[spaceId, page]} readOnly fillParent /></Suspense>}
-                        </Box>
+                        metadata?.data.contentApiVersion === 2
+                            ? <WhiteboardPreviewV2 key={`${spaceId}:${page}`} spaceId={spaceId} pageId={page} onTitle={setPublishedTitle} />
+                            : <Suspense fallback={<Flex align="center" justify="center" height="100%"><Spinner /></Flex>}>
+                                <WhiteboardEditor key={page} slug={[spaceId, page]} readOnly fillParent />
+                            </Suspense>
                     ) : readOnlyContent ?? (
                         <Box className="rounded-[18px] border border-[#d4d1da] bg-white px-5 py-6 text-[#605c67] shadow-[0_10px_30px_rgba(11,10,42,0.04)] md:px-8">
                             <Text size="3">

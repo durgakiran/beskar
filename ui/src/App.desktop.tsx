@@ -94,7 +94,7 @@ export default function AppDesktop() {
         
         <Route path="/space" element={<AuthGuard><SpaceLayout><SpacePage /></SpaceLayout></AuthGuard>} />
         
-        <Route path="/space/:spaceId" element={<AuthGuard><SpaceLayout><SpaceDetailLayout /></SpaceLayout></AuthGuard>}>
+        <Route path="/space/:spaceId" element={<AuthGuard><SpaceDetailLayout /></AuthGuard>}>
           <Route index element={<SpaceDetailOverview />} />
           <Route path="view/:page" element={<RouteWrapper Component={ViewPage} />} />
           <Route path="edit/:page" element={<RouteWrapper Component={EditPage} />} />

@@ -6,7 +6,7 @@ import { Link } from "react-router-dom";
 import { Icon } from "@components/ui/Icon";
 import { NavItem, TopbarMenuItem, TopbarProps } from "./types";
 
-function BrandMark({ compact = false }: { compact?: boolean }) {
+export function BrandMark({ compact = false }: { compact?: boolean }) {
     const sizeClass = compact ? "h-7 w-7 rounded-lg" : "h-9 w-9 rounded-[10px]";
     const topBarClass = compact ? "left-[8px] top-[6px] h-1 w-3" : "left-[10px] top-[8px] h-[5px] w-[15px]";
     const stemClass = compact ? "left-[9px] top-[9px] h-3 w-1" : "left-[11px] top-[12px] h-[15px] w-[5px]";
@@ -112,12 +112,18 @@ function MenuItem({ item }: { item: TopbarMenuItem }) {
     );
 }
 
-function UserMenu({ user, items }: { user: NonNullable<TopbarProps["user"]>; items: TopbarMenuItem[] }) {
+export function UserMenu({ user, items, side = "bottom" }: {
+    user: NonNullable<TopbarProps["user"]>;
+    items: TopbarMenuItem[];
+    side?: "bottom" | "right";
+}) {
     return (
         <Popover.Root>
             <Popover.Trigger asChild>
                 <button
                     type="button"
+                    aria-label="Account menu"
+                    title="Account menu"
                     className="flex h-10 w-10 items-center justify-center rounded-full border border-primary-300 bg-primary-100 text-base font-semibold leading-none text-primary-700 transition-colors duration-150 hover:border-primary-400 hover:bg-primary-200"
                 >
                     {user.initials}
@@ -125,9 +131,10 @@ function UserMenu({ user, items }: { user: NonNullable<TopbarProps["user"]>; ite
             </Popover.Trigger>
             <Popover.Portal>
                 <Popover.Content
+                    side={side}
                     sideOffset={12}
                     align="end"
-                    className="z-50 w-[248px] rounded-xl border border-neutral-200 bg-white p-2 shadow-lg outline-none"
+                    className="z-50 w-[248px] max-w-[var(--radix-popover-content-available-width)] rounded-xl border border-neutral-200 bg-white p-2 shadow-lg outline-none"
                 >
                     <div className="flex items-center gap-3 rounded-xl px-3 py-2.5">
                         <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary-100 text-sm font-semibold text-primary-700">

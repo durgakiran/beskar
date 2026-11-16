@@ -171,7 +171,7 @@ export default function Page() {
 
     return (
         <>
-            <div className="flex h-full w-full flex-col gap-6 overflow-y-auto px-8 py-6">
+            <div className="mx-auto flex h-full w-full max-w-[1440px] flex-col gap-6 overflow-y-auto px-4 py-6 sm:px-8">
                 <SpacesHeader
                     title={PAGE_TITLE}
                     subtitle={PAGE_SUBTITLE}

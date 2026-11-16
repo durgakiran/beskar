@@ -377,8 +377,8 @@ export default function WhiteboardEditorV2({ slug }: { slug: string[] }) {
     };
 
     if (!session) return <Flex direction="column" align="center" gap="3" p="5">{error ? <><Text role="alert">{error}</Text><Button onClick={() => setLoadAttempt(n => n + 1)}>Retry</Button></> : <Spinner />}</Flex>;
-    return <div style={{ height: 'calc(100vh - 57px)', marginTop: -17, display: 'flex', flexDirection: 'column' }}>
-        <Flex align="center" gap="3" px="4" py="3" style={{ borderBottom: '1px solid #ddd' }}>
+    return <div style={{ height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+        <Flex align="center" wrap="wrap" flexShrink="0" gap="3" px="4" py="3" style={{ borderBottom: '1px solid #ddd' }}>
             {titleText && <DocumentTitle text={titleText} awareness={session.provider.awareness} label="Whiteboard title" cursorField="canvasCursor"
                 className="whiteboard-title" disabled={busy || accessDenied}
                 onBlur={() => { void session.saveTitle().catch(e => setError(e.message)); }} />}
