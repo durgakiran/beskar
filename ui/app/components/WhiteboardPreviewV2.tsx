@@ -18,6 +18,6 @@ export default function WhiteboardPreviewV2({ spaceId, pageId, onTitle }: { spac
         });
         return () => abort.abort();
     }, [spaceId, pageId, attempt, onTitle]);
-    return published?.preview ? <img src={contentUrl(published.preview.url)} alt={published.snapshot.title} onError={() => { setPublished(null); setMessage('Unable to load the published preview.'); }} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+    return published?.preview ? <img className="block h-full w-full object-contain object-top" src={contentUrl(published.preview.url)} alt={published.snapshot.title} onError={() => { setPublished(null); setMessage('Unable to load the published preview.'); }} />
         : <Flex align="center" justify="center" direction="column" gap="3" height="100%"><Text>{message}</Text>{message.startsWith('Unable') ? <Button onClick={() => setAttempt(n => n + 1)}>Retry</Button> : null}</Flex>;
 }

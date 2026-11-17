@@ -1,0 +1,2 @@
+export const railButtonClass = "relative flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] text-neutral-700 transition-colors hover:bg-neutral-200 hover:text-neutral-900 focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary-700";
+export const railActiveClass = "bg-primary-100 text-primary-800 hover:bg-primary-200 hover:text-primary-900";
