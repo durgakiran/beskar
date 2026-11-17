@@ -101,7 +101,7 @@ export default function WorkspaceRail({ actions }: { actions?: ReactNode }) {
         : "Notifications";
 
     return (
-        <nav aria-label="Workspace navigation" className="z-10 flex w-12 shrink-0 flex-col items-center gap-2 overflow-y-auto border-r border-neutral-200 bg-[var(--surface)] px-1 py-2 sm:w-14 sm:px-2">
+        <nav aria-label="Workspace navigation" className="z-10 flex w-12 shrink-0 flex-col items-center gap-2 overflow-x-hidden overflow-y-auto border-r border-neutral-200 bg-[var(--surface)] py-2 [scrollbar-width:thin] sm:w-14">
             <Link to="/space" aria-label="Teddox home" title="Teddox home" className={railButtonClass}>
                 <BrandMark />
             </Link>
