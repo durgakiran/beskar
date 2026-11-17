@@ -75,5 +75,26 @@ for (const [index, orientation] of ['tall', 'wide'].entries()) {
   });
   assert(fits, `${orientation} Mermaid diagram fits inline without clipping or distortion`);
 }
-await page.evaluate(()=>{window.codeBrowserResults='PASS: language keyboard search, copy, caption, wrap, line numbers, duplicate and unique IDs, Tab/Shift-Tab, Escape, collapse, reader copy and immutable preferences, HTML preview, tall and wide Mermaid previews'});
+await page.evaluate(() => {
+  window.codeReader.commands.setContent(window.codeEditor.getJSON());
+});
+const readerDiagram = reader.locator('.code-block-view').first();
+const readerSource = readerDiagram.locator('.code-block-source');
+await readerDiagram.locator('.mermaid-inline-frame img').waitFor();
+assert(!await readerSource.isVisible(), 'Mermaid opens in preview in a read-only editor');
+await readerDiagram.getByRole('button', { name: 'Code', exact: true }).click();
+assert(await readerSource.isVisible(), 'readers can switch to Mermaid source');
+await readerDiagram.getByRole('button', { name: 'Preview', exact: true }).click();
+assert(!await readerSource.isVisible(), 'readers can return to the diagram');
+const editorDiagram = edit.locator('.code-block-view').first();
+await editorDiagram.getByRole('button', { name: 'Code', exact: true }).click();
+await page.getByRole('button', { name: 'Toggle editability' }).click();
+await editorDiagram.getByRole('button', { name: 'Code', exact: true }).waitFor();
+await editorDiagram.getByRole('button', { name: 'Code', exact: true }).click();
+await page.getByRole('button', { name: 'Toggle editability' }).click();
+await editorDiagram.getByRole('button', { name: 'Preview', exact: true }).waitFor();
+assert(await editorDiagram.locator('.code-block-source').isVisible(), 'edit mode opens Mermaid source');
+await page.getByRole('button', { name: 'Toggle editability' }).click();
+await editorDiagram.getByRole('button', { name: 'Code', exact: true }).waitFor();
+await page.evaluate(()=>{window.codeBrowserResults='PASS: language keyboard search, copy, caption, wrap, line numbers, duplicate and unique IDs, Tab/Shift-Tab, Escape, collapse, reader copy and immutable preferences, HTML preview, tall and wide Mermaid previews, and Mermaid view-mode defaults'});
 }
