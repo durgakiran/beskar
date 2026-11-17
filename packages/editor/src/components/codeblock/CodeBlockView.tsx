@@ -1,4 +1,4 @@
-import React, { useEffect, useId, useRef, useState } from 'react';
+import React, { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { NodeViewContent, NodeViewWrapper, type NodeViewProps } from '@tiptap/react';
 import * as Popover from '@radix-ui/react-popover';
 import * as Menu from '@radix-ui/react-dropdown-menu';
@@ -23,19 +23,19 @@ export function CodeBlockView({ editor, node, getPos, updateAttributes, deleteNo
   const [status, setStatus] = useState('');
   const [captionOpen, setCaptionOpen] = useState(false);
   const [caption, setCaption] = useState('');
-  const [preview, setPreview] = useState(false);
+  const [previewOverride, setPreviewOverride] = useState<boolean | null>(null);
   const [readerOptions, setReaderOptions] = useState<Record<string, boolean>>({});
   const listId = useId();
   const captionId = useId();
   const language = normalizeLanguage(node.attrs.language);
-  const previousLanguage = useRef(language);
   const matches = filterLanguages(query, recent);
   const option = (key: string) => !editable && key in readerOptions ? readerOptions[key] : !!node.attrs[key];
   const wrap = option('wrap');
   const lineNumbers = option('lineNumbers');
   const collapsed = option('collapsed');
   const previewType = language === 'xml' ? 'html' : language === 'mermaid' ? 'mermaid' : null;
-  const showPreview = !!previewType && preview;
+  const defaultPreview = !editable && previewType === 'mermaid';
+  const showPreview = !!previewType && (previewOverride ?? defaultPreview);
   const setOption = (key: string, value: boolean) => editor.isEditable ? updateAttributes({ [key]: value }) : setReaderOptions(old => ({ ...old, [key]: value }));
 
   useEffect(() => {
@@ -49,12 +49,7 @@ export function CodeBlockView({ editor, node, getPos, updateAttributes, deleteNo
 
   useEffect(() => { if (!status) return; const timer = setTimeout(() => setStatus(''), 3000); return () => clearTimeout(timer); }, [status]);
   useEffect(() => { setActive(0); }, [query]);
-  useEffect(() => {
-    if (previousLanguage.current !== language) {
-      previousLanguage.current = language;
-      setPreview(false);
-    }
-  }, [language]);
+  useLayoutEffect(() => { setPreviewOverride(null); }, [language, defaultPreview]);
   useEffect(() => {
     root.current?.querySelector(`#${CSS.escape(listId)} [aria-selected="true"]`)?.scrollIntoView({ block: 'nearest' });
   }, [active, listId]);
@@ -76,7 +71,7 @@ export function CodeBlockView({ editor, node, getPos, updateAttributes, deleteNo
   const chooseLanguage = (value: string) => {
     if (!editor.isEditable) return;
     updateAttributes({ language: value });
-    setPreview(false);
+    setPreviewOverride(null);
     const next = [value, ...recent.filter(l => l !== value)].slice(0, 5);
     setRecent(next);
     try { localStorage.setItem(RECENTS_KEY, JSON.stringify(next)); } catch { /* Storage is optional. */ }
@@ -110,7 +105,7 @@ export function CodeBlockView({ editor, node, getPos, updateAttributes, deleteNo
         </Popover.Content></Popover.Portal>
       </Popover.Root>
       <div className="code-block-actions">
-        {previewType && <button type="button" className="code-block-control" aria-pressed={showPreview} onClick={() => setPreview(value => !value)}>{showPreview ? 'Code' : 'Preview'}</button>}
+        {previewType && <button type="button" className="code-block-control" aria-pressed={showPreview} onClick={() => setPreviewOverride(!showPreview)}>{showPreview ? 'Code' : 'Preview'}</button>}
         <button type="button" className="code-block-control" onClick={copy} aria-label="Copy code"><FiCopy aria-hidden="true" />{status === 'Copied' ? 'Copied' : 'Copy'}</button>
         <button type="button" className="code-block-control" aria-expanded={!collapsed} onClick={() => setOption('collapsed', !collapsed)}>{collapsed ? 'Expand' : 'Collapse'}</button>
         <Menu.Root modal={false}><Menu.Trigger asChild><button type="button" className="code-block-control" aria-label="Code block options"><FiMoreHorizontal aria-hidden="true" /></button></Menu.Trigger>
