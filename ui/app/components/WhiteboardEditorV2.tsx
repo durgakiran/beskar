@@ -15,6 +15,7 @@ import { WebrtcProvider } from 'y-webrtc';
 import { Glideboard, createPublishPreview, safeAwarenessEntries, type GlideboardHandle, type GlideboardCollaborationConfig } from '@durgakiran/glideboard';
 import { getSignalingUrl } from 'app/core/signaling';
 import { getApiV1Base } from 'app/core/http/apiBase';
+import { useWhiteboardSwipeGuard } from 'app/core/whiteboard/useWhiteboardSwipeGuard';
 import { YjsDurabilityCoordinator } from 'app/core/whiteboard/durability/YjsDurabilityCoordinator';
 import { IndexedDbYjsRecoveryAdapter } from 'app/core/whiteboard/durability/IndexedDbYjsRecoveryAdapter';
 import type { DurabilityStatus } from 'app/core/whiteboard/durability/types';
@@ -43,6 +44,7 @@ export default function WhiteboardEditorV2({ slug }: { slug: string[] }) {
     const [session, setSession] = useState<Session | null>(null);
     const [titleText, setTitleText] = useState<Y.Text | null>(null);
     const activeSession = useRef<Session | null>(null);
+    const swipeGuardRef = useWhiteboardSwipeGuard();
     const [board, setBoard] = useState<GlideboardHandle | null>(null);
     const [status, setStatus] = useState<DurabilityStatus | null>(null);
     const pendingTitle = useRef<Rename | null>(null);
@@ -377,7 +379,7 @@ export default function WhiteboardEditorV2({ slug }: { slug: string[] }) {
     };
 
     if (!session) return <Flex direction="column" align="center" gap="3" p="5">{error ? <><Text role="alert">{error}</Text><Button onClick={() => setLoadAttempt(n => n + 1)}>Retry</Button></> : <Spinner />}</Flex>;
-    return <div style={{ height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+    return <div ref={swipeGuardRef} style={{ height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column' }}>
         <Flex align="center" wrap="wrap" flexShrink="0" gap="3" px="4" py="3" style={{ borderBottom: '1px solid #ddd' }}>
             {titleText && <DocumentTitle text={titleText} awareness={session.provider.awareness} label="Whiteboard title" cursorField="canvasCursor"
                 className="whiteboard-title" disabled={busy || accessDenied}

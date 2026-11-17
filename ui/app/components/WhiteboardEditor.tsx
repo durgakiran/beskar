@@ -22,6 +22,7 @@ import { WhiteboardCheckpointHttpAdapter } from "app/core/whiteboard/durability/
 import { YjsDurabilityCoordinator } from "app/core/whiteboard/durability/YjsDurabilityCoordinator";
 import type { DurabilityStatus, YjsRecoveryAdapter } from "app/core/whiteboard/durability/types";
 import { getApiV1Base } from "app/core/http/apiBase";
+import { useWhiteboardSwipeGuard } from "app/core/whiteboard/useWhiteboardSwipeGuard";
 
 const USER_URI = (import.meta.env.VITE_USER_SERVER_URL || "").replace(/\/+$/, "");
 const INITIAL_DATABASE_LOAD = Symbol('whiteboard-initial-database-load');
@@ -225,6 +226,7 @@ export default function WhiteboardEditor({
         provider: WebrtcProvider;
     } | null>(null);
     const yDocLifetimeGenerationsRef = useRef(new WeakMap<Y.Doc, number>());
+    const swipeGuardRef = useWhiteboardSwipeGuard();
     const boardRef = useRef<GlideboardHandle | null>(null);
     const [boardHandle, setBoardHandle] = useState<GlideboardHandle | null>(null);
     const handleBoardRef = useCallback((handle: GlideboardHandle | null) => {
@@ -818,6 +820,7 @@ export default function WhiteboardEditor({
     if (!readOnly) {
         return (
             <div
+                ref={swipeGuardRef}
                 style={{
                     display: 'flex',
                     flexDirection: 'column',
@@ -994,7 +997,7 @@ export default function WhiteboardEditor({
 
     // View mode: render canvas directly, no sub-header
     return (
-        <div style={{ width: '100%', height: fillParent ? '100%' : 'calc(100vh - 120px)' }}>
+        <div ref={swipeGuardRef} style={{ width: '100%', height: fillParent ? '100%' : 'calc(100vh - 120px)' }}>
             <WhiteboardCanvas boardRef={handleBoardRef} sessionKey={documentSessionKey} yDoc={yDoc} provider={provider} fetchErr={fetchErr} readOnly={readOnly} collaborationUser={collaborationUser} bootstrapRevision={boardData?.durableRevision ?? "0"} documentId={String(boardData?.docId ?? "")} assetStorage={whiteboardAssetStorage} />
         </div>
     );
