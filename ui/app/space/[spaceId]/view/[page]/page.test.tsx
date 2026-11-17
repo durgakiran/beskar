@@ -40,12 +40,14 @@ vi.mock("@components/ReadOnlyContentMain", () => ({
         capabilities,
         onEdit,
         onDelete,
+        toolbarAction,
         children,
     }: {
         title: string;
         capabilities: { canEdit: boolean; canDelete: boolean; canComment: boolean; canShare: boolean };
         onEdit: () => void;
         onDelete: () => void;
+        toolbarAction?: React.ReactNode;
         children: React.ReactNode;
     }) => (
         <div data-testid="readonly-shell">
@@ -53,6 +55,7 @@ vi.mock("@components/ReadOnlyContentMain", () => ({
             <div data-testid="shell-capabilities">{JSON.stringify(capabilities)}</div>
             <button onClick={onEdit}>Edit page</button>
             <button onClick={onDelete}>Delete page</button>
+            {toolbarAction}
             {children}
         </div>
     ),
@@ -140,7 +143,7 @@ describe("whiteboard view page", () => {
         vi.stubGlobal('fetch', fetcher);
         render(<MemoryRouter initialEntries={["/space-1/42"]}><Routes><Route path="/:spaceId/:page" element={<Page />} /></Routes></MemoryRouter>);
         await screen.findByTestId('v2-preview');
-        expect(screen.getByText('Version history')).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Version history' })).toBeTruthy();
         fireEvent.click(screen.getByText('Delete page'));
         fireEvent.click(await screen.findByRole('button', { name: 'Delete whiteboard' }));
         await waitFor(() => expect(push).toHaveBeenCalledWith('/space/space-1'));
