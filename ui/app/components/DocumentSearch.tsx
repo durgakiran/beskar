@@ -1,5 +1,8 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
+import * as Popover from '@radix-ui/react-popover';
+import { cn } from '@/lib/utils';
+import { railActiveClass, railButtonClass } from './workspaceRailStyles';
 import { Icon } from '@components/ui/Icon';
 import { DocumentSearchResult, searchDocuments } from '../core/http/searchApiHandler';
 
@@ -10,32 +13,26 @@ export default function DocumentSearch() {
     const [open, setOpen] = useState(false);
     const [active, setActive] = useState(-1);
     const [state, setState] = useState<{ query: string; results: DocumentSearchResult[]; status: 'idle' | 'loading' | 'ready' | 'error' }>({ query: '', results: [], status: 'idle' });
-    const root = useRef<HTMLDivElement>(null);
     const input = useRef<HTMLInputElement>(null);
     const listID = useId();
     const navigate = useNavigate();
     const location = useLocation();
     const normalized = query.trim();
     const results = state.query === normalized ? state.results : [];
-    const expanded = open;
 
     useEffect(() => { setOpen(false); setQuery(''); }, [location.pathname]);
 
     useEffect(() => {
-        const outside = (event: PointerEvent) => {
-            if (!root.current?.contains(event.target as Node)) setOpen(false);
-        };
         const shortcut = (event: KeyboardEvent) => {
             const target = event.target as HTMLElement | null;
             const editing = target?.closest?.('input, textarea, [contenteditable="true"]');
+            if (event.defaultPrevented || (!input.current && target?.closest?.('[role="dialog"]'))) return;
             if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k' && (!editing || target === input.current)) {
-                event.preventDefault(); input.current?.focus(); setOpen(true);
+                event.preventDefault(); setOpen(true); input.current?.focus();
             }
         };
-        document.addEventListener('pointerdown', outside);
         document.addEventListener('keydown', shortcut);
         return () => {
-            document.removeEventListener('pointerdown', outside);
             document.removeEventListener('keydown', shortcut);
         };
     }, []);
@@ -69,37 +66,41 @@ export default function DocumentSearch() {
         : results.length === 0 ? 'No matching documents found.' : `${results.length} document${results.length === 1 ? '' : 's'} found`;
 
     return (
-        <div ref={root} className="relative w-full min-w-0" onBlur={(event) => {
-            if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setOpen(false);
-        }}>
-            <div className={`flex h-10 items-center gap-2 rounded-full border bg-white px-3 transition-shadow ${expanded ? 'border-primary-400 ring-2 ring-primary-100' : 'border-neutral-300 hover:border-neutral-400'}`}>
-                <Icon name="Search" className="h-4 w-4 shrink-0 text-neutral-500" />
-                <input ref={input} type="search" role="combobox" aria-label="Search documents" aria-autocomplete="list"
-                    aria-controls={expanded ? listID : undefined} aria-expanded={expanded}
-                    aria-activedescendant={expanded && active >= 0 && results[active] ? `${listID}-${active}` : undefined}
-                    value={query} maxLength={200} placeholder="Search documents…" autoComplete="off" spellCheck={false}
-                    className="w-full min-w-0 bg-transparent text-sm text-neutral-900 outline-none placeholder:text-neutral-500 [&::-webkit-search-cancel-button]:hidden"
-                    onFocus={() => setOpen(true)} onChange={(event) => { setQuery(event.target.value); setActive(-1); setOpen(true); }}
-                    onKeyDown={(event) => {
-                        if (event.key === 'Escape') { event.preventDefault(); setOpen(false); setActive(-1); }
-                        if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-                            event.preventDefault(); setOpen(true);
-                            if (results.length) setActive((index) => event.key === 'ArrowDown' ? (index + 1) % results.length : index <= 0 ? results.length - 1 : index - 1);
-                        }
-                        if (event.key === 'Enter') {
-                            event.preventDefault();
-                            if (expanded && active >= 0 && results[active]) { setOpen(false); navigate(documentURL(results[active])); }
-                        }
-                    }} />
-                {query ? <button type="button" aria-label="Clear search" className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-neutral-500 hover:bg-neutral-100"
-                    onClick={() => { setQuery(''); input.current?.focus(); }}><Icon name="X" className="h-3.5 w-3.5" /></button>
-                    : <kbd className="hidden shrink-0 rounded border border-neutral-200 px-1.5 py-0.5 text-[10px] text-neutral-400 lg:inline">⌘ / Ctrl K</kbd>}
-            </div>
-            {expanded && (
-                <div className="absolute left-0 right-0 top-full z-[60] mt-2 overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-xl">
-                    <div className="border-b border-neutral-100 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-neutral-500">Documents</div>
+        <Popover.Root open={open} onOpenChange={setOpen}>
+            <Popover.Trigger asChild>
+                <button type="button" aria-label="Search documents" title="Search documents (⌘ / Ctrl K)"
+                    className={cn(railButtonClass, open && railActiveClass)}>
+                    <Icon name="Search" className="h-5 w-5" strokeWidth={1.75} />
+                </button>
+            </Popover.Trigger>
+            <Popover.Portal>
+                <Popover.Content side="right" align="start" sideOffset={12} collisionPadding={8} aria-label="Document search"
+                    className="z-[60] flex max-h-[var(--radix-popover-content-available-height)] w-[min(440px,calc(100vw-72px))] max-w-[var(--radix-popover-content-available-width)] flex-col overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-xl"
+                    onOpenAutoFocus={(event) => { event.preventDefault(); input.current?.focus(); }}>
+                    <div className="flex h-11 shrink-0 items-center gap-2 border-b border-neutral-200 px-3">
+                        <Icon name="Search" className="h-4 w-4 shrink-0 text-neutral-500" />
+                        <input ref={input} type="search" role="combobox" aria-label="Search documents" aria-autocomplete="list"
+                            aria-controls={listID} aria-expanded={true}
+                            aria-activedescendant={active >= 0 && results[active] ? `${listID}-${active}` : undefined}
+                            value={query} maxLength={200} placeholder="Search documents…" autoComplete="off" spellCheck={false}
+                            className="w-full min-w-0 bg-transparent text-sm text-neutral-900 outline-none placeholder:text-neutral-500 [&::-webkit-search-cancel-button]:hidden"
+                            onChange={(event) => { setQuery(event.target.value); setActive(-1); }}
+                            onKeyDown={(event) => {
+                                if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+                                    event.preventDefault();
+                                    if (results.length) setActive((index) => event.key === 'ArrowDown' ? (index + 1) % results.length : index <= 0 ? results.length - 1 : index - 1);
+                                }
+                                if (event.key === 'Enter') {
+                                    event.preventDefault();
+                                    if (active >= 0 && results[active]) { setOpen(false); navigate(documentURL(results[active])); }
+                                }
+                            }} />
+                        {query ? <button type="button" aria-label="Clear search" className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-neutral-500 hover:bg-neutral-100"
+                            onClick={() => { setQuery(''); input.current?.focus(); }}><Icon name="X" className="h-3.5 w-3.5" /></button>
+                            : <kbd className="hidden shrink-0 rounded border border-neutral-200 px-1.5 py-0.5 text-[10px] text-neutral-400 lg:inline">⌘ / Ctrl K</kbd>}
+                    </div>
                     <div role="status" aria-live="polite" className={results.length ? 'sr-only' : 'px-4 py-6 text-sm text-neutral-500'}>{status}</div>
-                    <ul id={listID} role="listbox" aria-label="Document search results" className="max-h-[min(420px,60vh)] overflow-y-auto py-1">
+                    <ul id={listID} role="listbox" aria-label="Document search results" className="min-h-0 max-h-[min(420px,60dvh)] overflow-y-auto empty:hidden">
                         {results.map((result, index) => (
                             <li key={result.pageId} id={`${listID}-${index}`} role="option" aria-selected={active === index}>
                                 <Link to={documentURL(result)} tabIndex={-1} onMouseEnter={() => setActive(index)}
@@ -117,8 +118,8 @@ export default function DocumentSearch() {
                         ))}
                     </ul>
                     {results.length > 0 && <div className="hidden border-t border-neutral-100 px-4 py-2 text-[11px] text-neutral-400 sm:block">↑ ↓ Navigate <span className="mx-2">↵ Open</span> Esc Close</div>}
-                </div>
-            )}
-        </div>
+                </Popover.Content>
+            </Popover.Portal>
+        </Popover.Root>
     );
 }

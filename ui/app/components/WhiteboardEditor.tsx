@@ -815,7 +815,7 @@ export default function WhiteboardEditor({
 
     const pageTitle = boardData?.title || 'Untitled Whiteboard';
 
-    // Edit mode: pull flush under the fixed navbar, with our own sub-header.
+    // Edit mode: fill the workspace and show the editor header.
     // View mode: the page already has a header, so render canvas directly.
     if (!readOnly) {
         return (
@@ -824,8 +824,8 @@ export default function WhiteboardEditor({
                 style={{
                     display: 'flex',
                     flexDirection: 'column',
-                    height: 'calc(100vh - 57px)',
-                    marginTop: '-17px',
+                    height: '100%',
+                    minHeight: 0,
                     width: '100%',
                     maxWidth: '100%',
                     minWidth: 0,
@@ -836,6 +836,7 @@ export default function WhiteboardEditor({
                 <Flex
                     align="center"
                     justify="between"
+                    wrap="wrap"
                     py="3"
                     px="4"
                     gap="4"
@@ -873,7 +874,7 @@ export default function WhiteboardEditor({
                     </Flex>
 
                     {/* Right: Publish & Close button */}
-                    <Flex align="center" gap="3" style={{ flexShrink: 0 }}>
+                    <Flex align="center" wrap="wrap" gap="3" style={{ flexShrink: 0, maxWidth: "100%" }}>
                         <Flex align="center" gap="2">
                             {visibleCollaborators.length ? (
                                 <Flex align="center" style={{ marginRight: "4px" }}>
@@ -987,7 +988,7 @@ export default function WhiteboardEditor({
                 </Flex>}
 
                 {/* Canvas */}
-                <div style={{ flex: 1, position: 'relative', minWidth: 0 }}>
+                <div style={{ flex: 1, position: 'relative', minHeight: 0, minWidth: 0 }}>
                     <WhiteboardCanvas boardRef={handleBoardRef} sessionKey={documentSessionKey} yDoc={yDoc} provider={provider} fetchErr={fetchErr} readOnly={readOnly || migrationDetected} collaborationUser={collaborationUser} bootstrapRevision={boardData?.durableRevision ?? "0"} documentId={String(boardData?.docId ?? "")} assetStorage={whiteboardAssetStorage} />
                 </div>
             </div>

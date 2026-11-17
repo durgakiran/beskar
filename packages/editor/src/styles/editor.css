@@ -4153,11 +4153,11 @@ td.selectedCell {
 .code-block-preview > span, .code-block-status { display: block; padding: 6px 8px; color: var(--editor-text-secondary); font: 400 12px/1.5 var(--editor-font-family); }
 .code-block-mermaid-preview { min-width: 0; color: var(--editor-text-secondary); font: 400 12px/1.5 var(--editor-font-family); }
 .code-block-mermaid-preview > span { display: grid; place-items: center; min-height: 80px; box-sizing: border-box; padding: 16px; white-space: pre-wrap; overflow-wrap: anywhere; }
-.mermaid-inline-frame { position: relative; display: flex; justify-content: center; align-items: flex-start; max-height: min(320px, 45vh); max-height: min(320px, 45dvh); overflow: clip; }
-.mermaid-inline-frame img { display: block; flex: none; max-width: none; height: auto; }
-.mermaid-inline-frame.is-clipped::after { content: ''; position: absolute; inset: auto 0 0; height: 32px; background: linear-gradient(transparent, var(--editor-code-bg)); pointer-events: none; }
-.mermaid-inline-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 8px; padding: 6px 4px 0; }
-.mermaid-open-diagram { margin-inline-start: auto; border: 1px solid var(--editor-border-default); background: var(--editor-bg-primary); }
+.mermaid-inline-frame { --mermaid-inline-height: min(320px, 45vh); }
+@supports (height: 1dvh) { .mermaid-inline-frame { --mermaid-inline-height: min(320px, 45dvh); } }
+.mermaid-inline-frame img { display: block; max-width: 100%; max-height: var(--mermaid-inline-height); height: auto; margin-inline: auto; }
+.mermaid-inline-actions { display: flex; justify-content: flex-end; padding: 6px 4px 0; }
+.mermaid-open-diagram { border: 1px solid var(--editor-border-default); background: var(--editor-bg-primary); }
 .mermaid-diagram-dialog {
   position: fixed;
   inset: 0;

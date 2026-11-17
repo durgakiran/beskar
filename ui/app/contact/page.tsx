@@ -1,4 +1,4 @@
-import MenuBar from "@components/menuBar";
+import SpaceLayout from "@components/spaceLayout";
 import { Box, Button, Flex, Heading, Text } from "@radix-ui/themes";
 import { FiArrowLeft, FiMail } from "react-icons/fi";
 import { Link } from "react-router-dom";
@@ -8,9 +8,8 @@ const mailtoHref = `mailto:${contactEmail}?subject=Teddox%20support%20request`;
 
 export default function ContactPage() {
     return (
-        <div className="min-h-screen bg-[#fbfafc]">
-            <MenuBar />
-            <Box className="mx-auto w-full max-w-5xl px-4 pb-12 pt-36 md:pt-24 md:px-8">
+        <SpaceLayout>
+            <Box className="mx-auto w-full max-w-5xl px-4 pb-12 pt-8 md:px-8 md:pt-12">
                 <Flex direction="column" gap="6">
                     <Link
                         to="/space"
@@ -80,6 +79,6 @@ export default function ContactPage() {
                     </div>
                 </Flex>
             </Box>
-        </div>
+        </SpaceLayout>
     );
 }

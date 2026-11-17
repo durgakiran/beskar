@@ -177,7 +177,7 @@ export default function WhiteboardVersionViewPage() {
   }, [canonicalPageId, canonicalVersionId, spaceId, versionSessionKey]);
 
   return (
-    <Flex direction="column" style={{ height: '100vh', overflow: 'hidden' }}>
+    <Flex direction="column" style={{ height: '100%', overflow: 'hidden' }}>
       <Flex align="center" gap="3" p="3" style={{ borderBottom: '1px solid var(--gray-4)', background: 'var(--color-panel)' }}>
         <Button variant="ghost" color="gray" onClick={() => navigate(`/space/${spaceId}/whiteboard/${pageId}`)}>
           <ArrowLeft size={16} /> Back to whiteboard
@@ -185,7 +185,7 @@ export default function WhiteboardVersionViewPage() {
         <Text size="3" weight="bold">Historical Version (Read-Only)</Text>
       </Flex>
 
-      <Flex flexGrow="1" style={{ position: 'relative' }}>
+      <Flex flexGrow="1" minHeight="0" style={{ position: 'relative' }}>
         {status === 'loading' ? (
           <Flex align="center" justify="center" style={{ width: '100%', height: '100%' }}>
             <Spinner size="3" />

@@ -1,4 +1,4 @@
-import MenuBar from "@components/menuBar";
+import SpaceLayout from "@components/spaceLayout";
 import { Box, Flex } from "@radix-ui/themes";
 import { Link } from "react-router-dom";
 import { useLocation, Outlet } from "react-router-dom";
@@ -10,19 +10,17 @@ export default function UserLayout() {
 
     if (isNotifications) {
         return (
-            <div>
-                <MenuBar />
-                <Box className="px-4 pt-[117px] md:pt-16 pb-8 mx-auto max-w-6xl"><Outlet /></Box>
-            </div>
+            <SpaceLayout>
+                <Box className="mx-auto max-w-6xl px-4 py-6"><Outlet /></Box>
+            </SpaceLayout>
         );
     }
 
     return (
-        <div>
-            <MenuBar />
-            <Box className="px-4 pt-[117px] md:pt-16 mx-auto max-w-8xl">
-                <Flex gap="4">
-                    <Box className="w-64 border-r border-neutral-200" p="4">
+        <SpaceLayout>
+            <Box className="mx-auto max-w-8xl px-4 py-6">
+                <Flex gap="4" direction={{ initial: "column", md: "row" }}>
+                    <Box className="shrink-0 border-neutral-200 md:w-56 md:border-r" p="4">
                         <Flex direction="column" gap="2">
                             <Link
                                 to="/user/notifications"
@@ -35,11 +33,11 @@ export default function UserLayout() {
                             </Link>
                         </Flex>
                     </Box>
-                    <Box className="flex-1 p-4">
+                    <Box className="min-w-0 flex-1 md:p-4">
                         <Outlet />
                     </Box>
                 </Flex>
             </Box>
-        </div>
+        </SpaceLayout>
     );
 }
