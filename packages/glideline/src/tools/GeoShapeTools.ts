@@ -1,6 +1,7 @@
 import { StateNode } from '../state-node.js';
 import type { PointerDownEvent, PointerMoveEvent, PointerUpEvent, KeyDownEvent } from '../state-node.js';
 import type { ShapeId, Vec2 } from '../types.js';
+import { isCreationStyleKey } from '../styles.js';
 
 const DRAG_THRESHOLD = 4;
 
@@ -19,7 +20,7 @@ function getToolClass(node: StateNode): GeoShapeToolClass {
 
 function makeShape(node: StateNode, id: ShapeId, x: number, y: number, w: number, h: number) {
   const shapeType = getToolClass(node).shapeType;
-  const util = node.editor.getShapeUtil(shapeType as any) as any;
+  const defaults = node.editor.getShapeUtil(shapeType).getDefaultProps();
   return {
     id,
     type: shapeType,
@@ -28,7 +29,7 @@ function makeShape(node: StateNode, id: ShapeId, x: number, y: number, w: number
     rotation: 0,
     meta: {},
     props: {
-      ...util.getDefaultProps(),
+      ...Object.fromEntries(Object.entries(defaults).filter(([key]) => !isCreationStyleKey(key))),
       w: Math.max(1, Math.abs(w)),
       h: Math.max(1, Math.abs(h)),
     },

@@ -1,80 +1,16 @@
-import React, { useMemo } from 'react';
-import { useSignalValue } from './useSignalValue.js';
+import React from 'react';
+import { LuArrowLeft } from 'react-icons/lu';
 import { useGlideboardController } from './GlideboardContext.js';
 import { wbTheme } from './theme.js';
 
-export function BackToContentButton() {
+export function BackToContentButton({ onClick }: { onClick: () => void }) {
   const controller = useGlideboardController();
-  const editor = controller.editor;
-  const camera = useSignalValue(editor.camera.signal);
-  const shapeIds = useSignalValue(editor.getCurrentPageShapeIdsSignal());
-
-  const isOffscreen = useMemo(() => {
-    if (!shapeIds || shapeIds.length === 0) return false;
-
-    const shapes = editor.getShapes();
-    if (shapes.length === 0) return false;
-
-    let minX = Infinity;
-    let minY = Infinity;
-    let maxX = -Infinity;
-    let maxY = -Infinity;
-
-    for (const shape of shapes) {
-      const bounds = editor.getShapeWorldBounds(shape);
-      if (bounds.minX < minX) minX = bounds.minX;
-      if (bounds.minY < minY) minY = bounds.minY;
-      if (bounds.maxX > maxX) maxX = bounds.maxX;
-      if (bounds.maxY > maxY) maxY = bounds.maxY;
-    }
-
-    if (minX === Infinity) return false;
-
-    const vp = editor.getViewportBounds();
-    // Check if the viewport completely misses the content bounding box
-    const intersects = !(vp.maxX < minX || vp.minX > maxX || vp.maxY < minY || vp.minY > maxY);
-    return !intersects;
-  }, [camera, editor, shapeIds]);
-
-  if (!isOffscreen) return null;
-
-  const handleBackToContent = () => {
-    const shapes = editor.getShapes();
-    if (shapes.length === 0) return;
-
-    let minX = Infinity;
-    let minY = Infinity;
-    let maxX = -Infinity;
-    let maxY = -Infinity;
-
-    for (const shape of shapes) {
-      const bounds = editor.getShapeWorldBounds(shape);
-      if (bounds.minX < minX) minX = bounds.minX;
-      if (bounds.minY < minY) minY = bounds.minY;
-      if (bounds.maxX > maxX) maxX = bounds.maxX;
-      if (bounds.maxY > maxY) maxY = bounds.maxY;
-    }
-
-    if (minX === Infinity) return;
-
-    const container = controller.getCanvasElement();
-    if (!container) return;
-
-    const { width, height } = container.getBoundingClientRect();
-    const cx = (minX + maxX) / 2;
-    const cy = (minY + maxY) / 2;
-    const camera = editor.camera.getCamera();
-
-    editor.camera.setCamera({
-      x: cx - (width / 2) / camera.z,
-      y: cy - (height / 2) / camera.z,
-    });
-  };
-
   return (
     <button
+      type="button"
       id={controller.domId('back-to-content')}
-      onClick={handleBackToContent}
+      data-glideboard-role="back-to-content"
+      onClick={onClick}
       style={{
         position: 'absolute',
         bottom: 72,
@@ -92,19 +28,11 @@ export function BackToContentButton() {
         fontSize: 13,
         fontWeight: 600,
         cursor: 'pointer',
+        whiteSpace: 'nowrap',
         boxShadow: wbTheme.shadow,
-        transition: 'background 0.1s',
-      }}
-      onMouseOver={(e) => {
-        e.currentTarget.style.background = wbTheme.surfaceInset;
-      }}
-      onMouseOut={(e) => {
-        e.currentTarget.style.background = wbTheme.surface;
       }}
     >
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-        <path d="m15 18-6-6 6-6"/>
-      </svg>
+      <LuArrowLeft size={14} aria-hidden="true" />
       Back to content
     </button>
   );

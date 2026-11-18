@@ -66,6 +66,36 @@ function DoubleArrowIcon() {
   </svg>;
 }
 
+function EraserIcon({ partial = false, area = false }: { partial?: boolean; area?: boolean }) {
+  return (
+    <span aria-hidden="true" style={{
+      display: 'grid', gridTemplateRows: '16px 7px', justifyItems: 'center', gap: 1, width: 22,
+    }}>
+      <LuEraser size={16} />
+      {area ? (
+        <svg viewBox="0 0 22 8" width={22} height={8} fill="currentColor">
+          <path d="M3 1h4.5a3.5 3.5 0 0 0 7 0H19a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1Z" />
+        </svg>
+      ) : <span style={{
+        boxSizing: 'border-box', width: 20, height: 7, borderTop: '2px solid currentColor',
+        borderRadius: '75% 38% 0 0 / 95% 72% 0 0', transform: 'rotate(-10deg)',
+        maskImage: partial
+          ? 'linear-gradient(to right, currentColor 0 36%, transparent 36% 64%, currentColor 64% 100%)'
+          : undefined,
+      }} />}
+    </span>
+  );
+}
+
+const ERASER_MODES = [
+  { id: 'eraser', label: 'All elements', shortcut: 'X' },
+  { id: 'whole-stroke-eraser', label: 'Whole stroke', shortcut: 'X1' },
+  { id: 'partial-eraser', label: 'Partial stroke', shortcut: 'X2' },
+  { id: 'area-eraser', label: 'Erase area', shortcut: 'X3' },
+] as const;
+const ERASER_PICKER_WIDTH = 144;
+const ERASER_PICKER_HEIGHT = 42;
+
 const SHAPE_TOOLS: ToolDef[] = [
   { id: 'box', label: 'Rectangle', shortcut: 'R', icon: FiSquare },
   { id: 'ellipse', label: 'Ellipse', shortcut: 'E', icon: FiCircle },
@@ -393,6 +423,8 @@ export function Toolbar({
   const controller = useGlideboardController();
   const { editor } = controller;
   const activeTool = useSignalValue(editor.currentToolId) ?? 'select';
+  const eraserTool = useSignalValue(controller.eraserToolSignal) ?? 'eraser';
+  const eraserActive = ERASER_MODES.some(mode => mode.id === activeTool);
   const currentArrowPreset = useSignalValue(controller.arrowPresetSignal) ?? 'arrow';
   const snapSettings = useSignalValue(editor.snapping.settings)!;
   const selectedShapes = useSelectedShapes();
@@ -406,6 +438,9 @@ export function Toolbar({
     && editor.getChildren(id).every(child => canDeleteShape(child.id as ShapeId));
   const canDelete = canActOnSelection && selectedIds.every(canDeleteShape);
   const toolbarRef = React.useRef<HTMLDivElement>(null);
+  const eraserTriggerRef = React.useRef<HTMLButtonElement>(null);
+  const eraserPickerRef = React.useRef<HTMLDivElement>(null);
+  const [eraserPicker, setEraserPicker] = React.useState<{ left: number; top: number } | null>(null);
   const [isShapePickerOpen, setIsShapePickerOpen] = React.useState(false);
   const [isArrowPickerOpen, setIsArrowPickerOpen] = React.useState(false);
   const [currentShapeToolId, setCurrentShapeToolId] = React.useState('box');
@@ -419,13 +454,18 @@ export function Toolbar({
     if (activeTool !== 'arrow' && isArrowPickerOpen) {
       setIsArrowPickerOpen(false);
     }
-  }, [activeTool, isArrowPickerOpen, isShapePickerOpen]);
+    if (!eraserActive || readOnly) setEraserPicker(null);
+  }, [activeTool, eraserActive, isArrowPickerOpen, isShapePickerOpen, readOnly]);
 
   React.useEffect(() => {
     const handlePointerDown = (event: PointerEvent) => {
-      if (!toolbarRef.current?.contains(event.target as Node)) {
+      const target = event.target as Node;
+      if (!toolbarRef.current?.contains(target)) {
         setIsShapePickerOpen(false);
         setIsArrowPickerOpen(false);
+      }
+      if (!eraserTriggerRef.current?.contains(target) && !eraserPickerRef.current?.contains(target)) {
+        setEraserPicker(null);
       }
     };
     document.addEventListener('pointerdown', handlePointerDown);
@@ -439,6 +479,26 @@ export function Toolbar({
     controller.setCurrentTool(toolId);
     setIsShapePickerOpen(false);
     setIsArrowPickerOpen(false);
+    setEraserPicker(null);
+  };
+
+  const toggleEraserPicker = () => {
+    if (eraserPicker) {
+      setEraserPicker(null);
+      return;
+    }
+    const toolbar = toolbarRef.current!.getBoundingClientRect();
+    const trigger = eraserTriggerRef.current!.getBoundingClientRect();
+    const compact = window.matchMedia('(max-width: 600px)').matches;
+    const left = compact ? trigger.left : trigger.right + 8;
+    const top = compact ? trigger.bottom + 8 : trigger.top;
+    controller.activateEraser();
+    setIsShapePickerOpen(false);
+    setIsArrowPickerOpen(false);
+    setEraserPicker({
+      left: Math.max(8, Math.min(left - toolbar.left, toolbar.width - ERASER_PICKER_WIDTH - 8)),
+      top: Math.max(8, Math.min(top - toolbar.top, toolbar.height - ERASER_PICKER_HEIGHT - 8)),
+    });
   };
 
   const separator = (
@@ -453,6 +513,22 @@ export function Toolbar({
   );
 
   const drawingControls = TOOLS.map(tool => {
+    if (tool.id === 'eraser') {
+      return (
+        <button key={tool.id} ref={eraserTriggerRef} type="button"
+          className="glideboard-toolbar-button"
+          id={controller.domId('tool-eraser')}
+          data-glideboard-tool="eraser"
+          data-isactive={eraserActive}
+          aria-label="Eraser" aria-expanded={eraserPicker !== null}
+          aria-controls={eraserPicker ? controller.domId('eraser-picker') : undefined}
+          title="Eraser (X)" onClick={toggleEraserPicker}
+          style={{ ...buttonStyle, color: eraserActive ? wbTheme.accentText : wbTheme.textSoft }}>
+          {eraserTool === 'eraser' ? <LuEraser size={16} />
+            : <EraserIcon partial={eraserTool === 'partial-eraser'} area={eraserTool === 'area-eraser'} />}
+        </button>
+      );
+    }
     if (tool.id === 'shape-picker') {
       return (
         <ShapePickerButton
@@ -590,6 +666,48 @@ export function Toolbar({
           ...surfaceStyle, position: 'absolute', left: 60, top: 12,
           flexDirection: 'row', maxWidth: 'calc(100% - 72px)', overflowX: 'auto',
         }}>{actionControls}</div>
+      ) : null}
+      {eraserPicker && !readOnly ? (
+        <div ref={eraserPickerRef} role="group" aria-label="Eraser modes"
+          id={controller.domId('eraser-picker')} data-glideboard-role="eraser-picker"
+          onKeyDown={event => {
+            if (event.key !== 'Escape') return;
+            event.stopPropagation();
+            setEraserPicker(null);
+            eraserTriggerRef.current?.focus();
+          }}
+          onBlur={event => {
+            if (event.relatedTarget !== eraserTriggerRef.current && !event.currentTarget.contains(event.relatedTarget)) {
+              setEraserPicker(null);
+            }
+          }}
+          style={{
+            ...surfaceStyle, ...eraserPicker, position: 'absolute',
+            width: ERASER_PICKER_WIDTH, height: ERASER_PICKER_HEIGHT,
+            maxWidth: 'calc(100% - 16px)', boxSizing: 'border-box',
+            gap: 2,
+            border: `1px solid ${wbTheme.border}`,
+          }}>
+          {ERASER_MODES.map(mode => (
+            <button key={mode.id} type="button" className="glideboard-toolbar-button"
+              aria-label={mode.label}
+              title={`${mode.label} (${mode.shortcut})`}
+              aria-keyshortcuts={mode.id === 'eraser' ? 'X' : undefined}
+              data-isactive={eraserTool === mode.id} aria-pressed={eraserTool === mode.id}
+              autoFocus={eraserTool === mode.id}
+              onClick={() => {
+                selectTool(mode.id);
+                eraserTriggerRef.current?.focus();
+              }}
+              style={{
+                ...buttonStyle,
+                color: eraserTool === mode.id ? wbTheme.accentText : wbTheme.text,
+              }}>
+              {mode.id === 'eraser' ? <LuEraser size={16} aria-hidden="true" />
+                : <EraserIcon partial={mode.id === 'partial-eraser'} area={mode.id === 'area-eraser'} />}
+            </button>
+          ))}
+        </div>
       ) : null}
     </div>
   );

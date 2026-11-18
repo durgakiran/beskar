@@ -13,8 +13,9 @@
  */
 
 import { StateNode } from '../state-node.js';
+import type { GlideEditor } from '../editor.js';
 import type { PointerDownEvent } from '../state-node.js';
-import type { ShapeId } from '../types.js';
+import type { ShapeId, Vec2 } from '../types.js';
 
 // ─────────────────────────────────────────────────────────────
 // Idle
@@ -35,34 +36,31 @@ class Idle extends StateNode {
       }
     }
 
-    // Create a new text shape at click position and start editing
-    const newId: ShapeId = this.editor.createShapeId('text');
-    this.editor.batch('Create Text', () => {
-      this.editor.createShape({
-        id:       newId,
-        type:     'text',
-        x:        e.point.x,
-        y:        e.point.y,
-        rotation: 0,
-        meta:     {},
-        props: {
-          text:     '',
-          textAlign: this.editor.activeStyles.peek()['standaloneTextAlign'] ?? 'left',
-        },
-      });
-    });
-
-    this.editor.setCurrentTool('select');
-    this.editor.setSelectedShapeIds([newId]);
-    this.editor.startEditing(newId);
+    TextTool.createAndEdit(this.editor, e.point);
   }
 }
-
-// ─────────────────────────────────────────────────────────────
-// TextTool (root)
-// ─────────────────────────────────────────────────────────────
 
 export class TextTool extends StateNode {
   static override readonly id = 'text';
   static override children = () => [Idle];
+
+  static createAndEdit(editor: GlideEditor, point: Vec2): void {
+    const id = editor.createShapeId('text');
+    editor.batch('Create Text', () => {
+      editor.createShape({
+        id,
+        type: 'text',
+        x: point.x,
+        y: point.y,
+        props: {
+          text: '',
+          textAlign: editor.activeStyles.peek()['standaloneTextAlign'] ?? 'left',
+        },
+      });
+    });
+
+    if (editor.currentToolId.peek() !== 'select') editor.setCurrentTool('select');
+    editor.setSelectedShapeIds([id]);
+    editor.startEditing(id);
+  }
 }

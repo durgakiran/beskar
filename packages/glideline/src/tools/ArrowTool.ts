@@ -67,7 +67,6 @@ class Drawing extends StateNode {
       arrowheadEnd,
     });
     const { end, bend, label, labelPosition } = arrow.props;
-    const strokeStyle = this.editor.activeStyles.peek().strokeStyle;
 
     this.editor.beginHistoryPreview();
     this.editor.batch('Arrow Preview', () => {
@@ -82,7 +81,6 @@ class Drawing extends StateNode {
           arrowheadEnd,
           label,
           labelPosition,
-          ...(arrowRouteStyle !== 'ortho' && strokeStyle === 'sketch' ? { strokeStyle: 'solid' } : {}),
         },
       } as unknown as AnyRecord);
     }, { history: 'ignore' });

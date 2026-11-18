@@ -5,9 +5,8 @@ import { useGlideboardController } from './GlideboardContext.js';
 import { PositionSizeBar, StylePanel } from './StylePanel.js';
 import { wbTheme } from './theme.js';
 import { Toolbar } from './Toolbar.js';
-import { ZoomWidget, fitToScreen } from './ZoomWidget.js';
+import { ZoomWidget, fitToScreen, stepZoom } from './ZoomWidget.js';
 import { useSignalValue } from './useSignalValue.js';
-import { BackToContentButton } from './BackToContentButton.js';
 import { CollaborationCursors } from './CollaborationCursors.js';
 import { LayersPanel } from './LayersPanel.js';
 import { BOARD_MONO_FEATURES, FONT_FAMILIES, ContentIngressError, normalizeClipboardText, type ArrowShape, type ShapeId } from '@durgakiran/glideline';
@@ -34,13 +33,16 @@ const TOOL_KEYS: Record<string, string> = {
   t: 'text',
   s: 'sticky-note',
   d: 'draw',
-  x: 'eraser',
   a: 'arrow',
   f: 'frame',
 };
 
 // Keep page support in the document model while the page navigation UI is deferred.
 const PAGE_TABS_ENABLED = false;
+const ERASER_SEQUENCE_DELAY = 1500;
+const ERASER_SHORTCUTS = new Map([
+  ['1', 'whole-stroke-eraser'], ['2', 'partial-eraser'], ['3', 'area-eraser'],
+]);
 
 export function WhiteboardApp({
   assetLibraryProvider,
@@ -56,6 +58,7 @@ export function WhiteboardApp({
   const focusReturnRef = React.useRef<HTMLElement | null>(null);
   const pickerOpenRef = React.useRef(false);
   const dragDepthRef = React.useRef(0);
+  const eraserSequenceUntil = React.useRef(0);
   const shapeCount = useSignalValue(editor.getCurrentPageShapeIdsSignal())?.length ?? 0;
   const camera = useSignalValue(editor.camera.signal);
   const readOnly = useSignalValue(controller.readOnlySignal) ?? false;
@@ -110,7 +113,10 @@ export function WhiteboardApp({
       ));
   }, [addImportNotice, assetLibraryProvider]);
 
-  const importFiles = React.useCallback(async (files: readonly File[], origin?: { x: number; y: number }) => {
+  const importFiles = React.useCallback(async (
+    files: readonly File[],
+    { origin, preserveTool }: { origin?: { x: number; y: number }; preserveTool?: boolean } = {},
+  ) => {
     if (readOnly || files.length === 0) return;
     setLayersOpen(false);
     setAssetsOpen(false);
@@ -123,7 +129,7 @@ export function WhiteboardApp({
       try {
         const point = { x: anchor.x + index * 24, y: anchor.y + index * 24 };
         const request = await readAssetImportRequest(file, point, controller.assetLimits, correlationToken);
-        void controller.queueAssetImport(request).result.catch(() => undefined);
+        void controller.queueAssetImport(preserveTool ? { ...request, preserveTool } : request).result.catch(() => undefined);
       } catch (error) {
         addImportNotice(file.name || 'Image', error, undefined, correlationToken);
       }
@@ -285,12 +291,38 @@ export function WhiteboardApp({
   };
 
   const onKeyDown = (event: React.KeyboardEvent) => {
+    const eraserSequenceStarted = Date.now() < eraserSequenceUntil.current;
+    eraserSequenceUntil.current = 0;
     if (shouldIgnoreGlideboardShortcuts(event)) return;
     if (editor.editingShapeId.peek()) return;
 
+    if ((event.metaKey || event.ctrlKey) && !event.altKey) {
+      if (event.key === '=' || event.key === '+' || event.key === '-') {
+        event.preventDefault();
+        stepZoom(controller, event.key === '-' ? -1 : 1);
+        return;
+      }
+    }
+
     if (!readOnly) {
-      const toolId = TOOL_KEYS[event.key.toLowerCase()];
-      if (toolId && !event.metaKey && !event.ctrlKey && !event.altKey) {
+      const key = event.key.toLowerCase();
+      const unmodified = !event.metaKey && !event.ctrlKey && !event.altKey;
+      if (unmodified && !event.shiftKey) {
+        if (key === 'x') {
+          event.preventDefault();
+          eraserSequenceUntil.current = Date.now() + ERASER_SEQUENCE_DELAY;
+          if (!event.repeat) controller.setCurrentTool('eraser');
+          return;
+        }
+        const eraserMode = ERASER_SHORTCUTS.get(key);
+        if (eraserSequenceStarted && editor.currentToolId.peek() === 'eraser' && eraserMode) {
+          event.preventDefault();
+          controller.setCurrentTool(eraserMode);
+          return;
+        }
+      }
+      const toolId = TOOL_KEYS[key];
+      if (toolId && unmodified) {
         editor.setCurrentTool(toolId);
         return;
       }
@@ -409,12 +441,12 @@ export function WhiteboardApp({
     if (svgSource) {
       event.preventDefault();
       const blob = new File([svgSource], 'Pasted SVG.svg', { type: 'image/svg+xml' });
-      void importFiles([blob]);
+      void importFiles([blob], { preserveTool: true });
       return;
     }
     if (imageFiles.length > 0) {
       event.preventDefault();
-      void importFiles(imageFiles);
+      void importFiles(imageFiles, { preserveTool: true });
       return;
     }
     if (html || text) {
@@ -453,6 +485,10 @@ export function WhiteboardApp({
       } as React.CSSProperties}
       tabIndex={0}
       onKeyDown={onKeyDown}
+      onPointerDownCapture={() => { eraserSequenceUntil.current = 0; }}
+      onBlur={event => {
+        if (!event.currentTarget.contains(event.relatedTarget)) eraserSequenceUntil.current = 0;
+      }}
       onPaste={onPaste}
       onContextMenu={onContextMenu}
       onDragEnter={event => {
@@ -506,7 +542,7 @@ export function WhiteboardApp({
           closeAssets();
           return;
         }
-        void importFiles(Array.from(event.dataTransfer.files), point);
+        void importFiles(Array.from(event.dataTransfer.files), { origin: point });
       }}
     >
       <style>{`
@@ -615,6 +651,15 @@ export function WhiteboardApp({
             right: 8px !important;
             bottom: 8px !important;
           }
+          [data-glideboard-role="minimap"] {
+            right: 8px !important;
+            bottom: 60px !important;
+            width: 116px !important;
+            height: 78px !important;
+          }
+          [data-glideboard-role="back-to-content"] {
+            bottom: 148px !important;
+          }
           [data-glideboard-role="page-tabs"] {
             left: 8px !important;
             right: 8px !important;
@@ -704,7 +749,6 @@ export function WhiteboardApp({
       {!readOnly ? (
         <ContextMenu position={contextMenuPosition} onClose={() => setContextMenuPosition(null)} />
       ) : null}
-      <BackToContentButton />
       <div
         id={controller.domId('statusbar')}
         data-glideboard-role="statusbar"
@@ -731,7 +775,7 @@ export function WhiteboardApp({
         {readOnly ? (
           <span style={{ color: wbTheme.accentText }}> · Read-only</span>
         ) : (
-          <span data-glideboard-role="status-help" style={{ color: wbTheme.accentText }}> · Double-click to edit labels</span>
+          <span data-glideboard-role="status-help" style={{ color: wbTheme.accentText }}> · Double-click to add or edit text</span>
         )}
       </div>
     </div>

@@ -10,6 +10,7 @@ export default defineConfig({
     alias: [
       { find: /^@durgakiran\/glideboard$/, replacement: resolve(__dirname, '../glideboard/dist/index.js') },
       { find: /^@durgakiran\/glideboard\/styles\.css$/, replacement: resolve(__dirname, '../glideboard/dist/styles.css') },
+      { find: /^@durgakiran\/glideline$/, replacement: resolve(__dirname, '../glideline/dist/index.js') },
       { find: '@preact/signals', replacement: resolve(__dirname, 'node_modules/@preact/signals') },
       { find: 'react-dom', replacement: resolve(__dirname, 'node_modules/react-dom') },
       { find: 'react', replacement: resolve(__dirname, 'node_modules/react') },

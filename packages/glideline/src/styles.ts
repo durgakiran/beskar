@@ -134,6 +134,38 @@ export const StyleValidators = {
   },
 };
 
+const creationStyleValidators = {
+  font: StyleValidators.font,
+  fontSize: StyleValidators.fontSize,
+  fillStyle: StyleValidators.fillStyle,
+  strokeStyle: StyleValidators.strokeStyle,
+  strokeWidth: StyleValidators.strokeWidth,
+  pressureSensitive: {
+    validate(value: unknown): boolean {
+      if (typeof value !== 'boolean') throw new Error('pressureSensitive must be a boolean');
+      return value;
+    },
+  },
+};
+
+export function isCreationStyleKey(key: string): key is keyof typeof creationStyleValidators {
+  return Object.prototype.hasOwnProperty.call(creationStyleValidators, key);
+}
+
+export function readCreationStyles(value: unknown): Record<string, unknown> {
+  const styles: Record<string, unknown> = {};
+  if (!value || typeof value !== 'object') return styles;
+  for (const [key, entry] of Object.entries(value)) {
+    if (!isCreationStyleKey(key)) continue;
+    try {
+      styles[key] = creationStyleValidators[key].validate(entry);
+    } catch {
+      // Retain the editor default for invalid stored values.
+    }
+  }
+  return styles;
+}
+
 // ─────────────────────────────────────────────────────────────
 // ShapeStyleProps — superset of all style properties
 // ─────────────────────────────────────────────────────────────

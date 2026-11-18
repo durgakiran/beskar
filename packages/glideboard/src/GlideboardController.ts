@@ -8,6 +8,8 @@ import {
   prepareRasterAsset,
   MutationPermissionError,
   resolveArrowRoute,
+  readCreationStyles,
+  TextUtil,
   type Box2d,
   type AssetPlacementTool,
   type CanvasToolName,
@@ -105,6 +107,7 @@ const awarenessPresenceOwners = new WeakMap<object, object>();
 const MAX_AUTOMATIC_SAVE_RETRIES = 3;
 const MAX_AUTOMATIC_RETRY_DELAY_MS = 5_000;
 const RICH_TEXT_FRAGMENTS_KEY = 'glideboard-rich-text-fragments-v1';
+const CREATION_STYLES_STORAGE_KEY = 'glideboard:creation-styles';
 const ASSET_ERROR_CATEGORIES = new Set<GlideboardAssetErrorCategory>([
   'invalid-content',
   'unsupported-format',
@@ -118,6 +121,14 @@ const ASSET_ERROR_CATEGORIES = new Set<GlideboardAssetErrorCategory>([
   'unavailable',
   'unknown',
 ]);
+
+function loadCreationStyles(): Record<string, unknown> {
+  try {
+    return readCreationStyles(JSON.parse(window.localStorage.getItem(CREATION_STYLES_STORAGE_KEY) ?? '{}'));
+  } catch {
+    return {};
+  }
+}
 
 function createAbortError(): DOMException {
   return new DOMException('Asset import cancelled', 'AbortError');
@@ -256,6 +267,7 @@ export class GlideboardController {
   private readonly remoteMutationCapability = createMutationCapability();
   private readonly fencedSettlementSignal = signal(false);
   private canvasElement: HTMLElement | null = null;
+  readonly eraserToolSignal = signal<'eraser' | 'whole-stroke-eraser' | 'partial-eraser' | 'area-eraser'>('eraser');
   private collaborationCleanup: (() => void) | null = null;
   private collaborationConfig: GlideboardCollaborationConfig | null = null;
   private collaborationCheckpoints: CollaborationCheckpointSource | null = null;
@@ -303,6 +315,7 @@ export class GlideboardController {
         : undefined,
       options.assetResolutionContext,
     );
+    this.editor.activeStyles.value = { ...this.editor.activeStyles.peek(), ...loadCreationStyles() };
     this.toolServer = createCanvasToolServer(this.editor);
     for (const source of [this.editor.currentToolId, this.editor.getSelectionSignal(),
       this.editor.activePageId, this.editor.editingShapeId, this.editor.interactions.getVersionSignal()]) {
@@ -321,6 +334,9 @@ export class GlideboardController {
         : null;
     }));
     this.debugCleanups.add(this.editor.currentToolId.subscribe(toolId => {
+      if (toolId === 'eraser' || toolId === 'whole-stroke-eraser' || toolId === 'partial-eraser' || toolId === 'area-eraser') {
+        this.eraserToolSignal.value = toolId;
+      }
       if (toolId !== 'asset' && this.assetPlacementSignal.peek()) {
         this.assetPlacementTool?.cancel();
         this.assetPlacementTool = null;
@@ -549,10 +565,9 @@ export class GlideboardController {
       type: 'text',
       x: origin.x,
       y: origin.y,
-      props: { text, textAlign: 'left' },
+      props: { ...TextUtil.getPlainTextProps(text, this.editor.activeStyles.peek()), textAlign: 'left' },
     });
     this.editor.setSelectedShapeIds([id]);
-    this.editor.setCurrentTool('select', { preserveSelection: true });
     return id;
   }
 
@@ -788,7 +803,7 @@ export class GlideboardController {
       try {
         shapeId = entry.replaceShapeId
           ? this.commitAssetReplacement(entry.replaceShapeId, asset, entry.expectedAssetId)
-          : this.commitAssetImport(asset, request.point, entry.destination);
+          : this.commitAssetImport(asset, request, entry.destination);
         if (persistence && !commitBeforeDocument) {
           try {
             this.updateAssetImportJob(entry, { status: 'finalizing' });
@@ -886,7 +901,7 @@ export class GlideboardController {
     this.assertAssetDestination(entry.destination, controller.signal);
   }
 
-  private commitAssetImport(asset: GlideAsset, point: Vec2 | undefined, destination: AssetDestination): ShapeId {
+  private commitAssetImport(asset: GlideAsset, request: GlideboardAssetImportRequest, destination: AssetDestination): ShapeId {
     const viewport = destination.viewport;
     const selectImported = this.canSelectImportedAsset(destination);
     const sourceWidth = asset.props['width'] as number;
@@ -896,7 +911,7 @@ export class GlideboardController {
     const scale = Math.min(1, maximumWidth / sourceWidth, maximumHeight / sourceHeight);
     const width = sourceWidth * scale;
     const height = sourceHeight * scale;
-    const origin = point ?? {
+    const origin = request.point ?? {
       x: viewport.x + (viewport.w - width) / 2,
       y: viewport.y + (viewport.h - height) / 2,
     };
@@ -928,7 +943,7 @@ export class GlideboardController {
     const importedShapeId = report.idMap[sourceShapeId] as ShapeId;
     if (selectImported) {
       this.editor.setSelectedShapeIds([importedShapeId]);
-      this.editor.setCurrentTool('select', { preserveSelection: true });
+      if (!request.preserveTool) this.editor.setCurrentTool('select', { preserveSelection: true });
     }
     return importedShapeId;
   }
@@ -1112,6 +1127,22 @@ export class GlideboardController {
       }));
     }
     this.editor.setCurrentTool(toolId);
+  }
+
+  activateEraser(): void {
+    this.setCurrentTool(this.eraserToolSignal.peek());
+  }
+
+  setCreationStyleDefaults(props: Record<string, unknown>): void {
+    this.editor.activeStyles.value = { ...this.editor.activeStyles.peek(), ...props };
+    const savedStyles = readCreationStyles(props);
+    if (Object.keys(savedStyles).length === 0) return;
+    try {
+      window.localStorage.setItem(CREATION_STYLES_STORAGE_KEY,
+        JSON.stringify({ ...loadCreationStyles(), ...savedStyles }));
+    } catch {
+      // The current board can still use the defaults when storage is unavailable.
+    }
   }
 
   setArrowRouteStyle(routeStyle: ArrowRouteStyle): void {

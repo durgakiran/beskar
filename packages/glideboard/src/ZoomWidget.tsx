@@ -82,6 +82,11 @@ function zoomToward(controller: GlideboardController, newZ: number) {
   });
 }
 
+export function stepZoom(controller: GlideboardController, direction: 1 | -1): void {
+  const zoom = controller.editor.camera.getCamera().z + direction * ZOOM_STEP;
+  zoomToward(controller, Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, zoom)));
+}
+
 export function ZoomWidget() {
   const controller = useGlideboardController();
   const editor = controller.editor;
@@ -89,8 +94,6 @@ export function ZoomWidget() {
   const zoom = camera?.z ?? 1;
   const pct = Math.round(zoom * 100);
 
-  const zoomIn = () => zoomToward(controller, Math.min(MAX_ZOOM, zoom + ZOOM_STEP));
-  const zoomOut = () => zoomToward(controller, Math.max(MIN_ZOOM, zoom - ZOOM_STEP));
   const reset = () => zoomToward(controller, 1);
 
   return (
@@ -116,7 +119,9 @@ export function ZoomWidget() {
         ⊞
       </button>
       <div style={{ width: 1, height: 24, background: wbTheme.border, margin: '0 2px' }} />
-      <button id={controller.domId('zoom-out')} data-glideboard-control="zoom-out" title="Zoom out (−)" onClick={zoomOut} style={buttonStyle}>−</button>
+      <button id={controller.domId('zoom-out')} data-glideboard-control="zoom-out"
+        aria-label="Zoom out" aria-keyshortcuts="Meta+- Control+-" title="Zoom out (Cmd/Ctrl + -)"
+        onClick={() => stepZoom(controller, -1)} style={buttonStyle}>−</button>
       <button
         id={controller.domId('zoom-pct')}
         data-glideboard-control="zoom-pct"
@@ -126,7 +131,9 @@ export function ZoomWidget() {
       >
         {pct}%
       </button>
-      <button id={controller.domId('zoom-in')} data-glideboard-control="zoom-in" title="Zoom in (+)" onClick={zoomIn} style={buttonStyle}>+</button>
+      <button id={controller.domId('zoom-in')} data-glideboard-control="zoom-in"
+        aria-label="Zoom in" aria-keyshortcuts="Meta+= Control+=" title="Zoom in (Cmd/Ctrl + =)"
+        onClick={() => stepZoom(controller, 1)} style={buttonStyle}>+</button>
     </div>
   );
 }

@@ -10,6 +10,13 @@ import { existsSync } from 'node:fs';
 const workspaceEditorDist = path.resolve(__dirname, '../packages/editor/dist');
 const hasWorkspaceEditor = ['index.mjs', 'styles.css', 'index.css']
   .every(file => existsSync(path.join(workspaceEditorDist, file)));
+const workspaceBoardDist = path.resolve(__dirname, '../packages/glideboard/dist');
+const workspaceDrawingDist = path.resolve(__dirname, '../packages/glideline/dist');
+const hasWorkspaceWhiteboard = [
+  path.join(workspaceBoardDist, 'index.js'),
+  path.join(workspaceBoardDist, 'styles.css'),
+  path.join(workspaceDrawingDist, 'index.js'),
+].every(file => existsSync(file));
 
 export default defineConfig(({ mode }) => ({
   plugins: [react(), securityPolicyPlugin(mode === 'desktop', loadEnv(mode, process.cwd(), 'VITE_'))],
@@ -28,6 +35,11 @@ export default defineConfig(({ mode }) => ({
         '@durgakiran/editor/index.css': path.join(workspaceEditorDist, 'index.css'),
         '@durgakiran/editor': path.join(workspaceEditorDist, 'index.mjs'),
       } : {}),
+      ...(hasWorkspaceWhiteboard ? {
+        '@durgakiran/glideboard/styles.css': path.join(workspaceBoardDist, 'styles.css'),
+        '@durgakiran/glideboard': path.join(workspaceBoardDist, 'index.js'),
+        '@durgakiran/glideline': path.join(workspaceDrawingDist, 'index.js'),
+      } : {}),
       '@http/hooks':        path.resolve(__dirname, 'app/core/http/hooks'),
       '@http':              path.resolve(__dirname, 'app/core/http'),
       '@editor':            path.resolve(__dirname, 'app/core/editor'),
@@ -45,6 +57,9 @@ export default defineConfig(({ mode }) => ({
       'prosemirror-model',
       'prosemirror-transform',
       'y-prosemirror',
+      'yjs',
+      '@preact/signals',
+      'preact',
       'react',
       'react-dom'
     ],

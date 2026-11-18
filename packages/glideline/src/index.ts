@@ -186,6 +186,7 @@ export {
   STROKE_STYLES, STROKE_DASH_ARRAYS, FILL_OPACITIES,
   inlinePatternDefs, getPatternId, getShapePatternId,
   createTextForeignObjectForExport,
+  isCreationStyleKey, readCreationStyles,
 } from './styles.js';
 export type {
   TldrawColor,
@@ -221,7 +222,9 @@ export { EllipseTool } from './tools/EllipseTool.js';
 export { TextTool } from './tools/TextTool.js';
 export { StickyNoteTool } from './tools/StickyNoteTool.js';
 export { DrawTool } from './tools/DrawTool.js';
-export { EraserTool } from './tools/EraserTool.js';
+export { ERASER_RADIUS_PX, EraserTool, WholeStrokeEraserTool, PartialEraserTool } from './tools/EraserTool.js';
+export { AreaEraserTool } from './tools/AreaEraserTool.js';
+export { getAreaEraseCuts, getAreaEraseMaskBounds, getAreaEraseMaskPaths } from './area-erase-mask.js';
 export {
   TriangleTool, DiamondTool, HexagonTool, StarTool,
   RoundedRectTool, ParallelogramTool, ChevronTool,

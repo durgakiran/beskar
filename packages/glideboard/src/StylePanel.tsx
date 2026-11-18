@@ -15,9 +15,11 @@ import {
   STROKE_STYLES,
   FONT_FAMILIES,
   boardFontStyle,
+  isCreationStyleKey,
   type StrokeStyle,
   type GlideShape,
   type ShapeId,
+  type ShapeUtil,
 } from '@durgakiran/glideline';
 import { useSelectedShapes } from './hooks/useSelectedShapes.js';
 import { useGlideboardController } from './GlideboardContext.js';
@@ -944,24 +946,42 @@ export function StylePanel() {
   const canMatchSizes = canArrange && transformRoots.every(shape => canResizeFromInspector(editor, shape));
 
   // Defaults also describe capabilities for records saved before a style was added.
-  const shapeStyles = shapes.map(shape => ({
-    ...editor.getShapeUtil(shape).getDefaultProps(),
+  const shapeUtils = shapes.map(shape => editor.getShapeUtil(shape));
+  const shapeStyles = shapes.map((shape, index) => ({
+    ...shapeUtils[index]!.getDefaultProps(),
     ...shape.props,
+    ...(editingShape?.id === shape.id ? editingSession?.pendingProps : undefined),
   }));
-  const supports = (key: string) => isDefault ? key in creationDefaults
-    : shapeStyles.every(styles => key in styles);
+  const supportsOptionalStyle = (util: ShapeUtil | null, key: string) =>
+    isCreationStyleKey(key) && util !== null && key in (util.constructor as typeof ShapeUtil).props;
+  const supports = (key: string) => isDefault
+    ? key in creationDefaults || supportsOptionalStyle(creationUtil, key)
+    : shapeStyles.every((styles, index) => key in styles || supportsOptionalStyle(shapeUtils[index]!, key));
   const getCommonValue = (key: string) => isDefault ? activeStyles?.[key] ?? creationDefaults[key]
     : commonValue(shapeStyles.map(styles => styles[key]));
 
   const updateProps = (props: Record<string, unknown>, label = 'Style change') => {
-    if (shapes.length > 0) {
-      editor.batch(label, () => {
-        for (const shape of shapes) editor.updateShape(shape.id as ShapeId, { props });
-      });
+    if (isDefault) {
+      controller.setCreationStyleDefaults(props);
+      return;
     }
-    editor.activeStyles.value = { ...editor.activeStyles.peek(), ...props };
+    editor.batch(label, () => {
+      for (const shape of shapes) editor.updateShape(shape.id as ShapeId, { props });
+    });
+    const selectionStyles = Object.entries(props).filter(([key]) => !isCreationStyleKey(key));
+    if (selectionStyles.length > 0) {
+      editor.activeStyles.value = { ...editor.activeStyles.peek(), ...Object.fromEntries(selectionStyles) };
+    }
   };
   const updateProp = (key: string, value: unknown) => updateProps({ [key]: value });
+  const updateTypographyProp = (key: 'font' | 'fontSize', value: unknown) => {
+    const pending = editingSession?.pendingProps;
+    if (editingSession?.field === 'label' && !editingSession.baseValue && pending && key in pending) {
+      editor.updateEditingDraft(editingSession.draft, { ...pending, [key]: value });
+      return;
+    }
+    updateProp(key, value);
+  };
   const supportsTextColor = isDefault ? supports('color') : shapeStyles.every(
     (styles, index) => textColorKey(shapes[index]!) in styles,
   );
@@ -989,7 +1009,7 @@ export function StylePanel() {
   const clipContent = getCommonValue('clipContent');
   const supportsPressure = supports('pressureSensitive');
   const showSketch = isDefault
-    ? Boolean(creationType === 'arrow' ? toolRoute === 'ortho' : creationUtil?.supportsSketchStroke({
+    ? Boolean(creationUtil?.supportsSketchStroke({
       type: creationType,
       props: creationDefaults,
     } as GlideShape))
@@ -1010,7 +1030,7 @@ export function StylePanel() {
 
   const updateStrokePresentation = (value: StrokeStyle | 'pressure') => {
     const props: Record<string, unknown> = { strokeStyle: value === 'pressure' ? 'solid' : value };
-    if (supportsPressure) props['pressureSensitive'] = value === 'pressure';
+    if (isDefault || supportsPressure) props['pressureSensitive'] = value === 'pressure';
     // A shared stroke style must also take effect on pressure-enabled strokes.
     if (!supportsPressure && shapeStyles.some(styles => styles['pressureSensitive'] === true)) {
       editor.batch('Stroke style change', () => {
@@ -1018,7 +1038,6 @@ export function StylePanel() {
           props: 'pressureSensitive' in shapeStyles[index]! ? { ...props, pressureSensitive: false } : props,
         }));
       });
-      editor.activeStyles.value = { ...editor.activeStyles.peek(), ...props };
       return;
     }
     updateProps(props);
@@ -1163,8 +1182,8 @@ export function StylePanel() {
         onFill={value => updateProp('fillStyle', value)}
         onStrokePresentation={updateStrokePresentation}
         onStrokeWidth={value => updateProp('strokeWidth', value)}
-        onFont={value => updateProp('font', value)}
-        onFontSize={value => updateProp('fontSize', value)}
+        onFont={value => updateTypographyProp('font', value)}
+        onFontSize={value => updateTypographyProp('fontSize', value)}
         onTextAlign={value => updateProp(creationType === 'text' ? 'standaloneTextAlign' : 'textAlign', value)}
       />
 

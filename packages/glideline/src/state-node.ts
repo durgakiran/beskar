@@ -23,7 +23,7 @@ export type GlideEvent =
   // firing pointerUp). No point: the browser doesn't guarantee one is
   // meaningful here. Distinct from a user-pressed Escape, which stays a hard
   // abort — a tool may choose to salvage in-progress work on this instead.
-  | { type: 'pointerCancel' }
+  | { type: 'pointerCancel'; reason?: 'interrupted' | 'unmount' }
   | { type: 'keyDown';     key: string }
   | { type: 'doubleClick'; point: Vec2; shapeId?: ShapeId };
 

@@ -37,16 +37,19 @@ import { HistoryManager, commandIdFromLabel, createReadonlyHistoryView } from '.
 import type { BatchOptions, HistoryResult, ReadonlyHistoryManager } from './history.js';
 import { Rectangle2d } from './geometry/index.js';
 import { matrixToSvg, TransformService, type Matrix2d } from './transform.js';
+import { getAreaEraseCuts, maskAreaErasedSvg } from './area-erase-mask.js';
+import type { AreaErasePreview } from './tools/AreaEraserTool.js';
 import { StateNode } from './state-node.js';
 import { SelectTool } from './tools/SelectTool.js';
 import { BoxTool } from './tools/BoxTool.js';
 import type { ShapeUtil, BindingUtil } from './shapes/ShapeUtil.js';
 import type { ArrowheadStyle, ArrowRouteStyle, ArrowShape } from './shapes/ArrowUtil.js';
+import type { FreehandPoint, FreehandShape } from './shapes/FreehandUtil.js';
 import { buildAIContext, type AIContextSnapshot } from './ai-context.js';
 import { getWorldBounds, SmartRouterCache, type SmartRouteResolution, type SmartRoutingSnapshot } from './smart-router.js';
 import type { GlideShape, GlideBinding, GlidePage, GlideAsset, ShapeId, BindingId, PageId, Vec2, Box2d, AnyRecord } from './types.js';
 import type { GlideEvent } from './state-node.js';
-import { getMinHeightForShape, STROKE_WIDTHS, type SizeStyle } from './styles.js';
+import { getMinHeightForShape, isCreationStyleKey, readCreationStyles, STROKE_WIDTHS, type SizeStyle } from './styles.js';
 import { RecordIdService } from './id.js';
 import { InteractionManager } from './interaction.js';
 import {
@@ -84,6 +87,11 @@ export interface GlidePlugin {
   onInstall?(editor: GlideEditor): void;
 }
 
+export interface PartialErasePreview {
+  readonly stroke: FreehandShape;
+  readonly fragments: readonly FreehandPoint[][];
+}
+
 // Internal static-side shape shared by ShapeUtil and BindingUtil classes.
 interface UtilStatic {
   readonly type: string;
@@ -107,13 +115,8 @@ export interface BindingPreview extends BindingPreviewCandidate {
 const DEFAULT_ACTIVE_STYLES = Object.freeze({
   color: 'black',
   labelColor: 'black',
-  fillStyle: 'none',
-  strokeStyle: 'solid',
-  strokeWidth: 'medium',
-  pressureSensitive: false,
-  font: 'sans',
-  fontSize: 'md',
 });
+const LABEL_TYPOGRAPHY_KEYS = ['font', 'fontSize'] as const;
 
 export interface ClipboardSchemaHeader {
   readonly clipboardVersion: 1;
@@ -375,6 +378,10 @@ export class GlideEditor {
    *  Empty set when the eraser is not active. EraserTool writes; ShapeLayer reads. */
   readonly erasingShapeIds: Signal<ReadonlySet<ShapeId>> = signal(new Set<ShapeId>());
 
+  /** Local-space stroke fragments rendered while a partial erase gesture is active. */
+  readonly partialErasePreviews: Signal<ReadonlyMap<ShapeId, PartialErasePreview>> = signal(new Map());
+  readonly areaErasePreviews: Signal<ReadonlyMap<ShapeId, AreaErasePreview>> = signal(new Map());
+
   /** Signal describing the current arrow-binding candidate under the pointer, if any. */
   readonly bindingPreview: Signal<BindingPreview | null> = signal(null);
 
@@ -465,7 +472,7 @@ export class GlideEditor {
     });
     this._selection = signal(new Set<ShapeId>());
 
-    // Update activeStyles based on the newly selected shape's props
+    // Sync selection-following styles, leaving new-element defaults independent.
     this._selection.subscribe(set => {
       if (set.size === 1) {
         const shapeId = Array.from(set)[0]!;
@@ -474,7 +481,7 @@ export class GlideEditor {
           const nextActive = { ...this.activeStyles.peek() };
           let changed = false;
           for (const key of Object.keys(nextActive)) {
-            if (key in shape.props && shape.props[key] !== nextActive[key]) {
+            if (!isCreationStyleKey(key) && key in shape.props && shape.props[key] !== nextActive[key]) {
               nextActive[key] = shape.props[key];
               changed = true;
             }
@@ -810,6 +817,8 @@ export class GlideEditor {
     this.setSelectedShapeIds([]);
     this.focusedGroupId.value = null;
     this.bindingPreview.value = null;
+    if (this.partialErasePreviews.peek().size > 0) this.partialErasePreviews.value = new Map();
+    if (this.areaErasePreviews.peek().size > 0) this.areaErasePreviews.value = new Map();
     this.activePageId.value = pageId;
     this.camera.setCamera(this._pageCameras.get(pageId) ?? { x: 0, y: 0, z: 1 });
   }
@@ -974,15 +983,21 @@ export class GlideEditor {
       .sort(compareSiblingOrder);
   }
 
-  private _allocateOrderKeysAbove(parentId: string, count: number): {
+  private _allocateOrderKeysAbove(parentId: string, count: number, after?: ShapeId): {
     keys: readonly string[];
     rebalanced: ReadonlyMap<ShapeId, string>;
   } {
     const siblings = this._getSiblingShapes(parentId);
+    const insertionIndex = after === undefined
+      ? siblings.length
+      : siblings.findIndex(shape => shape.id === after) + 1;
+    if (after !== undefined && insertionIndex === 0) {
+      throw new Error(`Shape "${after}" is not a sibling of the new shape.`);
+    }
     if (siblings.every(shape => isCanonicalOrderKey(shape.index))) {
       try {
         return {
-          keys: generateOrderKeysBetween(siblings[siblings.length - 1]?.index ?? null, null, count),
+          keys: generateOrderKeysBetween(siblings[insertionIndex - 1]?.index ?? null, siblings[insertionIndex]?.index ?? null, count),
           rebalanced: new Map(),
         };
       } catch (error) {
@@ -991,8 +1006,10 @@ export class GlideEditor {
     }
     const allKeys = generateRebalancedOrderKeys(siblings.length + count);
     return {
-      keys: Object.freeze(allKeys.slice(siblings.length)),
-      rebalanced: new Map(siblings.map((shape, index) => [shape.id as ShapeId, allKeys[index]!])),
+      keys: Object.freeze(allKeys.slice(insertionIndex, insertionIndex + count)),
+      rebalanced: new Map(siblings.map((shape, index) => [
+        shape.id as ShapeId, allKeys[index < insertionIndex ? index : index + count]!,
+      ])),
     };
   }
 
@@ -1020,7 +1037,7 @@ export class GlideEditor {
     return bid(this.store.createRecordId(`binding:${type}`));
   }
 
-  createShape(partial: AnyRecord): ShapeId {
+  createShape(partial: AnyRecord, { after }: { after?: ShapeId } = {}): ShapeId {
     const requestedType = String(partial['type'] ?? 'shape');
     partial = {
       rotation: 0,
@@ -1033,7 +1050,7 @@ export class GlideEditor {
       id: partial['id'] ?? this.createShapeId(requestedType),
     };
     const parentId = getShapeOrderParentId(partial);
-    const allocation = this._allocateOrderKeysAbove(parentId, 1);
+    const allocation = this._allocateOrderKeysAbove(parentId, 1, after);
     partial = { ...partial, index: allocation.keys[0]! };
     const type = partial['type'] as string;
     if (type === 'arrow' && Number(partial['rotation'] ?? 0) !== 0) {
@@ -1048,7 +1065,7 @@ export class GlideEditor {
       const mergedProps = { ...defaultProps, ...userProps };
       const shapePropsSchema = (util.constructor as any).props || {};
       for (const [key, val] of Object.entries(activeStyles)) {
-        if (key in defaultProps) {
+        if (key in defaultProps || (isCreationStyleKey(key) && key in shapePropsSchema)) {
           if (key in userProps) {
             continue;
           }
@@ -1678,7 +1695,7 @@ export class GlideEditor {
     this._smartRouter.markDirty();
   }
 
-  deleteShapes(ids: ShapeId[]): void {
+  deleteShapes(ids: ShapeId[], { pruneEmptyGroups = true }: { pruneEmptyGroups?: boolean } = {}): void {
     const closure = new Set<ShapeId>();
     const visit = (id: ShapeId) => {
       if (closure.has(id)) return;
@@ -1690,7 +1707,7 @@ export class GlideEditor {
       }
     };
     for (const id of ids) visit(id);
-    let addedEmptyGroup = true;
+    let addedEmptyGroup = pruneEmptyGroups;
     while (addedEmptyGroup) {
       addedEmptyGroup = false;
       for (const id of [...closure]) {
@@ -2395,6 +2412,13 @@ export class GlideEditor {
     }
     const util = this.getShapeUtil(latest.type);
     const patch = util.getTextCommitPatch(latest as any, draft, pendingProps) as Partial<GlideShape>;
+    const editable = util.getEditableText(latest);
+    if (editable?.field === 'label' && !editable.value && draft.trim() && pendingProps) {
+      const typography = Object.fromEntries(LABEL_TYPOGRAPHY_KEYS
+        .filter(key => key in pendingProps && key in (util.constructor as typeof ShapeUtil).props)
+        .map(key => [key, pendingProps[key]]));
+      patch.props = { ...patch.props, ...typography };
+    }
     if (latest.type === 'text' && latest.rotation !== 0) {
       const anchoredPagePoint = this.transforms.localToPage(id, { x: 0, y: 0 });
       const nextShape = {
@@ -2423,6 +2447,18 @@ export class GlideEditor {
     pendingProps?: Readonly<Record<string, unknown>>,
   ): void {
     this._liveTextEditBaseline = null;
+    const shape = this.getShape(id);
+    if (shape) {
+      const util = this.getShapeUtil(shape.type);
+      const editable = util.getEditableText(shape);
+      if (editable?.field === 'label' && !editable.value) {
+        const defaults = this.activeStyles.peek();
+        const typography = LABEL_TYPOGRAPHY_KEYS
+          .filter(key => defaults[key] !== undefined && key in (util.constructor as typeof ShapeUtil).props)
+          .map(key => [key, defaults[key]]);
+        if (typography.length > 0) pendingProps = { ...Object.fromEntries(typography), ...pendingProps };
+      }
+    }
     const session = this.textEditing.start(id, pendingProps);
     if (!session) return;
     this.setSelectedShapeIds([]);
@@ -2796,7 +2832,7 @@ export class GlideEditor {
     this.bindingPreview.value = null;
     this._pageCameras.clear();
     this.activePageId.value = this.getDefaultPageId();
-    this.activeStyles.value = { ...DEFAULT_ACTIVE_STYLES };
+    this.activeStyles.value = { ...DEFAULT_ACTIVE_STYLES, ...readCreationStyles(this.activeStyles.peek()) };
     this.arrowRouteStyle = 'ortho';
     this.arrowheadStart = 'none';
     this.arrowheadEnd = 'arrow';
@@ -2935,7 +2971,7 @@ export class GlideEditor {
           }
           const wrapper = document.createElementNS('http://www.w3.org/2000/svg', 'g');
           wrapper.setAttribute('transform', matrixToSvg(this.transforms.getWorldTransform(shape.id as ShapeId)));
-          wrapper.appendChild(svgEl);
+          wrapper.appendChild(maskAreaErasedSvg(svgEl, getAreaEraseCuts(shape), util.getVisualBounds(shape), `area-erase-${elements.length}`));
           const clippingFrame = this.getClippingFrameAncestors(shape.id as ShapeId)[0];
           if (clippingFrame) {
             const clipId = `clip-${String(clippingFrame.id).replace(/[^a-zA-Z0-9_-]/g, '-')}`;

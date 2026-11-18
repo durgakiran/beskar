@@ -187,7 +187,7 @@ export interface GlideboardAssetImportError {
   readonly retryable: boolean;
 }
 
-export type GlideboardAssetImportRequest =
+export type GlideboardAssetImportRequest = { readonly preserveTool?: boolean } & (
   | {
     readonly kind: 'svg';
     readonly source: string;
@@ -202,7 +202,7 @@ export type GlideboardAssetImportRequest =
     readonly name?: string;
     readonly point?: Vec2;
     readonly correlationToken?: string;
-  };
+  });
 
 export interface GlideboardAssetImportJob {
   readonly id: string;

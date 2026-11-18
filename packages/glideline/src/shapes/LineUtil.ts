@@ -4,6 +4,7 @@ import { STROKE_DASH_ARRAYS, STROKE_WIDTHS, StyleValidators, resolveColor, type 
 import type { GlidePlugin } from '../editor.js';
 import type { GlideShape, Vec2 } from '../types.js';
 import { T } from '../validators.js';
+import { addSketchOutline, sketchPolyline } from '../sketch-stroke.js';
 
 export interface LineProps {
   [key: string]: unknown;
@@ -34,7 +35,7 @@ export class LineUtil extends ShapeUtil<LineShape> {
     end: point,
     color: T.string,
     opacity: T.number,
-    strokeStyle: StyleValidators.standardStrokeStyle,
+    strokeStyle: StyleValidators.strokeStyle,
     strokeWidth: StyleValidators.strokeWidth,
   };
 
@@ -50,6 +51,7 @@ export class LineUtil extends ShapeUtil<LineShape> {
   }
 
   override getConnectionAnchors(): [] { return []; }
+  override supportsSketchStroke(): boolean { return true; }
   override hideResizeHandles(): boolean { return true; }
   override hideRotateHandle(): boolean { return true; }
 
@@ -60,7 +62,7 @@ export class LineUtil extends ShapeUtil<LineShape> {
     };
   }
 
-  override toSvg({ props }: LineShape): SVGElement {
+  override toSvg({ id, props }: LineShape): SVGElement {
     const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
     line.setAttribute('class', 'glideline-line');
     line.setAttribute('x1', String(props.start.x));
@@ -70,6 +72,13 @@ export class LineUtil extends ShapeUtil<LineShape> {
     line.setAttribute('stroke', resolveColor(props.color));
     line.setAttribute('stroke-width', String(STROKE_WIDTHS[props.strokeWidth]));
     line.setAttribute('stroke-dasharray', STROKE_DASH_ARRAYS[props.strokeStyle]);
+    if (props.strokeStyle === 'sketch') {
+      const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+      group.setAttribute('opacity', String(props.opacity));
+      group.appendChild(line);
+      addSketchOutline(line, id, (seed, strength) => sketchPolyline([props.start, props.end], seed, strength));
+      return group;
+    }
     line.setAttribute('opacity', String(props.opacity));
     return line;
   }
