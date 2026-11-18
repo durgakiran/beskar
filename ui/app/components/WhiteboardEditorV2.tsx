@@ -247,10 +247,19 @@ export default function WhiteboardEditorV2({ slug }: { slug: string[] }) {
                     }
                 });
             };
+            let visiblePeerNames: string[] | undefined;
             const updatePeers = () => {
                 if (!active) return;
-                setPeers(safeAwarenessEntries(provider.awareness.getStates()).map(({ user }) => user.name));
-                const newer = [...provider.awareness.getStates().values()].some(value => {
+                const states = provider.awareness.getStates();
+                const names = safeAwarenessEntries(states).map(({ user }) => user.name);
+                // Cursor motion also emits a presence change. Only update the
+                // header when the peer names it displays have changed.
+                const previousNames = visiblePeerNames;
+                if (names.length !== previousNames?.length || names.some((name, index) => name !== previousNames[index])) {
+                    visiblePeerNames = names;
+                    setPeers(names);
+                }
+                const newer = [...states.values()].some(value => {
                     const saved = value.savedSequence ?? value.titleSequence;
                     if (typeof saved !== 'string') return false;
                     try { return sequence(saved) > sequence(verified.manifest.headSequence); } catch { return false; }
@@ -269,6 +278,7 @@ export default function WhiteboardEditorV2({ slug }: { slug: string[] }) {
                 }, 300);
             };
             provider.awareness.on('change', updatePeers);
+            updatePeers();
             // Keep title autosave independent of the infrequent server status check.
             titleTimer = setInterval(() => {
                 if (!navigator.onLine || busyRef.current || paused) return;

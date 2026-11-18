@@ -35,8 +35,8 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('react-router-dom', () => ({ useNavigate: () => mocks.navigate }));
 vi.mock('../WhiteboardHistoryV2', () => ({ default: () => null }));
-vi.mock('@durgakiran/glideboard', () => ({
-    safeAwarenessEntries: () => [],
+vi.mock('@durgakiran/glideboard', async (importOriginal) => ({
+    safeAwarenessEntries: (await importOriginal<typeof import('@durgakiran/glideboard')>()).safeAwarenessEntries,
     createPublishPreview: mocks.createPublishPreview,
     Glideboard: React.forwardRef(function MockGlideboard(props: { readOnly: boolean; assetStorage: unknown; assetResolutionContext: { documentId: string } }, ref) {
         mocks.glideboardProps(props);
@@ -184,6 +184,41 @@ describe('WhiteboardEditorV2 capture preparation', () => {
             await vi.advanceTimersByTimeAsync(120000);
         });
         expect(mocks.syncDraft).not.toHaveBeenCalled();
+    });
+
+    it('renders peer joins and departures without rerendering the board for cursor motion', async () => {
+        await renderEditor();
+        const { awareness } = mocks.providerConstruct.mock.lastCall![0] as { awareness: Awareness };
+        const remote = new Y.Doc();
+        const remoteAwareness = new Awareness(remote);
+        const receiveRemotePresence = () =>
+            applyAwarenessUpdate(awareness, encodeAwarenessUpdate(remoteAwareness, [remote.clientID]), 'remote');
+        try {
+            act(() => {
+                remoteAwareness.setLocalStateField('user', { id: 'user-2', name: 'Alex', color: '#aabbcc' });
+                receiveRemotePresence();
+            });
+            expect(screen.getByText('2 editing').title).toBe('Asha, Alex');
+            mocks.glideboardProps.mockClear();
+
+            for (let x = 1; x <= 3; x++) {
+                act(() => { awareness.setLocalStateField('canvasCursor', { x, y: 10 }); });
+                act(() => {
+                    remoteAwareness.setLocalStateField('canvasCursor', { x, y: 20 });
+                    receiveRemotePresence();
+                });
+            }
+            expect(mocks.glideboardProps).not.toHaveBeenCalled();
+
+            act(() => {
+                remoteAwareness.setLocalState(null);
+                receiveRemotePresence();
+            });
+            expect(screen.getByText('1 editing').title).toBe('Asha');
+        } finally {
+            remoteAwareness.destroy();
+            remote.destroy();
+        }
     });
 
     it('debounces newer peer save notifications and ignores already applied sequences', async () => {

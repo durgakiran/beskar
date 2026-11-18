@@ -86,6 +86,7 @@ export function DocumentTitle({ text, awareness, editor, disabled = false, label
         const undo = sharedUndo ?? new Y.UndoManager(text, { trackedOrigins: new Set([origin.current]) });
         if (sharedUndo) { undo.addToScope(text); undo.trackedOrigins.add(origin.current); }
         undoRef.current = undo;
+        let visiblePeers: Peer[] | undefined;
         const syncPeers = () => {
             const next: Peer[] = [];
             awareness.getStates().forEach((state, clientId) => {
@@ -96,6 +97,15 @@ export function DocumentTitle({ text, awareness, editor, disabled = false, label
                 next.push({ clientId, anchor, head, name: state.user.name || "Collaborator",
                     color: /^#[\da-f]{6}$/i.test(state.user.color) ? state.user.color : "#6366f1" });
             });
+            // Canvas cursor updates share this awareness channel with title
+            // selections. Don't rerender if the visible selections are unchanged.
+            const previousPeers = visiblePeers;
+            if (previousPeers?.length === next.length && next.every((peer, index) => {
+                const previous = previousPeers[index];
+                return peer.clientId === previous.clientId && peer.anchor === previous.anchor &&
+                    peer.head === previous.head && peer.name === previous.name && peer.color === previous.color;
+            })) return;
+            visiblePeers = next;
             setPeers(next);
         };
         const syncText = () => {
