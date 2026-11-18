@@ -1,6 +1,6 @@
 import React from 'react';
 import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react';
-import { ArrowUtil, type AnyRecord } from '@durgakiran/glideline';
+import { ArrowUtil, ERASER_RADIUS_PX, type AnyRecord } from '@durgakiran/glideline';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { GlideboardProvider } from './GlideboardContext';
 import { GlideboardController } from './GlideboardController';
@@ -91,7 +91,255 @@ describe('Canvas asset cursor policy', () => {
   });
 });
 
+it('shows the partial eraser footprint at the pointer in screen pixels', async () => {
+  const controller = new GlideboardController({ sessionKey: 'partial-eraser-cursor' });
+  try {
+    const view = setupCanvas(controller);
+    const cursor = () => view.container.querySelector<HTMLElement>('[data-glideboard-role="partial-eraser-cursor"]');
+    fireEvent.pointerMove(view.canvas, { clientX: 90, clientY: 100, pointerType: 'mouse' });
+    expect(cursor()).toBeNull();
+
+    act(() => controller.setCurrentTool('partial-eraser'));
+    expect(cursor()?.style.visibility).toBe('visible');
+    expect(cursor()?.style.left).toBe('80px');
+    expect(cursor()?.style.top).toBe('80px');
+    expect(cursor()?.style.width).toBe(`${ERASER_RADIUS_PX * 2}px`);
+    act(() => controller.editor.camera.setCamera({ z: 3 }));
+    fireEvent.pointerMove(view.canvas, { clientX: 160, clientY: 50, pointerType: 'mouse' });
+    expect(cursor()?.style.left).toBe('150px');
+    expect(cursor()?.style.top).toBe('30px');
+    expect(cursor()?.style.width).toBe(`${ERASER_RADIUS_PX * 2}px`);
+    fireEvent.pointerLeave(view.canvas);
+    expect(cursor()?.style.visibility).toBe('hidden');
+    act(() => controller.setCurrentTool('eraser'));
+    expect(cursor()).toBeNull();
+  } finally {
+    await controller.dispose();
+  }
+});
+
+it('renders partial cuts immediately, restores on Escape, and saves on release or interrupted capture', async () => {
+  const controller = new GlideboardController({ sessionKey: 'partial-eraser-live-ink' });
+  const { editor } = controller;
+  try {
+    const id = editor.createShape({
+      type: 'freehand', x: 40, y: 100,
+      props: { points: [{ x: 40, y: 100, pressure: 0.5 }, { x: 180, y: 100, pressure: 0.5 }], isComplete: true },
+    });
+    const view = setupCanvas(controller);
+    const strokePaths = () => view.container.querySelectorAll(`[data-shape-id="${id}"] > svg path`);
+    const pointer = { pointerId: 1, pointerType: 'mouse', clientX: 120 };
+    const sweep = () => {
+      fireEvent.pointerDown(view.canvas, { ...pointer, button: 0, clientY: 80 });
+      fireEvent.pointerMove(view.canvas, { ...pointer, buttons: 1, clientY: 160 });
+    };
+    act(() => controller.setCurrentTool('partial-eraser'));
+    expect(strokePaths()).toHaveLength(1);
+    sweep();
+    expect(strokePaths()).toHaveLength(2);
+    expect(editor.getShapes()).toHaveLength(1);
+
+    fireEvent.keyDown(view.canvas, { key: 'Escape' });
+    fireEvent.pointerUp(view.canvas, { ...pointer, button: 0, clientY: 160 });
+    expect(strokePaths()).toHaveLength(1);
+    sweep();
+    expect(strokePaths()).toHaveLength(2);
+    fireEvent.pointerUp(view.canvas, { ...pointer, button: 0, clientY: 160 });
+    expect(editor.getShapes()).toHaveLength(2);
+    act(() => editor.undo());
+    expect(editor.getShapes()).toHaveLength(1);
+    expect(strokePaths()).toHaveLength(1);
+
+    sweep();
+    expect(strokePaths()).toHaveLength(2);
+    fireEvent.pointerDown(view.canvas, { ...pointer, button: 0, pointerId: 2, clientY: 120 });
+    fireEvent.pointerCancel(view.canvas, { ...pointer, pointerId: 2 });
+    expect(strokePaths()).toHaveLength(2);
+    expect(editor.getShapes()).toHaveLength(1);
+    fireEvent.pointerCancel(view.canvas, pointer);
+    expect(editor.getShapes()).toHaveLength(2);
+    fireEvent.pointerUp(view.canvas, { ...pointer, button: 0, clientY: 160 });
+    act(() => editor.undo());
+    expect(editor.getShapes()).toHaveLength(1);
+    expect(strokePaths()).toHaveLength(1);
+  } finally {
+    await controller.dispose();
+  }
+});
+
+describe('Canvas navigation', () => {
+  function resize(width: number, height: number) {
+    act(() => ResizeObserverStub.callback?.([{
+      contentRect: { width, height },
+    } as ResizeObserverEntry], {} as ResizeObserver));
+  }
+
+  it('returns to nearby content from the gap between clusters and preserves zoom', async () => {
+    const controller = new GlideboardController({ sessionKey: 'back-to-content' });
+    const { editor } = controller;
+    try {
+      editor.createShape(box('shape:nearby', 0));
+      editor.createShape(box('shape:farther', 2200));
+      const view = setupCanvas(controller);
+      resize(640, 480);
+      expect(view.queryByRole('button', { name: 'Back to content' })).toBeNull();
+      act(() => editor.camera.setCamera({ x: 620, y: 0, z: 2 }));
+      fireEvent.click(view.getByRole('button', { name: 'Back to content' }));
+      expect(editor.camera.getCamera()).toEqual({ x: -100, y: -60, z: 2 });
+      expect(view.queryByRole('button', { name: 'Back to content' })).toBeNull();
+    } finally {
+      await controller.dispose();
+    }
+  });
+
+  it('hides the minimap during freehand drawing and restarts the delay after another stroke', async () => {
+    vi.useFakeTimers();
+    const controller = new GlideboardController({ sessionKey: 'minimap-drawing' });
+    const { editor } = controller;
+    try {
+      const view = setupCanvas(controller);
+      const minimap = () => view.queryByRole('img', { name: /Minimap of the current whiteboard/ });
+      const indicator = () => view.container.querySelector('[data-glideboard-role="minimap-viewport"]');
+      resize(640, 480);
+      expect(minimap()).not.toBeNull();
+      act(() => editor.camera.setCamera({ x: 60, z: 2 }));
+      expect(indicator()?.getAttribute('x')).toBe('60');
+      expect(indicator()?.getAttribute('width')).toBe('320');
+      resize(800, 600);
+      expect(indicator()?.getAttribute('width')).toBe('400');
+
+      const press = (x: number) => fireEvent.pointerDown(view.canvas, {
+        button: 0, pointerId: 1, clientX: x, clientY: 65,
+      });
+      const release = () => fireEvent.pointerUp(view.canvas, {
+        button: 0, pointerId: 1, clientX: 280, clientY: 65,
+      });
+      act(() => controller.setCurrentTool('draw'));
+      expect(minimap()).not.toBeNull();
+      press(70);
+      expect(minimap()).toBeNull();
+      act(() => vi.advanceTimersByTime(2000));
+      expect(minimap()).toBeNull();
+      release();
+      act(() => vi.advanceTimersByTime(1000));
+      press(140);
+      release();
+      act(() => {
+        editor.camera.setCamera({ x: 120 });
+        controller.setCurrentTool('hand');
+        vi.advanceTimersByTime(1499);
+      });
+      expect(minimap()).toBeNull();
+      act(() => vi.advanceTimersByTime(1));
+      expect(indicator()?.getAttribute('x')).toBe('120');
+      press(70);
+      expect(minimap()).not.toBeNull();
+      release();
+    } finally {
+      vi.useRealTimers();
+      await controller.dispose();
+    }
+  });
+
+  it('hides the minimap while placing, dragging, and editing nodes', async () => {
+    vi.useFakeTimers();
+    const controller = new GlideboardController({ sessionKey: 'minimap-diagram-editing' });
+    const { editor } = controller;
+    try {
+      const view = setupCanvas(controller);
+      resize(640, 480);
+      const minimap = () => view.queryByRole('img', { name: /Minimap of the current whiteboard/ });
+      const point = (x: number, y: number) => ({ x, y });
+      const down = (x: number, y: number, shapeId?: ReturnType<typeof editor.createShape>) =>
+        editor.dispatchEvent({ type: 'pointerDown', point: point(x, y), shiftKey: false, target: shapeId ? 'shape' : 'canvas', shapeId });
+      const move = (x: number, y: number) => editor.dispatchEvent({ type: 'pointerMove', point: point(x, y) });
+      const up = (x: number, y: number) => editor.dispatchEvent({ type: 'pointerUp', point: point(x, y) });
+      const idle = () => act(() => vi.advanceTimersByTime(1500));
+
+      act(() => controller.setCurrentTool('box'));
+      expect(minimap()).not.toBeNull();
+      act(() => { down(30, 30); move(160, 120); });
+      expect(minimap()).toBeNull();
+      idle();
+      expect(minimap()).toBeNull();
+      act(() => up(160, 120));
+      expect(minimap()).toBeNull();
+      idle();
+      expect(minimap()).not.toBeNull();
+
+      const boxId = editor.getShapes()[0]!.id;
+      act(() => { controller.setCurrentTool('select'); down(70, 75, boxId); up(70, 75); });
+      expect(minimap()).not.toBeNull();
+      act(() => { down(70, 75, boxId); move(200, 150); });
+      expect(minimap()).toBeNull();
+      act(() => up(200, 150));
+      idle();
+      expect(minimap()).not.toBeNull();
+
+      act(() => { controller.setCurrentTool('text'); down(300, 100); up(300, 100); });
+      expect(editor.editingShapeId.peek()).toBeTruthy();
+      expect(minimap()).toBeNull();
+      idle();
+      expect(minimap()).toBeNull();
+      act(() => editor.stopEditing());
+      expect(minimap()).toBeNull();
+      idle();
+      expect(minimap()).not.toBeNull();
+    } finally {
+      vi.useRealTimers();
+      await controller.dispose();
+    }
+  });
+
+  it('restarts the minimap delay after another instant local edit', async () => {
+    vi.useFakeTimers();
+    const controller = new GlideboardController({ sessionKey: 'minimap-local-edits' });
+    const { editor } = controller;
+    try {
+      const view = setupCanvas(controller);
+      resize(640, 480);
+      const minimap = () => view.queryByRole('img', { name: /Minimap of the current whiteboard/ });
+      act(() => { editor.createShape({ type: 'sticky-note', x: 20, y: 20 }); });
+      expect(minimap()).toBeNull();
+      act(() => vi.advanceTimersByTime(1000));
+      act(() => { editor.createShape({ type: 'sticky-note', x: 220, y: 20 }); });
+      act(() => vi.advanceTimersByTime(1499));
+      expect(minimap()).toBeNull();
+      act(() => vi.advanceTimersByTime(1));
+      expect(minimap()).not.toBeNull();
+    } finally {
+      vi.useRealTimers();
+      await controller.dispose();
+    }
+  });
+});
+
 describe('Canvas text editing overlay', () => {
+  it('opens a new text edit on a blank double-click in Select mode', async () => {
+    const controller = new GlideboardController({ sessionKey: 'double-click-create-text' });
+    const { editor } = controller;
+    try {
+      const view = setupCanvas(controller);
+      act(() => editor.camera.setCamera({ x: 100, y: 200, z: 2 }));
+      const click = { clientX: 130, clientY: 100 };
+      act(() => controller.setCurrentTool('hand'));
+      fireEvent.doubleClick(view.canvas, click);
+      expect(editor.getShapes()).toHaveLength(0);
+
+      act(() => controller.setCurrentTool('select'));
+      fireEvent.doubleClick(view.canvas, click);
+      expect(editor.getShapes()).toHaveLength(1);
+      const [shape] = editor.getShapes();
+      expect(shape).toMatchObject({ type: 'text', x: 160, y: 240 });
+      expect(editor.editingShapeId.peek()).toBe(shape!.id);
+      expect(editor.currentToolId.peek()).toBe('select');
+      fireEvent.doubleClick(view.canvas, click);
+      expect(editor.getShapes()).toHaveLength(1);
+    } finally {
+      await act(async () => controller.dispose());
+    }
+  });
+
   it('applies shape opacity to standalone text and labels', () => {
     vi.stubGlobal('ResizeObserver', ResizeObserverStub);
     const controller = new GlideboardController({ sessionKey: 'text-label-opacity' });
@@ -465,9 +713,11 @@ describe('Canvas viewport rendering', () => {
       overlayMocks.getHandleAtPagePoint.mockReturnValue('e');
       fireEvent.pointerDown(view.canvas, { button: 0, pointerId: 7, clientX: 100, clientY: 100 });
       expect(dispatch).toHaveBeenLastCalledWith(expect.objectContaining({ type: 'pointerDown', target: 'handle', handleId: 'e' }));
+      fireEvent.pointerUp(view.canvas, { button: 0, pointerId: 7, clientX: 100, clientY: 100 });
       overlayMocks.getHandleAtPagePoint.mockReturnValue(null);
       fireEvent.pointerDown(view.canvas, { button: 0, pointerId: 8, clientX: 100, clientY: 100, shiftKey: true });
       expect(dispatch).toHaveBeenLastCalledWith(expect.objectContaining({ type: 'pointerDown', target: 'shape', shapeId, shiftKey: true }));
+      fireEvent.pointerUp(view.canvas, { button: 0, pointerId: 8, clientX: 100, clientY: 100 });
       hit.mockReturnValue(undefined);
       fireEvent.pointerDown(view.canvas, { button: 0, pointerId: 9, clientX: 100, clientY: 100 });
       expect(dispatch).toHaveBeenLastCalledWith(expect.objectContaining({ type: 'pointerDown', target: 'canvas' }));

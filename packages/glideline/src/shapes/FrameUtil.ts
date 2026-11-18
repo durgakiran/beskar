@@ -1,6 +1,7 @@
 import { FONT_FAMILIES } from '../board-fonts.js';
 import { createSvgLabel } from './TextUtil.js';
 import { boundsAnchors, QUARTERS } from '../connection-anchors.js';
+import { addSketchOutline, rectangleOutline, sketchOutlinePath } from '../sketch-stroke.js';
 /**
  * FrameUtil — container shape (Story 2.3)
  *
@@ -15,7 +16,10 @@ import { defineMigrations } from '../migrations.js';
 import { makeBox } from '../types.js';
 import type { GlideShape } from '../types.js';
 import { Geometry2d, Rectangle2d } from '../geometry/index.js';
-import { type LabelProps } from '../styles.js';
+import {
+  FONT_SIZES, inlinePatternDefs, STROKE_DASH_ARRAYS, STROKE_WIDTHS, StyleValidators, svgFill,
+  type FillStyle, type Font, type FontSize, type LabelProps, type SizeStyle, type StrokeStyle,
+} from '../styles.js';
 
 export interface FrameProps {
   [key: string]: unknown;
@@ -25,6 +29,11 @@ export interface FrameProps {
   color: string;
   opacity: number;
   clipContent: boolean;
+  font?: Font;
+  fontSize?: FontSize;
+  fillStyle?: FillStyle;
+  strokeStyle?: StrokeStyle;
+  strokeWidth?: SizeStyle;
 }
 
 export type FrameShape = GlideShape<FrameProps>;
@@ -37,6 +46,8 @@ export class FrameUtil extends ShapeUtil<FrameShape> {
   }
   static override readonly canContainChildren = true;
 
+  override supportsSketchStroke(): boolean { return true; }
+
   static override readonly props = {
     w:     T.number,
     h:     T.number,
@@ -44,6 +55,11 @@ export class FrameUtil extends ShapeUtil<FrameShape> {
     color: T.string,
     opacity: T.number,
     clipContent: T.boolean,
+    font: T.optional(StyleValidators.font),
+    fontSize: T.optional(StyleValidators.fontSize),
+    fillStyle: T.optional(StyleValidators.fillStyle),
+    strokeStyle: T.optional(StyleValidators.strokeStyle),
+    strokeWidth: T.optional(StyleValidators.strokeWidth),
   };
 
   static override readonly migrations = defineMigrations({
@@ -94,8 +110,8 @@ export class FrameUtil extends ShapeUtil<FrameShape> {
   override getLabelProps(shape: FrameShape): LabelProps {
     return {
       text: shape.props.label,
-      fontFamily: FONT_FAMILIES.sans,
-      fontSize: 13,
+      fontFamily: FONT_FAMILIES[shape.props.font ?? 'sans'],
+      fontSize: shape.props.fontSize ? FONT_SIZES[shape.props.fontSize] : 13,
       color: shape.props.color,
       textAlign: 'left',
       verticalAlign: 'center',
@@ -122,18 +138,26 @@ export class FrameUtil extends ShapeUtil<FrameShape> {
     const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
     if (props.opacity < 1) g.setAttribute('opacity', String(props.opacity));
 
-    // Dashed border (local coords: x=0, y=0)
+    const fill = props.fillStyle;
+    const pattern = fill && inlinePatternDefs(fill, props.color, shape.id);
+    if (pattern) g.appendChild(pattern);
+    const dash = STROKE_DASH_ARRAYS[props.strokeStyle ?? 'dashed'];
     const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
     rect.setAttribute('x',              '0');
     rect.setAttribute('y',              '0');
     rect.setAttribute('width',          String(props.w));
     rect.setAttribute('height',         String(props.h));
-    rect.setAttribute('fill',           `${props.color}22`);
+    rect.setAttribute('fill',           fill ? svgFill(fill, props.color, shape.id) : `${props.color}22`);
     rect.setAttribute('stroke',         props.color);
-    rect.setAttribute('stroke-width',   '2');
-    rect.setAttribute('stroke-dasharray', '8 4');
+    rect.setAttribute('stroke-width',   String(props.strokeWidth ? STROKE_WIDTHS[props.strokeWidth] : 2));
+    if (dash !== 'none') rect.setAttribute('stroke-dasharray', dash);
+    if (props.strokeStyle === 'dotted') rect.setAttribute('stroke-linecap', 'round');
     rect.setAttribute('rx',             '4');
     g.appendChild(rect);
+    if (props.strokeStyle === 'sketch') {
+      const outline = rectangleOutline(props.w, props.h, 4);
+      addSketchOutline(rect, shape.id, (seed, strength) => sketchOutlinePath(outline, seed, strength));
+    }
 
     return g;
   }

@@ -14,7 +14,6 @@ vi.mock('./Canvas', () => ({
   },
 }));
 vi.mock('./ContextMenu', () => ({ ContextMenu: () => null }));
-vi.mock('./ZoomWidget', () => ({ ZoomWidget: () => null, fitToScreen: () => undefined }));
 vi.mock('./BackToContentButton', () => ({ BackToContentButton: () => null }));
 vi.mock('./CollaborationCursors', () => ({ CollaborationCursors: () => null }));
 
@@ -39,6 +38,119 @@ function createPng(width: number, height: number): Uint8Array {
 }
 
 describe('WhiteboardApp shortcut boundaries', () => {
+  it('pastes copied text as a new node with a selection or another tool active', async () => {
+    const controller = new GlideboardController({ sessionKey: 'paste-text-with-active-node' });
+    const { editor } = controller;
+    try {
+      const box = editor.createShape({ type: 'box', x: 10, y: 20, props: { label: 'Original label' } });
+      const view = render(
+        <GlideboardProvider controller={controller}><WhiteboardApp /></GlideboardProvider>,
+      );
+      const canvas = view.container.querySelector('[data-glideboard-role="canvas"]')!;
+      const pasteText = (text: string) => fireEvent.paste(canvas, {
+        clipboardData: { files: [], getData: (type: string) => type === 'text/plain' ? text : '' },
+      });
+      act(() => editor.setSelectedShapeIds([box]));
+      expect(pasteText('Copied text\nSecond line')).toBe(false);
+      expect(editor.getShape(box)?.props.label).toBe('Original label');
+      const pasted = editor.getShapes().find(shape => shape.type === 'text')!;
+      expect(pasted.props).toMatchObject({
+        text: 'Copied text\nSecond line',
+        richText: { doc: { content: [
+          { type: 'paragraph', content: [{ type: 'text', text: 'Copied text' }] },
+          { type: 'paragraph', content: [{ type: 'text', text: 'Second line' }] },
+        ] } },
+      });
+      expect(pasted.props.w).toBeGreaterThan(10);
+
+      act(() => controller.setCurrentTool('arrow'));
+      expect(pasteText('Pasted while drawing')).toBe(false);
+      expect(editor.currentToolId.peek()).toBe('arrow');
+      expect(editor.getShapes().filter(shape => shape.type === 'text').map(shape => shape.props.text))
+        .toEqual(['Copied text\nSecond line', 'Pasted while drawing']);
+    } finally {
+      await controller.dispose();
+    }
+  });
+
+  it('zooms around the board center with Cmd or Ctrl and matches the toolbar step', async () => {
+    const controller = new GlideboardController({ sessionKey: 'zoom-shortcuts' });
+    try {
+      const view = render(
+        <GlideboardProvider controller={controller}>
+          <WhiteboardApp />
+        </GlideboardProvider>,
+      );
+      const app = view.container.querySelector('[data-glideboard-role="app"]')!;
+      const canvas = controller.getCanvasElement()!;
+      vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 800, 600));
+      const camera = controller.editor.camera;
+      expect(fireEvent.keyDown(app, { key: '=', metaKey: true })).toBe(false);
+      expect(camera.getCamera()).toEqual({ x: 80, y: 60, z: 1.25 });
+      fireEvent.click(view.getByRole('button', { name: 'Zoom out' }));
+      expect(camera.getCamera()).toEqual({ x: 0, y: 0, z: 1 });
+      expect(fireEvent.keyDown(app, { key: '-', ctrlKey: true })).toBe(false);
+      expect(camera.getCamera().z).toBe(0.75);
+      expect(fireEvent.keyDown(app, { key: '=', ctrlKey: true })).toBe(false);
+      expect(camera.getCamera().z).toBe(1);
+      expect(fireEvent.keyDown(app, { key: '-', metaKey: true })).toBe(false);
+      expect(camera.getCamera().z).toBe(0.75);
+    } finally {
+      await controller.dispose();
+    }
+  });
+
+  it('shows fixed eraser shortcuts and accepts X followed by the mode number', async () => {
+    const controller = new GlideboardController({ sessionKey: 'last-eraser-mode' });
+    try {
+      const view = render(
+        <GlideboardProvider controller={controller}>
+          <WhiteboardApp />
+        </GlideboardProvider>,
+      );
+      const app = view.container.querySelector('[data-glideboard-role="app"]')!;
+      const trigger = view.getByRole('button', { name: 'Eraser', exact: true });
+      fireEvent.click(trigger);
+      expect(view.getByRole('group', { name: 'Eraser modes' })).toBeTruthy();
+      expect(view.getByRole('group', { name: 'Eraser modes' }).textContent).toBe('');
+      const allElements = view.getByRole('button', { name: 'All elements' });
+      expect(allElements.getAttribute('aria-pressed')).toBe('true');
+      expect(allElements.getAttribute('title')).toBe('All elements (X)');
+      expect(view.getByRole('button', { name: 'Whole stroke' }).getAttribute('title')).toBe('Whole stroke (X1)');
+      expect(controller.editor.currentToolId.peek()).toBe('eraser');
+      fireEvent.click(view.getByRole('button', { name: 'Partial stroke' }));
+      expect(view.queryByRole('group', { name: 'Eraser modes' })).toBeNull();
+      expect(controller.editor.currentToolId.peek()).toBe('partial-eraser');
+      fireEvent.keyDown(app, { key: 'v' });
+      fireEvent.click(trigger);
+      const partial = view.getByRole('button', { name: 'Partial stroke' });
+      expect(partial.getAttribute('aria-pressed')).toBe('true');
+      expect(partial.getAttribute('title')).toBe('Partial stroke (X2)');
+      fireEvent.click(trigger);
+      fireEvent.keyDown(app, { key: 'x' });
+      expect(controller.editor.currentToolId.peek()).toBe('eraser');
+      fireEvent.keyDown(app, { key: '1' });
+      expect(controller.editor.currentToolId.peek()).toBe('whole-stroke-eraser');
+      fireEvent.keyDown(app, { key: '2' });
+      expect(controller.editor.currentToolId.peek()).toBe('whole-stroke-eraser');
+      fireEvent.keyDown(app, { key: 'x' });
+      fireEvent.keyDown(app, { key: '2' });
+      expect(controller.editor.currentToolId.peek()).toBe('partial-eraser');
+      fireEvent.keyDown(app, { key: 'x' });
+      fireEvent.keyDown(app, { key: '3' });
+      expect(controller.editor.currentToolId.peek()).toBe('area-eraser');
+      fireEvent.keyDown(app, { key: 'v' });
+      fireEvent.click(trigger);
+      const area = view.getByRole('button', { name: 'Erase area' });
+      expect(area.getAttribute('title')).toBe('Erase area (X3)');
+      expect(area.getAttribute('aria-pressed')).toBe('true');
+      fireEvent.keyDown(app, { key: 'x' });
+      expect(controller.editor.currentToolId.peek()).toBe('eraser');
+    } finally {
+      await controller.dispose();
+    }
+  });
+
   it('groups siblings inside a frame but leaves a frame and its child selected', () => {
     const controller = new GlideboardController({ sessionKey: 'frame-group-shortcut' });
     const { editor } = controller;

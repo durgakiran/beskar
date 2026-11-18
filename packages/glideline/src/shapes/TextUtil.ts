@@ -279,20 +279,25 @@ function clipSvgText(content: SVGElement, x: number, y: number, width: number, h
   return group;
 }
 
-export function createSvgLabel(label: LabelProps, bounds: { w: number; h: number }): SVGElement {
+export function getPlainLabelLayout(label: LabelProps, bounds: { w: number; h: number }) {
   const x = label.x ?? label.padding;
   const y = label.y ?? label.padding;
   const w = label.w ?? Math.max(0, bounds.w - label.padding * 2);
   const h = label.h ?? Math.max(0, bounds.h - label.padding * 2);
   const lineHeight = label.fontSize * (label.lineHeight ?? 1.35);
   const lines = wrapPlainTextLines(label.text, Math.max(1, w), label.fontFamily, label.fontSize);
+  const anchor = x + (label.textAlign === 'center' ? w / 2 : label.textAlign === 'right' ? w : 0);
+  const top = y + (label.verticalAlign === 'center' ? (h - lines.length * lineHeight) / 2 : 0);
+  return { x, y, w, h, lineHeight, lines, anchor, top };
+}
+
+export function createSvgLabel(label: LabelProps, bounds: { w: number; h: number }): SVGElement {
+  const { x, y, w, h, lineHeight, lines, anchor, top } = getPlainLabelLayout(label, bounds);
   const text = svgElement('text', {
     'font-family': label.fontFamily, 'font-size': label.fontSize, fill: label.color,
     'dominant-baseline': 'central', 'xml:space': 'preserve',
     'text-anchor': label.textAlign === 'center' ? 'middle' : label.textAlign === 'right' ? 'end' : 'start',
   });
-  const anchor = x + (label.textAlign === 'center' ? w / 2 : label.textAlign === 'right' ? w : 0);
-  const top = y + (label.verticalAlign === 'center' ? (h - lines.length * lineHeight) / 2 : 0);
   lines.forEach((line, index) => {
     text.append(svgElement('tspan', { x: anchor, y: top + (index + 0.5) * lineHeight }, line));
   });
@@ -473,6 +478,12 @@ export class TextUtil extends ShapeUtil<TextShape> {
       lineHeight: 1.35,
       scale: 1,
     };
+  }
+
+  static getPlainTextProps(text: string, style: Partial<Pick<TextProps, 'fontSize' | 'font'>>): Partial<TextProps> {
+    const fontSize = FONT_SIZES[style.fontSize ?? 'md'] ?? FONT_SIZES.md;
+    const font = FONT_FAMILIES[style.font ?? 'sans'] ?? FONT_FAMILIES.sans;
+    return { text, richText: legacyRichText(text), ...estimateBounds(text, fontSize, font) };
   }
 
   getGeometry(shape: TextShape): Geometry2d {

@@ -217,6 +217,24 @@ describe('WhiteboardApp unified asset ingress', () => {
     expect((shape.props['h'] as number) / (shape.props['w'] as number)).toBeCloseTo(10);
   });
 
+  it('keeps the active tool when a pasted SVG is placed', async () => {
+    controller.setCurrentTool('arrow');
+    const { container } = render(
+      <GlideboardProvider controller={controller}><WhiteboardApp /></GlideboardProvider>,
+    );
+    const root = container.firstElementChild as HTMLElement;
+    fireEvent.paste(root, {
+      clipboardData: {
+        files: [],
+        getData: (type: string) => type === 'image/svg+xml'
+          ? '<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><path d="M0 0L100 100"/></svg>'
+          : '',
+      },
+    });
+    await waitFor(() => expect(controller.editor.getShapes()).toHaveLength(1));
+    expect(controller.editor.currentToolId.peek()).toBe('arrow');
+  });
+
   it('handles failed queue results, picker window focus, and dismissible validation notices', async () => {
     const queue = vi.spyOn(controller, 'queueAssetImport').mockImplementation(request => ({
       id: `failed:${request.name}`,

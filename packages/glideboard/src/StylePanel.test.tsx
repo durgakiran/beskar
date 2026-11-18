@@ -14,6 +14,7 @@ class ResizeObserverStub {
 
 afterEach(() => {
   cleanup();
+  window.localStorage.clear();
   vi.unstubAllGlobals();
 });
 
@@ -46,6 +47,138 @@ function importTestAsset(controller: GlideboardController, type: 'raster-image' 
 }
 
 describe('StylePanel text targeting', () => {
+  it('keeps creation defaults across tools, existing-node edits, and reopening the board', async () => {
+    const controller = new GlideboardController({ sessionKey: 'persistent-creation-styles' });
+    const { editor } = controller;
+    let reopened: GlideboardController | undefined;
+    try {
+      const existingText = editor.createShape({ type: 'text', x: 20, y: 30, props: { text: 'Existing', font: 'draw' } });
+      const existingShape = editor.createShape({ type: 'box', x: 20, y: 80, props: { fillStyle: 'solid', strokeWidth: 'thin' } });
+      const view = renderPanel(controller);
+
+      act(() => controller.setCurrentTool('text'));
+      fireEvent.click(view.getByRole('button', { name: 'Serif font' }));
+      fireEvent.click(view.getByRole('button', { name: 'Large font' }));
+      act(() => controller.setCurrentTool('box'));
+      fireEvent.click(view.getByRole('button', { name: 'Pattern fill' }));
+      fireEvent.click(view.getByRole('button', { name: 'Dashed stroke' }));
+      fireEvent.click(view.getByRole('button', { name: 'Thick stroke width' }));
+
+      act(() => { controller.setCurrentTool('select'); editor.setSelectedShapeIds([existingShape]); });
+      fireEvent.click(view.getByRole('button', { name: 'Lined fill' }));
+      fireEvent.click(view.getByRole('button', { name: 'Dotted stroke' }));
+      fireEvent.click(view.getByRole('button', { name: 'Extra large stroke width' }));
+      expect(editor.getShape(existingShape)?.props).toMatchObject({
+        fillStyle: 'lined', strokeStyle: 'dotted', strokeWidth: 'xl',
+      });
+      act(() => editor.startEditing(existingText));
+      fireEvent.click(view.getByRole('button', { name: 'Mono font' }));
+      fireEvent.click(view.getByRole('button', { name: 'Small font' }));
+      expect(editor.getShape(existingText)?.props).toMatchObject({ font: 'mono', fontSize: 'sm' });
+      act(() => editor.stopEditing());
+
+      act(() => {
+        controller.setCurrentTool('triangle');
+        editor.dispatchEvent({ type: 'pointerDown', point: { x: 200, y: 220 }, target: 'canvas', shiftKey: false });
+        editor.dispatchEvent({ type: 'pointerMove', point: { x: 330, y: 350 } });
+        editor.dispatchEvent({ type: 'pointerUp', point: { x: 340, y: 360 } });
+      });
+      const triangle = editor.getShapes().find(shape => shape.type === 'triangle');
+      expect(triangle?.props).toMatchObject({
+        font: 'serif', fontSize: 'lg', fillStyle: 'pattern', strokeStyle: 'dashed', strokeWidth: 'thick',
+      });
+      let pastedId!: ReturnType<typeof editor.createShape>;
+      act(() => { pastedId = controller.importPlainText('New text')!; });
+      expect(editor.getShape(pastedId)?.props).toMatchObject({ font: 'serif', fontSize: 'lg' });
+
+      reopened = new GlideboardController({ sessionKey: 'reopened-creation-styles' });
+      expect(reopened.editor.activeStyles.peek()).toMatchObject({
+        font: 'serif', fontSize: 'lg', fillStyle: 'pattern', strokeStyle: 'dashed', strokeWidth: 'thick',
+      });
+    } finally {
+      await controller.dispose();
+      await reopened?.dispose();
+    }
+  });
+
+  it('applies typography to first labels and stroke defaults to newly drawn frames', async () => {
+    const controller = new GlideboardController({ sessionKey: 'new-label-and-frame-styles' });
+    const { editor } = controller;
+    try {
+      const blank = editor.createShape({ type: 'box', x: 20, y: 20 });
+      const labeled = editor.createShape({
+        type: 'box', x: 180, y: 20, props: { label: 'Existing label', font: 'draw' },
+      });
+      const view = renderPanel(controller);
+      act(() => {
+        controller.setCreationStyleDefaults({ font: 'serif', fontSize: 'lg', strokeStyle: 'dotted', strokeWidth: 'thick', fillStyle: 'none' });
+        editor.startEditing(blank);
+      });
+      expect(view.getByRole('button', { name: 'Serif font' }).getAttribute('data-isactive')).toBe('true');
+      act(() => { editor.updateEditingDraft('New label'); editor.commitEditing(); });
+      expect(editor.getShape(blank)?.props).toMatchObject({ label: 'New label', font: 'serif', fontSize: 'lg' });
+
+      act(() => editor.startEditing(labeled));
+      expect(view.getByRole('button', { name: 'Draw font' }).getAttribute('data-isactive')).toBe('true');
+      act(() => { editor.updateEditingDraft('Updated label'); editor.commitEditing(); });
+      expect(editor.getShape(labeled)?.props).toMatchObject({ label: 'Updated label', font: 'draw' });
+
+      act(() => {
+        controller.setCurrentTool('frame');
+        editor.dispatchEvent({ type: 'pointerDown', point: { x: 400, y: 40 }, target: 'canvas', shiftKey: false });
+        editor.dispatchEvent({ type: 'pointerMove', point: { x: 540, y: 150 } });
+        editor.dispatchEvent({ type: 'pointerUp', point: { x: 550, y: 160 } });
+      });
+      const frame = editor.getShapes().find(shape => shape.type === 'frame')!;
+      expect(frame.props).toMatchObject({
+        font: 'serif', fontSize: 'lg', strokeStyle: 'dotted', strokeWidth: 'thick', fillStyle: 'none',
+      });
+      const border = editor.getShapeUtil(frame).toSvg(frame).querySelector('rect')!;
+      expect(border.getAttribute('stroke-dasharray')).toBe('1 6');
+      expect(border.getAttribute('stroke-width')).toBe('3.5');
+      expect(border.getAttribute('fill')).toBe('none');
+    } finally {
+      await controller.dispose();
+    }
+  });
+
+  it('keeps Sketch and Draw defaults when moving between line, connector, and pencil tools', async () => {
+    const controller = new GlideboardController({ sessionKey: 'sketch-and-draw-defaults' });
+    const { editor } = controller;
+    try {
+      const view = renderPanel(controller);
+      act(() => controller.setCurrentTool('text'));
+      fireEvent.click(view.getByRole('button', { name: 'Draw font' }));
+      act(() => controller.setCurrentTool('box'));
+      fireEvent.click(view.getByRole('button', { name: 'Sketch stroke' }));
+      act(() => controller.setArrowRouteStyle('curve'));
+
+      for (const [index, tool] of ['line', 'arrow', 'draw'].entries()) {
+        const y = 100 + 180 * index;
+        act(() => controller.setCurrentTool(tool));
+        expect(view.getByRole('button', { name: 'Sketch stroke' }).getAttribute('data-isactive')).toBe('true');
+        act(() => {
+          editor.dispatchEvent({ type: 'pointerDown', point: { x: 100, y }, shiftKey: false, target: 'canvas' });
+          editor.dispatchEvent({ type: 'pointerMove', point: { x: 160, y: y + 65 } });
+          editor.dispatchEvent({ type: 'pointerUp', point: { x: 260, y: y + 105 } });
+        });
+        const shape = editor.getShapes().find(shape => shape.type === (tool === 'draw' ? 'freehand' : tool))!;
+        expect(shape.props.strokeStyle).toBe('sketch');
+        const util = editor.getShapeUtil(shape);
+        const svg = util.toSvg(shape);
+        const sketch = svg.querySelector('.glideline-sketch-outline, .glideline-sketch-shaft');
+        expect(sketch?.getAttribute('d')).toMatch(/^M /);
+        expect(sketch?.getAttribute('d')).not.toMatch(/NaN|undefined/);
+        if (tool === 'arrow') {
+          expect(shape.props.font).toBe('draw');
+          expect(util.getLabelProps(shape)?.fontFamily).toContain('Shantell Sans');
+        }
+      }
+    } finally {
+      await controller.dispose();
+    }
+  });
+
   it('shows only the active creation tool defaults and keeps navigation tools clear', () => {
     const controller = new GlideboardController({ sessionKey: 'compact-default-style-panel' });
     try {
@@ -62,7 +195,7 @@ describe('StylePanel text targeting', () => {
       act(() => controller.setCurrentTool('draw'));
       expect(view.getByRole('heading', { name: 'Draw defaults' })).toBeDefined();
       expect(view.queryByRole('group', { name: 'Fill' })).toBeNull();
-      expect(view.queryByRole('button', { name: 'Sketch stroke' })).toBeNull();
+      expect(view.getByRole('button', { name: 'Sketch stroke' })).toBeTruthy();
       fireEvent.click(view.getByRole('button', { name: 'Pressure-sensitive stroke' }));
       expect(controller.editor.activeStyles.peek()).toMatchObject({
         strokeStyle: 'solid', pressureSensitive: true, fillStyle: 'pattern',

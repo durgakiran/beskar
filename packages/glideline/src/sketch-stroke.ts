@@ -63,13 +63,25 @@ export function sketchOutlinePath(outline: string, seed: string, strength: numbe
   let point: Vec2 = { x: 0, y: 0 };
   let first = point;
   return Array.from(commands, ([, command, args], index) => {
-    const values = args!.trim().split(/\s+/).map(Number);
+    const values = args!.trim().split(/[\s,]+/).map(Number);
     const end = command === 'Z' ? first : { x: values.at(-2)!, y: values.at(-1)! };
     let segment = `${command} ${args!.trim()}`.trim();
     if (command === 'M') first = end;
     if (command === 'L' || command === 'Z') {
       segment = sketchSegment(point, end, `${seed}:${index - 1}`, strength);
       if (command === 'Z') segment += ' Z';
+    } else if (command === 'Q' || command === 'C') {
+      const dx = end.x - point.x;
+      const dy = end.y - point.y;
+      const length = Math.hypot(dx, dy);
+      if (length > 0) {
+        const drift = seededOffset(`${seed}:${index}`) * Math.min(strength, Math.max(12, length) * 0.09);
+        const x = -dy / length * drift;
+        const y = dx / length * drift;
+        const first = `${values[0]! + x} ${values[1]! + y}`;
+        const second = command === 'C' ? ` ${values[2]! - x} ${values[3]! - y}` : '';
+        segment = `${command} ${first}${second} ${xy(end)}`;
+      }
     }
     point = end;
     return segment;

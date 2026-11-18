@@ -1,4 +1,5 @@
-import React, { memo, useCallback, useEffect, useRef, useState } from 'react';
+import React, { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { computed } from '@preact/signals';
 import { CanvasTextView } from '@durgakiran/canvas-text-editor/view';
 import type { CanvasRichTextDocument } from '@durgakiran/canvas-text-editor/model';
 import { projectCanvasRichTextToPlainText } from '@durgakiran/canvas-text-editor/model';
@@ -14,8 +15,12 @@ import type {
   StateNode,
   TextEditSession,
 } from '@durgakiran/glideline';
-import { boardFontStyle } from '@durgakiran/glideline';
+import {
+  boardFontStyle, ERASER_RADIUS_PX, getAreaEraseCuts, getAreaEraseMaskBounds, getAreaEraseMaskPaths,
+  TextTool, type FreehandUtil,
+} from '@durgakiran/glideline';
 import { CanvasOverlays, getHandleAtPagePoint, getCursorForHandle } from './CanvasOverlays.js';
+import { BoardNavigation } from './BoardNavigation.js';
 import { useGlideboardController } from './GlideboardContext.js';
 import { wbTheme } from './theme.js';
 import { useSignalValue } from './useSignalValue.js';
@@ -33,7 +38,8 @@ const LazyCanvasTextEditor = React.lazy(async () => {
 
 export function getCanvasToolCursor(tool: string | undefined, handleId: string | null, buttons = 0, editor?: GlideEditor): string {
   if (tool === 'hand') return buttons === 1 ? 'grabbing' : 'grab';
-  if (tool === 'asset' || tool === 'line') return 'crosshair';
+  if (tool === 'asset' || tool === 'line' || tool === 'eraser'
+    || tool === 'whole-stroke-eraser' || tool === 'partial-eraser' || tool === 'area-eraser') return 'crosshair';
   return handleId ? getCursorForHandle(handleId, editor) : 'default';
 }
 
@@ -150,6 +156,20 @@ const ShapeLayer = memo(({
   const editor = controller.editor;
   const sig = editor.getShapeSignal(id);
   const shape = useSignalValue(sig as any) as GlideShape | null;
+  const isFreehand = shape?.type === 'freehand';
+  const erasePreviewSignal = useMemo(() => isFreehand
+    ? computed(() => editor.partialErasePreviews.value.get(id))
+    : undefined, [editor, id, isFreehand]);
+  const erasePreview = useSignalValue(erasePreviewSignal);
+  const currentErasePreview = erasePreview && erasePreview.stroke === shape && !editor.isShapeEffectivelyLocked(id)
+    ? erasePreview : undefined;
+  const areaErasePreviewSignal = useMemo(() => computed(() => editor.areaErasePreviews.value.get(id)), [editor, id]);
+  const areaErasePreview = useSignalValue(areaErasePreviewSignal);
+  const areaEraseCuts = useMemo(() => {
+    if (!shape) return [];
+    const cuts = getAreaEraseCuts(shape);
+    return areaErasePreview?.shape === shape ? [...cuts, areaErasePreview.cut] : cuts;
+  }, [shape, areaErasePreview]);
   const remoteTextEditingShapeIds = useSignalValue(controller.remoteTextEditingShapeIdsSignal);
   const isRemoteTextEditing = remoteTextEditingShapeIds?.has(id) ?? false;
   const documentVersion = useSignalValue(editor.getDocumentVersionSignal());
@@ -158,9 +178,18 @@ const ShapeLayer = memo(({
 
   const routeVersion = shape?.type === 'arrow' ? documentVersion : undefined;
   // Inject toSvg() geometry output into the per-shape <svg>
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!svgRef.current || !shape) return;
     const util = editor.getShapeUtil(shape.type);
+    if (currentErasePreview) {
+      const { stroke, fragments } = currentErasePreview;
+      // The existing shape layer applies the stroke's world transform and clipping.
+      const paths = fragments.map(points => (util as FreehandUtil).toSvg({
+        ...stroke, x: 0, y: 0, props: { ...stroke.props, points, isClosed: false },
+      }));
+      svgRef.current.replaceChildren(...paths);
+      return;
+    }
     if ((util as any).toSvg) {
       const el = shape.type === 'arrow' && connectorEdit
         ? (util as ArrowUtil).toSvg({
@@ -177,7 +206,7 @@ const ShapeLayer = memo(({
         svgRef.current.appendChild(el);
       }
     }
-  }, [editor, shape, routeVersion, connectorEdit]);
+  }, [editor, shape, routeVersion, connectorEdit, currentErasePreview]);
 
   const util = shape ? editor.getShapeUtil(shape.type) : null;
   const labelProps: LabelProps | null = (shape && util) ? ((util as any).getLabelProps?.(shape) ?? null) : null;
@@ -192,6 +221,9 @@ const ShapeLayer = memo(({
   const hasFixedWidth = isTextType && typeof (shape.props as any).w === 'number';
 
   const localBounds = util.getGeometry(shape as any).getBounds();
+  const visualBounds = areaEraseCuts.length ? util.getVisualBounds(shape as any) : null;
+  const maskBounds = visualBounds ? getAreaEraseMaskBounds(visualBounds) : null;
+  const maskId = controller.domId(`area-mask-${id}`);
   const world = editor.getWorldTransform(shape.id as ShapeId);
   const worldTransform = `matrix(${world.a}, ${world.b}, ${world.c}, ${world.d}, ${world.e}, ${world.f})`;
   const clippingFrame = editor.getClippingFrameAncestors(shape.id as ShapeId)[0];
@@ -220,8 +252,21 @@ const ShapeLayer = memo(({
         zIndex,
         pointerEvents: 'none',
         clipPath,
+        maskImage: maskBounds ? `url("#${maskId}")` : undefined,
       }}
     >
+      {maskBounds && visualBounds && (
+        <svg width="0" height="0" aria-hidden="true" style={{ position: 'absolute' }}>
+          <defs>
+            <mask id={maskId} maskUnits="userSpaceOnUse" maskContentUnits="userSpaceOnUse" {...maskBounds}>
+              <rect {...maskBounds} fill="white" />
+              {getAreaEraseMaskPaths(areaEraseCuts, visualBounds).map(({ d, transform }, index) => (
+                <path key={index} d={d} transform={transform} fill="black" />
+              ))}
+            </mask>
+          </defs>
+        </svg>
+      )}
       {/* Geometry: 1×1px SVG with overflow:visible — contains toSvg() output */}
       <svg
         ref={svgRef}
@@ -329,6 +374,8 @@ const ShapeLayer = memo(({
 // EraserPreviewOverlay — transient feedback outside shape layers
 // ─────────────────────────────────────────────────────────────
 
+const ERASER_PREVIEW_COLOR = '#f38ba8';
+
 const EraserPreviewShape = memo(({ id, zoom }: { id: ShapeId; zoom: number }) => {
   const controller = useGlideboardController();
   const editor = controller.editor;
@@ -343,7 +390,7 @@ const EraserPreviewShape = memo(({ id, zoom }: { id: ShapeId; zoom: number }) =>
     <polyline
       points={serialized}
       fill="none"
-      stroke="#f38ba8"
+      stroke={ERASER_PREVIEW_COLOR}
       strokeWidth={8 / zoom}
       strokeLinecap="round"
       strokeLinejoin="round"
@@ -352,8 +399,8 @@ const EraserPreviewShape = memo(({ id, zoom }: { id: ShapeId; zoom: number }) =>
   ) : (
     <polygon
       points={serialized}
-      fill="#f38ba8"
-      stroke="#f38ba8"
+      fill={ERASER_PREVIEW_COLOR}
+      stroke={ERASER_PREVIEW_COLOR}
       strokeWidth={2 / zoom}
       opacity={0.35}
     />
@@ -731,8 +778,11 @@ export function Canvas() {
   const editingSession = useSignalValue(editor.textEditing.session);
   const readOnly = useSignalValue(controller.readOnlySignal) ?? false;
   const [viewportRevision, setViewportRevision] = useState(0);
+  const [pointerEditTool, setPointerEditTool] = useState<string | null>(null);
   const viewportShapes = useViewportShapeEntries(editor, viewportRevision);
   const containerRef = useRef<HTMLDivElement>(null);
+  const partialEraserCursorRef = useRef<HTMLDivElement>(null);
+  const pointerScreenRef = useRef<Vec2 | null>(null);
   const preventFocusStealRef = useRef(false);
   const isMiddleDraggingRef = useRef(false);
   const originalToolBeforeMiddleDragRef = useRef<string | null>(null);
@@ -741,6 +791,26 @@ export function Canvas() {
   const awarenessCursorFrameRef = useRef<number | null>(null);
   const latestAwarenessCursorRef = useRef<Vec2 | null>(null);
   const activeTool = useSignalValue(editor.currentToolId);
+  const showPartialEraserCursor = (activeTool === 'partial-eraser' || activeTool === 'area-eraser') && !readOnly;
+
+  const updatePointerPosition = useCallback((screen: Vec2 | null) => {
+    pointerScreenRef.current = screen;
+    const cursor = partialEraserCursorRef.current;
+    if (!cursor) return;
+    cursor.style.visibility = screen ? 'visible' : 'hidden';
+    if (screen) {
+      cursor.style.left = `${screen.x}px`;
+      cursor.style.top = `${screen.y}px`;
+    }
+  }, []);
+
+  useLayoutEffect(() => {
+    if (showPartialEraserCursor) updatePointerPosition(pointerScreenRef.current);
+  }, [showPartialEraserCursor, updatePointerPosition]);
+
+  useEffect(() => {
+    setPointerEditTool(tool => tool === activeTool && !readOnly ? tool : null);
+  }, [activeTool, readOnly]);
 
   useEffect(() => {
     if (!readOnly) return;
@@ -830,6 +900,7 @@ export function Canvas() {
 
   const onPointerDown = useCallback((event: React.PointerEvent) => {
     if (event.button !== 0 && event.button !== 1) return;
+    if (isPointerDownRef.current && event.pointerId !== controller.activePointerIdRef.current) return;
     // macOS reports Control-click as a primary pointer press before contextmenu.
     // Let that menu open without starting a canvas selection or transform.
     if (event.button === 0 && event.ctrlKey && event.pointerType === 'mouse'
@@ -850,6 +921,7 @@ export function Canvas() {
     containerRef.current!.setPointerCapture(event.pointerId);
 
     const { screen, page } = getPagePoint(event);
+    updatePointerPosition(screen);
     const handleId = readOnly ? null : getHandleAtEvent(event);
 
     if (handleId && event.button === 0) {
@@ -886,6 +958,11 @@ export function Canvas() {
       }
     }
     const editingBefore = editor.editingShapeId.peek();
+    const tool = editor.currentToolId.peek();
+    if (!readOnly && (tool === 'eraser' || tool === 'whole-stroke-eraser' || tool === 'partial-eraser'
+      || tool === 'area-eraser' || tool === 'asset')) {
+      setPointerEditTool(tool);
+    }
     editor.dispatchEvent({
       type: 'pointerDown',
       point: page,
@@ -899,10 +976,12 @@ export function Canvas() {
     if (!readOnly && editor.editingShapeId.peek() !== editingBefore) {
       preventFocusStealRef.current = true;
     }
-  }, [controller, editor, getHandleAtEvent, getPagePoint, getShapeAtEvent, readOnly]);
+  }, [controller, editor, getHandleAtEvent, getPagePoint, getShapeAtEvent, readOnly, updatePointerPosition]);
 
   const onPointerMove = useCallback((event: React.PointerEvent) => {
+    if (isPointerDownRef.current && event.pointerId !== controller.activePointerIdRef.current) return;
     const { screen, page } = getPagePoint(event);
+    updatePointerPosition(screen);
     const handleId = controller.readOnlySignal.peek()
       ? null
       : getHandleAtPagePoint(editor, page.x, page.y);
@@ -934,7 +1013,7 @@ export function Canvas() {
         });
       }
     }
-  }, [controller, editor, getPagePoint]);
+  }, [controller, editor, getPagePoint, updatePointerPosition]);
 
   useEffect(() => {
     const awareness = controller.awarenessSignal.peek();
@@ -946,6 +1025,7 @@ export function Canvas() {
   const onPointerUp = useCallback((event: React.PointerEvent) => {
     if (!isPointerDownRef.current || event.pointerId !== controller.activePointerIdRef.current) return;
     isPointerDownRef.current = false;
+    setPointerEditTool(null);
     controller.activePointerIdRef.current = null;
 
     // Commit the gesture before releasing pointer capture. Releasing capture
@@ -954,6 +1034,7 @@ export function Canvas() {
     // interaction as still active (this pointerUp hasn't committed it yet)
     // and cancel the just-finished stroke via a synthetic Escape.
     const { screen, page } = getPagePoint(event);
+    updatePointerPosition(event.pointerType === 'touch' ? null : screen);
     editor.dispatchEvent({
       type: 'pointerUp', point: page, screenPoint: screen,
       shiftKey: event.shiftKey, altKey: event.altKey,
@@ -985,11 +1066,14 @@ export function Canvas() {
       const handleId = controller.readOnlySignal.peek() ? null : getHandleAtPagePoint(editor, page.x, page.y);
       containerRef.current.style.cursor = getCanvasToolCursor(editor.currentToolId.peek(), handleId, event.buttons, editor);
     }
-  }, [controller, editor, getPagePoint]);
+  }, [controller, editor, getPagePoint, updatePointerPosition]);
 
-  const cancelPointerInteraction = useCallback((pointerId?: number) => {
+  const cancelPointerInteraction = useCallback((pointerId?: number, reason: 'interrupted' | 'unmount' = 'interrupted') => {
+    if (pointerId !== undefined && pointerId !== controller.activePointerIdRef.current) return;
     if (!isPointerDownRef.current && !editor.interactions.active) return;
+    updatePointerPosition(null);
     isPointerDownRef.current = false;
+    setPointerEditTool(null);
     controller.isCanvasDraggingRef.current = false;
     controller.activePointerIdRef.current = null;
     if (pointerId !== undefined && containerRef.current?.hasPointerCapture?.(pointerId)) {
@@ -1000,7 +1084,7 @@ export function Canvas() {
     // Only fall back to the hard-abort Escape path if nothing handled it —
     // this keeps every tool that hasn't opted into pointerCancel behaving
     // exactly as before.
-    const handled = editor.dispatchEvent({ type: 'pointerCancel' } as any);
+    const handled = editor.dispatchEvent({ type: 'pointerCancel', reason });
     if (!handled) {
       editor.dispatchEvent({ type: 'keyDown', key: 'Escape' } as any);
     }
@@ -1012,24 +1096,32 @@ export function Canvas() {
     isMiddleDraggingRef.current = false;
     originalToolBeforeMiddleDragRef.current = null;
     controller.deferredToolRestoreRef.current = null;
-  }, [controller, editor]);
+  }, [controller, editor, updatePointerPosition]);
 
   useEffect(() => {
-    const handleWindowBlur = () => cancelPointerInteraction();
+    const handleWindowBlur = () => {
+      updatePointerPosition(null);
+      cancelPointerInteraction();
+    };
     window.addEventListener('blur', handleWindowBlur);
     return () => {
       window.removeEventListener('blur', handleWindowBlur);
-      cancelPointerInteraction();
+      cancelPointerInteraction(undefined, 'unmount');
     };
-  }, [cancelPointerInteraction]);
+  }, [cancelPointerInteraction, updatePointerPosition]);
 
   const onDoubleClick = useCallback((event: React.MouseEvent) => {
-    if (readOnly) return;
+    if (readOnly || editor.editingShapeId.peek() || shouldIgnoreGlideboardShortcuts(event)) return;
     const rect = containerRef.current!.getBoundingClientRect();
     const screen = { x: event.clientX - rect.left, y: event.clientY - rect.top };
     const page = editor.screenToPage(screen);
     const hit = editor.getTopShapeAtPoint(page);
-    editor.dispatchEvent({ type: 'doubleClick', point: page, shapeId: hit?.id as ShapeId | undefined } as any);
+    if (!hit && editor.currentToolId.peek() === 'select') {
+      event.preventDefault();
+      TextTool.createAndEdit(editor, page);
+      return;
+    }
+    editor.dispatchEvent({ type: 'doubleClick', point: page, shapeId: hit?.id as ShapeId | undefined });
   }, [editor, readOnly]);
 
   const onKeyDown = useCallback((event: React.KeyboardEvent) => {
@@ -1038,6 +1130,7 @@ export function Canvas() {
   }, [editor, readOnly]);
 
   const onPointerLeave = useCallback(() => {
+    updatePointerPosition(null);
     if (!isPointerDownRef.current) editor.clearBindingPreview();
     const awareness = controller.awarenessSignal.peek();
     if (awareness) {
@@ -1048,13 +1141,13 @@ export function Canvas() {
       latestAwarenessCursorRef.current = null;
       awareness.setLocalStateField('canvasCursor', null);
     }
-  }, [controller, editor]);
+  }, [controller, editor, updatePointerPosition]);
 
   const cameraTransform = `matrix(${camera.z}, 0, 0, ${camera.z}, ${-camera.x * camera.z}, ${-camera.y * camera.z})`;
   const assetPlacementArmed = activeTool === 'asset' || undefined;
   const canvasCursor = getCanvasToolCursor(activeTool, null);
 
-  return (
+  const canvas = (
     <div
       ref={containerRef}
       id={controller.domId('canvas')}
@@ -1071,6 +1164,7 @@ export function Canvas() {
         cursor: canvasCursor,
       }}
       onPointerDown={onPointerDown}
+      onPointerEnter={event => updatePointerPosition(getPagePoint(event).screen)}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       onPointerCancel={event => cancelPointerInteraction(event.pointerId)}
@@ -1147,6 +1241,23 @@ export function Canvas() {
 
       {/* 3. Screen overlay — selection handles, marquee, binding preview */}
       <CanvasOverlays />
+      {showPartialEraserCursor ? (
+        <div ref={partialEraserCursorRef} data-glideboard-role="partial-eraser-cursor" aria-hidden="true"
+          style={{
+            position: 'absolute', visibility: 'hidden', pointerEvents: 'none',
+            width: ERASER_RADIUS_PX * 2, height: ERASER_RADIUS_PX * 2,
+            boxSizing: 'border-box', borderRadius: '50%',
+            border: `1px solid ${ERASER_PREVIEW_COLOR}`, boxShadow: `0 0 0 1px ${wbTheme.surface}`,
+            transform: 'translate(-50%, -50%)', zIndex: 1_000_000,
+          }} />
+      ) : null}
     </div>
+  );
+  return (
+    <>
+      {canvas}
+      <BoardNavigation viewportRevision={viewportRevision}
+        pointerEditing={!readOnly && pointerEditTool !== null && pointerEditTool === activeTool} />
+    </>
   );
 }

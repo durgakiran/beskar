@@ -125,7 +125,7 @@ function collectChangedPaths(before: unknown, after: unknown, path = ''): JsonPo
  * excluded from persistence, collaboration, spatial indices, and history.
  */
 export class InteractionManager {
-  private _kind: InteractionKind | null = null;
+  private readonly _kind = signal<InteractionKind | null>(null);
   private _overlay = new Map<string, StoreRecord | null>();
   private _baselines = new Map<string, StoreRecord | null>();
   private _baselineGenerations = new Map<string, number>();
@@ -170,14 +170,14 @@ export class InteractionManager {
     });
   }
 
-  get active(): boolean { return this._kind !== null; }
+  get active(): boolean { return this.kind !== null; }
   get previewing(): boolean { return this._previewDepth > 0; }
-  get kind(): InteractionKind | null { return this._kind; }
+  get kind(): InteractionKind | null { return this._kind.peek(); }
   get changedIds(): readonly string[] { return Object.freeze([...this._overlay.keys()]); }
 
   begin(kind: InteractionKind = 'document'): void {
-    if (this._kind) this.cancel();
-    this._kind = kind;
+    if (this.active) this.cancel();
+    this._kind.value = kind;
   }
 
   get(id: string): StoreRecord | undefined {
@@ -199,11 +199,12 @@ export class InteractionManager {
   }
 
   getVersionSignal(): ReadonlySignal<number> { return this._combinedVersion; }
+  getKindSignal(): ReadonlySignal<InteractionKind | null> { return this._kind; }
   getShapeIdsSignal(): ReadonlySignal<readonly ShapeId[]> { return this._shapeIds; }
   getChangedIdsSignal(): ReadonlySignal<readonly string[]> { return this._changedIds; }
 
   runPreview<T>(fn: () => T): T {
-    if (!this._kind) throw new Error('No interaction is active');
+    if (!this.active) throw new Error('No interaction is active');
     const overlayBefore = new Map(this._overlay);
     const baselinesBefore = new Map(this._baselines);
     const generationsBefore = new Map(this._baselineGenerations);
@@ -227,9 +228,9 @@ export class InteractionManager {
   }
 
   runEphemeral<T>(fn: () => T): T {
-    if (!this._kind) this.begin('ephemeral');
+    if (!this.active) this.begin('ephemeral');
     const value = this.runPreview(fn);
-    if (this._kind === 'ephemeral' && this._overlay.size === 0) this._clear(false);
+    if (this.kind === 'ephemeral' && this._overlay.size === 0) this._clear(false);
     return value;
   }
 
@@ -262,7 +263,7 @@ export class InteractionManager {
   }
 
   commit(options: InteractionCommitOptions): void {
-    if (!this._kind) return;
+    if (!this.active) return;
     const entries = [...this._overlay.entries()];
     if (entries.length === 0) {
       this._clear(true);
@@ -342,10 +343,10 @@ export class InteractionManager {
   }
 
   private _clear(publish: boolean): void {
-    this._kind = null;
     this._overlay.clear();
     this._baselines.clear();
     this._baselineGenerations.clear();
+    this._kind.value = null;
     if (publish) this._publishOverlay();
   }
 

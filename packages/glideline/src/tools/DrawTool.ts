@@ -63,8 +63,7 @@ class Drawing extends StateNode {
   private _simulatePressure = false;
 
   private get strokeStyle() {
-    const stroke = this.editor.activeStyles.value.strokeStyle;
-    return stroke === 'sketch' ? 'solid' : stroke ?? 'solid';
+    return this.editor.activeStyles.peek().strokeStyle ?? 'solid';
   }
 
   override onEnter(info: PointerDownEvent): void {

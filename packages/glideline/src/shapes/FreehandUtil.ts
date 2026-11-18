@@ -26,6 +26,7 @@ import { STROKE_WIDTHS, STROKE_DASH_ARRAYS, resolveColor, StyleValidators } from
 import type { SizeStyle, StrokeStyle } from '../styles.js';
 import { Geometry2d, Polyline2d } from '../geometry/index.js';
 import { getStroke } from 'perfect-freehand';
+import { addSketchOutline, sketchOutlinePath } from '../sketch-stroke.js';
 
 // ─────────────────────────────────────────────────────────────
 // Freehand point type
@@ -133,11 +134,13 @@ export class FreehandUtil extends ShapeUtil<FreehandShape> {
 
   override canEditLabel(_shape: FreehandShape): boolean { return false; }
 
+  override supportsSketchStroke(): boolean { return true; }
+
   static override readonly props: GlideProps<FreehandProps> = {
     points:      pointsValidator,
     color:       T.string,
     strokeWidth: StyleValidators.strokeWidth,
-    strokeStyle: StyleValidators.standardStrokeStyle,
+    strokeStyle: StyleValidators.strokeStyle,
     pressureSensitive: T.boolean,
     simulatePressure: T.boolean,
     opacity:     T.number,
@@ -253,6 +256,9 @@ export class FreehandUtil extends ShapeUtil<FreehandShape> {
       path.setAttribute('stroke-dasharray', dashArray);
     }
     g.appendChild(path);
+    if (!pressureSensitive && strokeStyle === 'sketch') {
+      addSketchOutline(path, shape.id, (seed, strength) => sketchOutlinePath(pathStr, seed, strength));
+    }
 
     return g;
   }
