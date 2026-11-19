@@ -11,6 +11,9 @@ import type { ArrowRouteStyle } from './shapes/ArrowUtil.js';
 import type { AnyRecord, ShapeId } from './types.js';
 import { MutationPermissionError } from './mutation-policy.js';
 
+// Initialize Zod before constructing schemas so it skips its eval probe under strict CSP.
+z.config({ jitless: true });
+
 const recordSchema = z.record(z.string(), z.unknown());
 const finiteNumber = z.number().finite();
 

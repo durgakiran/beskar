@@ -60,37 +60,9 @@ func (service *whiteboardServiceV2) checkpointTransaction(ctx context.Context, i
 		defer cancel()
 		_ = tx.Rollback(cleanup)
 	}()
-	if _, err = tx.Exec(ctx, whiteboardV2SetLockTimeout); err != nil {
-		return result, err
-	}
-	// Lock order: space, board/page, draft. Shared locks stabilize membership and
-	// lifecycle state; the exclusive draft lock serializes append and replay.
-	var archived, deleted bool
-	err = tx.QueryRow(ctx, whiteboardV2LockSpace, input.SpaceID).Scan(&archived, &deleted)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return result, errWhiteboardV2BoardNotFound
-	}
+	draft, err := lockCheckpointDraft(ctx, tx, input)
 	if err != nil {
 		return result, err
-	}
-	var pageID int64
-	err = tx.QueryRow(ctx, whiteboardV2CheckpointLockBoard, input.PageID, input.SpaceID).Scan(&pageID)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return result, errWhiteboardV2BoardNotFound
-	}
-	if err != nil {
-		return result, err
-	}
-	var head, generation int64
-	err = tx.QueryRow(ctx, whiteboardV2CheckpointLockDraft, input.PageID).Scan(&head, &generation)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return result, errWhiteboardV2DraftMissing
-	}
-	if err != nil {
-		return result, err
-	}
-	if generation != input.RestoreGeneration {
-		return result, errWhiteboardRestored
 	}
 	hash := whiteboardCheckpointV2Hash(input)
 	var storedHash string
@@ -106,34 +78,82 @@ func (service *whiteboardServiceV2) checkpointTransaction(ctx context.Context, i
 	if !errors.Is(err, pgx.ErrNoRows) {
 		return result, err
 	}
-	if deleted {
+	if draft.deleted {
 		return result, errWhiteboardV2BoardNotFound
 	}
-	if archived {
+	if draft.archived {
 		return result, errWhiteboardV2Archived
 	}
-	if head < 0 || head == math.MaxInt64 {
-		return result, errors.New("invalid or exhausted draft sequence")
-	}
-	result.UpdateID, result.Sequence = uuid.New(), head+1
-	if _, err = tx.Exec(ctx, whiteboardV2CheckpointInsert, result.UpdateID, input.PageID, result.Sequence,
-		input.ActorID, input.IdempotencyKey, input.UpdateBytes, input.UpdateEncoding, hash); err != nil {
+	if err = appendCheckpoint(ctx, tx, input, draft.head, hash, &result); err != nil {
 		return result, err
-	}
-	if input.Title != nil {
-		if _, err = tx.Exec(ctx, whiteboardV2InsertTitle, input.PageID, result.Sequence, *input.Title); err != nil {
-			return result, err
-		}
-	}
-	tag, err := tx.Exec(ctx, whiteboardV2CheckpointAdvance, input.PageID, result.Sequence, input.ActorID)
-	if err != nil {
-		return result, err
-	}
-	if tag.RowsAffected() != 1 {
-		return result, errWhiteboardV2DraftMissing
 	}
 	if err = tx.Commit(ctx); err != nil {
 		return result, err
 	}
 	return result, nil
+}
+
+type checkpointDraftV2 struct {
+	head              int64
+	archived, deleted bool
+}
+
+func lockCheckpointDraft(ctx context.Context, tx pgx.Tx, input whiteboardCheckpointV2Input) (checkpointDraftV2, error) {
+	var draft checkpointDraftV2
+	if _, err := tx.Exec(ctx, whiteboardV2SetLockTimeout); err != nil {
+		return draft, err
+	}
+	// Lock order: space, board/page, draft. Shared locks stabilize membership and
+	// lifecycle state; the exclusive draft lock serializes append and replay.
+	err := tx.QueryRow(ctx, whiteboardV2LockSpace, input.SpaceID).Scan(&draft.archived, &draft.deleted)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return draft, errWhiteboardV2BoardNotFound
+	}
+	if err != nil {
+		return draft, err
+	}
+	var pageID int64
+	err = tx.QueryRow(ctx, whiteboardV2CheckpointLockBoard, input.PageID, input.SpaceID).Scan(&pageID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return draft, errWhiteboardV2BoardNotFound
+	}
+	if err != nil {
+		return draft, err
+	}
+	var generation int64
+	err = tx.QueryRow(ctx, whiteboardV2CheckpointLockDraft, input.PageID).Scan(&draft.head, &generation)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return draft, errWhiteboardV2DraftMissing
+	}
+	if err != nil {
+		return draft, err
+	}
+	if generation != input.RestoreGeneration {
+		return draft, errWhiteboardRestored
+	}
+	return draft, nil
+}
+
+func appendCheckpoint(ctx context.Context, tx pgx.Tx, input whiteboardCheckpointV2Input, head int64, hash string, result *whiteboardCheckpointV2Result) error {
+	if head < 0 || head == math.MaxInt64 {
+		return errors.New("invalid or exhausted draft sequence")
+	}
+	result.UpdateID, result.Sequence = uuid.New(), head+1
+	if _, err := tx.Exec(ctx, whiteboardV2CheckpointInsert, result.UpdateID, input.PageID, result.Sequence,
+		input.ActorID, input.IdempotencyKey, input.UpdateBytes, input.UpdateEncoding, hash); err != nil {
+		return err
+	}
+	if input.Title != nil {
+		if _, err := tx.Exec(ctx, whiteboardV2InsertTitle, input.PageID, result.Sequence, *input.Title); err != nil {
+			return err
+		}
+	}
+	tag, err := tx.Exec(ctx, whiteboardV2CheckpointAdvance, input.PageID, result.Sequence, input.ActorID)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() != 1 {
+		return errWhiteboardV2DraftMissing
+	}
+	return nil
 }

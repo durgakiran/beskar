@@ -16,25 +16,25 @@ import { Glideboard, createPublishPreview, safeAwarenessEntries, type Glideboard
 import { getSignalingUrl } from 'app/core/signaling';
 import { getApiV1Base } from 'app/core/http/apiBase';
 import { useWhiteboardSwipeGuard } from 'app/core/whiteboard/useWhiteboardSwipeGuard';
-import { YjsDurabilityCoordinator } from 'app/core/whiteboard/durability/YjsDurabilityCoordinator';
+import { IncrementalCheckpointSession, SERVER_REPLAY_ORIGIN } from 'app/core/whiteboard/v2/IncrementalCheckpointSession';
+import { IncrementalRecoveryJournal } from 'app/core/whiteboard/v2/IncrementalRecoveryJournal';
 import { IndexedDbYjsRecoveryAdapter } from 'app/core/whiteboard/durability/IndexedDbYjsRecoveryAdapter';
-import type { DurabilityStatus } from 'app/core/whiteboard/durability/types';
-import { CheckpointAdapter } from 'app/core/whiteboard/v2/CheckpointAdapter';
+import type { DurabilityStatus, RecoveryWrite } from 'app/core/whiteboard/durability/types';
 import { WhiteboardAssetHttpAdapterV2 } from 'app/core/whiteboard/v2/WhiteboardAssetHttpAdapterV2';
-import { boardUrl, digest, jsonRequest, post, sequence, WhiteboardApiError, type PublishedBoard } from 'app/core/whiteboard/v2/api';
+import { boardUrl, jsonRequest, post, sequence, WhiteboardApiError, type PublishedBoard } from 'app/core/whiteboard/v2/api';
 
-type Rename = { title: string; key: string; update?: string; vector?: Uint8Array };
+type Rename = { title: string; key: string };
 interface Session {
     doc: Y.Doc;
     signal: AbortSignal;
     provider: WebrtcProvider;
-    durability: YjsDurabilityCoordinator;
+    durability: IncrementalCheckpointSession;
     user: { id: string; name: string; color: string };
     collaboration: GlideboardCollaborationConfig;
     assetStorage: WhiteboardAssetHttpAdapterV2;
     assetResolutionContext: { documentId: string };
     sync: () => ReturnType<typeof syncDraft>;
-    saveTitle: () => Promise<void>;
+    saveTitle: (force?: boolean) => Promise<void>;
 }
 
 export default function WhiteboardEditorV2({ slug }: { slug: string[] }) {
@@ -66,6 +66,8 @@ export default function WhiteboardEditorV2({ slug }: { slug: string[] }) {
         let active = true;
         let owned: Session | null = null;
         let recovery: IndexedDbYjsRecoveryAdapter | null = null;
+        let journal: IncrementalRecoveryJournal | null = null;
+        let durability: IncrementalCheckpointSession | null = null;
         let doc: Y.Doc | null = null;
         let timer: ReturnType<typeof setInterval> | undefined;
         let unsubscribe: (() => void) | undefined;
@@ -96,14 +98,33 @@ export default function WhiteboardEditorV2({ slug }: { slug: string[] }) {
             const storedTitle = localStorage.getItem(titleStorage.current);
             pendingTitle.current = storedTitle ? { title: JSON.parse(storedTitle).title, key: crypto.randomUUID() } : null;
             setTitlePending(Boolean(pendingTitle.current));
+            journal = new IncrementalRecoveryJournal(sessionKey);
+            const recovered = await journal.read();
+            if (!active) return;
+            for (const update of recovered) Y.applyUpdate(doc, update.bytes);
+            let announceSaved: (saved: string) => void = () => {};
+            let legacy: RecoveryWrite | null;
             recovery = new IndexedDbYjsRecoveryAdapter(sessionKey, page);
-            await recovery.hydrate(doc);
+            const legacyRecovery = recovery;
+            const incremental = new IncrementalCheckpointSession({
+                doc, base, draftId: page, restoreGeneration: generation, durableRevision: loaded.manifest.headSequence,
+                journal, recovered, signal: abort.signal, onSaved: saved => announceSaved(saved),
+                onDrained: async () => {
+                    if (legacy) {
+                        await legacyRecovery.clearThrough(legacy);
+                        legacy = null;
+                    }
+                },
+            });
+            durability = incremental;
+            // The journal listens while older recovery snapshots are applied,
+            // so their actual changes enter the new save queue before cleanup.
+            legacy = await recovery.hydrate(doc);
             if (!active) return;
             const metadata = doc.getMap('glideboard-meta');
             let sharedTitle = whiteboardTitle(doc, loaded.manifest.title, `${room}:${loaded.manifest.baseSnapshot?.id ?? loaded.manifest.headSequence}`);
             if (pendingTitle.current) updateTitle(sharedTitle, pendingTitle.current.title, 'whiteboard-title-recovery');
             setTitleText(sharedTitle);
-            let titleVector = Y.encodeStateVectorFromUpdate(loaded.state);
             const onTitleChange = () => {
                 // A peer's bootstrap may replace the nested map entry. Never
                 // save edits/removal events from the superseded text object.
@@ -132,39 +153,31 @@ export default function WhiteboardEditorV2({ slug }: { slug: string[] }) {
             // Canvas autosave may have persisted the CRDT before the separate
             // title metadata request completed in a tab that subsequently closed.
             if (sharedTitle.toString().trim() !== loaded.manifest.title) onTitleChange();
-            const acknowledgedStateDigest = await digest(loaded.state);
-            if (!active || abort.signal.aborted) return;
             const provider = new WebrtcProvider(room, doc, { signaling: [getSignalingUrl()], filterBcConns: false });
             let announcedSequence = sequence(loaded.manifest.headSequence);
-            const announceSaved = (saved: string) => {
+            announceSaved = (saved: string) => {
                 if (!active) return;
                 announcedSequence = sequence(saved) > announcedSequence ? sequence(saved) : announcedSequence;
                 provider.awareness.setLocalStateField('savedSequence', announcedSequence.toString());
             };
-            const durability = new YjsDurabilityCoordinator({ sessionKey, draftId: page, clientId: tabId, debounceMs: 5000,
-                durableRevision: loaded.manifest.headSequence, acknowledgedStateDigest,
-                persistence: new CheckpointAdapter(base, loaded.state, generation, announceSaved), recovery });
-
             let archived = Boolean(spaceDetails.archivedAt);
             let paused = archived;
             if (archived) { provider.disconnect(); setAccessDenied(true); setSyncError('This space is archived and read-only.'); }
             let verified = loaded;
             let syncing: ReturnType<typeof syncDraft> | null = null;
             let renaming: Promise<void> | null = null;
-            const saveTitle = (): Promise<void> => {
-                if (renaming) return renaming.then(() => saveTitle());
+            const saveTitle = (force = false): Promise<void> => {
+                if (renaming) return renaming.then(() => saveTitle(force));
                 const change = pendingTitle.current;
                 if (!change) return Promise.resolve();
+                if (!force && incremental.getSnapshot().phase !== 'clean') return Promise.resolve();
                 const normalized = change.title.trim();
                 if (!normalized || [...normalized].length > 255 || normalized.includes('\0')) return Promise.reject(new Error('Title must contain 1–255 characters.'));
-                if (!change.update) {
-                    const update = Y.encodeStateAsUpdate(doc!, titleVector);
-                    if (update.length > 1024 * 1024) return Promise.reject(new Error('Title checkpoint exceeds the 1 MiB limit. Keep this tab open until the board is saved.'));
-                    change.update = uint8ArrayToBase64(update);
-                    change.vector = Y.encodeStateVector(doc!);
-                }
-                renaming = post<{ sequence: string }>(`${base}/checkpoint`, { updateEncoding: 'yjs-update-v1', update: change.update, title: normalized, restoreGeneration: generation }, change.key, abort.signal).then(receipt => {
-                    titleVector = change.vector!;
+                // Background title saves wait for the journal's scheduled checkpoint.
+                renaming = incremental.flush().then(() => post<{ sequence: string }>(`${base}/checkpoint`, {
+                    updateEncoding: 'yjs-update-v1', update: uint8ArrayToBase64(new Uint8Array([0, 0])),
+                    title: normalized, restoreGeneration: generation,
+                }, change.key, abort.signal)).then(receipt => {
                     if (pendingTitle.current === change) {
                         pendingTitle.current = null;
                         localStorage.removeItem(titleStorage.current);
@@ -173,7 +186,7 @@ export default function WhiteboardEditorV2({ slug }: { slug: string[] }) {
                     provider.awareness.setLocalStateField('titleSequence', receipt.sequence);
                     announceSaved(receipt.sequence);
                 }).finally(() => { renaming = null; });
-                return renaming.then(() => pendingTitle.current ? saveTitle() : undefined);
+                return renaming.then(() => pendingTitle.current ? saveTitle(force) : undefined);
             };
             const sync = () => {
                 if (syncing) return syncing;
@@ -192,11 +205,15 @@ export default function WhiteboardEditorV2({ slug }: { slug: string[] }) {
                         paused = archived;
                         setAccessDenied(paused);
                         if (paused) provider.disconnect();
-                        else { provider.connect(); void durability.retryPending().catch(() => {}); }
+                        else { provider.connect(); void incremental.retryPending().catch(() => {}); }
                     }
                     setSyncError(archived ? 'This space is archived and read-only.' : '');
-                    if (next.state !== verified.state) Y.applyUpdate(doc!, next.state, 'v2-server-replay');
-                    titleVector = Y.encodeStateVectorFromUpdate(next.state);
+                    if (next.state !== verified.state) {
+                        // If a peer update had missing dependencies, applying
+                        // the server state can also integrate that unsaved update.
+                        const unresolved = doc!.store.pendingStructs || doc!.store.pendingDs;
+                        Y.applyUpdate(doc!, next.state, unresolved ? undefined : SERVER_REPLAY_ORIGIN);
+                    }
                     verified = next;
                     return next;
                 }).catch(e => {
@@ -226,12 +243,12 @@ export default function WhiteboardEditorV2({ slug }: { slug: string[] }) {
             provider.awareness.setLocalStateField('user', collaborationUser);
             const boardIdentity = `v2:${space}:${page}`;
             const assetStorage = new WhiteboardAssetHttpAdapterV2({ spaceId: space, pageId: page, signal: abort.signal });
-            owned = { doc, signal: abort.signal, provider, durability, user: collaborationUser, sync, saveTitle,
+            owned = { doc, signal: abort.signal, provider, durability: incremental, user: collaborationUser, sync, saveTitle,
                 assetStorage, assetResolutionContext: { documentId: boardIdentity },
-                collaboration: { doc, provider: boardProvider, user: collaborationUser, boardIdentity, bootstrapRevision: loaded.manifest.headSequence } };
-            unsubscribe = durability.subscribeStatus(() => {
+                collaboration: { doc, provider: boardProvider, user: collaborationUser, boardIdentity, bootstrapRevision: loaded.manifest.headSequence, checkpointOnDemand: true } };
+            unsubscribe = incremental.subscribeStatus(() => {
                 if (!active) return;
-                const next = durability.getSnapshot();
+                const next = incremental.getSnapshot();
                 setStatus(next);
                 if (next.error instanceof WhiteboardApiError && ([401, 403, 404].includes(next.error.status) || ['SPACE_ARCHIVED', 'WHITEBOARD_RESTORED'].includes(next.error.code))) {
                     paused = true; provider.disconnect(); setAccessDenied(true);
@@ -259,7 +276,8 @@ export default function WhiteboardEditorV2({ slug }: { slug: string[] }) {
                     visiblePeerNames = names;
                     setPeers(names);
                 }
-                const newer = [...states.values()].some(value => {
+                const newer = [...states.entries()].some(([client, value]) => {
+                    if (client === provider.awareness.clientID) return false;
                     const saved = value.savedSequence ?? value.titleSequence;
                     if (typeof saved !== 'string') return false;
                     try { return sequence(saved) > sequence(verified.manifest.headSequence); } catch { return false; }
@@ -287,7 +305,7 @@ export default function WhiteboardEditorV2({ slug }: { slug: string[] }) {
             timer = setInterval(() => {
                 if (document.visibilityState === 'visible') backgroundSync();
             }, 60000);
-            if (active) { activeSession.current = owned; setSession(owned); setStatus(durability.getSnapshot()); }
+            if (active) { activeSession.current = owned; setSession(owned); setStatus(incremental.getSnapshot()); }
         };
         void start().catch(e => { if (active) setError(e.message); });
         return () => {
@@ -297,7 +315,13 @@ export default function WhiteboardEditorV2({ slug }: { slug: string[] }) {
             owned?.provider.disconnect();
             owned?.provider.destroy();
             owned?.provider.awareness.destroy();
-            void (owned ? owned.durability.dispose('cancel') : recovery?.dispose());
+            const closeLocal = async () => {
+                try {
+                    if (durability) await durability.dispose();
+                    else await journal?.close();
+                } finally { await recovery?.dispose(); }
+            };
+            void closeLocal().catch(() => {});
             doc?.destroy();
         };
     }, [base, page, space, loadAttempt]);
@@ -308,11 +332,15 @@ export default function WhiteboardEditorV2({ slug }: { slug: string[] }) {
     }, [session, board]);
     useEffect(() => {
         const unload = (event: BeforeUnloadEvent) => {
-            if (status?.phase !== 'clean' || pendingTitle.current || (board?.getPendingAssetCount() ?? 0) > 0) { event.preventDefault(); event.returnValue = ''; }
+            if (session?.durability.getSnapshot().phase !== 'clean' || pendingTitle.current
+                || (board?.getPendingAssetCount() ?? 0) > 0) {
+                event.preventDefault();
+                event.returnValue = '';
+            }
         };
         const reconnect = () => {
             if (!session || session.signal.aborted || activeSession.current !== session || !navigator.onLine || busyRef.current) return;
-            void Promise.all([session.saveTitle(), session.sync()]).catch(e => {
+            void Promise.all([session.saveTitle(), session.sync(), session.durability.retryPending()]).catch(e => {
                 if (!session.signal.aborted && activeSession.current === session) setSyncError(e.message);
             });
         };
@@ -322,7 +350,7 @@ export default function WhiteboardEditorV2({ slug }: { slug: string[] }) {
         window.addEventListener('focus', reconnect);
         document.addEventListener('visibilitychange', visible);
         return () => { window.removeEventListener('beforeunload', unload); window.removeEventListener('online', reconnect); window.removeEventListener('focus', reconnect); document.removeEventListener('visibilitychange', visible); };
-    }, [status, session, board]);
+    }, [session, board]);
 
     const run = async (publish: boolean) => {
         if (!session || !board || busyRef.current) return;
@@ -353,8 +381,8 @@ export default function WhiteboardEditorV2({ slug }: { slug: string[] }) {
             requireCurrentSession();
             await board.settleActiveEdit('commit');
             requireCurrentSession();
-            await session.saveTitle();
-            await session.durability.flush(await board.captureProjectionTarget());
+            await session.saveTitle(true);
+            await session.durability.flush();
             requireCurrentSession();
             if (!publish) { navigate(`/space/${space}/view/${page}`); return; }
             // Other editors may have saved changes this tab has not seen yet. Preview a verified server boundary.
@@ -369,7 +397,7 @@ export default function WhiteboardEditorV2({ slug }: { slug: string[] }) {
                 requireCurrentSession();
                 if (!matchesServer) {
                     publishMismatch = 'server';
-                    await session.durability.flush(target);
+                    await session.durability.flush();
                     continue;
                 }
                 const preview = await createPublishPreview(board, { target });

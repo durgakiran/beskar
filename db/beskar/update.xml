@@ -34,6 +34,7 @@
     <include file="updates/whiteboard_assets.xml" />
     <include file="updates/whiteboard_creation.xml" />
     <include file="updates/whiteboard_updates.xml" />
+    <include file="updates/whiteboard_checkpoint_uploads.xml" relativeToChangelogFile="true" />
     <include file="updates/whiteboard_draft_replay.xml" />
     <include file="updates/whiteboard_publication.xml" />
     <include file="updates/whiteboard_previews.xml" />

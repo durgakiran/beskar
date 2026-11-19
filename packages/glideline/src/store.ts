@@ -436,6 +436,7 @@ export class GlideStore {
   private _listeners = new Set<StoreChangeListener>();
   private _commitParticipants = new Set<StoreCommitParticipant>();
   private _recordGenerations = new Map<string, number>();
+  private _recordCount = 1; // The constructor creates the default page.
   private _changeSequence = 0;
   private _preparingCommit = false;
   private _fatalIntegrityError: StoreFatalIntegrityError | null = null;
@@ -776,34 +777,45 @@ export class GlideStore {
     }
     if (deltas.length === 0) return null;
 
+    const onlyDelta = deltas.length === 1 ? deltas[0] : undefined;
+    // A new shape on an existing page cannot invalidate existing references:
+    // nothing in the committed graph can point to an ID that did not exist.
+    const pageShapeInsert = this.schema.frozen && onlyDelta?.before === null
+      && onlyDelta.after?.['kind'] === 'shape'
+      && this.get(String(onlyDelta.after['parentId']))?.['kind'] === 'page'
+      ? onlyDelta.after : null;
+
     // All fallible work happens against the candidate snapshot. Store writes
     // from validators and geometry hooks are rejected as impure re-entry.
     let derived: DerivedState;
     this._preparingCommit = true;
     try {
-      const graphMayHaveChanged = deltas.some(delta => {
+      if (pageShapeInsert) {
+        this.schema.validatePageShapeInsert(
+          pageShapeInsert as AnyRecord,
+          this._recordCount + 1,
+          id => this.get(id) as AnyRecord | undefined,
+        );
+      } else if (deltas.some(delta => {
         if (delta.before === null || delta.after === null) return true;
         const referencePaths = new Set([
           ...this.schema.getReferenceDescriptors(delta.before as AnyRecord).map(reference => reference.path),
           ...this.schema.getReferenceDescriptors(delta.after as AnyRecord).map(reference => reference.path),
         ]);
         return delta.changedPaths.some(path =>
-          /^\/(parentId|pageId|assetId|fromId|toId)(\/|$)/.test(path)
+          /^\/(parentId|pageId|assetId|fromId|toId|schemaVersion)(\/|$)/.test(path)
           || (this.schema.isBindingRecord(delta.after as AnyRecord) && /^\/props(\/|$)/.test(path))
           || Array.from(referencePaths).some(referencePath => pointerOverlaps(path, referencePath)),
         );
-      });
-      if (graphMayHaveChanged) {
-        // Existing committed records are already valid, so a non-structural
-        // update only needs its changed records revalidated. Relationship
-        // edits, inserts, and deletes validate the complete final graph.
+      })) {
+        // A change to existing relationships can affect untouched records.
         this.schema.validateCandidate(this._candidateValues() as unknown as AnyRecord[]);
       } else {
         for (const delta of deltas) {
           if (delta.after) this.schema.validateRecord(delta.after as AnyRecord);
         }
       }
-      derived = this._buildDerivedState(deltas);
+      derived = this._buildDerivedState(deltas, pageShapeInsert);
     } finally {
       this._preparingCommit = false;
     }
@@ -847,6 +859,7 @@ export class GlideStore {
         canonicalPublicationStarted = true;
         this._applyDerivedState(derived);
         for (const delta of deltas) {
+          this._recordCount += Number(delta.after !== null) - Number(delta.before !== null);
           this._recordGenerations.set(delta.id, delta.afterGeneration);
           if (changes.scope === 'ephemeral') {
             if (delta.after === null) this._ephemeralIds.delete(delta.id);
@@ -913,7 +926,7 @@ export class GlideStore {
     return writable;
   }
 
-  private _buildDerivedState(deltas: readonly RecordDelta[]): DerivedState {
+  private _buildDerivedState(deltas: readonly RecordDelta[], pageShapeInsert: StoreRecord | null): DerivedState {
     const treeRemovals: RBushEntry[] = [];
     const treeInsertions: RBushEntry[] = [];
     const bindingsByFrom = new Map<ShapeId, Set<BindingId>>();
@@ -926,6 +939,7 @@ export class GlideStore {
       delta.before === null
       || delta.after === null
       || delta.before?.['parentId'] !== delta.after?.['parentId']
+      || delta.before?.['schemaVersion'] !== delta.after?.['schemaVersion']
       || delta.before?.['kind'] === 'page'
       || delta.after?.['kind'] === 'page');
     let replaceShapesByPage: Map<PageId, Set<ShapeId>> | null = null;
@@ -1038,7 +1052,12 @@ export class GlideStore {
       }
     }
 
-    if (hierarchyChanged) {
+    if (pageShapeInsert && !this._signals.has(String(pageShapeInsert['id']))) {
+      if (this.schema.isRenderableShape(pageShapeInsert as AnyRecord)) {
+        mutableSet(this._shapesByPage, shapesByPage, pageShapeInsert['parentId'] as PageId)
+          .add(pageShapeInsert['id'] as ShapeId);
+      }
+    } else if (hierarchyChanged) {
       replaceShapesByPage = this._deriveShapesByPage(this._candidateValues());
     }
 

@@ -14,24 +14,20 @@ function intersects(a: Box2d, b: Box2d): boolean {
   return a.minX <= b.maxX && a.maxX >= b.minX && a.minY <= b.maxY && a.maxY >= b.minY;
 }
 
-function readBoardItems(editor: GlideEditor): BoardItem[] {
-  const items: BoardItem[] = [];
-  for (const shape of editor.getShapes(true)) {
-    if (shape.type === 'group') continue;
-    const bounds = editor.getShapeVisualWorldBounds(shape);
-    let { minX, minY, maxX, maxY } = bounds;
-    for (const frame of editor.getClippingFrameAncestors(shape.id as ShapeId)) {
-      const clip = editor.getShapeWorldBounds(frame);
-      minX = Math.max(minX, clip.minX);
-      minY = Math.max(minY, clip.minY);
-      maxX = Math.min(maxX, clip.maxX);
-      maxY = Math.min(maxY, clip.maxY);
-    }
-    if (maxX >= minX && maxY >= minY) {
-      items.push({ shape, bounds: makeBox(minX, minY, maxX - minX, maxY - minY) });
-    }
+function readBoardItem(editor: GlideEditor, shape: GlideShape): BoardItem | undefined {
+  if (shape.type === 'group') return undefined;
+  let { minX, minY, maxX, maxY } = editor.getShapeVisualWorldBounds(shape);
+  for (const frame of editor.getClippingFrameAncestors(shape.id as ShapeId)) {
+    const clip = editor.getShapeWorldBounds(frame);
+    minX = Math.max(minX, clip.minX);
+    minY = Math.max(minY, clip.minY);
+    maxX = Math.min(maxX, clip.maxX);
+    maxY = Math.min(maxY, clip.maxY);
   }
-  return items;
+  if (maxX >= minX && maxY >= minY) {
+    return { shape, bounds: makeBox(minX, minY, maxX - minX, maxY - minY) };
+  }
+  return undefined;
 }
 
 function distanceToContent(box: Box2d, x: number, y: number): number {
@@ -129,9 +125,18 @@ export function BoardNavigation({ viewportRevision, pointerEditing }: { viewport
   // Document previews can change on every pointer move. Skip intermediate
   // preview revisions while the minimap is hidden.
   const contentVersion = editing ? editor.store.getVersionSignal().peek() : documentVersion;
-  const items = useMemo(() => readBoardItems(editor), [editor, pageId, contentVersion, editing]);
   const viewport = useMemo(() => editor.getViewportBounds(), [editor, camera, viewportRevision]);
   const showMinimap = useMinimapVisibility(editor, editing);
+  const needsBoardItems = useMemo(() => showMinimap
+    || !editor.getShapesInBox(viewport, { ordered: false }).some(shape => {
+      const item = readBoardItem(editor, shape);
+      return item !== undefined && intersects(item.bounds, viewport);
+    }), [editor, pageId, contentVersion, editing, viewport, showMinimap]);
+  // When visible content is confirmed and the minimap is hidden, neither
+  // navigation control needs the geometry for the rest of the page.
+  const items = useMemo(() => needsBoardItems
+    ? editor.getShapes(true).map(shape => readBoardItem(editor, shape)).filter(item => item !== undefined)
+    : [], [editor, pageId, contentVersion, editing, needsBoardItems]);
 
   if (viewport.w <= 0 || viewport.h <= 0) return null;
   const showBackToContent = items.length > 0 && !items.some(({ bounds }) => intersects(bounds, viewport));

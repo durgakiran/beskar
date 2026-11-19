@@ -44,6 +44,9 @@ func RouterV2() *chi.Mux {
 	draft.register(r)
 	publication := whiteboardPublishControllerV2{user: core.GetUserInfo, permission: core.ValidateUserPagePermission, service: service}
 	publication.register(r)
+	uploads := whiteboardCheckpointUploadControllerV2{identity: publication, service: service}
+	r.Get("/space/{spaceId}/whiteboard/{pageId}/checkpoint-uploads/{uploadId}", uploads.handleUpload)
+	r.Put("/space/{spaceId}/whiteboard/{pageId}/checkpoint-uploads/{uploadId}", uploads.handleUpload)
 	migration := whiteboardMigrationControllerV2{identity: publication, service: service}
 	migration.register(r)
 	history := whiteboardHistoryControllerV2{identity: publication, service: service}

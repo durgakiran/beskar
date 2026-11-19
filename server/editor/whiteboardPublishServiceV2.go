@@ -110,7 +110,7 @@ func (service *whiteboardServiceV2) PublishWhiteboard(ctx context.Context, in wh
 			rows.Close()
 			return result, err
 		}
-		if seq != last+1 || encoding != whiteboardUpdateEncodingV1 || len(update) == 0 || len(update) > whiteboardCheckpointV2MaxUpdate {
+		if seq != last+1 || encoding != whiteboardUpdateEncodingV1 || len(update) == 0 || len(update) > whiteboardCheckpointV2MaxAssembled {
 			rows.Close()
 			return result, errWhiteboardPublishState
 		}

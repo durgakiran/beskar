@@ -26,6 +26,7 @@ interface CoordinatorOptions {
     recovery: YjsRecoveryAdapter;
     resolveConflict?: (remoteState: Uint8Array, localState: Uint8Array) => Promise<ProjectionTarget>;
     debounceMs?: number;
+    maxSaveDelayMs?: number;
     retryBaseMs?: number;
     retryMaxMs?: number;
     random?: () => number;
@@ -73,6 +74,8 @@ export class YjsDurabilityCoordinator {
     private readonly recovery: YjsRecoveryAdapter;
     private readonly resolveConflict?: CoordinatorOptions["resolveConflict"];
     private readonly debounceMs: number;
+    private readonly maxSaveDelayMs: number;
+    private dirtySince: number | null = null;
     private readonly retryBaseMs: number;
     private readonly retryMaxMs: number;
     private readonly random: () => number;
@@ -81,7 +84,9 @@ export class YjsDurabilityCoordinator {
     private status: DurabilityStatus;
     private readonly statusListeners = new Set<StatusListener>();
     private readonly records = new Map<string, GenerationRecord>();
-    private readonly acknowledgedStates = new Map<string, Uint8Array>();
+    private readonly capturedRecords = new WeakMap<ProjectionTarget, GenerationRecord>();
+    private readonly acknowledgedCheckpoints = new WeakMap<DurabilityCheckpoint, GenerationRecord>();
+    private acknowledgedRecord: GenerationRecord | null = null;
     private latestRecord: GenerationRecord | null = null;
     private generation = 0;
     private initialProjectionHandled = false;
@@ -93,6 +98,7 @@ export class YjsDurabilityCoordinator {
     private abortController: AbortController | null = null;
     private unsubscribeCheckpoints: (() => void) | null = null;
     private processing: Promise<void> = Promise.resolve();
+    private readonly localWrites = new Set<Promise<boolean>>();
     private disposed = false;
 
     constructor(options: CoordinatorOptions) {
@@ -104,6 +110,7 @@ export class YjsDurabilityCoordinator {
         this.recovery = options.recovery;
         this.resolveConflict = options.resolveConflict;
         this.debounceMs = options.debounceMs ?? 750;
+        this.maxSaveDelayMs = options.maxSaveDelayMs ?? Infinity;
         this.retryBaseMs = options.retryBaseMs ?? 500;
         this.retryMaxMs = options.retryMaxMs ?? 10_000;
         this.random = options.random ?? Math.random;
@@ -173,7 +180,12 @@ export class YjsDurabilityCoordinator {
                 throw error;
             }
 
-            if (this.records.has(targetKey(target))) return;
+            const known = this.findRecord(target);
+            if (known) {
+                this.capturedRecords.set(state.target, known);
+                return;
+            }
+            if (this.latestRecord && target.yjs.transactionSequence < this.latestRecord.target.yjs.transactionSequence) return;
 
             const isInitialProjection = !this.initialProjectionHandled;
             this.initialProjectionHandled = true;
@@ -192,7 +204,8 @@ export class YjsDurabilityCoordinator {
                 });
                 this.records.set(targetKey(target), write);
                 this.latestRecord = write;
-                this.acknowledgedStates.set(targetKey(target), encodedState.slice());
+                this.acknowledgedRecord = write;
+                this.capturedRecords.set(state.target, write);
                 this.setStatus({
                     phase: "clean",
                     acknowledgedYjsCheckpoint: {
@@ -211,8 +224,9 @@ export class YjsDurabilityCoordinator {
                 target,
                 encodedState,
             });
+            const { sessionKey, draftId } = write;
             const localPromise = this.recovery.persist(write).then(() => {
-                if (this.disposed || write.sessionKey !== this.sessionKey || write.draftId !== this.draftId) return true;
+                if (this.disposed || sessionKey !== this.sessionKey || draftId !== this.draftId) return true;
                 this.setStatus({
                     localRecovery: "acknowledged",
                     localCheckpointGeneration: Math.max(this.status.localCheckpointGeneration ?? 0, generation),
@@ -222,9 +236,12 @@ export class YjsDurabilityCoordinator {
                 if (!this.disposed) this.setStatus({ phase: "error", localRecovery: "error", error: asError(error) });
                 return false;
             });
+            this.trackLocalWrite(localPromise);
             const record: GenerationRecord = Object.freeze({ ...write, localPromise, requestId: requestId() });
             this.records.set(targetKey(target), record);
+            this.capturedRecords.set(state.target, record);
             this.latestRecord = record;
+            this.trimRecords();
             this.retryAttempt = 0;
             this.setStatus({
                 phase: "dirty",
@@ -233,7 +250,8 @@ export class YjsDurabilityCoordinator {
                 error: undefined,
                 remoteRevision: undefined,
             });
-            this.scheduleAutomaticSave(this.debounceMs);
+            this.dirtySince ??= Date.now();
+            this.scheduleAutomaticSave(Math.min(this.debounceMs, this.maxSaveDelayMs - (Date.now() - this.dirtySince)));
         }).catch(error => {
             if (!this.disposed && this.status.phase !== "quarantined") {
                 this.setStatus({ phase: "error", error: asError(error) });
@@ -258,7 +276,7 @@ export class YjsDurabilityCoordinator {
         }
         this.cancelTimer();
         await this.processing;
-        const record = this.records.get(targetKey(target));
+        const record = this.findRecord(target);
         if (!record) throw new DurabilityTargetError("The requested Glideboard projection target was not captured by this durability session.");
         if (record.generation < this.serverAcknowledgedGeneration) {
             throw new DurabilityTargetError("The requested projection target has been superseded by a newer server revision.");
@@ -272,18 +290,15 @@ export class YjsDurabilityCoordinator {
         await this.processing;
         this.assertActive();
         if (this.projectionQuarantined) throw new DurabilityTargetError("Cannot read a quarantined Yjs projection.");
-        const record = this.records.get(targetKey(target));
+        const record = this.findRecord(target);
         if (!record) throw new DurabilityTargetError("The requested projection target was not captured in this session.");
         return record.encodedState.slice();
     }
 
     getAcknowledgedState(checkpoint: DurabilityCheckpoint): Uint8Array {
-        const state = this.acknowledgedStates.get(targetKey({
-            storeRevision: checkpoint.storeRevision,
-            yjs: checkpoint.yjs,
-        }));
-        if (!state) throw new DurabilityTargetError("No acknowledged encoded state exists for this checkpoint.");
-        return state.slice();
+        const record = this.findAcknowledgedRecord(checkpoint);
+        if (!record) throw new DurabilityTargetError("No acknowledged encoded state exists for this checkpoint.");
+        return record.encodedState.slice();
     }
 
     async advanceDraft(
@@ -295,16 +310,14 @@ export class YjsDurabilityCoordinator {
         this.abortController?.abort();
         await this.processing;
         await this.inFlight?.catch(() => {});
+        await Promise.all(this.localWrites);
         this.cancelTimer();
-        const oldTarget = { storeRevision: baseline.storeRevision, yjs: baseline.yjs };
-        const encodedState = this.acknowledgedStates.get(targetKey(oldTarget));
-        if (!encodedState) throw new DurabilityTargetError("Cannot advance a draft without its acknowledged baseline state.");
-        const baselineRecord = this.records.get(targetKey(oldTarget));
-        if (!baselineRecord) throw new DurabilityTargetError("Cannot locate the published generation in this durability session.");
-        const projectedAfterPublish = [...this.records.values()]
-            .filter(record => record.generation > baselineRecord.generation)
-            .sort((left, right) => left.generation - right.generation)
-            .map(record => ({ target: record.target, encodedState: record.encodedState.slice() }));
+        const baselineRecord = this.findAcknowledgedRecord(baseline);
+        if (!baselineRecord) throw new DurabilityTargetError("Cannot advance a draft without its acknowledged baseline state.");
+        const latest = this.latestRecord;
+        const projectedAfterPublish = latest && latest.generation > baselineRecord.generation
+            ? { target: latest.target, encodedState: latest.encodedState }
+            : null;
         this.sessionKey = next.sessionKey;
         this.draftId = next.draftId;
         this.durableRevision = next.durableRevision;
@@ -313,7 +326,8 @@ export class YjsDurabilityCoordinator {
         this.initialProjectionHandled = true;
         this.serverAcknowledgedGeneration = 0;
         this.records.clear();
-        this.acknowledgedStates.clear();
+        this.acknowledgedRecord = null;
+        this.dirtySince = null;
         const target = copyTarget({
             storeRevision: baseline.storeRevision,
             yjs: {
@@ -326,12 +340,12 @@ export class YjsDurabilityCoordinator {
             draftId: next.draftId,
             generation: 0,
             target,
-            encodedState: encodedState.slice(),
+            encodedState: baselineRecord.encodedState,
             localPromise: Promise.resolve(true),
             requestId: requestId(),
         });
         this.records.set(targetKey(target), record);
-        this.acknowledgedStates.set(targetKey(target), encodedState.slice());
+        this.acknowledgedRecord = record;
         this.latestRecord = record;
         this.setStatus({
             phase: "clean",
@@ -347,9 +361,7 @@ export class YjsDurabilityCoordinator {
             error: undefined,
             remoteRevision: undefined,
         });
-        for (const projected of projectedAfterPublish) {
-            await this.acceptProjectedState(projected);
-        }
+        if (projectedAfterPublish) await this.acceptProjectedState(projectedAfterPublish);
     }
 
     async adoptAuthoritativeDraft(
@@ -361,8 +373,9 @@ export class YjsDurabilityCoordinator {
         this.abortController?.abort();
         await this.processing;
         await this.inFlight?.catch(() => {});
+        await Promise.all(this.localWrites);
         this.cancelTimer();
-        const merged = this.records.get(targetKey(mergedTarget));
+        const merged = this.findRecord(mergedTarget);
         if (!merged) throw new DurabilityTargetError("The authoritative draft transition is missing its merged projection.");
 
         this.sessionKey = next.sessionKey;
@@ -373,13 +386,14 @@ export class YjsDurabilityCoordinator {
         this.initialProjectionHandled = true;
         this.serverAcknowledgedGeneration = 0;
         this.records.clear();
-        this.acknowledgedStates.clear();
+        this.acknowledgedRecord = null;
+        this.dirtySince = null;
         const write: RecoveryWrite = Object.freeze({
             sessionKey: next.sessionKey,
             draftId: next.draftId,
             generation: 1,
             target: copyTarget(mergedTarget),
-            encodedState: merged.encodedState.slice(),
+            encodedState: merged.encodedState,
         });
         const localPromise = this.recovery.persist(write).then(() => {
             if (!this.disposed && this.sessionKey === next.sessionKey && this.draftId === next.draftId) {
@@ -392,6 +406,7 @@ export class YjsDurabilityCoordinator {
             }
             return false;
         });
+        this.trackLocalWrite(localPromise);
         const rebased: GenerationRecord = Object.freeze({ ...write, localPromise, requestId: requestId() });
         this.records.set(targetKey(mergedTarget), rebased);
         this.latestRecord = rebased;
@@ -422,14 +437,20 @@ export class YjsDurabilityCoordinator {
         // Captured projections may still be hashing. Finish their local writes before
         // closing IndexedDB, even when navigation cancels the network request.
         await this.processing;
-        await Promise.all([...this.records.values()].map(record => record.localPromise));
+        await Promise.all(this.localWrites);
+        this.records.clear();
+        this.latestRecord = null;
+        this.acknowledgedRecord = null;
         await this.recovery.dispose();
         this.statusListeners.clear();
     }
 
     private persistRecord(record: GenerationRecord): Promise<DurabilityCheckpoint> {
         this.assertActive();
-        if (record.generation <= this.serverAcknowledgedGeneration) {
+        if (record.generation < this.serverAcknowledgedGeneration) {
+            return Promise.reject(new DurabilityTargetError("The requested projection target has been superseded by a newer server revision."));
+        }
+        if (record.generation === this.serverAcknowledgedGeneration) {
             const checkpoint = this.checkpointFor(record, this.status.acknowledgedYjsCheckpoint);
             return Promise.resolve(checkpoint);
         }
@@ -437,6 +458,7 @@ export class YjsDurabilityCoordinator {
             return this.inFlight.then(() => this.persistRecord(record));
         }
 
+        this.dirtySince = null;
         const abortController = new AbortController();
         this.abortController = abortController;
         this.setStatus({ phase: "saving", error: undefined, remoteRevision: undefined });
@@ -466,7 +488,7 @@ export class YjsDurabilityCoordinator {
                         this.validateSaveResult(savingRecord, result);
                         this.durableRevision = result.durableRevision;
                         this.serverAcknowledgedGeneration = savingRecord.generation;
-                        this.acknowledgedStates.set(targetKey(savingRecord.target), savingRecord.encodedState.slice());
+                        this.acknowledgedRecord = savingRecord;
                         if (locallyRecovered) await this.recovery.clearThrough(savingRecord);
                         this.retryAttempt = 0;
                         const checkpoint = this.checkpointFor(savingRecord, result.acknowledgedCheckpoint);
@@ -496,7 +518,7 @@ export class YjsDurabilityCoordinator {
                             savingRecord.encodedState.slice(),
                         );
                         await this.processing;
-                        const mergedRecord = this.records.get(targetKey(mergedTarget));
+                        const mergedRecord = this.findRecord(mergedTarget);
                         if (!mergedRecord || mergedRecord.generation <= savingRecord.generation) {
                             throw new DurabilityTargetError("Conflict merge did not produce a newer Glideboard projection checkpoint.");
                         }
@@ -544,13 +566,43 @@ export class YjsDurabilityCoordinator {
 
     private checkpointFor(record: GenerationRecord, acknowledged?: YjsSaveResult["acknowledgedCheckpoint"]): DurabilityCheckpoint {
         if (!acknowledged) throw new DurabilityTargetError("The projection target has no server acknowledgement.");
-        return Object.freeze({
+        const checkpoint = Object.freeze({
             sessionKey: record.sessionKey,
             draftId: record.draftId,
             storeRevision: record.target.storeRevision,
             durableRevision: this.durableRevision,
             yjs: Object.freeze({ ...acknowledged }),
         });
+        this.acknowledgedCheckpoints.set(checkpoint, record);
+        return checkpoint;
+    }
+
+    private findRecord(target: ProjectionTarget): GenerationRecord | undefined {
+        const saved = this.acknowledgedRecord;
+        const key = targetKey(target);
+        const record = this.records.get(key) ?? this.capturedRecords.get(target);
+        if (record?.sessionKey === this.sessionKey && record.draftId === this.draftId) return record;
+        if (saved && targetKey(saved.target) === key) return saved;
+    }
+
+    private findAcknowledgedRecord(checkpoint: DurabilityCheckpoint): GenerationRecord | undefined {
+        if (checkpoint.sessionKey !== this.sessionKey || checkpoint.draftId !== this.draftId) return;
+        const captured = this.acknowledgedCheckpoints.get(checkpoint);
+        const saved = this.acknowledgedRecord;
+        if (captured) return captured;
+        if (saved && targetKey(saved.target) === targetKey(checkpoint)) return saved;
+    }
+
+    private trimRecords(): void {
+        // Keep the latest two projections for callers that are transitioning to
+        // an exact capture. Explicit capture targets and save receipts keep
+        // their own immutable bytes alive only while the caller holds them.
+        if (this.records.size > 2) this.records.delete(this.records.keys().next().value!);
+    }
+
+    private trackLocalWrite(write: Promise<boolean>): void {
+        this.localWrites.add(write);
+        void write.then(() => this.localWrites.delete(write));
     }
 
     private scheduleAutomaticSave(delayMs: number): void {

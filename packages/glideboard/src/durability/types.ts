@@ -24,6 +24,7 @@ export interface CollaborationCheckpointSource {
   readonly status: ReadonlySignal<ProjectionStatus>;
   subscribe(listener: (state: ProjectedYjsState) => void): () => void;
   captureTarget(): Promise<ProjectionTarget>;
+  hasPendingProjection?(): boolean;
   waitForStoreRevision(storeRevision: number): Promise<ProjectionTarget>;
 }
 

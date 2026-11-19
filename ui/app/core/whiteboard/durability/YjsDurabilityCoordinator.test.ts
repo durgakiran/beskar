@@ -53,6 +53,38 @@ describe("YjsDurabilityCoordinator", () => {
         await coordinator.dispose("cancel");
     });
 
+    it("releases superseded snapshot bytes while keeping explicitly held targets", async () => {
+        const { recovery } = createRecovery();
+        const coordinator = new YjsDurabilityCoordinator({ sessionKey: "session", draftId: "draft", clientId: "client", durableRevision: "0", persistence: { save: vi.fn() }, recovery });
+        const first = await projectedState(1, 1, 4);
+        await coordinator.acceptProjectedState(first);
+        for (let revision = 2; revision <= 10; revision++) {
+            await coordinator.acceptProjectedState(await projectedState(revision, revision, revision));
+        }
+        const unheld = { ...first.target };
+        await expect(coordinator.getCapturedState(unheld)).rejects.toThrow("not captured");
+        expect(await coordinator.getCapturedState(first.target)).toEqual(first.encodedState);
+        await coordinator.dispose("cancel");
+    });
+
+    it("starts an autosave during continuous changes by the maximum delay", async () => {
+        const { recovery } = createRecovery();
+        const save = vi.fn<YjsPersistenceAdapter["save"]>(async request => ({
+            draftId: request.draftId, durableRevision: "1", acknowledgedCheckpoint: request.target.yjs,
+        }));
+        const coordinator = new YjsDurabilityCoordinator({
+            sessionKey: "session", draftId: "draft", clientId: "client", durableRevision: "0",
+            persistence: { save }, recovery, debounceMs: 500, maxSaveDelayMs: 200,
+        });
+        await coordinator.acceptProjectedState(await projectedState(1, 1, 1));
+        await vi.advanceTimersByTimeAsync(100);
+        await coordinator.acceptProjectedState(await projectedState(2, 2, 2));
+        await vi.advanceTimersByTimeAsync(100);
+        expect(save).toHaveBeenCalledOnce();
+        expect(save.mock.calls[0][0].target.storeRevision).toBe(2);
+        await coordinator.dispose("cancel");
+    });
+
     it("finishes an already captured local write before closing recovery on navigation", async () => {
         const { recovery, writes } = createRecovery();
         const coordinator = new YjsDurabilityCoordinator({ sessionKey: "session", draftId: "draft", clientId: "client", durableRevision: "0", persistence: { save: vi.fn() }, recovery });

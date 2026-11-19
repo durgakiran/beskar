@@ -76,6 +76,8 @@ function MountedGlideboardSession({
   const collaborationUserColor = collaboration?.user?.color;
   const collaborationBoardIdentity = collaboration?.boardIdentity;
   const collaborationBootstrapRevision = collaboration?.bootstrapRevision;
+  const checkpointIntervalMs = collaboration?.checkpointIntervalMs;
+  const checkpointOnDemand = collaboration?.checkpointOnDemand;
 
   React.useEffect(() => {
     if (!collaborationDoc) return;
@@ -98,8 +100,12 @@ function MountedGlideboardSession({
         : null,
       boardIdentity: collaborationBoardIdentity,
       bootstrapRevision: collaborationBootstrapRevision,
+      checkpointIntervalMs,
+      checkpointOnDemand,
     });
   }, [
+    checkpointIntervalMs,
+    checkpointOnDemand,
     collaborationBoardIdentity,
     collaborationBootstrapRevision,
     collaborationDoc,

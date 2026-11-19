@@ -5,6 +5,7 @@ import {
   computed,
   signal,
   type ReadonlySignal,
+  type Signal,
 } from '@preact/signals';
 import type { GlideStore, JsonPointer, StoreRecord, StoreTransaction } from './store.js';
 import type { AnyRecord, ShapeId } from './types.js';
@@ -130,7 +131,10 @@ export class InteractionManager {
   private _baselines = new Map<string, StoreRecord | null>();
   private _baselineGenerations = new Map<string, number>();
   private _signals = new Map<string, ReadonlySignal<StoreRecord | null>>();
+  private _overlaySignals = new Map<string, Signal<StoreRecord | null | undefined>>();
+  private _publishedOverlay = new Map<string, StoreRecord | null>();
   private _overlayVersion = signal(0);
+  private _overlayOrderVersion = signal(0);
   private _previewDepth = 0;
   private _combinedVersion = computed(() => {
     // Consumers such as canvas overlays need a new numeric value for both
@@ -140,7 +144,7 @@ export class InteractionManager {
     return this._store.getVersionSignal().value + this._overlayVersion.value;
   });
   private _shapeIds = computed<readonly ShapeId[]>(() => {
-    this._overlayVersion.value;
+    this._overlayOrderVersion.value;
     const ids = [...this._store.getShapeIdsSignal().value];
     for (const [id, record] of this._overlay) {
       const index = ids.indexOf(id as ShapeId);
@@ -188,9 +192,13 @@ export class InteractionManager {
   getSignal(id: string): ReadonlySignal<StoreRecord | null> {
     let result = this._signals.get(id);
     if (!result) {
+      const overlay = signal(this._publishedOverlay.get(id));
+      this._overlaySignals.set(id, overlay);
       result = computed(() => {
-        this._overlayVersion.value;
-        if (this._overlay.has(id)) return this._overlay.get(id) ?? null;
+        const preview = overlay.value;
+        if (preview !== undefined) return preview;
+        // A subscriber may start observing an ID before its first commit.
+        if (!this._store.getSignal(id)) this._store.getVersionSignal().value;
         return this._store.getSignal(id)?.value ?? null;
       });
       this._signals.set(id, result);
@@ -199,6 +207,7 @@ export class InteractionManager {
   }
 
   getVersionSignal(): ReadonlySignal<number> { return this._combinedVersion; }
+  getOverlayOrderVersionSignal(): ReadonlySignal<number> { return this._overlayOrderVersion; }
   getKindSignal(): ReadonlySignal<InteractionKind | null> { return this._kind; }
   getShapeIdsSignal(): ReadonlySignal<readonly ShapeId[]> { return this._shapeIds; }
   getChangedIdsSignal(): ReadonlySignal<readonly string[]> { return this._changedIds; }
@@ -351,6 +360,25 @@ export class InteractionManager {
   }
 
   private _publishOverlay(): void {
-    this._overlayVersion.value = this._overlayVersion.peek() + 1;
+    const previous = this._publishedOverlay;
+    this._publishedOverlay = new Map(this._overlay);
+    preactBatch(() => {
+      let orderChanged = false;
+      for (const id of new Set([...previous.keys(), ...this._publishedOverlay.keys()])) {
+        const before = previous.get(id);
+        const after = this._publishedOverlay.get(id);
+        if (before === after) continue;
+        const observer = this._overlaySignals.get(id);
+        if (observer) observer.value = after;
+        orderChanged ||= !before || !after
+          || before['parentId'] !== after['parentId']
+          || before['index'] !== after['index']
+          || before['kind'] !== after['kind']
+          || before['type'] !== after['type']
+          || before['schemaVersion'] !== after['schemaVersion'];
+      }
+      if (orderChanged) this._overlayOrderVersion.value = this._overlayOrderVersion.peek() + 1;
+      this._overlayVersion.value = this._overlayVersion.peek() + 1;
+    });
   }
 }

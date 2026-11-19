@@ -54,6 +54,7 @@ import { RecordIdService } from './id.js';
 import { InteractionManager } from './interaction.js';
 import {
   compareSiblingOrder,
+  generateAppendOrderKey,
   generateOrderKeysBetween,
   generateRebalancedOrderKeys,
   getCanonicalShapeIds,
@@ -443,19 +444,15 @@ export class GlideEditor {
       this.interactions.getVersionSignal().value;
       return this._store.getPageIds();
     });
-    this._currentPageShapeIdsSignal = computed(() => {
-      this.interactions.getVersionSignal().value;
+    const currentPageShapes = computed(() => {
+      this._store.getVersionSignal().value;
+      this.interactions.getOverlayOrderVersionSignal().value;
       const pageId = this.activePageId.value;
-      return Object.freeze(this._getAllShapes()
-        .filter(shape => this.getShapePageId(shape.id as ShapeId) === pageId)
-        .map(shape => shape.id as ShapeId));
+      return this._getAllShapes().filter(shape => this.getShapePageId(shape.id as ShapeId) === pageId);
     });
-    this._orderedShapeIdsSignal = computed(() => {
-      this.interactions.getVersionSignal().value;
-      const pageId = this.activePageId.value;
-      return getCanonicalShapeIds(this._getAllShapes()
-        .filter(shape => this.getShapePageId(shape.id as ShapeId) === pageId));
-    });
+    this._currentPageShapeIdsSignal = computed(() =>
+      Object.freeze(currentPageShapes.value.map(shape => shape.id as ShapeId)));
+    this._orderedShapeIdsSignal = computed(() => getCanonicalShapeIds(currentPageShapes.value));
     this.interactions.getVersionSignal().subscribe(() => this._reconcileActivePage());
     this._history = new HistoryManager(store, this._localMutationCapability);
     this.history = createReadonlyHistoryView(this._history);
@@ -624,7 +621,10 @@ export class GlideEditor {
     return undefined;
   }
 
-  getShapesInBox(box: Pick<Box2d, 'minX' | 'minY' | 'maxX' | 'maxY'> & Partial<Pick<Box2d, 'x' | 'y' | 'w' | 'h'>>): GlideShape[] {
+  getShapesInBox(
+    box: Pick<Box2d, 'minX' | 'minY' | 'maxX' | 'maxY'> & Partial<Pick<Box2d, 'x' | 'y' | 'w' | 'h'>>,
+    { ordered = true }: { ordered?: boolean } = {},
+  ): GlideShape[] {
     const changed = this._getInteractionAffectedShapeIds();
     const committed = toGlideShapes(this.store.getShapesInBox(box.minX, box.minY, box.maxX, box.maxY))
       .filter(shape => !changed.has(shape.id));
@@ -636,9 +636,11 @@ export class GlideEditor {
         return bounds.maxX >= box.minX && bounds.minX <= box.maxX
           && bounds.maxY >= box.minY && bounds.minY <= box.maxY;
       });
-    return this.sortShapesByCanonicalOrder([...committed, ...transient])
-      .filter(shape => this.getShapePageId(shape.id as ShapeId) === this.activePageId.peek())
+    const pageId = this.activePageId.peek();
+    const visible = [...committed, ...transient]
+      .filter(shape => this.getShapePageId(shape.id as ShapeId) === pageId)
       .filter(shape => !this.isShapeEffectivelyHidden(shape.id as ShapeId));
+    return ordered ? this.sortShapesByCanonicalOrder(visible) : visible;
   }
 
   private _pointInsideClippingAncestors(id: ShapeId, point: Vec2): boolean {
@@ -795,6 +797,11 @@ export class GlideEditor {
 
   getShapePageId(shapeId: ShapeId): PageId | null {
     let cursor = this.interactions.get(shapeId);
+    // A top-level shape has no ancestry to walk.
+    if (cursor?.['kind'] === 'shape' && typeof cursor['parentId'] === 'string'
+      && this.interactions.get(cursor['parentId'])?.['kind'] === 'page') {
+      return cursor['parentId'] as PageId;
+    }
     const seen = new Set<string>();
     while (cursor && cursor['kind'] === 'shape' && typeof cursor['parentId'] === 'string') {
       const parentId = cursor['parentId'] as string;
@@ -977,17 +984,17 @@ export class GlideEditor {
     return result;
   }
 
-  private _getSiblingShapes(parentId: string): GlideShape[] {
-    return this._getAllShapes()
-      .filter(shape => getShapeOrderParentId(shape) === parentId)
-      .sort(compareSiblingOrder);
+  private _getSiblingShapes(parentId: string, ordered = true): GlideShape[] {
+    const siblings = this._getAllShapes().filter(shape => getShapeOrderParentId(shape) === parentId);
+    return ordered ? siblings.sort(compareSiblingOrder) : siblings;
   }
 
   private _allocateOrderKeysAbove(parentId: string, count: number, after?: ShapeId): {
     keys: readonly string[];
     rebalanced: ReadonlyMap<ShapeId, string>;
   } {
-    const siblings = this._getSiblingShapes(parentId);
+    const appendingSingle = after === undefined && count === 1;
+    const siblings = this._getSiblingShapes(parentId, !appendingSingle);
     const insertionIndex = after === undefined
       ? siblings.length
       : siblings.findIndex(shape => shape.id === after) + 1;
@@ -996,6 +1003,13 @@ export class GlideEditor {
     }
     if (siblings.every(shape => isCanonicalOrderKey(shape.index))) {
       try {
+        if (appendingSingle) {
+          let top: string | null = null;
+          for (const shape of siblings) {
+            if (top === null || shape.index > top) top = shape.index;
+          }
+          return { keys: [generateAppendOrderKey(top)], rebalanced: new Map() };
+        }
         return {
           keys: generateOrderKeysBetween(siblings[insertionIndex - 1]?.index ?? null, siblings[insertionIndex]?.index ?? null, count),
           rebalanced: new Map(),
@@ -1004,6 +1018,7 @@ export class GlideEditor {
         if (!(error instanceof OrderKeySpaceExhaustedError)) throw error;
       }
     }
+    if (appendingSingle) siblings.sort(compareSiblingOrder);
     const allKeys = generateRebalancedOrderKeys(siblings.length + count);
     return {
       keys: Object.freeze(allKeys.slice(insertionIndex, insertionIndex + count)),

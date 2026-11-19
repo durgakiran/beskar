@@ -31,8 +31,8 @@ async function sha256(bytes: Uint8Array): Promise<string> {
 }
 
 /**
- * Records the exact Yjs bytes corresponding to each published Glideline store
- * revision. It deliberately knows nothing about recovery or server saves.
+ * Captures exact Yjs bytes for projected Glideline revisions. Hosts that set
+ * a collection interval can combine several commits into one projection.
  */
 export class GlideboardCollaborationCheckpointSource implements CollaborationCheckpointSource {
   readonly status: Signal<ProjectionStatus> = signal('catching-up');
@@ -41,12 +41,53 @@ export class GlideboardCollaborationCheckpointSource implements CollaborationChe
   private disposed = false;
   private latest: Promise<ProjectedYjsState> | null = null;
   private queue: Promise<void> = Promise.resolve();
-  private readonly byStoreRevision = new Map<number, Promise<ProjectedYjsState>>();
+  private readonly byStoreRevision = new Map<number, Promise<ProjectionTarget>>();
+  private pending: { doc: Y.Doc; revision: number } | null = null;
+  private timer: ReturnType<typeof setTimeout> | null = null;
+  private recording: Promise<ProjectedYjsState> | null = null;
   private readonly listeners = new Set<(state: ProjectedYjsState) => void>();
 
-  private emit(state: ProjectedYjsState): void {
+  constructor(private readonly intervalMs = 0, private readonly onDemand = false) {}
+
+  stage(doc: Y.Doc, revision: number): void {
     if (this.disposed) return;
-    for (const listener of [...this.listeners]) listener(copyProjectedState(state));
+    if (this.intervalMs === 0 && !this.onDemand) {
+      void this.record(doc, revision).catch(() => {});
+      return;
+    }
+    this.pending = { doc, revision };
+    this.schedule();
+  }
+
+  private schedule(): void {
+    if (this.onDemand || this.timer !== null || this.recording || !this.pending || this.disposed) return;
+    this.timer = setTimeout(() => {
+      this.timer = null;
+      this.flushPending();
+    }, this.intervalMs);
+  }
+
+  private flushPending(): void {
+    if (this.timer !== null) clearTimeout(this.timer);
+    this.timer = null;
+    const pending = this.pending;
+    if (!pending) return;
+    this.pending = null;
+    const result = this.record(pending.doc, pending.revision);
+    this.recording = result;
+    const complete = () => {
+      if (this.recording !== result) return;
+      this.recording = null;
+      this.schedule();
+    };
+    void result.then(complete, complete);
+  }
+
+  private emit(state: ProjectedYjsState, target?: ProjectionTarget): void {
+    if (this.disposed) return;
+    for (const listener of [...this.listeners]) {
+      listener(target ? { target, encodedState: state.encodedState.slice() } : copyProjectedState(state));
+    }
   }
 
   record(doc: Y.Doc, storeRevision: number): Promise<ProjectedYjsState> {
@@ -55,7 +96,13 @@ export class GlideboardCollaborationCheckpointSource implements CollaborationChe
     }
 
     const transactionSequence = ++this.transactionSequence;
-    const encodedState = Y.encodeStateAsUpdate(doc).slice();
+    let encodedState: Uint8Array;
+    try {
+      encodedState = Y.encodeStateAsUpdate(doc);
+    } catch (error) {
+      this.quarantine();
+      return Promise.reject(error);
+    }
     let resolveState!: (state: ProjectedYjsState) => void;
     let rejectState!: (error: unknown) => void;
     const result = new Promise<ProjectedYjsState>((resolve, reject) => {
@@ -63,7 +110,11 @@ export class GlideboardCollaborationCheckpointSource implements CollaborationChe
       rejectState = reject;
     });
 
-    this.byStoreRevision.set(storeRevision, result);
+    // Revision lookups only need the target metadata. Retaining the state
+    // promises would also retain a full Yjs buffer for every revision.
+    const target = result.then(state => copyTarget(state.target));
+    void target.catch(() => {});
+    this.byStoreRevision.set(storeRevision, target);
     this.latest = result;
     this.queue = this.queue.then(async () => {
       try {
@@ -116,32 +167,41 @@ export class GlideboardCollaborationCheckpointSource implements CollaborationChe
     return () => this.listeners.delete(listener);
   }
 
+  hasPendingProjection(): boolean {
+    return !this.onDemand && (this.pending !== null || this.recording !== null);
+  }
+
   async captureTarget(): Promise<ProjectionTarget> {
     if (this.status.peek() !== 'healthy') {
       throw new Error(`Glideboard collaboration projection is ${this.status.peek()}.`);
     }
+    this.flushPending();
     const latest = this.latest;
     if (!latest) throw new Error('Glideboard collaboration projection is not ready.');
     const state = await latest;
     // Close the late-subscriber race at save/publish boundaries. Consumers
     // can safely deduplicate this immutable target.
-    this.emit(state);
-    return copyTarget(state.target);
+    const target = copyTarget(state.target);
+    this.emit(state, target);
+    return target;
   }
 
   async waitForStoreRevision(storeRevision: number): Promise<ProjectionTarget> {
     if (this.status.peek() !== 'healthy') {
       throw new Error(`Glideboard collaboration projection is ${this.status.peek()}.`);
     }
+    if (this.pending?.revision === storeRevision) this.flushPending();
     const checkpoint = this.byStoreRevision.get(storeRevision);
     if (!checkpoint) {
       throw new Error(`No Yjs projection checkpoint exists for store revision ${storeRevision}.`);
     }
-    return copyTarget((await checkpoint).target);
+    return copyTarget(await checkpoint);
   }
 
   dispose(): void {
     this.disposed = true;
+    if (this.timer !== null) clearTimeout(this.timer);
+    this.pending = null;
     this.listeners.clear();
     this.byStoreRevision.clear();
     this.latest = null;

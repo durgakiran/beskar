@@ -9,12 +9,6 @@
  *   isClosed    — whether the path should be closed (filled) vs open
  *   isComplete  — false while the stroke is being drawn (live preview)
  *
- * getGeometry  → AABB from all points + padding for stroke width
- * hitTestPoint → point-to-polyline distance (8 px tolerance)
- * toSvg        → smoothed <path> using Catmull-Rom → cubic Bézier
- *
- * Path smoothing: Catmull-Rom spline converted to SVG cubic Bézier segments.
- * This gives natural-looking curves without requiring an external library.
  */
 
 import { ShapeUtil } from './ShapeUtil.js';
@@ -76,20 +70,15 @@ const pointsValidator = {
 /**
  * Convert an array of Vec2 into an SVG path string using Catmull-Rom spline.
  * Each segment is converted to a cubic Bézier so it's renderable in SVG.
- *
- * alpha = 0.5  → centripetal parameterisation (avoids cusps)
- * tension = 0  → standard catmull-rom
+ * A tangent scale of 1/6 gives the uniform Catmull–Rom interpolant.
  */
-export function catmullRomPath(pts: Vec2[], isClosed: boolean): string {
+export function catmullRomPath(pts: Vec2[], isClosed: boolean, tangentScale = 0.4): string {
   if (pts.length < 2) return '';
   if (pts.length === 2) {
     const first = pts[0]!;
     const second = pts[1]!;
     return `M ${first.x} ${first.y} L ${second.x} ${second.y}`;
   }
-
-  // Tension factor: 0 = standard, higher = tighter
-  const t = 0.4;
 
   // Build extended point list (duplicate endpoints for boundary conditions)
   const p: Vec2[] = isClosed
@@ -105,10 +94,10 @@ export function catmullRomPath(pts: Vec2[], isClosed: boolean): string {
     const p3 = p[i + 2]!;
 
     // Control points
-    const cp1x = p1.x + (p2.x - p0.x) * t;
-    const cp1y = p1.y + (p2.y - p0.y) * t;
-    const cp2x = p2.x - (p3.x - p1.x) * t;
-    const cp2y = p2.y - (p3.y - p1.y) * t;
+    const cp1x = p1.x + (p2.x - p0.x) * tangentScale;
+    const cp1y = p1.y + (p2.y - p0.y) * tangentScale;
+    const cp2x = p2.x - (p3.x - p1.x) * tangentScale;
+    const cp2y = p2.y - (p3.y - p1.y) * tangentScale;
 
     d += ` C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${p2.x} ${p2.y}`;
   }
@@ -118,8 +107,27 @@ export function catmullRomPath(pts: Vec2[], isClosed: boolean): string {
 }
 
 // ─────────────────────────────────────────────────────────────
-// Hit-test helpers removed (now handled by Geometry2d)
-// ─────────────────────────────────────────────────────────────
+// Smooth the centerline without shifting endpoints or rounding widely spaced
+// corners by more than one stroke width. Keep raw samples in the document.
+function inkCenterline(points: Vec2[], width: number): Vec2[] {
+  return points.map((point, index) => {
+    if (index === 0 || index === points.length - 1) return point;
+    const prev = points[index - 1]!;
+    const next = points[index + 1]!;
+    // A five-sample binomial filter attenuates jitter through a turn.
+    // Use the smaller symmetric window next to either endpoint.
+    const outerPrev = points[index - 2];
+    const outerNext = points[index + 2];
+    let dx = (prev.x - point.x + next.x - point.x) / 4;
+    let dy = (prev.y - point.y + next.y - point.y) / 4;
+    if (outerPrev && outerNext) {
+      dx += (outerPrev.x - point.x + outerNext.x - point.x) / 16;
+      dy += (outerPrev.y - point.y + outerNext.y - point.y) / 16;
+    }
+    const scale = width / Math.max(width, Math.hypot(dx, dy));
+    return { x: point.x + dx * scale, y: point.y + dy * scale };
+  });
+}
 
 // ─────────────────────────────────────────────────────────────
 // FreehandUtil
@@ -216,7 +224,9 @@ export class FreehandUtil extends ShapeUtil<FreehandShape> {
   getGeometry(shape: FreehandShape): Geometry2d {
     const { points } = shape.props;
     const localPoints = points.map(pt => ({ x: pt.x - shape.x, y: pt.y - shape.y }));
-    return new Polyline2d(localPoints);
+    return new Polyline2d(localPoints, {
+      boundsPadding: points.length === 1 ? STROKE_WIDTHS[shape.props.strokeWidth] / 2 : 0,
+    });
   }
 
   toSvg(shape: FreehandShape): SVGElement {
@@ -236,13 +246,23 @@ export class FreehandUtil extends ShapeUtil<FreehandShape> {
 
     // Freehand points are in world space; offset by -shape.x, -shape.y to draw in local space
     const localPoints = points.map(pt => ({ x: pt.x - shape.x, y: pt.y - shape.y }));
+    if (points.length === 1) {
+      const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+      dot.setAttribute('cx', String(localPoints[0]!.x));
+      dot.setAttribute('cy', String(localPoints[0]!.y));
+      dot.setAttribute('r', String(strokeW / 2));
+      dot.setAttribute('fill', strokeColor);
+      g.appendChild(dot);
+      return g;
+    }
+
     const pathStr = pressureSensitive
       ? pressureStrokePath(points.map(point => [
         point.x - shape.x,
         point.y - shape.y,
         point.pressure,
       ]), strokeW, simulatePressure, isComplete)
-      : catmullRomPath(localPoints, isClosed);
+      : catmullRomPath(inkCenterline(localPoints, strokeW), isClosed, 1 / 6);
 
     const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
     path.setAttribute('d', pathStr);
@@ -272,9 +292,11 @@ export function pressureStrokePath(
 ): string {
   const outline = getStroke(points, {
     size,
-    thinning: 0.7,
+    // Distance-based pressure can approach zero on fast mouse movements.
+    // Keep a readable width floor while preserving the full stylus response.
+    thinning: simulatePressure ? 0.2 : 0.7,
     smoothing: 0.65,
-    streamline: 0.45,
+    streamline: simulatePressure ? 0.64 : 0.45,
     simulatePressure,
     last: isComplete,
   });

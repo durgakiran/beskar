@@ -3,9 +3,10 @@ package editor
 import "github.com/google/uuid"
 
 const (
-	whiteboardCheckpointV2MaxBody   = 1536 * 1024
-	whiteboardCheckpointV2MaxUpdate = 1024 * 1024
-	whiteboardUpdateEncodingV1      = "yjs-update-v1"
+	whiteboardCheckpointV2MaxBody      = 1536 * 1024
+	whiteboardCheckpointV2MaxUpdate    = 1024 * 1024
+	whiteboardCheckpointV2MaxAssembled = 4 * whiteboardCheckpointV2MaxUpdate
+	whiteboardUpdateEncodingV1         = "yjs-update-v1"
 )
 
 type whiteboardCheckpointV2Body struct {

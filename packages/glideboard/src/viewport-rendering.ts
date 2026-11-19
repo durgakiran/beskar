@@ -29,7 +29,7 @@ export function getViewportShapeEntries(editor: GlideEditor): ViewportShapeEntry
       minY: viewport.minY - overscan,
       maxX: viewport.maxX + overscan,
       maxY: viewport.maxY + overscan,
-    }).map(shape => shape.id as ShapeId),
+    }, { ordered: false }).map(shape => shape.id as ShapeId),
   );
 
   for (const id of editor.getSelectedShapeIds()) ids.add(id);

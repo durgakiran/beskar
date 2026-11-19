@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+    <changeSet id="whiteboard_checkpoint_uploads_1" author="beskar" dbms="postgresql">
+        <sql><![CDATA[
+            CREATE TABLE whiteboard.whiteboard_checkpoint_upload (
+                page_id bigint NOT NULL REFERENCES whiteboard.whiteboard(page_id) ON DELETE CASCADE,
+                actor_id uuid NOT NULL,
+                request_id uuid NOT NULL,
+                restore_generation bigint NOT NULL CHECK (restore_generation >= 0),
+                total_bytes integer NOT NULL CHECK (total_bytes > 1048576 AND total_bytes <= 4194304),
+                digest text NOT NULL CHECK (digest ~ '^sha256:[0-9a-f]{64}$'),
+                data bytea NOT NULL CHECK (octet_length(data) > 0 AND octet_length(data) < total_bytes),
+                expires_at timestamptz NOT NULL,
+                PRIMARY KEY (page_id, actor_id, request_id)
+            );
+            CREATE INDEX whiteboard_checkpoint_upload_expiry_idx
+                ON whiteboard.whiteboard_checkpoint_upload (expires_at);
+            GRANT SELECT, INSERT, UPDATE, DELETE ON whiteboard.whiteboard_checkpoint_upload TO ${app_user};
+        ]]></sql>
+        <rollback>
+            <dropTable schemaName="whiteboard" tableName="whiteboard_checkpoint_upload"/>
+        </rollback>
+    </changeSet>
+</databaseChangeLog>

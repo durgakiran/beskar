@@ -8,7 +8,7 @@
  *
  * Drawing:
  *   pointerMove   → append new sample point (live preview, history: ignore)
- *   pointerUp     → finalize stroke; if < 2 points, discard; else commit
+ *   pointerUp     → commit the stroke, including a stationary tap as a dot
  *   pointerCancel → browser/OS-initiated abort (e.g. trackpad gesture
  *                   disambiguation on a fast short drag) — commit whatever
  *                   was drawn so far rather than losing it, same as pointerUp
@@ -30,8 +30,8 @@ import type { PointerDownEvent, PointerMoveEvent, PointerUpEvent, KeyDownEvent }
 import type { ShapeId, Vec2 } from '../types.js';
 import type { FreehandPoint } from '../shapes/FreehandUtil.js';
 
-/** Minimum squared distance between successive points (de-duplicate near-idle). */
-const MIN_DIST_SQ = 4;
+/** Minimum spacing in CSS pixels, independent of canvas zoom. */
+const MIN_SCREEN_DISTANCE = 0.75;
 
 function distSq(a: Vec2, b: Vec2): number {
   return (b.x - a.x) ** 2 + (b.y - a.y) ** 2;
@@ -101,16 +101,17 @@ class Drawing extends StateNode {
   }
 
   override onPointerMove(e: PointerMoveEvent): void {
-    // Skip if pointer hasn't moved enough (reduces point count)
-    if (distSq(this._lastPt, e.point) < MIN_DIST_SQ) return;
-    this._lastPt = e.point;
-
-    const newPt: FreehandPoint = {
-      x:        e.point.x,
-      y:        e.point.y,
-      pressure: e.pressure ?? 0.5,
+    const minDistSq = (MIN_SCREEN_DISTANCE / this.editor.camera.getCamera().z) ** 2;
+    const accepted: FreehandPoint[] = [];
+    const append = (point: FreehandPoint) => {
+      if (distSq(this._lastPt, point) < minDistSq) return;
+      accepted.push(point);
+      this._lastPt = point;
     };
-    this._points = [...this._points, newPt];
+    for (const sample of e.samples ?? []) append(sample);
+    append({ ...e.point, pressure: e.pressure ?? 0.5 });
+    if (!accepted.length) return;
+    this._points = this._points.concat(accepted);
 
     this.editor.batch('Draw Preview Update', () => {
       this.editor.updateShape(this._id, {
@@ -130,7 +131,7 @@ class Drawing extends StateNode {
   override onPointerUp(e: PointerUpEvent): void {
     // PointerUp can contain a final sample that never arrived as pointerMove.
     // Keep it so the committed stroke ends where the pointer actually ended.
-    if (distSq(this._lastPt, e.point) >= MIN_DIST_SQ) {
+    if (distSq(this._lastPt, e.point) > 0) {
       this._points = [...this._points, {
         x: e.point.x,
         y: e.point.y,
@@ -147,6 +148,10 @@ class Drawing extends StateNode {
     // of delivering a normal pointerUp. Losing a stroke the user can see on
     // screen is worse than keeping one that ends a sample early, so commit
     // whatever was actually drawn rather than discarding it.
+    if (this._points.length === 1) {
+      this.parent!.transition('idle');
+      return;
+    }
     this._finishStroke();
   }
 
@@ -158,14 +163,6 @@ class Drawing extends StateNode {
   }
 
   private _finishStroke(): void {
-    if (this._points.length < 2) {
-      // Too short to count as a stroke — discard the staged preview, nothing
-      // was ever written to the real store.
-      this.editor.cancelHistoryPreview();
-      this.parent!.transition('idle');
-      return;
-    }
-
     const pts = this._points;
 
     // Compute AABB origin for shape.x/y
