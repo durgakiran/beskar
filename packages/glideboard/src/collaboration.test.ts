@@ -158,6 +158,59 @@ describe('bindGlideboardCollaboration', () => {
     cleanupB();
   });
 
+  it('batches checkpoint encoding while keeping each draw stroke undoable', async () => {
+    const capability = createMutationCapability();
+    const editor = createGlideboardEditorInstance([], undefined, capability);
+    const doc = new Y.Doc();
+    const binding = bindGlideboardCollaboration(editor, { doc, checkpointIntervalMs: 100 }, capability);
+    const initial = await binding.checkpoints.captureTarget();
+    editor.setCurrentTool('draw');
+    const drawStroke = (x: number) => {
+      editor.dispatchEvent({ type: 'pointerDown', point: { x, y: 20 }, shiftKey: false, target: 'canvas' });
+      editor.dispatchEvent({ type: 'pointerMove', point: { x: x + 10, y: 30 } });
+      editor.dispatchEvent({ type: 'pointerUp', point: { x: x + 20, y: 40 } });
+    };
+    drawStroke(20);
+    drawStroke(50);
+    expect(binding.checkpoints.hasPendingProjection?.()).toBe(true);
+    const captured = await binding.checkpoints.captureTarget();
+    expect(captured.yjs.transactionSequence).toBe(initial.yjs.transactionSequence + 1);
+    expect(editor.getShapes()).toHaveLength(2);
+    editor.undo();
+    expect(editor.getShapes()).toHaveLength(1);
+    editor.redo();
+    expect(editor.getShapes()).toHaveLength(2);
+    await binding.checkpoints.captureTarget();
+    binding();
+    doc.destroy();
+  });
+
+  it('encodes only requested revisions in on-demand checkpoint mode', async () => {
+    const capability = createMutationCapability();
+    const editor = createGlideboardEditorInstance([], undefined, capability);
+    const doc = new Y.Doc();
+    const binding = bindGlideboardCollaboration(editor, { doc, checkpointOnDemand: true }, capability);
+    const delivered: Array<{ target: { storeRevision: number }; encodedState: Uint8Array }> = [];
+    binding.checkpoints.subscribe(state => delivered.push(state));
+    editor.createShape(createBoxRecord('shape:first', 10, 20) as any);
+    const intermediate = editor.store.revision;
+    editor.createShape(createBoxRecord('shape:second', 30, 40) as any);
+
+    await expect(binding.checkpoints.waitForStoreRevision(intermediate)).rejects.toThrow('No Yjs projection checkpoint');
+    expect(delivered).toHaveLength(0);
+    const target = await binding.checkpoints.captureTarget();
+    expect(target.storeRevision).toBe(editor.store.revision);
+    expect(target.yjs.transactionSequence).toBe(1);
+    expect(delivered.at(-1)?.target).toBe(target);
+    const snapshot = new Y.Doc();
+    Y.applyUpdate(snapshot, delivered.at(-1)!.encodedState);
+    expect(snapshot.getMap('glideboard-records-v2').has('shape:first')).toBe(true);
+    expect(snapshot.getMap('glideboard-records-v2').has('shape:second')).toBe(true);
+    snapshot.destroy();
+    binding();
+    doc.destroy();
+  });
+
   it('maps a committed store revision to detached Yjs checkpoint bytes', async () => {
     const capability = createMutationCapability();
     const editor = createGlideboardEditorInstance([], undefined, capability);

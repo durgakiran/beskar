@@ -104,6 +104,23 @@ describe('Glideboard board-scoped lifecycle', () => {
     delete (window as any)[DEBUG_API_KEY];
   });
 
+  it('forwards the checkpoint collection interval through the collaboration prop', async () => {
+    const ref = React.createRef<GlideboardHandle>();
+    const doc = new Y.Doc();
+    const view = render(<Glideboard ref={ref} sessionKey="checkpoint-interval" collaboration={{ doc, checkpointIntervalMs: 1000 }} />);
+    await flushControllerCreation();
+    const initial = await ref.current!.captureProjectionTarget();
+    const controller = controllerFor('checkpoint-interval');
+    act(() => {
+      addBox(controller, 'shape:checkpoint-1', 10);
+      addBox(controller, 'shape:checkpoint-2', 20);
+    });
+    const final = await ref.current!.captureProjectionTarget();
+    expect(final.yjs.transactionSequence).toBe(initial.yjs.transactionSequence + 1);
+    view.unmount();
+    doc.destroy();
+  });
+
   it('abandons deferred controller creation when unmounted synchronously', async () => {
     const view = render(<Glideboard sessionKey="abandoned-before-creation" />);
     view.unmount();

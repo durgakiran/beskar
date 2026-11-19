@@ -28,6 +28,8 @@ const mocks = vi.hoisted(() => ({
     digest: vi.fn(),
     providerConstruct: vi.fn(),
     durabilityConstruct: vi.fn(),
+    durabilitySnapshot: vi.fn(),
+    readRecovery: vi.fn(),
     awarenessSet: vi.fn(),
     awarenessStates: new Map<number, Record<string, unknown>>(),
     awarenessChange: undefined as undefined | (() => void),
@@ -88,14 +90,22 @@ vi.mock('app/core/whiteboard/durability/IndexedDbYjsRecoveryAdapter', () => ({
         async dispose() {}
     },
 }));
-vi.mock('app/core/whiteboard/durability/YjsDurabilityCoordinator', () => ({
-    YjsDurabilityCoordinator: class {
+vi.mock('app/core/whiteboard/v2/IncrementalRecoveryJournal', () => ({
+    IncrementalRecoveryJournal: class {
+        read = mocks.readRecovery;
+        async close() {}
+    },
+}));
+vi.mock('app/core/whiteboard/v2/IncrementalCheckpointSession', () => ({
+    SERVER_REPLAY_ORIGIN: Symbol(),
+    IncrementalCheckpointSession: class {
         constructor(options: unknown) { mocks.durabilityConstruct(options); }
         flush = mocks.flush;
         getCapturedState = mocks.getCapturedState;
-        getSnapshot() { return { phase: 'clean' }; }
+        getSnapshot = mocks.durabilitySnapshot;
         subscribeStatus() { return () => {}; }
         attach() { return () => {}; }
+        async retryPending() {}
         async dispose() {}
     },
 }));
@@ -128,6 +138,8 @@ describe('WhiteboardEditorV2 capture preparation', () => {
         mocks.captureProjectionTarget.mockResolvedValue(target);
         mocks.createPublishPreview.mockResolvedValue({ svg: '<svg />' });
         mocks.flush.mockResolvedValue(undefined);
+        mocks.durabilitySnapshot.mockReturnValue({ phase: 'clean' });
+        mocks.readRecovery.mockResolvedValue([]);
         mocks.getCapturedState.mockResolvedValue(state);
         mocks.post.mockResolvedValue({});
         mocks.assetDispose.mockResolvedValue(undefined);
@@ -252,17 +264,16 @@ describe('WhiteboardEditorV2 capture preparation', () => {
         expect(mocks.syncDraft.mock.calls[1][1].manifest.headSequence).toBe('2');
     });
 
-    it('broadcasts successful checkpoints without advancing the verified sequence', async () => {
+    it('announces its own checkpoints without replaying the local board', async () => {
         await renderEditor();
         vi.useFakeTimers();
-        const adapter = mocks.durabilityConstruct.mock.calls[0][0].persistence;
-        const request = { sessionKey: 's', draftId: 'page-1', generation: 1, clientId: 'c', expectedDurableRevision: '1', requestId: 'key', signal: new AbortController().signal, encodedState: new Uint8Array([0, 0]), target };
-        mocks.post.mockResolvedValueOnce({ pageId: 'page-1', sequence: '4' });
-        await act(async () => { await adapter.save(request); });
+        const options = mocks.durabilityConstruct.mock.calls[0][0];
+        await act(async () => {
+            options.onSaved('4');
+            await vi.advanceTimersByTimeAsync(300);
+        });
         expect(mocks.awarenessSet).toHaveBeenCalledWith('savedSequence', '4');
-        await act(async () => { await vi.advanceTimersByTimeAsync(300); });
-        expect(mocks.syncDraft).toHaveBeenCalledTimes(1);
-        expect(mocks.syncDraft.mock.calls[0][1].manifest.headSequence).toBe('1');
+        expect(mocks.syncDraft).not.toHaveBeenCalled();
     });
 
     it('broadcasts saved title sequences through the same collaboration notification', async () => {
@@ -272,13 +283,25 @@ describe('WhiteboardEditorV2 capture preparation', () => {
         fireEvent.blur(screen.getByLabelText('Whiteboard title'));
         await waitFor(() => expect(mocks.awarenessSet).toHaveBeenCalledWith('savedSequence', '2'));
         expect(mocks.awarenessSet).toHaveBeenCalledWith('titleSequence', '2');
-        const payload = mocks.post.mock.calls.find(call => call[0].endsWith('/checkpoint'))![1];
-        const saved = new Y.Doc();
-        try {
-            Y.applyUpdate(saved, base64ToUint8Array(payload.update));
-            expect(whiteboardTitle(saved, 'Board', 'unused').toString()).toBe('Renamed');
-            expect(payload.title).toBe('Renamed');
-        } finally { saved.destroy(); }
+        const checkpoint = mocks.post.mock.calls.find(call => call[0].endsWith('/checkpoint'))!;
+        expect(mocks.flush.mock.invocationCallOrder[0]).toBeLessThan(mocks.post.mock.invocationCallOrder[0]!);
+        expect(base64ToUint8Array(checkpoint[1].update)).toEqual(new Uint8Array([0, 0]));
+        expect(checkpoint[1].title).toBe('Renamed');
+    });
+
+    it('does not use title blur to flush canvas changes ahead of the idle save', async () => {
+        await renderEditor();
+        mocks.durabilitySnapshot.mockReturnValue({ phase: 'dirty' });
+        const title = screen.getByLabelText('Whiteboard title');
+        fireEvent.change(title, { target: { value: 'Renamed' } });
+        fireEvent.blur(title);
+        expect(mocks.flush).not.toHaveBeenCalled();
+        expect(mocks.post).not.toHaveBeenCalled();
+
+        mocks.durabilitySnapshot.mockReturnValue({ phase: 'clean' });
+        mocks.post.mockResolvedValueOnce({ sequence: '2' });
+        fireEvent.blur(title);
+        await waitFor(() => expect(mocks.awarenessSet).toHaveBeenCalledWith('titleSequence', '2'));
     });
 
     it('shows live remote title edits and relative cursors while hiding the local cursor', async () => {
@@ -454,11 +477,11 @@ describe('WhiteboardEditorV2 capture preparation', () => {
         expect(mocks.assetDispose).toHaveBeenCalledTimes(2);
     });
 
-    it.each(['unmount', 'replace'] as const)('does not start a stale session when digest completes after %s', async action => {
-        let finishDigest!: (value: string) => void;
-        mocks.digest.mockReturnValueOnce(new Promise<string>(resolve => { finishDigest = resolve; }));
+    it.each(['unmount', 'replace'] as const)('does not start a stale session when journal hydration completes after %s', async action => {
+        let finishRecovery!: (value: unknown[]) => void;
+        mocks.readRecovery.mockReturnValueOnce(new Promise<unknown[]>(resolve => { finishRecovery = resolve; }));
         const editor = render(<WhiteboardEditorV2 slug={['space-1', 'page-1']} />);
-        await waitFor(() => expect(mocks.digest).toHaveBeenCalledTimes(1));
+        await waitFor(() => expect(mocks.readRecovery).toHaveBeenCalledTimes(1));
         expect(mocks.providerConstruct).not.toHaveBeenCalled();
 
         if (action === 'unmount') editor.unmount();
@@ -466,7 +489,7 @@ describe('WhiteboardEditorV2 capture preparation', () => {
             editor.rerender(<WhiteboardEditorV2 slug={['space-2', 'page-2']} />);
             await waitFor(() => expect(screen.getByTestId('glideboard').getAttribute('data-asset-context')).toBe('v2:space-2:page-2'));
         }
-        await act(async () => finishDigest('sha256:state'));
+        await act(async () => finishRecovery([]));
 
         const expectedSessions = action === 'unmount' ? 0 : 1;
         expect(mocks.providerConstruct).toHaveBeenCalledTimes(expectedSessions);
@@ -492,7 +515,7 @@ describe('WhiteboardEditorV2 capture preparation', () => {
 
         await waitFor(() => expect(mocks.post).toHaveBeenCalledTimes(1));
         expect(mocks.settleActiveEdit).toHaveBeenCalledWith('commit');
-        expect(mocks.flush).toHaveBeenCalledWith(target);
+        expect(mocks.flush).toHaveBeenCalledWith();
         expect(mocks.createPublishPreview).toHaveBeenCalledWith(expect.anything(), { target });
         expect(mocks.post.mock.calls[0][3]).toBe(mocks.assetConstruct.mock.calls[0][0].signal);
         expect(mocks.release).toHaveBeenCalledTimes(1);

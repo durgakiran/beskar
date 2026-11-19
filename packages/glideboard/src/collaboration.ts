@@ -213,14 +213,14 @@ export function bindGlideboardCollaboration(
   const legacyRecords = doc.getMap<AnyRecord>(LEGACY_RECORDS_KEY);
   const metadata = doc.getMap<unknown>(META_KEY);
   const richTextFragments = doc.getMap<Y.XmlFragment>(RICH_TEXT_FRAGMENTS_KEY);
-  const checkpoints = new GlideboardCollaborationCheckpointSource();
+  const checkpoints = new GlideboardCollaborationCheckpointSource(config.checkpointIntervalMs, config.checkpointOnDemand);
   const localDocumentSchema = editor.serialize().schema;
   let disposed = false;
   let applyingRemote = false;
   let ready = providerIsReady(config);
 
   const recordCheckpoint = (storeRevision: number) => {
-    void checkpoints.record(doc, storeRevision).catch(() => {});
+    checkpoints.stage(doc, storeRevision);
   };
 
   const validateMetadata = (): boolean => {

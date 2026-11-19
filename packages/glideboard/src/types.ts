@@ -76,6 +76,10 @@ export interface GlideboardCollaborationConfig {
   boardIdentity?: string;
   /** Server revision from which an otherwise-empty shared document was bootstrapped. */
   bootstrapRevision?: string;
+  /** Maximum normal collection interval before projecting a checkpoint. */
+  checkpointIntervalMs?: number;
+  /** Encode the full document only when an exact projection is requested. */
+  checkpointOnDemand?: boolean;
 }
 
 export type InitialDocumentDisposition =
