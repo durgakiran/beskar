@@ -41,5 +41,9 @@ export function contentUrl(path: string): string {
     return url.href;
 }
 export async function post<T>(url: string, body: unknown, key: string, signal?: AbortSignal): Promise<T> {
-    return jsonRequest<T>(url, { method: 'POST', signal, headers: { 'Content-Type': 'application/json', 'Idempotency-Key': key }, body: JSON.stringify(body) });
+    return postJsonBody<T>(url, JSON.stringify(body), key, signal);
+}
+
+export function postJsonBody<T>(url: string, body: string, key: string, signal?: AbortSignal): Promise<T> {
+    return jsonRequest<T>(url, { method: 'POST', signal, headers: { 'Content-Type': 'application/json', 'Idempotency-Key': key }, body });
 }

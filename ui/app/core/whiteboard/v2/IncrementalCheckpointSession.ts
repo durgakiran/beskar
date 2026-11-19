@@ -1,12 +1,12 @@
-import * as Y from 'yjs';
-import { uint8ArrayToBase64 } from 'app/core/utils/base64';
+import type * as Y from 'yjs';
 import type { CollaborationCheckpointSource, DurabilityStatus, ProjectionTarget } from '../durability/types';
 import { DurabilityTargetError } from '../durability/types';
 import type { JournalUpdate, RecoveryJournal } from './IncrementalRecoveryJournal';
-import { post, sequence } from './api';
+import { postJsonBody, sequence } from './api';
+import { CheckpointBatchEncoder } from './CheckpointBatchEncoder';
+import { CHECKPOINT_MAX_BYTES } from './encodeCheckpointBatch';
 
 export const SERVER_REPLAY_ORIGIN = Symbol('whiteboard-server-replay');
-export const CHECKPOINT_MAX_BYTES = 1024 * 1024;
 const MAX_BATCH_UPDATES = 128;
 const AUTOSAVE_INTERVAL_MS = 5000;
 
@@ -20,7 +20,7 @@ interface PendingUpdate {
 interface SaveBatch {
     readonly through: number;
     readonly requestId: string;
-    readonly body: { update: string; updateEncoding: 'yjs-update-v1'; restoreGeneration: string };
+    readonly body: string;
 }
 
 interface Options {
@@ -53,6 +53,7 @@ export class IncrementalCheckpointSession {
     private status: DurabilityStatus;
     private readonly listeners = new Set<() => void>();
     private readonly captured = new WeakMap<ProjectionTarget, Uint8Array>();
+    private readonly encoder = new CheckpointBatchEncoder();
 
     constructor({ recovered, ...options }: Options) {
         this.options = options;
@@ -133,6 +134,7 @@ export class IncrementalCheckpointSession {
         this.disposed = true;
         this.options.doc.off('update', this.onUpdate);
         clearTimeout(this.timer);
+        this.encoder.dispose();
         await this.saving?.catch(() => {});
         await Promise.allSettled(this.pending.map(update => update.stored));
         await this.options.journal.close();
@@ -167,7 +169,7 @@ export class IncrementalCheckpointSession {
             this.assertReady();
             const batch = this.batch ??= await this.prepareBatch(through);
             this.assertReady();
-            const receipt = await post<{ pageId: number; sequence: string }>(
+            const receipt = await postJsonBody<{ pageId: number; sequence: string }>(
                 `${this.options.base}/checkpoint`, batch.body, batch.requestId, this.options.signal,
             );
             if (String(receipt.pageId) !== this.options.draftId) throw new Error('Checkpoint acknowledgement belongs to another board');
@@ -188,17 +190,18 @@ export class IncrementalCheckpointSession {
 
     private async prepareBatch(through: number): Promise<SaveBatch> {
         const updates = selectCheckpointUpdates(this.pending, through);
-        const bytes = updates.length === 1 ? updates[0]!.bytes : Y.mergeUpdates(updates.map(update => update.bytes));
-        if (bytes.length > CHECKPOINT_MAX_BYTES) {
+        const encoded = await this.encoder.encode(updates.map(update => update.bytes), this.options.restoreGeneration);
+        if (!encoded) {
             if (updates.length > 1) return this.prepareBatch(updates[0]!.revision);
             throw Object.assign(new Error('One edit exceeds the 1 MiB checkpoint limit. The edit remains in local recovery.'), { retryable: false });
         }
         const ids = await Promise.all(updates.map(update => update.stored));
         const requestId = updates[0]!.requestId ?? crypto.randomUUID();
-        if (!updates[0]!.requestId) await this.options.journal.prepare(ids, bytes, requestId);
+        if (!updates[0]!.requestId) await this.options.journal.prepare(ids, encoded.bytes, requestId);
         return {
-            through: updates.at(-1)!.revision, requestId,
-            body: { update: uint8ArrayToBase64(bytes), updateEncoding: 'yjs-update-v1', restoreGeneration: this.options.restoreGeneration },
+            through: updates.at(-1)!.revision,
+            requestId,
+            body: encoded.body,
         };
     }
 
