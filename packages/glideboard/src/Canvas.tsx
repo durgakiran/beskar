@@ -885,7 +885,7 @@ export function Canvas() {
   const getPagePoint = useCallback((event: React.PointerEvent | React.WheelEvent) => {
     const rect = containerRef.current!.getBoundingClientRect();
     const screen = { x: event.clientX - rect.left, y: event.clientY - rect.top };
-    return { screen, page: editor.screenToPage(screen) };
+    return { screen, page: editor.screenToPage(screen), rect };
   }, [editor]);
 
   const getShapeAtEvent = useCallback((event: React.PointerEvent) => {
@@ -980,20 +980,25 @@ export function Canvas() {
 
   const onPointerMove = useCallback((event: React.PointerEvent) => {
     if (isPointerDownRef.current && event.pointerId !== controller.activePointerIdRef.current) return;
-    const { screen, page } = getPagePoint(event);
+    const { screen, page, rect } = getPagePoint(event);
     updatePointerPosition(screen);
-    const handleId = controller.readOnlySignal.peek()
+    const currentTool = editor.currentToolId.peek();
+    const drawing = isPointerDownRef.current && currentTool === 'draw';
+    const samples = drawing ? event.nativeEvent.getCoalescedEvents?.().map(sample => ({
+      ...editor.screenToPage({ x: sample.clientX - rect.left, y: sample.clientY - rect.top }),
+      pressure: sample.pressure,
+    })) : undefined;
+    const handleId = drawing || controller.readOnlySignal.peek()
       ? null
       : getHandleAtPagePoint(editor, page.x, page.y);
     if (containerRef.current) {
-      const currentTool = editor.currentToolId.peek();
       const state = editor.getCurrentTool().current.constructor as typeof StateNode;
       const segmentCursor = state.id === 'editingOrthoRoute' ? segmentDragCursorRef.current : null;
       containerRef.current.style.cursor = state.id === 'draggingConnectorLabel' ? 'grabbing'
         : segmentCursor ?? getCanvasToolCursor(currentTool, handleId, event.buttons, editor);
     }
     editor.dispatchEvent({
-      type: 'pointerMove', point: page, screenPoint: screen,
+      type: 'pointerMove', point: page, screenPoint: screen, samples,
       shiftKey: event.shiftKey, altKey: event.altKey,
       pressure: event.pressure, pointerType: event.pointerType,
     } as any);

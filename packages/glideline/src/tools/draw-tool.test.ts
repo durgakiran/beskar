@@ -80,6 +80,23 @@ describe('DrawTool FSM', () => {
     });
   });
 
+  it('keeps coalesced bends and pressure at high zoom and ends at the release point', () => {
+    const editor = makeEditor();
+    editor.camera.setCamera({ z: 4 });
+    pd(editor, 10, 10, 0.2, 'pen');
+    const samples = [
+      { x: 10.5, y: 11, pressure: 0.7 },
+      { x: 11, y: 10, pressure: 0.4 },
+    ];
+    editor.dispatchEvent({ type: 'pointerMove', point: { x: 11, y: 10 }, pressure: 0.4, samples });
+    pu(editor, 11.1, 10);
+
+    const [shape] = editor.getShapesInBox({ minX: 0, minY: 0, maxX: 100, maxY: 100 });
+    expect(shape!.props.points).toEqual([
+      { x: 10, y: 10, pressure: 0.2 }, ...samples, { x: 11.1, y: 10, pressure: 0.5 },
+    ]);
+  });
+
   it('simulates pressure for mouse-drawn pressure strokes', () => {
     const editor = makeEditor();
     editor.activeStyles.value = { ...editor.activeStyles.peek(), pressureSensitive: true };
@@ -113,13 +130,26 @@ describe('DrawTool FSM', () => {
     ]);
   });
 
-  it('discards a too-short stroke on pointerCancel, same as pointerUp', () => {
+  it('discards a stationary tap interrupted by pointerCancel', () => {
     const editor = makeEditor();
 
     pd(editor, 100, 100);
     pc(editor);
 
     expect(shapeCount(editor)).toBe(0);
+  });
+
+  it('commits a tap as a single selectable dot', () => {
+    const editor = makeEditor();
+    pd(editor, 10, 20);
+    pu(editor, 10, 20);
+    const shape = editor.getTopShapeAtPoint({ x: 10, y: 20 });
+    expect(shape?.props.points).toEqual([{ x: 10, y: 20, pressure: 0.5 }]);
+    expect(shape?.props.isComplete).toBe(true);
+    editor.undo();
+    expect(shapeCount(editor)).toBe(0);
+    editor.redo();
+    expect(editor.getTopShapeAtPoint({ x: 10, y: 20 })?.id).toBe(shape?.id);
   });
 
   it('creates a closed variable-width outline', () => {
