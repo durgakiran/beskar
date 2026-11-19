@@ -37,6 +37,23 @@ function makeStore(): GlideStore {
 }
 
 describe('atomic staged publication', () => {
+  it('checks references and the record limit when inserting a single shape on an existing page', () => {
+    const schema = new GlideSchema({ maxRecords: 2 });
+    schema.registerShapeUtil({ type: 'box', references: [{ path: '/props/target', targetKind: 'shape' }] });
+    schema.freeze();
+    const store = new GlideStore(schema);
+
+    expect(() => store.put([shape('invalid', 0, { props: { target: 'missing' } })]))
+      .toThrow('/props/target must reference an existing shape record');
+    store.put([shape('first')]);
+    expect(() => store.put([shape('overflow')])).toThrow('record-count limit');
+    store.transact({ origin: 'user' }, tx => tx.remove('first'));
+    store.put([shape('replacement')]);
+
+    expect(store.getShapeIdsOnPage(store.getPageIds()[0]!)).toEqual(['replacement']);
+    expect(store.assertIntegrity().ok).toBe(true);
+  });
+
   it('publishes nothing when geometry for the second record throws', () => {
     const store = makeStore();
     store.getGeometry = record => ({

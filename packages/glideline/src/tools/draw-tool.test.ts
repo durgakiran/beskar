@@ -29,6 +29,27 @@ function pc(editor: ReturnType<typeof makeEditor>) {
 }
 
 describe('DrawTool FSM', () => {
+  it('updates the live stroke without invalidating the page shape lists on each point', () => {
+    const editor = makeEditor();
+    pd(editor, 10, 10);
+    const ids = editor.getCurrentPageShapeIdsSignal().peek();
+    const order = editor.getOrderedShapeIds();
+    const stroke = editor.getShapeSignal(ids[0]!);
+    const previews: unknown[] = [];
+    const unsubscribe = stroke.subscribe(record => previews.push(record?.props));
+
+    pm(editor, 20, 20);
+    expect(editor.getCurrentPageShapeIdsSignal().peek()).toBe(ids);
+    expect(editor.getOrderedShapeIds()).toBe(order);
+    expect(previews).toHaveLength(2);
+
+    pu(editor, 20, 20);
+    expect(editor.getOrderedShapeIds()).toEqual(order);
+    editor.undo();
+    expect(editor.getOrderedShapeIds()).toEqual([]);
+    unsubscribe();
+  });
+
   it('stays active in draw tool after drawing a stroke', () => {
     const editor = makeEditor();
     

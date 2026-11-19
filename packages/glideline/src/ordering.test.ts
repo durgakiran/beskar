@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { createEditor, type GlidePlugin } from './editor';
 import {
   compareSiblingOrder,
+  generateAppendOrderKey,
   generateOrderKeysBetween,
   generateRebalancedOrderKeys,
   getCanonicalShapeIds,
@@ -33,6 +34,16 @@ function createBox(
 }
 
 describe('canonical fractional order keys', () => {
+  it('leaves space for 3,000 appends and for inserting between the newest siblings', () => {
+    let previous = generateAppendOrderKey(null);
+    for (let attempt = 1; attempt < 3000; attempt++) {
+      const next = generateAppendOrderKey(previous);
+      const [between] = generateOrderKeysBetween(previous, next, 1);
+      if (!(previous < between! && between! < next)) throw new Error('Append key left no gap');
+      previous = next;
+    }
+  });
+
   it('generates deterministic, canonical keys strictly between bounds', () => {
     const [lower, upper] = generateRebalancedOrderKeys(2);
     const first = generateOrderKeysBetween(lower!, upper!, 3);

@@ -172,7 +172,11 @@ const ShapeLayer = memo(({
   }, [shape, areaErasePreview]);
   const remoteTextEditingShapeIds = useSignalValue(controller.remoteTextEditingShapeIdsSignal);
   const isRemoteTextEditing = remoteTextEditingShapeIds?.has(id) ?? false;
-  const documentVersion = useSignalValue(editor.getDocumentVersionSignal());
+  const inkParent = useSignalValue(isFreehand ? editor.interactions.getSignal(shape.parentId) : undefined);
+  // Top-level ink renders from its own record and erase-preview signals.
+  // Nested shapes still need ancestor edits, and connectors need rerouting.
+  const documentVersion = useSignalValue(isFreehand && inkParent?.['kind'] === 'page'
+    ? undefined : editor.getDocumentVersionSignal());
   useSignalValue(controller.collaborationTextVersionSignal);
   const svgRef = useRef<SVGSVGElement>(null);
 

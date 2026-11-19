@@ -348,6 +348,7 @@ export class GlideSchema {
     if (!records.some(record => record['kind'] === 'page')) {
       throw new DocumentValidationError('document must contain at least one page');
     }
+    const getRecord = (id: string) => byId.get(id);
     for (const record of records) {
       const id = record['id'] as string;
       if (record['kind'] === 'binding') {
@@ -363,25 +364,7 @@ export class GlideSchema {
         }
       }
 
-      for (const [field, expectedKind] of [['assetId', 'asset']] as const) {
-        const targetId = record[field];
-        if (targetId === undefined || targetId === null) continue;
-        const target = typeof targetId === 'string' ? byId.get(targetId) : undefined;
-        if (!target || target['kind'] !== expectedKind) throw new DocumentValidationError(`${field} must reference a ${expectedKind}`, id);
-      }
-
-      for (const reference of this.getReferenceDescriptors(record)) {
-        const targetId = readPointer(record, reference.path);
-        if (targetId === undefined || targetId === null) continue;
-        if (typeof targetId !== 'string') {
-          throw new DocumentValidationError(`${reference.path} must contain a record ID or null`, id);
-        }
-        const target = byId.get(targetId);
-        if (!target || (reference.targetKind && target['kind'] !== reference.targetKind)) {
-          const suffix = reference.targetKind ? ` ${reference.targetKind}` : '';
-          throw new DocumentValidationError(`${reference.path} must reference an existing${suffix} record`, id);
-        }
-      }
+      this._validateReferences(record, getRecord);
 
       if (record['kind'] === 'binding') {
         const terminal = (record['props'] as AnyRecord)['terminal'];
@@ -402,6 +385,35 @@ export class GlideSchema {
 
     this._validateParentGraph(byId);
     this._validateBindingPages(byId);
+  }
+
+  /** @internal Validate a new shape whose parent is an existing page in a valid store. */
+  validatePageShapeInsert(record: AnyRecord, recordCount: number, getRecord: (id: string) => AnyRecord | undefined): void {
+    if (recordCount > this.limits.maxRecords) throw new DocumentValidationError('document exceeds configured record-count limit');
+    this.validateRecord(record);
+    this._validateReferences(record, getRecord);
+  }
+
+  private _validateReferences(record: AnyRecord, getRecord: (id: string) => AnyRecord | undefined): void {
+    const id = record['id'] as string;
+    const assetId = record['assetId'];
+    if (assetId !== undefined && assetId !== null
+      && (typeof assetId !== 'string' || getRecord(assetId)?.['kind'] !== 'asset')) {
+      throw new DocumentValidationError('assetId must reference a asset', id);
+    }
+
+    for (const reference of this.getReferenceDescriptors(record)) {
+      const targetId = readPointer(record, reference.path);
+      if (targetId === undefined || targetId === null) continue;
+      if (typeof targetId !== 'string') {
+        throw new DocumentValidationError(`${reference.path} must contain a record ID or null`, id);
+      }
+      const target = getRecord(targetId);
+      if (!target || (reference.targetKind && target['kind'] !== reference.targetKind)) {
+        const suffix = reference.targetKind ? ` ${reference.targetKind}` : '';
+        throw new DocumentValidationError(`${reference.path} must reference an existing${suffix} record`, id);
+      }
+    }
   }
 
   loadDocument(input: unknown): LoadedDocument {

@@ -50,6 +50,13 @@ export function generateOrderKeysBetween(
     formatOrderKey(lowerValue + step * BigInt(index + 1))));
 }
 
+/** Reserve room for repeated appends and for inserts between adjacent siblings. */
+export function generateAppendOrderKey(lower: string | null): string {
+  const lowerValue = lower === null ? 0n : parseOrderKey(lower);
+  const step = (ORDER_MAX - lowerValue) / 128n;
+  return formatOrderKey(lowerValue + (step > 0n ? step : 1n));
+}
+
 /** Evenly distribute a complete sibling set across the available key space. */
 export function generateRebalancedOrderKeys(count: number): readonly string[] {
   return generateOrderKeysBetween(null, null, count);
