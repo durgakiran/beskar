@@ -1,13 +1,16 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { webcrypto } from 'node:crypto';
 import * as Y from 'yjs';
+import { GlideboardController } from '@durgakiran/glideboard';
 import { base64ToUint8Array } from 'app/core/utils/base64';
 import { IncrementalCheckpointSession, SERVER_REPLAY_ORIGIN } from './IncrementalCheckpointSession';
 import { CHECKPOINT_MAX_BYTES, encodeCheckpointBatch, type CheckpointEncodingRequest } from './encodeCheckpointBatch';
 import type { RecoveryJournal, JournalUpdate } from './IncrementalRecoveryJournal';
-import { postJsonBody } from './api';
+import { jsonRequest, postJsonBody } from './api';
+import { MAX_ASSEMBLED_CHECKPOINT_BYTES } from './uploadCheckpoint';
 
 vi.mock('./api', async importOriginal => ({
-    ...await importOriginal<typeof import('./api')>(), postJsonBody: vi.fn(),
+    ...await importOriginal<typeof import('./api')>(), postJsonBody: vi.fn(), jsonRequest: vi.fn(),
 }));
 
 function open(recovered: JournalUpdate[] = [], journal?: RecoveryJournal) {
@@ -32,6 +35,44 @@ function open(recovered: JournalUpdate[] = [], journal?: RecoveryJournal) {
 function updateBody(call: number): Uint8Array {
     const body = JSON.parse(vi.mocked(postJsonBody).mock.calls[call]![1]) as { update: string };
     return base64ToUint8Array(body.update);
+}
+
+function checkpointBackend(interruptOffset: number) {
+    vi.stubGlobal('crypto', webcrypto);
+    const doc = new Y.Doc();
+    let sequence = 0;
+    const uploads = new Map<string, { bytes: Uint8Array; offset: number; receipt?: { pageId: number; sequence: string } }>();
+    const offsets: number[] = [];
+    const save = (bytes: Uint8Array) => {
+        Y.applyUpdate(doc, bytes);
+        return { pageId: 7, sequence: String(++sequence) };
+    };
+    vi.mocked(postJsonBody).mockImplementation(async (_url, body) => save(base64ToUint8Array(JSON.parse(body).update)));
+    vi.mocked(jsonRequest).mockImplementation(async (url, init) => {
+        const target = new URL(url, 'https://example.test');
+        const id = target.pathname.split('/').at(-1)!;
+        let upload = uploads.get(id);
+        if (!upload) {
+            upload = { bytes: new Uint8Array(Number(target.searchParams.get('size'))), offset: 0 };
+            uploads.set(id, upload);
+        }
+        if (init?.method === 'PUT') {
+            const offset = Number(target.searchParams.get('offset'));
+            const bytes = init.body as Uint8Array;
+            expect(offset).toBe(upload.offset);
+            expect(bytes.byteLength).toBeLessThanOrEqual(CHECKPOINT_MAX_BYTES);
+            upload.bytes.set(bytes, offset);
+            upload.offset += bytes.byteLength;
+            offsets.push(offset);
+            if (upload.offset === upload.bytes.byteLength) upload.receipt = save(upload.bytes);
+            if (offset === interruptOffset) {
+                interruptOffset = -1;
+                throw new TypeError('Connection lost after storing chunk');
+            }
+        }
+        return { nextOffset: upload.offset, receipt: upload.receipt };
+    });
+    return { doc, offsets, uploads };
 }
 
 describe('IncrementalCheckpointSession', () => {
@@ -83,6 +124,81 @@ describe('IncrementalCheckpointSession', () => {
         expect(session.getSnapshot().phase).toBe('clean');
         await session.dispose();
         doc.destroy();
+    });
+
+    it('resumes a large Glideboard edit at the next chunk, saves later edits, and preserves one-step undo', async () => {
+        const backend = checkpointBackend(0);
+        const { doc, session } = open();
+        const board = new GlideboardController({ sessionKey: 'large-edit-test' });
+        const detach = board.attachCollaboration({ doc });
+        try {
+            await session.flush();
+            const editor = board.editor;
+            const shape = (x: number) => ({ type: 'box', x, y: 0 });
+            editor.batch('Paste shapes', () => {
+                for (let i = 0; i < 25; i++) {
+                    editor.createShape({ ...shape(i), meta: { note: String(i) + 'x'.repeat(48 * 1024) } });
+                }
+            });
+            expect(editor.history.undoStack).toHaveLength(1);
+            await expect(session.flush()).rejects.toThrow('Connection lost');
+            expect(backend.offsets).toEqual([0]);
+            const serverRecords = backend.doc.getMap<Y.Map<unknown>>('glideboard-records-v2');
+            const serverShapes = () => [...serverRecords.values()]
+                .filter(record => record.get('kind') === 'shape' && record.get('$tombstone') !== true);
+            expect(serverShapes()).toHaveLength(0);
+
+            editor.setCurrentTool('draw');
+            editor.dispatchEvent({ type: 'pointerDown', point: { x: 100, y: 20 }, shiftKey: false, target: 'canvas' });
+            editor.dispatchEvent({ type: 'pointerMove', point: { x: 110, y: 30 } });
+            editor.dispatchEvent({ type: 'pointerUp', point: { x: 120, y: 40 } });
+            await session.flush();
+            expect(backend.offsets).toEqual([0, CHECKPOINT_MAX_BYTES]);
+            expect(backend.uploads.size).toBe(1);
+            expect(serverShapes()).toHaveLength(26);
+            expect(session.getSnapshot().phase).toBe('clean');
+
+            editor.undo();
+            expect(editor.getShapes()).toHaveLength(25);
+            editor.undo();
+            expect(editor.getShapes()).toHaveLength(0);
+            await session.flush();
+            expect(serverShapes()).toHaveLength(0);
+        } finally {
+            await session.dispose();
+            detach();
+            await board.dispose();
+            doc.destroy();
+            backend.doc.destroy();
+        }
+    });
+
+    it.each([
+        { description: 'a stored first chunk', offset: 0, sentBeforeReload: [0] },
+        { description: 'a lost final acknowledgement', offset: CHECKPOINT_MAX_BYTES, sentBeforeReload: [0, CHECKPOINT_MAX_BYTES] },
+    ])('recovers $description after reopening without resending stored chunks', async ({ offset, sentBeforeReload }) => {
+        const backend = checkpointBackend(offset);
+        const { doc, session, journal } = open();
+        doc.getMap('records').set('large', new Uint8Array(CHECKPOINT_MAX_BYTES + 1));
+        await expect(session.flush()).rejects.toThrow('Connection lost');
+        const [, bytes, requestId] = vi.mocked(journal.prepare).mock.calls[0]!;
+        expect(journal.acknowledge).not.toHaveBeenCalled();
+        expect(backend.offsets).toEqual(sentBeforeReload);
+        doc.getMap('records').set('later', 'still saved');
+        const [later] = vi.mocked(journal.append).mock.calls[1]!;
+        await session.dispose();
+        doc.destroy();
+
+        const reopened = open([{ id: 1, bytes, requestId }, { id: 2, bytes: later }]);
+        await reopened.session.flush();
+        expect(backend.offsets).toEqual([0, CHECKPOINT_MAX_BYTES]);
+        expect(reopened.journal.acknowledge).toHaveBeenCalledTimes(2);
+        expect(reopened.journal.acknowledge).toHaveBeenCalledWith(requestId);
+        expect(reopened.doc.getMap('records').get('large')).toEqual(backend.doc.getMap('records').get('large'));
+        expect(backend.doc.getMap('records').get('later')).toBe('still saved');
+        await reopened.session.dispose();
+        reopened.doc.destroy();
+        backend.doc.destroy();
     });
 
     it('saves every five seconds during continuous editing and skips empty windows', async () => {
@@ -187,7 +303,7 @@ describe('IncrementalCheckpointSession', () => {
         Y.applyUpdate(doc, Y.encodeStateAsUpdate(remote), SERVER_REPLAY_ORIGIN);
         expect(journal.append).not.toHaveBeenCalled();
 
-        doc.getMap('records').set('oversize', new Uint8Array(CHECKPOINT_MAX_BYTES + 1));
+        doc.getMap('records').set('oversize', new Uint8Array(MAX_ASSEMBLED_CHECKPOINT_BYTES + 1));
         await expect(session.flush()).rejects.toThrow('remains in local recovery');
         expect(journal.append).toHaveBeenCalledTimes(1);
         expect(postJsonBody).not.toHaveBeenCalled();

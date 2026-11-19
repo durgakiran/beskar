@@ -5,18 +5,25 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/binary"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net"
+	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"os"
 	osexec "os/exec"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/durgakiran/beskar/core"
+	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -67,10 +74,10 @@ func TestDraftV2Postgres(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	migrate := func(command ...string) {
+	migrate := func(changelog string, command ...string) {
 		t.Helper()
 		args := []string{"--defaults-file=/dev/null", "--search-path=" + searchPath,
-			"--changelog-file=updates/whiteboard_draft_replay.xml",
+			"--changelog-file=updates/" + changelog,
 			"--url=jdbc:postgresql://" + net.JoinHostPort(config.ConnConfig.Host, strconv.Itoa(int(config.ConnConfig.Port))) + "/whiteboard_draft_test",
 			"--username=" + config.ConnConfig.User}
 		args = append(args, command...)
@@ -82,7 +89,8 @@ func TestDraftV2Postgres(t *testing.T) {
 			t.Fatalf("Liquibase %s failed: %v\n%s", command[0], err, output)
 		}
 	}
-	migrate("update")
+	migrate("whiteboard_checkpoint_uploads.xml", "update")
+	migrate("whiteboard_draft_replay.xml", "update")
 	// The replay fixture uses the same title table shape; publication integration
 	// separately applies and verifies the actual XML title migration.
 	exec(`CREATE TABLE whiteboard.whiteboard_title_update(page_id bigint NOT NULL,sequence bigint NOT NULL,title text NOT NULL,PRIMARY KEY(page_id,sequence),FOREIGN KEY(page_id,sequence) REFERENCES whiteboard.whiteboard_update(page_id,sequence))`)
@@ -101,6 +109,110 @@ func TestDraftV2Postgres(t *testing.T) {
 	for sequence := int64(1); sequence <= 6; sequence++ {
 		exec(whiteboardV2CheckpointInsert, uuid.New(), in.PageID, sequence, in.ActorID, uuid.New(), bytes.Repeat([]byte{byte(sequence)}, 1024*1024), whiteboardUpdateEncodingV1, "hash")
 	}
+	t.Run("checkpoint upload resumes and replays one assembled update", func(t *testing.T) {
+		board := in
+		board.PageID += 10
+		base := uuid.New()
+		exec(`INSERT INTO core.page VALUES($1,$2)`, board.PageID, board.SpaceID)
+		exec(`INSERT INTO whiteboard.whiteboard VALUES($1)`, board.PageID)
+		exec(`INSERT INTO whiteboard.whiteboard_snapshot VALUES($1,$2,0,'Draft',$3,$4)`,
+			base, board.PageID, []byte{0, 0}, checkpointUploadDigest([]byte{0, 0}))
+		exec(`INSERT INTO whiteboard.whiteboard_draft(page_id,base_snapshot_id,head_sequence,updated_by) VALUES($1,$2,0,$3)`,
+			board.PageID, base, board.ActorID)
+
+		payload := bytes.Repeat([]byte{11}, 2*checkpointUploadChunkSize+32)
+		update := binary.AppendUvarint([]byte{1, 1, 1, 0, 3, 1, 1, 'm'}, uint64(len(payload)))
+		update = append(append(update, payload...), 0)
+		checkpoint := whiteboardCheckpointV2Input{PageID: board.PageID, SpaceID: board.SpaceID, ActorID: board.ActorID,
+			IdempotencyKey: uuid.New(), UpdateEncoding: whiteboardUpdateEncodingV1}
+		upload := whiteboardCheckpointUploadInput{checkpoint: checkpoint, size: len(update), digest: checkpointUploadDigest(update)}
+		handler := whiteboardCheckpointUploadControllerV2{
+			service: service,
+			identity: whiteboardPublishControllerV2{
+				user: func(context.Context) (core.UserInfo, error) {
+					return core.UserInfo{Id: "test-user", AId: board.ActorID.String()}, nil
+				},
+				permission: func(_ string, _ uuid.UUID, permission string) bool { return permission == "edit" },
+			},
+		}
+		router := chi.NewRouter()
+		route := "/space/{spaceId}/whiteboard/{pageId}/checkpoint-uploads/{uploadId}"
+		router.Get(route, handler.handleUpload)
+		router.Put(route, handler.handleUpload)
+		endpoint := fmt.Sprintf("%s/checkpoint-uploads/%s", strings.TrimPrefix(draftURL(board), "/api/v2/editor"), checkpoint.IdempotencyKey)
+		request := func(offset int, data []byte) whiteboardCheckpointUploadResult {
+			t.Helper()
+			query := url.Values{"generation": {"0"}, "size": {strconv.Itoa(upload.size)}, "digest": {upload.digest}}
+			method := http.MethodGet
+			if data != nil {
+				method = http.MethodPut
+				query.Set("offset", strconv.Itoa(offset))
+			}
+			req := httptest.NewRequest(method, endpoint+"?"+query.Encode(), bytes.NewReader(data)).WithContext(ctx)
+			req.Header.Set("Content-Type", "application/octet-stream")
+			response := httptest.NewRecorder()
+			router.ServeHTTP(response, req)
+			var result struct {
+				Data whiteboardCheckpointUploadResult
+			}
+			if response.Code != 200 || json.Unmarshal(response.Body.Bytes(), &result) != nil {
+				t.Fatalf("upload returned %d: %s", response.Code, response.Body)
+			}
+			return result.Data
+		}
+
+		if first := request(0, update[:checkpointUploadChunkSize]); first.NextOffset != checkpointUploadChunkSize || first.Receipt != nil {
+			t.Fatalf("first chunk: %+v", first)
+		}
+		// Reconnect without any client-side offset, then replay the first request as if its response was lost.
+		if progress := request(0, nil); progress.NextOffset != checkpointUploadChunkSize || progress.Receipt != nil {
+			t.Fatalf("resume: %+v", progress)
+		}
+		if duplicate := request(0, update[:checkpointUploadChunkSize]); duplicate.NextOffset != checkpointUploadChunkSize {
+			t.Fatalf("duplicate advanced progress: %+v", duplicate)
+		}
+		conflict := upload
+		conflict.chunk = bytes.Repeat([]byte{42}, checkpointUploadChunkSize)
+		if _, err := service.CheckpointUpload(ctx, conflict); !errors.Is(err, errWhiteboardV2KeyReuse) {
+			t.Fatalf("conflicting duplicate: %v", err)
+		}
+		if progress := request(checkpointUploadChunkSize, update[checkpointUploadChunkSize:2*checkpointUploadChunkSize]); progress.Receipt != nil {
+			t.Fatalf("second chunk exposed as a checkpoint: %+v", progress)
+		}
+		draft, err := service.GetDraftStatus(ctx, board)
+		if err != nil || draft.HeadSequence != 0 {
+			t.Fatalf("draft advanced before completion: %+v %v", draft, err)
+		}
+		final := request(2*checkpointUploadChunkSize, update[2*checkpointUploadChunkSize:])
+		if final.Receipt == nil || final.Receipt.Sequence != 1 || final.NextOffset != len(update) {
+			t.Fatalf("completion: %+v", final)
+		}
+		if recovered := request(0, nil); recovered.Receipt == nil || *recovered.Receipt != *final.Receipt {
+			t.Fatalf("lost acknowledgement was not recovered: %+v", recovered)
+		}
+		var staged int
+		if err := pool.QueryRow(ctx, `SELECT count(*) FROM whiteboard.whiteboard_checkpoint_upload WHERE page_id=$1`, board.PageID).Scan(&staged); err != nil || staged != 0 {
+			t.Fatalf("completed upload remained staged: %d %v", staged, err)
+		}
+
+		checkpoint.IdempotencyKey = uuid.New()
+		checkpoint.UpdateBytes = []byte{0, 0}
+		if small, err := service.CheckpointWhiteboard(ctx, checkpoint); err != nil || small.Sequence != 2 {
+			t.Fatalf("subsequent normal checkpoint: %+v %v", small, err)
+		}
+		manifest, err := service.GetDraft(ctx, board)
+		if err != nil {
+			t.Fatal(err)
+		}
+		address, err := url.Parse(manifest.UpdatesURL)
+		if err != nil {
+			t.Fatal(err)
+		}
+		replay, err := service.GetDraftUpdates(ctx, board, address.Query().Get("cursor"))
+		if err != nil || len(replay.Updates) != 2 || !replay.Complete || !bytes.Equal(replay.Updates[0].Update, update) {
+			t.Fatalf("replay did not contain one complete large checkpoint and the later edit: %d %v", len(replay.Updates), err)
+		}
+	})
 	manifest, err := service.GetDraft(ctx, in)
 	if err != nil {
 		t.Fatal(err)
@@ -322,5 +434,6 @@ func TestDraftV2Postgres(t *testing.T) {
 		t.Fatal("status exposed deleted space", err)
 	}
 	// Verify the shipped XML/SQL rollback through Liquibase too.
-	migrate("rollback-count", "--count=2")
+	migrate("whiteboard_draft_replay.xml", "rollback-count", "--count=2")
+	migrate("whiteboard_checkpoint_uploads.xml", "rollback-count", "--count=1")
 }

@@ -2,9 +2,10 @@ import type * as Y from 'yjs';
 import type { CollaborationCheckpointSource, DurabilityStatus, ProjectionTarget } from '../durability/types';
 import { DurabilityTargetError } from '../durability/types';
 import type { JournalUpdate, RecoveryJournal } from './IncrementalRecoveryJournal';
-import { postJsonBody, sequence } from './api';
+import { digest, postJsonBody, sequence } from './api';
 import { CheckpointBatchEncoder } from './CheckpointBatchEncoder';
 import { CHECKPOINT_MAX_BYTES } from './encodeCheckpointBatch';
+import { MAX_ASSEMBLED_CHECKPOINT_BYTES, uploadCheckpoint } from './uploadCheckpoint';
 
 export const SERVER_REPLAY_ORIGIN = Symbol('whiteboard-server-replay');
 const MAX_BATCH_UPDATES = 128;
@@ -17,11 +18,13 @@ interface PendingUpdate {
     readonly requestId?: string;
 }
 
-interface SaveBatch {
+type SaveBatch = {
     readonly through: number;
     readonly requestId: string;
-    readonly body: string;
-}
+} & (
+    | { readonly body: string }
+    | { readonly upload: { bytes: Uint8Array; digest: string } }
+);
 
 interface Options {
     doc: Y.Doc;
@@ -169,9 +172,14 @@ export class IncrementalCheckpointSession {
             this.assertReady();
             const batch = this.batch ??= await this.prepareBatch(through);
             this.assertReady();
-            const receipt = await postJsonBody<{ pageId: number; sequence: string }>(
-                `${this.options.base}/checkpoint`, batch.body, batch.requestId, this.options.signal,
-            );
+            const receipt = 'upload' in batch
+                ? await uploadCheckpoint(
+                    this.options.base, batch.requestId, this.options.restoreGeneration,
+                    batch.upload.bytes, batch.upload.digest, this.options.signal,
+                )
+                : await postJsonBody<{ pageId: number; sequence: string }>(
+                    `${this.options.base}/checkpoint`, batch.body, batch.requestId, this.options.signal,
+                );
             if (String(receipt.pageId) !== this.options.draftId) throw new Error('Checkpoint acknowledgement belongs to another board');
             sequence(receipt.sequence);
             await this.options.journal.acknowledge(batch.requestId);
@@ -190,19 +198,21 @@ export class IncrementalCheckpointSession {
 
     private async prepareBatch(through: number): Promise<SaveBatch> {
         const updates = selectCheckpointUpdates(this.pending, through);
-        const encoded = await this.encoder.encode(updates.map(update => update.bytes), this.options.restoreGeneration);
-        if (!encoded) {
-            if (updates.length > 1) return this.prepareBatch(updates[0]!.revision);
-            throw Object.assign(new Error('One edit exceeds the 1 MiB checkpoint limit. The edit remains in local recovery.'), { retryable: false });
+        const first = updates[0]!;
+        const large = updates.length === 1 && first.bytes.byteLength > CHECKPOINT_MAX_BYTES;
+        if (large && first.bytes.byteLength > MAX_ASSEMBLED_CHECKPOINT_BYTES) {
+            throw Object.assign(new Error('One edit exceeds the 4 MiB checkpoint upload limit. The edit remains in local recovery.'), { retryable: false });
         }
+
+        const encoded = large ? null : await this.encoder.encode(updates.map(update => update.bytes), this.options.restoreGeneration);
+        if (!large && !encoded) return this.prepareBatch(first.revision);
+        const bytes = encoded?.bytes ?? first.bytes;
+        const payload = encoded ? { body: encoded.body } : { upload: { bytes, digest: await digest(bytes) } };
+
         const ids = await Promise.all(updates.map(update => update.stored));
-        const requestId = updates[0]!.requestId ?? crypto.randomUUID();
-        if (!updates[0]!.requestId) await this.options.journal.prepare(ids, encoded.bytes, requestId);
-        return {
-            through: updates.at(-1)!.revision,
-            requestId,
-            body: encoded.body,
-        };
+        const requestId = first.requestId ?? crypto.randomUUID();
+        if (!first.requestId) await this.options.journal.prepare(ids, bytes, requestId);
+        return { through: updates.at(-1)!.revision, requestId, ...payload };
     }
 
     private schedule(): void {

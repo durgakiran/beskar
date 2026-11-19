@@ -78,25 +78,33 @@ func (deps whiteboardCheckpointControllerV2) handleCheckpoint(w http.ResponseWri
 		RestoreGeneration: generation, Title: title, PageID: page, SpaceID: space, ActorID: actor, IdempotencyKey: key, UpdateEncoding: encoding, UpdateBytes: update,
 	})
 	if err != nil {
-		switch {
-		case errors.Is(err, errWhiteboardTitleInvalid):
-			whiteboardV2Error(w, r, 400, "INVALID_REQUEST", err.Error())
-		case errors.Is(err, errWhiteboardV2KeyReuse):
-			whiteboardV2Error(w, r, 409, "IDEMPOTENCY_KEY_REUSED", errWhiteboardV2KeyReuse.Error())
-		case errors.Is(err, errWhiteboardV2BoardNotFound):
-			whiteboardV2Error(w, r, 404, "WHITEBOARD_NOT_FOUND", "Whiteboard not found in this space.")
-		case errors.Is(err, errWhiteboardRestored):
-			whiteboardV2Error(w, r, 409, "WHITEBOARD_RESTORED", err.Error())
-		case errors.Is(err, errWhiteboardV2Archived):
-			whiteboardV2Error(w, r, 409, "SPACE_ARCHIVED", errWhiteboardV2Archived.Error())
-		case errors.Is(err, errWhiteboardV2LockTimeout):
-			w.Header().Set("Retry-After", "1")
-			whiteboardV2Error(w, r, 503, "WHITEBOARD_CHECKPOINT_BUSY", "Checkpoint is busy. Retry the same batch and Idempotency-Key.")
-		default:
-			logWhiteboardV2Error("whiteboard v2 checkpoint failed", err)
-			whiteboardV2Error(w, r, 500, "WHITEBOARD_CHECKPOINT_FAILED", "Save could not be confirmed. Retry the same batch and Idempotency-Key.")
-		}
+		writeCheckpointV2Error(w, r, err)
 		return
 	}
 	core.SendSuccessResponse(w, r, http.StatusOK, result)
+}
+
+func writeCheckpointV2Error(w http.ResponseWriter, r *http.Request, err error) {
+	switch {
+	case errors.Is(err, errCheckpointUploadInvalid):
+		whiteboardV2Error(w, r, 400, "INVALID_CHECKPOINT_UPLOAD", err.Error())
+	case errors.Is(err, errCheckpointUploadBusy):
+		whiteboardV2Error(w, r, 503, "CHECKPOINT_UPLOAD_BUSY", err.Error())
+	case errors.Is(err, errWhiteboardTitleInvalid):
+		whiteboardV2Error(w, r, 400, "INVALID_REQUEST", err.Error())
+	case errors.Is(err, errWhiteboardV2KeyReuse):
+		whiteboardV2Error(w, r, 409, "IDEMPOTENCY_KEY_REUSED", errWhiteboardV2KeyReuse.Error())
+	case errors.Is(err, errWhiteboardV2BoardNotFound):
+		whiteboardV2Error(w, r, 404, "WHITEBOARD_NOT_FOUND", "Whiteboard not found in this space.")
+	case errors.Is(err, errWhiteboardRestored):
+		whiteboardV2Error(w, r, 409, "WHITEBOARD_RESTORED", err.Error())
+	case errors.Is(err, errWhiteboardV2Archived):
+		whiteboardV2Error(w, r, 409, "SPACE_ARCHIVED", errWhiteboardV2Archived.Error())
+	case errors.Is(err, errWhiteboardV2LockTimeout):
+		w.Header().Set("Retry-After", "1")
+		whiteboardV2Error(w, r, 503, "WHITEBOARD_CHECKPOINT_BUSY", "Checkpoint is busy. Retry the same batch and Idempotency-Key.")
+	default:
+		logWhiteboardV2Error("whiteboard v2 checkpoint failed", err)
+		whiteboardV2Error(w, r, 500, "WHITEBOARD_CHECKPOINT_FAILED", "Save could not be confirmed. Retry the same batch and Idempotency-Key.")
+	}
 }

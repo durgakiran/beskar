@@ -218,7 +218,7 @@ func (service *whiteboardServiceV2) GetDraftUpdates(ctx context.Context, in whit
 		return result, errWhiteboardDraftCursor
 	}
 	result.HeadSequence = replay.Head
-	rows, err := tx.Query(ctx, whiteboardV2DraftUpdates, in.PageID, after, replay.Head, whiteboardDraftPageCount, whiteboardDraftPageBytes, whiteboardCheckpointV2MaxUpdate)
+	rows, err := tx.Query(ctx, whiteboardV2DraftUpdates, in.PageID, after, replay.Head, whiteboardDraftPageCount, whiteboardDraftPageBytes, whiteboardCheckpointV2MaxAssembled)
 	if err != nil {
 		return result, err
 	}
@@ -229,7 +229,7 @@ func (service *whiteboardServiceV2) GetDraftUpdates(ctx context.Context, in whit
 		if err = rows.Scan(&update.Sequence, &update.UpdateEncoding, &update.Update, &update.Title); err != nil {
 			return result, err
 		}
-		if last == math.MaxInt64 || update.Sequence != last+1 || update.Sequence > replay.Head || update.UpdateEncoding != whiteboardUpdateEncodingV1 || len(update.Update) == 0 || len(update.Update) > whiteboardCheckpointV2MaxUpdate {
+		if last == math.MaxInt64 || update.Sequence != last+1 || update.Sequence > replay.Head || update.UpdateEncoding != whiteboardUpdateEncodingV1 || len(update.Update) == 0 || len(update.Update) > whiteboardCheckpointV2MaxAssembled {
 			return result, errWhiteboardDraftIntegrity
 		}
 		size += len(update.Update)

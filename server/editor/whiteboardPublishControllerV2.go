@@ -33,6 +33,18 @@ func (d whiteboardPublishControllerV2) register(r chi.Router) {
 	r.Head("/space/{spaceId}/whiteboard/{pageId}/published/{versionId}/content", d.handleContent)
 }
 func (d whiteboardPublishControllerV2) identity(w http.ResponseWriter, r *http.Request, permission string) (whiteboardDraftInput, bool) {
+	in, ok := d.boardIdentity(w, r, permission)
+	if !ok {
+		return in, false
+	}
+	if r.URL.RawQuery != "" && !validPublishedPreviewQuery(r) {
+		whiteboardV2Error(w, r, 400, "INVALID_REQUEST", "Query parameters are not supported.")
+		return whiteboardDraftInput{}, false
+	}
+	return in, true
+}
+
+func (d whiteboardPublishControllerV2) boardIdentity(w http.ResponseWriter, r *http.Request, permission string) (whiteboardDraftInput, bool) {
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	user, err := d.user(r.Context())
@@ -49,10 +61,6 @@ func (d whiteboardPublishControllerV2) identity(w http.ResponseWriter, r *http.R
 	}
 	if !d.permission(strconv.FormatInt(page, 10), actor, permission) {
 		whiteboardV2Error(w, r, 403, "WHITEBOARD_FORBIDDEN", "You cannot perform this whiteboard action.")
-		return whiteboardDraftInput{}, false
-	}
-	if r.URL.RawQuery != "" && !validPublishedPreviewQuery(r) {
-		whiteboardV2Error(w, r, 400, "INVALID_REQUEST", "Query parameters are not supported.")
 		return whiteboardDraftInput{}, false
 	}
 	return whiteboardDraftInput{SpaceID: space, PageID: page, ActorID: actor}, true
