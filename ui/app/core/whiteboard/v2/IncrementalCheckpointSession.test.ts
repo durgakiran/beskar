@@ -37,29 +37,33 @@ describe('IncrementalCheckpointSession', () => {
         vi.resetAllMocks();
     });
 
-    it('journals every edit and waits for five uninterrupted seconds before saving', async () => {
+    it('saves every five seconds during continuous editing and skips empty windows', async () => {
         vi.useFakeTimers();
         const { doc, session, journal } = open();
         vi.mocked(post).mockResolvedValue({ pageId: 7, sequence: '1' });
         const board = doc.getMap('records');
-        for (let i = 0; i < 4; i++) {
-            if (i > 0) await vi.advanceTimersByTimeAsync(4000);
-            board.set(String(i), true);
-            await session.retryPending();
-            expect(post).not.toHaveBeenCalled();
+        for (let window = 0; window < 2; window++) {
+            for (let edit = 0; edit < 3; edit++) {
+                if (edit > 0) await vi.advanceTimersByTimeAsync(2000);
+                board.set(`${window}:${edit}`, true);
+                await session.retryPending();
+                expect(post).toHaveBeenCalledTimes(window);
+            }
+            expect(journal.append).toHaveBeenCalledTimes((window + 1) * 3);
+            await vi.advanceTimersByTimeAsync(999);
+            expect(post).toHaveBeenCalledTimes(window);
+            await vi.advanceTimersByTimeAsync(1);
+            expect(post).toHaveBeenCalledTimes(window + 1);
         }
-        expect(journal.append).toHaveBeenCalledTimes(4);
-        await vi.advanceTimersByTimeAsync(4999);
-        expect(post).not.toHaveBeenCalled();
-        await vi.advanceTimersByTimeAsync(1);
-        expect(post).toHaveBeenCalledTimes(1);
-        expect(journal.prepare).toHaveBeenCalledWith([1, 2, 3, 4], expect.any(Uint8Array), expect.any(String));
+        await vi.advanceTimersByTimeAsync(10000);
+        expect(post).toHaveBeenCalledTimes(2);
+        expect(vi.mocked(journal.prepare).mock.calls.map(([ids]) => ids)).toEqual([[1, 2, 3], [4, 5, 6]]);
         expect(session.getSnapshot().phase).toBe('clean');
         await session.dispose();
         doc.destroy();
     });
 
-    it('waits for inactivity after an edit made during an in-flight save', async () => {
+    it('runs an elapsed save window after the previous request completes', async () => {
         vi.useFakeTimers();
         const { doc, session } = open();
         let finishFirstSave!: (receipt: { pageId: number; sequence: string }) => void;
@@ -71,10 +75,9 @@ describe('IncrementalCheckpointSession', () => {
         expect(post).toHaveBeenCalledTimes(1);
 
         board.set('second', true);
-        await vi.advanceTimersByTimeAsync(2000);
-        finishFirstSave({ pageId: 7, sequence: '1' });
-        await vi.advanceTimersByTimeAsync(2999);
+        await vi.advanceTimersByTimeAsync(6000);
         expect(post).toHaveBeenCalledTimes(1);
+        finishFirstSave({ pageId: 7, sequence: '1' });
         await vi.advanceTimersByTimeAsync(1);
         expect(post).toHaveBeenCalledTimes(2);
         expect(session.getSnapshot().phase).toBe('clean');

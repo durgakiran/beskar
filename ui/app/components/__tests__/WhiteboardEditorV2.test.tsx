@@ -289,7 +289,7 @@ describe('WhiteboardEditorV2 capture preparation', () => {
         expect(checkpoint[1].title).toBe('Renamed');
     });
 
-    it('does not use title blur to flush canvas changes ahead of the idle save', async () => {
+    it('does not use title blur to flush canvas changes ahead of the scheduled save', async () => {
         await renderEditor();
         mocks.durabilitySnapshot.mockReturnValue({ phase: 'dirty' });
         const title = screen.getByLabelText('Whiteboard title');

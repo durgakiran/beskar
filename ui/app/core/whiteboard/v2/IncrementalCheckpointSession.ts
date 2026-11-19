@@ -8,7 +8,7 @@ import { post, sequence } from './api';
 export const SERVER_REPLAY_ORIGIN = Symbol('whiteboard-server-replay');
 export const CHECKPOINT_MAX_BYTES = 1024 * 1024;
 const MAX_BATCH_UPDATES = 128;
-const AUTOSAVE_IDLE_MS = 5000;
+const AUTOSAVE_INTERVAL_MS = 5000;
 
 interface PendingUpdate {
     readonly revision: number;
@@ -44,7 +44,7 @@ export class IncrementalCheckpointSession {
     private batch: SaveBatch | null = null;
     private saving: Promise<void> | null = null;
     private timer: ReturnType<typeof setTimeout> | undefined;
-    private idleUntil = Date.now() + AUTOSAVE_IDLE_MS;
+    private saveAfter: number | undefined;
     private retryAfter = 0;
     private retryDelay = 500;
     private source: CollaborationCheckpointSource | null = null;
@@ -60,7 +60,10 @@ export class IncrementalCheckpointSession {
         for (const update of recovered) {
             this.pending.push({ ...update, revision: ++this.revision, stored: Promise.resolve(update.id) });
         }
-        if (this.pending.length) this.setStatus({ phase: 'dirty' });
+        if (this.pending.length) {
+            this.saveAfter = Date.now() + AUTOSAVE_INTERVAL_MS;
+            this.setStatus({ phase: 'dirty' });
+        }
         options.doc.on('update', this.onUpdate);
     }
 
@@ -71,7 +74,7 @@ export class IncrementalCheckpointSession {
             if (!this.disposed) this.setStatus({ phase: 'error', localRecovery: 'error', error: asError(error) });
         });
         this.pending.push({ revision: ++this.revision, bytes, stored });
-        this.idleUntil = Date.now() + AUTOSAVE_IDLE_MS;
+        this.saveAfter ??= Date.now() + AUTOSAVE_INTERVAL_MS;
         if (this.status.phase === 'clean') this.setStatus({ phase: 'dirty', localRecovery: 'pending' });
         this.schedule();
     };
@@ -116,6 +119,7 @@ export class IncrementalCheckpointSession {
         const through = this.revision;
         clearTimeout(this.timer);
         this.timer = undefined;
+        this.saveAfter = undefined;
         while (this.savedRevision < through) {
             await (this.saving ?? this.startSave(through));
         }
@@ -201,16 +205,10 @@ export class IncrementalCheckpointSession {
     private schedule(): void {
         if (this.timer !== undefined || this.saving || this.disposed || this.quarantined
             || !this.pending.length || !this.source || this.source.status?.peek() === 'catching-up') return;
-        const saveAt = Math.max(this.idleUntil, this.retryAfter);
+        const saveAt = Math.max(this.saveAfter ?? 0, this.retryAfter);
         if (!Number.isFinite(saveAt)) return;
         this.timer = setTimeout(() => {
             this.timer = undefined;
-            // Edits move the deadline, including while a request is in flight.
-            // Recheck it here so a burst of strokes needs only one timer.
-            if (Date.now() < this.idleUntil) {
-                this.schedule();
-                return;
-            }
             void this.flush().catch(() => {});
         }, Math.max(0, saveAt - Date.now()));
     }

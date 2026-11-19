@@ -173,7 +173,7 @@ export default function WhiteboardEditorV2({ slug }: { slug: string[] }) {
                 if (!force && incremental.getSnapshot().phase !== 'clean') return Promise.resolve();
                 const normalized = change.title.trim();
                 if (!normalized || [...normalized].length > 255 || normalized.includes('\0')) return Promise.reject(new Error('Title must contain 1–255 characters.'));
-                // Background title saves wait for the journal to drain on its idle timer.
+                // Background title saves wait for the journal's scheduled checkpoint.
                 renaming = incremental.flush().then(() => post<{ sequence: string }>(`${base}/checkpoint`, {
                     updateEncoding: 'yjs-update-v1', update: uint8ArrayToBase64(new Uint8Array([0, 0])),
                     title: normalized, restoreGeneration: generation,
