@@ -114,8 +114,16 @@ function inkCenterline(points: Vec2[], width: number): Vec2[] {
     if (index === 0 || index === points.length - 1) return point;
     const prev = points[index - 1]!;
     const next = points[index + 1]!;
-    const dx = (prev.x + next.x - 2 * point.x) / 4;
-    const dy = (prev.y + next.y - 2 * point.y) / 4;
+    // A five-sample binomial filter attenuates jitter through a turn.
+    // Use the smaller symmetric window next to either endpoint.
+    const outerPrev = points[index - 2];
+    const outerNext = points[index + 2];
+    let dx = (prev.x - point.x + next.x - point.x) / 4;
+    let dy = (prev.y - point.y + next.y - point.y) / 4;
+    if (outerPrev && outerNext) {
+      dx += (outerPrev.x - point.x + outerNext.x - point.x) / 16;
+      dy += (outerPrev.y - point.y + outerNext.y - point.y) / 16;
+    }
     const scale = width / Math.max(width, Math.hypot(dx, dy));
     return { x: point.x + dx * scale, y: point.y + dy * scale };
   });
