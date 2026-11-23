@@ -244,12 +244,12 @@ export class FreehandUtil extends ShapeUtil<FreehandShape> {
 
     if (points.length === 0) return g;
 
-    // Freehand points are in world space; offset by -shape.x, -shape.y to draw in local space
-    const localPoints = points.map(pt => ({ x: pt.x - shape.x, y: pt.y - shape.y }));
+    // Freehand points are in world space; offset by -shape.x, -shape.y to draw in local space.
     if (points.length === 1) {
+      const point = points[0]!;
       const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-      dot.setAttribute('cx', String(localPoints[0]!.x));
-      dot.setAttribute('cy', String(localPoints[0]!.y));
+      dot.setAttribute('cx', String(point.x - shape.x));
+      dot.setAttribute('cy', String(point.y - shape.y));
       dot.setAttribute('r', String(strokeW / 2));
       dot.setAttribute('fill', strokeColor);
       g.appendChild(dot);
@@ -262,7 +262,10 @@ export class FreehandUtil extends ShapeUtil<FreehandShape> {
         point.y - shape.y,
         point.pressure,
       ]), strokeW, simulatePressure, isComplete)
-      : catmullRomPath(inkCenterline(localPoints, strokeW), isClosed, 1 / 6);
+      : catmullRomPath(inkCenterline(points.map(point => ({
+        x: point.x - shape.x,
+        y: point.y - shape.y,
+      })), strokeW), isClosed, 1 / 6);
 
     const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
     path.setAttribute('d', pathStr);

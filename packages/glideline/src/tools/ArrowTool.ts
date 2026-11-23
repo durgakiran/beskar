@@ -117,7 +117,7 @@ class Drawing extends StateNode {
   }
 
   private _destinationAt(point: Vec2): BindingPreviewCandidate | null {
-    return resolveBindingCandidate(this.editor, point, [this._source?.targetId ?? null]);
+    return resolveBindingCandidate(this.editor, point, { oppositeTargetId: this._source?.targetId, connectorId: this._id });
   }
 
   private _refreshSource(): void {

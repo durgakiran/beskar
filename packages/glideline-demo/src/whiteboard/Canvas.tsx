@@ -20,7 +20,6 @@ import { preventFocusStealRef } from './WhiteboardApp';
 import { wbEditor } from './editor';
 import { useSignalValue } from '../useSignalValue';
 import type { ShapeId, GlideShape } from '../../../glideline/src/types';
-import { STICKY_COLORS } from '../../../glideline/src/shapes/StickyNoteUtil';
 import { FONT_SIZES, FONT_FAMILIES } from '../../../glideline/src/styles';
 import { Rectangle2d, Ellipse2d, Polygon2d, Polyline2d } from '../../../glideline/src/geometry';
 
@@ -353,19 +352,8 @@ export function InlineEditor() {
     wbEditor.stopEditing(selectAgain);
   };
 
-  // Background colour for sticky notes
-  let bg = 'rgba(30,30,46,0.85)';
-  let isSticky = false;
-  let isText = false;
-  if (shape.type === 'sticky-note') {
-    bg = STICKY_COLORS[(shape.props as any).color] ?? bg;
-    isSticky = true;
-  } else if (shape.type === 'text') {
-    bg = 'transparent';
-    isText = true;
-  } else {
-    bg = 'transparent';
-  }
+  const isSticky = shape.type === 'sticky-note';
+  const isText = shape.type === 'text';
 
   const font = (shape.props as any).font || 'sans';
   const fontSize = (shape.props as any).fontSize || 'md';
@@ -385,7 +373,6 @@ export function InlineEditor() {
         display: 'flex',
         alignItems: isSticky || isText ? 'flex-start' : 'center',
         justifyContent: 'center',
-        background: bg,
       }}
     >
       <textarea

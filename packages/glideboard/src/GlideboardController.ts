@@ -244,6 +244,7 @@ export class GlideboardController {
   readonly sessionKey: string;
   readonly editor;
   readonly readOnlySignal = signal(false);
+  readonly penModeSignal = signal(false);
   readonly awarenessSignal = signal<any | null>(null);
   readonly remoteTextEditingShapeIdsSignal = signal<ReadonlySet<string>>(new Set());
   readonly collaborationTextVersionSignal = signal(0);
@@ -1097,6 +1098,7 @@ export class GlideboardController {
     this.readOnlySignal.value = readOnly;
 
     if (readOnly) {
+      this.penModeSignal.value = false;
       this.cancelPendingAssets();
       // Edit → View
       this.editor.interactions.cancel();
@@ -1371,9 +1373,20 @@ export class GlideboardController {
     }
     const controller = new AbortController();
     const destination = this.captureAssetDestination();
+    let point = options.point;
+    const sourceDocumentId = fragment?.resolutionContext?.documentId;
+    const sameDocument = sourceDocumentId && sourceDocumentId === this.assetResolutionContext?.documentId;
+    const bounds = fragment?.sourceBounds;
+    if (!point && !sameDocument && bounds && Number.isFinite(bounds.w) && Number.isFinite(bounds.h)) {
+      const viewport = this.editor.getViewportBounds();
+      point = {
+        x: viewport.minX + (viewport.w - bounds.w) / 2,
+        y: viewport.minY + (viewport.h - bounds.h) / 2,
+      };
+    }
     let selectImported = false;
     const result = this.editor.pastePortableBoardFragment(fragment, {
-      point: options.point,
+      point,
       signal: controller.signal,
       targetPageId: destination.pageId,
       select: false,

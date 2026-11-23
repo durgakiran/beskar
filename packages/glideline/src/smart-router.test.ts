@@ -193,6 +193,12 @@ describe('Phase 6 smart routing', () => {
     expect(routeA.offset).toBeDefined();
     expect(routeB.offset).toBeDefined();
     expect(Math.abs((routeA.offset ?? 0) - (routeB.offset ?? 0))).toBeGreaterThanOrEqual(6);
+    for (const { worldPoints } of [routeA, routeB]) {
+      expect(worldPoints[1]!.y).toBe(worldPoints[0]!.y);
+      expect(worldPoints[1]!.x).toBeGreaterThan(worldPoints[0]!.x);
+      expect(worldPoints.at(-2)!.y).toBe(worldPoints.at(-1)!.y);
+      expect(worldPoints.at(-2)!.x).toBeLessThan(worldPoints.at(-1)!.x);
+    }
   });
 
   it('T6.1-04: computes cached routes under 8ms at 500 shapes', () => {

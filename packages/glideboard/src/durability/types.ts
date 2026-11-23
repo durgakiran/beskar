@@ -22,6 +22,7 @@ export type ProjectionStatus = 'healthy' | 'catching-up' | 'quarantined' | 'inco
 
 export interface CollaborationCheckpointSource {
   readonly status: ReadonlySignal<ProjectionStatus>;
+  readonly failureDetail?: string;
   subscribe(listener: (state: ProjectedYjsState) => void): () => void;
   captureTarget(): Promise<ProjectionTarget>;
   hasPendingProjection?(): boolean;

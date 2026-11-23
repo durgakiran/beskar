@@ -67,6 +67,36 @@ function WhiteboardPage({ savedDocument }: { savedDocument: GlideDocument | null
 
 The imperative `GlideboardHandle` (via `ref`) exposes `serialize()`, `replaceDocument()`, page management (`getPages`, `createPage`, `renamePage`, `movePage`, `deletePage`, ...), `exportSvg()`, cross-document copy-paste (`createPortableFragment`/`pastePortableFragment`), SVG/raster import, and collaboration checkpoints (`checkpoints`, `acquireMutationFence`).
 
+## Pen mode
+
+A pen tip press on an editable canvas enables pen mode when the browser reports touch capability. Pen mode ignores touch input on the canvas between pen strokes. Choose **Exit pen mode** in the status bar to resume finger input. Pen mode is local to the board session.
+
+## Stroke diagnostics
+
+Add `glideboardStrokeDiagnostics=1` to the board URL query string and reload. Open the browser's developer console, then draw the letters that lose their curves. Look for `[Glideboard stroke diagnostics]`. Remove the query parameter and reload to turn logging off.
+
+Applications can also pass `onStrokeDiagnostics` to receive the batches directly. The callback takes precedence over the console logger.
+
+```tsx
+<Glideboard onStrokeDiagnostics={batch => console.table(batch)} />
+```
+
+Each `stroke-ended` entry reports the input type, how the stroke ended, and whether the ink reached the local document store. Use the sample counts to locate where detail was lost.
+
+- `moveEventCount`, `coalescedSampleCount`, `maxInputSampleGapMs`, and `maxInputSampleDistancePx` describe the samples the browser delivered. Few samples or large gaps can leave a fast curve undersampled.
+- Compare `distinctMoveSampleCount` to `acceptedPointCount` minus the starting point. A large difference can indicate that the draw tool's 0.75 CSS-pixel spacing filter skipped closely spaced samples. `committedPointCount` includes a final point from pointerup when its position changed.
+- When the counts show that the samples reached the document, use `strokeStyle`, `strokeWidth`, `pressureSensitive`, and `zoomAtStart` to help investigate the SVG rendering. `zeroPressureMoveEventCount` counts pointermove events whose outer sample reported zero pressure.
+- A `pen-press-blocked` entry indicates that another pointer already owned the interaction. `pointercancel` and `lostpointercapture` identify browser interruptions. Pointer events expose the interruption and its timing, while the underlying OS cause can remain unknown.
+
+For long strokes, expand `frameTiming` in the `stroke-ended` entry. Timings are in milliseconds. Each maximum can come from a different update.
+
+- `animationFrameCount` counts draw callbacks and `synchronousFlushCount` counts batches flushed ahead of a frame, such as on pen lift. `maxAnimationFrameGapMs` can include a pause in pen movement, so compare it with `maxInputQueueMs`, the longest time a move actually waited for its draw update.
+- `maxDrawUpdateMs` measures the work to apply samples and publish a live preview. `maxUpdateToSvgStartMs` measures how long the same preview waited to reach SVG rendering.
+- `maxSvgRenderMs` measures generating and writing the live SVG to the DOM. `slowestSvgPointCount` is the number of points in that render. `maxInputToSvgReadyMs` measures the full time from the first queued move to its live SVG DOM update. Browser paint and display latency occur after that endpoint.
+- `svgRenderCount` includes the starting dot when it rendered during the stroke. A timing is `null` when its stage was never observed, for example when ink committed before the live SVG could render.
+
+Glideboard delivers batches outside the pointer handlers. It buffers up to 100 entries per pending batch and drops the oldest entries on overflow. Payloads contain aggregate counts, timings, and settings and omit coordinates, pointer IDs, and document IDs. The URL flag logs locally to the browser console.
+
 ## Real-time collaboration
 
 `glideboard` doesn't ship a transport — you bring a Yjs `Y.Doc` and an awareness-capable provider (e.g. `y-websocket`, `y-webrtc`, or your own), and `glideboard` projects the canvas document onto/from it:

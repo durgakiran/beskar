@@ -194,45 +194,21 @@ func ListSpaces(userId uuid.UUID) ([]SpaceListItem, error) {
 	}
 	defer rows.Close()
 
-	spaceIndexByID := make(map[uuid.UUID]int)
 	for rows.Next() {
 		var item SpaceListItem
-		if err := rows.Scan(&item.Id, &item.Name, &item.Description, &item.DateUpdated, &item.CreatedBy, &item.ArchivedAt); err != nil {
+		if err := rows.Scan(&item.Id, &item.Name, &item.Description, &item.DateUpdated, &item.LastActivityAt, &item.CreatedBy, &item.ArchivedAt,
+			&item.DocCount, &item.WhiteboardCount); err != nil {
 			logger().Error(err.Error())
 			return spaces, errors.New(core.ErrorCode_name[core.ErrorCode_ERROR_WHILE_READING_ROWS])
 		}
 		item.UserRole = "viewer"
 		spaces = append(spaces, item)
-		spaceIndexByID[item.Id] = len(spaces) - 1
 	}
 	if err = rows.Err(); err != nil {
 		logger().Error(err.Error())
 		return spaces, errors.New(core.ErrorCode_name[core.ErrorCode_ERROR_WHILE_FETCHING_ROWS])
 	}
 
-	countRows, err := conn.Query(ctx, GET_SPACE_PAGE_COUNTS, parsedSpaceIds)
-	if err != nil {
-		logger().Error(err.Error())
-		return spaces, errors.New(core.ErrorCode_name[core.ErrorCode_ERROR_WHILE_FETCHING_ROWS])
-	}
-	defer countRows.Close()
-	return hydrateSpaceList(spaces, spaceIndexByID, countRows, userId)
-}
-
-type countRowsType = pageCountRow
-
-func hydrateSpaceList(spaces []SpaceListItem, spaceIndexByID map[uuid.UUID]int, countRows pgx.Rows, userId uuid.UUID) ([]SpaceListItem, error) {
-	pageCounts, err := pgx.CollectRows[countRowsType](countRows, pgx.RowToStructByNameLax[countRowsType])
-	if err != nil {
-		logger().Error(err.Error())
-		return spaces, errors.New(core.ErrorCode_name[core.ErrorCode_ERROR_WHILE_READING_ROWS])
-	}
-	for _, row := range pageCounts {
-		if index, ok := spaceIndexByID[row.SpaceId]; ok {
-			spaces[index].DocCount = row.DocCount
-			spaces[index].WhiteboardCount = row.WhiteboardCount
-		}
-	}
 	for i := range spaces {
 		memberCount, userRole, membershipErr := getSpaceMembershipSummary(spaces[i].Id, userId)
 		if membershipErr != nil {
@@ -457,7 +433,7 @@ func getSpaceDetails(spaceId uuid.UUID, userId uuid.UUID) (Space, error) {
 	countRows, err := conn.Query(ctx, GET_SPACE_PAGE_COUNTS, []uuid.UUID{spaceId})
 	if err == nil {
 		defer countRows.Close()
-		pageCounts, collectErr := pgx.CollectRows[countRowsType](countRows, pgx.RowToStructByNameLax[countRowsType])
+		pageCounts, collectErr := pgx.CollectRows(countRows, pgx.RowToStructByNameLax[pageCountRow])
 		if collectErr == nil && len(pageCounts) > 0 {
 			space.DocCount = pageCounts[0].DocCount
 			space.WhiteboardCount = pageCounts[0].WhiteboardCount

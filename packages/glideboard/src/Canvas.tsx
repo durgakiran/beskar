@@ -1,5 +1,6 @@
 import React, { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { computed } from '@preact/signals';
+import { LuPencil } from 'react-icons/lu';
 import { CanvasTextView } from '@durgakiran/canvas-text-editor/view';
 import type { CanvasRichTextDocument } from '@durgakiran/canvas-text-editor/model';
 import { projectCanvasRichTextToPlainText } from '@durgakiran/canvas-text-editor/model';
@@ -8,6 +9,7 @@ import type {
   ArrowUtil,
   GlideEditor,
   GlideShape,
+  PointerMoveEvent,
   ShapeId,
   Vec2,
   LabelProps,
@@ -30,6 +32,8 @@ import {
   type ViewportShapeEntry,
 } from './viewport-rendering.js';
 import { shouldIgnoreGlideboardShortcuts } from './shortcut-guards.js';
+import { useStrokeDiagnostics } from './hooks/useStrokeDiagnostics.js';
+import type { GlideboardStrokeDiagnosticsHandler } from './types.js';
 
 const LazyCanvasTextEditor = React.lazy(async () => {
   const module = await import('@durgakiran/canvas-text-editor/editor');
@@ -38,6 +42,7 @@ const LazyCanvasTextEditor = React.lazy(async () => {
 
 export function getCanvasToolCursor(tool: string | undefined, handleId: string | null, buttons = 0, editor?: GlideEditor): string {
   if (tool === 'hand') return buttons === 1 ? 'grabbing' : 'grab';
+  if (tool === 'draw') return 'none';
   if (tool === 'asset' || tool === 'line' || tool === 'eraser'
     || tool === 'whole-stroke-eraser' || tool === 'partial-eraser' || tool === 'area-eraser') return 'crosshair';
   return handleId ? getCursorForHandle(handleId, editor) : 'default';
@@ -94,6 +99,7 @@ function useViewportShapeEntries(
       if (frame !== null) return;
       frame = requestAnimationFrame(update);
     };
+    let previousPreviewIds: readonly string[] = [];
     const disposers = [
       editor.store.listen(schedule),
       editor.camera.signal.subscribe(schedule),
@@ -102,7 +108,15 @@ function useViewportShapeEntries(
       editor.erasingShapeIds.subscribe(schedule),
       editor.bindingPreview.subscribe(schedule),
       editor.activePageId.subscribe(schedule),
-      editor.interactions.getChangedIdsSignal().subscribe(schedule),
+      editor.interactions.getChangedIdsSignal().subscribe(ids => {
+        // A new freehand stroke is already pinned in the shape layer. Its
+        // growing bounds do not change which records need to be mounted.
+        const sameNewStroke = ids.length === 1 && ids[0] === previousPreviewIds[0]
+          && editor.currentToolId.peek() === 'draw' && !editor.store.has(ids[0]!)
+          && editor.getShape(ids[0] as ShapeId)?.type === 'freehand';
+        previousPreviewIds = ids;
+        if (!sameNewStroke) schedule();
+      }),
     ];
     schedule();
     return () => {
@@ -146,11 +160,13 @@ const ShapeLayer = memo(({
   zIndex,
   isEditing,
   connectorEdit,
+  beginStrokeSvgRender,
 }: {
   id: ShapeId;
   zIndex: number;
   isEditing: boolean;
   connectorEdit?: TextEditSession;
+  beginStrokeSvgRender?: (shape: GlideShape) => (() => void) | undefined;
 }) => {
   const controller = useGlideboardController();
   const editor = controller.editor;
@@ -195,6 +211,7 @@ const ShapeLayer = memo(({
       return;
     }
     if ((util as any).toSvg) {
+      const finishStrokeSvgRender = beginStrokeSvgRender?.(shape);
       const el = shape.type === 'arrow' && connectorEdit
         ? (util as ArrowUtil).toSvg({
             ...shape,
@@ -209,8 +226,9 @@ const ShapeLayer = memo(({
         }
         svgRef.current.appendChild(el);
       }
+      finishStrokeSvgRender?.();
     }
-  }, [editor, shape, routeVersion, connectorEdit, currentErasePreview]);
+  }, [editor, shape, routeVersion, connectorEdit, currentErasePreview, beginStrokeSvgRender]);
 
   const util = shape ? editor.getShapeUtil(shape.type) : null;
   const labelProps: LabelProps | null = (shape && util) ? ((util as any).getLabelProps?.(shape) ?? null) : null;
@@ -224,7 +242,10 @@ const ShapeLayer = memo(({
   const isTextType = shape.type === 'text';
   const hasFixedWidth = isTextType && typeof (shape.props as any).w === 'number';
 
-  const localBounds = util.getGeometry(shape as any).getBounds();
+  // Live freehand geometry overflows its SVG and has no label to size.
+  const localBounds = isFreehand && !editor.store.has(id) && !labelProps && !richText
+    ? { w: 1, h: 1 }
+    : util.getGeometry(shape as any).getBounds();
   const visualBounds = areaEraseCuts.length ? util.getVisualBounds(shape as any) : null;
   const maskBounds = visualBounds ? getAreaEraseMaskBounds(visualBounds) : null;
   const maskId = controller.domId(`area-mask-${id}`);
@@ -367,7 +388,19 @@ const ShapeLayer = memo(({
             visibility: isEditing ? 'hidden' : 'visible',
           }}
         >
-          {labelProps.text}
+          {shape.type === 'frame' ? (
+            <span
+              style={{ pointerEvents: 'auto' }}
+              onDoubleClick={event => {
+                if (editor.currentToolId.peek() !== 'select') return;
+                event.stopPropagation();
+                if (controller.readOnlySignal.peek() || editor.editingShapeId.peek() || editor.isShapeEffectivelyLocked(id)) return;
+                editor.startEditing(id);
+              }}
+            >
+              {labelProps.text}
+            </span>
+          ) : labelProps.text}
         </div>
       )}
     </div>
@@ -705,7 +738,8 @@ function TextEditingOverlay() {
           contentEditable="plaintext-only"
           suppressContentEditableWarning
           role="textbox"
-          aria-multiline="true"
+          aria-label={shape.type === 'frame' ? 'Frame name' : undefined}
+          aria-multiline={shape.type !== 'frame'}
           aria-invalid={conflicted || undefined}
           title={conflicted ? 'This label changed elsewhere. Press Escape to keep the newer document value.' : undefined}
           onPointerDown={event => event.stopPropagation()}
@@ -739,7 +773,7 @@ function TextEditingOverlay() {
           onKeyDown={event => {
             event.stopPropagation();
             if (event.nativeEvent.isComposing || session.composing) return;
-            if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
+            if (event.key === 'Enter' && (shape.type === 'frame' || event.metaKey || event.ctrlKey)) {
               event.preventDefault();
               commit();
             } else if (event.key === 'Escape') {
@@ -774,9 +808,10 @@ function TextEditingOverlay() {
 // Canvas
 // ─────────────────────────────────────────────────────────────
 
-export function Canvas() {
+export function Canvas({ onStrokeDiagnostics }: { onStrokeDiagnostics?: GlideboardStrokeDiagnosticsHandler }) {
   const controller = useGlideboardController();
   const editor = controller.editor;
+  const strokeDiagnostics = useStrokeDiagnostics(controller, onStrokeDiagnostics);
   const camera = useSignalValue(editor.camera.signal)!;
   const editingId = useSignalValue(editor.editingShapeId);
   const editingSession = useSignalValue(editor.textEditing.session);
@@ -786,19 +821,32 @@ export function Canvas() {
   const viewportShapes = useViewportShapeEntries(editor, viewportRevision);
   const containerRef = useRef<HTMLDivElement>(null);
   const partialEraserCursorRef = useRef<HTMLDivElement>(null);
+  const pencilCursorRef = useRef<HTMLSpanElement>(null);
+  const drawFrameRef = useRef<number | null>(null);
+  const pendingDrawMoveRef = useRef<(PointerMoveEvent & { samples: (Vec2 & { pressure: number })[] }) | null>(null);
   const pointerScreenRef = useRef<Vec2 | null>(null);
   const preventFocusStealRef = useRef(false);
   const isMiddleDraggingRef = useRef(false);
   const originalToolBeforeMiddleDragRef = useRef<string | null>(null);
   const isPointerDownRef = useRef(false);
+  const activePointerTypeRef = useRef<string | null>(null);
+  const lastPressWasIgnoredTouchRef = useRef(false);
   const segmentDragCursorRef = useRef<string | null>(null);
   const awarenessCursorFrameRef = useRef<number | null>(null);
   const latestAwarenessCursorRef = useRef<Vec2 | null>(null);
   const activeTool = useSignalValue(editor.currentToolId);
+  const showPencilCursor = activeTool === 'draw' && !readOnly;
   const showPartialEraserCursor = (activeTool === 'partial-eraser' || activeTool === 'area-eraser') && !readOnly;
 
   const updatePointerPosition = useCallback((screen: Vec2 | null) => {
     pointerScreenRef.current = screen;
+    const pencil = pencilCursorRef.current;
+    if (pencil) {
+      pencil.style.visibility = screen ? 'visible' : 'hidden';
+      // The icon's tip is at roughly (2, 22) in its 24px view box.
+      if (screen) pencil.style.transform = `translate3d(${screen.x - 2}px, ${screen.y - 22}px, 0)`;
+      return;
+    }
     const cursor = partialEraserCursorRef.current;
     if (!cursor) return;
     cursor.style.visibility = screen ? 'visible' : 'hidden';
@@ -809,8 +857,50 @@ export function Canvas() {
   }, []);
 
   useLayoutEffect(() => {
-    if (showPartialEraserCursor) updatePointerPosition(pointerScreenRef.current);
-  }, [showPartialEraserCursor, updatePointerPosition]);
+    if (showPencilCursor || showPartialEraserCursor) updatePointerPosition(pointerScreenRef.current);
+  }, [showPencilCursor, showPartialEraserCursor, updatePointerPosition]);
+
+  const clearPendingDrawMove = useCallback(() => {
+    if (drawFrameRef.current !== null) cancelAnimationFrame(drawFrameRef.current);
+    drawFrameRef.current = null;
+    const move = pendingDrawMoveRef.current;
+    pendingDrawMoveRef.current = null;
+    return move;
+  }, []);
+
+  const flushDrawMove = useCallback((frameAt?: number) => {
+    const move = clearPendingDrawMove();
+    if (move && editor.currentToolId.peek() === 'draw' && !controller.readOnlySignal.peek()) {
+      const finishDrawUpdate = strokeDiagnostics.beginDrawUpdate(frameAt);
+      try {
+        editor.dispatchEvent(move);
+      } finally {
+        finishDrawUpdate?.();
+      }
+    }
+  }, [clearPendingDrawMove, controller, editor, strokeDiagnostics]);
+
+  const queueDrawMove = useCallback((move: PointerMoveEvent) => {
+    const pending = pendingDrawMoveRef.current;
+    const samples = pending?.samples ?? [];
+    if (pending) samples.push({ ...pending.point, pressure: pending.pressure ?? 0.5 });
+    for (const sample of move.samples ?? []) samples.push(sample);
+    pendingDrawMoveRef.current = { ...move, samples };
+    if (drawFrameRef.current === null) {
+      drawFrameRef.current = requestAnimationFrame(frameAt => {
+        drawFrameRef.current = null;
+        flushDrawMove(frameAt);
+      });
+    }
+  }, [flushDrawMove]);
+
+  useEffect(() => {
+    // A tool switch or an external preview cancellation invalidates input
+    // queued for that interaction, even if draw is selected again immediately.
+    return editor.interactions.getKindSignal().subscribe(kind => {
+      if (kind === null) clearPendingDrawMove();
+    });
+  }, [clearPendingDrawMove, editor]);
 
   useEffect(() => {
     setPointerEditTool(tool => tool === activeTool && !readOnly ? tool : null);
@@ -849,6 +939,7 @@ export function Canvas() {
 
       // Branch 1: Pinch-to-zoom — browsers set ctrlKey=true for trackpad pinch gestures
       if (event.ctrlKey || event.metaKey) {
+        flushDrawMove();
         const factor = Math.exp(-event.deltaY * 0.01);
         const newZ = Math.max(0.1, Math.min(8, cam.z * factor));
         const pagePtX = screenPt.x / cam.z + cam.x;
@@ -884,7 +975,7 @@ export function Canvas() {
         controller.setCanvasElement(null);
       }
     };
-  }, [controller, editor]);
+  }, [controller, editor, flushDrawMove]);
 
   const getPagePoint = useCallback((event: React.PointerEvent | React.WheelEvent) => {
     const rect = containerRef.current!.getBoundingClientRect();
@@ -902,9 +993,66 @@ export function Canvas() {
     return getHandleAtPagePoint(editor, page.x, page.y);
   }, [editor, getPagePoint]);
 
+  const cancelPointerInteraction = useCallback((
+    reason: 'pointercancel' | 'lostpointercapture' | 'window-blur' | 'unmount' | 'pen-takeover',
+    pointerId?: number,
+    event?: PointerEvent,
+  ) => {
+    if (pointerId !== undefined && pointerId !== controller.activePointerIdRef.current) return;
+    if (!isPointerDownRef.current && !editor.interactions.active) return;
+    flushDrawMove();
+    const reportStroke = strokeDiagnostics.pointerEnded();
+    updatePointerPosition(null);
+    isPointerDownRef.current = false;
+    activePointerTypeRef.current = null;
+    setPointerEditTool(null);
+    controller.isCanvasDraggingRef.current = false;
+    controller.activePointerIdRef.current = null;
+    if (pointerId !== undefined && containerRef.current?.hasPointerCapture?.(pointerId)) {
+      containerRef.current.releasePointerCapture(pointerId);
+    }
+    // Give the active tool a chance to salvage in-progress work on a
+    // browser/OS-initiated cancel (distinct from the user pressing Escape).
+    // Only fall back to the hard-abort Escape path if nothing handled it —
+    // this keeps every tool that hasn't opted into pointerCancel behaving
+    // exactly as before.
+    try {
+      const handled = editor.dispatchEvent({ type: 'pointerCancel', reason: reason === 'unmount' ? 'unmount' : 'interrupted' });
+      if (!handled) {
+        editor.dispatchEvent({ type: 'keyDown', key: 'Escape' } as any);
+      }
+      if (editor.interactions.active) editor.interactions.cancel();
+    } finally {
+      reportStroke?.(reason, event);
+    }
+    if (segmentDragCursorRef.current && containerRef.current) {
+      segmentDragCursorRef.current = null;
+      containerRef.current.style.cursor = getCanvasToolCursor(editor.currentToolId.peek(), null);
+    }
+    isMiddleDraggingRef.current = false;
+    originalToolBeforeMiddleDragRef.current = null;
+    controller.deferredToolRestoreRef.current = null;
+  }, [controller, editor, flushDrawMove, strokeDiagnostics, updatePointerPosition]);
+
   const onPointerDown = useCallback((event: React.PointerEvent) => {
     if (event.button !== 0 && event.button !== 1) return;
-    if (isPointerDownRef.current && event.pointerId !== controller.activePointerIdRef.current) return;
+    const isPenPress = event.pointerType === 'pen' && event.button === 0 && !controller.readOnlySignal.peek();
+    const view = isPenPress && !controller.penModeSignal.peek()
+      ? event.currentTarget.ownerDocument.defaultView : null;
+    const activatesPenMode = (view?.navigator.maxTouchPoints ?? 0) > 0
+      || view?.matchMedia?.('(any-pointer: coarse)').matches === true;
+    const activePointerId = controller.activePointerIdRef.current;
+    if (isPointerDownRef.current && event.pointerId !== activePointerId) {
+      const isPenDrawing = isPenPress && editor.currentToolId.peek() === 'draw';
+      if ((activatesPenMode || isPenDrawing) && activePointerId !== null && activePointerTypeRef.current === 'touch') {
+        // A touch can reach the canvas before the digitizer classifies it as a palm.
+        // Finish that interaction before assigning capture to the incoming pen.
+        cancelPointerInteraction('pen-takeover', activePointerId);
+      } else {
+        if (isPenDrawing) strokeDiagnostics.blockedPenPress(activePointerId);
+        return;
+      }
+    }
     // macOS reports Control-click as a primary pointer press before contextmenu.
     // Let that menu open without starting a canvas selection or transform.
     if (event.button === 0 && event.ctrlKey && event.pointerType === 'mouse'
@@ -919,10 +1067,13 @@ export function Canvas() {
     }
 
     isPointerDownRef.current = true;
+    activePointerTypeRef.current = event.pointerType;
     segmentDragCursorRef.current = null;
     controller.isCanvasDraggingRef.current = true;
     controller.activePointerIdRef.current = event.pointerId;
     containerRef.current!.setPointerCapture(event.pointerId);
+    if (activatesPenMode) controller.penModeSignal.value = true;
+    strokeDiagnostics.pointerDown(event.nativeEvent);
 
     const { screen, page } = getPagePoint(event);
     updatePointerPosition(screen);
@@ -977,35 +1128,46 @@ export function Canvas() {
       target: (hit && event.button === 0) ? 'shape' : 'canvas',
       shapeId: (hit && event.button === 0) ? (hit.id as ShapeId) : undefined,
     } as any);
+    if (tool === 'draw') strokeDiagnostics.strokeStarted();
     if (!readOnly && editor.editingShapeId.peek() !== editingBefore) {
       preventFocusStealRef.current = true;
     }
-  }, [controller, editor, getHandleAtEvent, getPagePoint, getShapeAtEvent, readOnly, updatePointerPosition]);
+  }, [cancelPointerInteraction, controller, editor, getHandleAtEvent, getPagePoint, getShapeAtEvent, readOnly, strokeDiagnostics, updatePointerPosition]);
+
+  const ignoresTouch = useCallback((event: { pointerType: string }) => (
+    event.pointerType === 'touch' && controller.penModeSignal.peek()
+  ), [controller]);
 
   const onPointerMove = useCallback((event: React.PointerEvent) => {
+    if (ignoresTouch(event)) return;
     if (isPointerDownRef.current && event.pointerId !== controller.activePointerIdRef.current) return;
     const { screen, page, rect } = getPagePoint(event);
     updatePointerPosition(screen);
     const currentTool = editor.currentToolId.peek();
     const drawing = isPointerDownRef.current && currentTool === 'draw';
-    const samples = drawing ? event.nativeEvent.getCoalescedEvents?.().map(sample => ({
+    const coalesced = drawing ? event.nativeEvent.getCoalescedEvents?.() : undefined;
+    if (drawing) strokeDiagnostics.pointerMove(event.nativeEvent, coalesced);
+    const samples = coalesced?.map(sample => ({
       ...editor.screenToPage({ x: sample.clientX - rect.left, y: sample.clientY - rect.top }),
       pressure: sample.pressure,
-    })) : undefined;
+    }));
     const handleId = drawing || controller.readOnlySignal.peek()
       ? null
       : getHandleAtPagePoint(editor, page.x, page.y);
-    if (containerRef.current) {
+    if (containerRef.current && !drawing) {
       const state = editor.getCurrentTool().current.constructor as typeof StateNode;
       const segmentCursor = state.id === 'editingOrthoRoute' ? segmentDragCursorRef.current : null;
       containerRef.current.style.cursor = state.id === 'draggingConnectorLabel' ? 'grabbing'
-        : segmentCursor ?? getCanvasToolCursor(currentTool, handleId, event.buttons, editor);
+        : segmentCursor ?? getCanvasToolCursor(controller.readOnlySignal.peek() && currentTool === 'draw'
+          ? undefined : currentTool, handleId, event.buttons, editor);
     }
-    editor.dispatchEvent({
+    const move: PointerMoveEvent = {
       type: 'pointerMove', point: page, screenPoint: screen, samples,
       shiftKey: event.shiftKey, altKey: event.altKey,
       pressure: event.pressure, pointerType: event.pointerType,
-    } as any);
+    };
+    if (drawing) queueDrawMove(move);
+    else editor.dispatchEvent(move);
     
     const awareness = controller.awarenessSignal.peek();
     if (awareness) {
@@ -1022,7 +1184,7 @@ export function Canvas() {
         });
       }
     }
-  }, [controller, editor, getPagePoint, updatePointerPosition]);
+  }, [controller, editor, getPagePoint, ignoresTouch, queueDrawMove, strokeDiagnostics, updatePointerPosition]);
 
   useEffect(() => {
     const awareness = controller.awarenessSignal.peek();
@@ -1033,7 +1195,9 @@ export function Canvas() {
 
   const onPointerUp = useCallback((event: React.PointerEvent) => {
     if (!isPointerDownRef.current || event.pointerId !== controller.activePointerIdRef.current) return;
+    flushDrawMove();
     isPointerDownRef.current = false;
+    activePointerTypeRef.current = null;
     setPointerEditTool(null);
     controller.activePointerIdRef.current = null;
 
@@ -1044,11 +1208,16 @@ export function Canvas() {
     // and cancel the just-finished stroke via a synthetic Escape.
     const { screen, page } = getPagePoint(event);
     updatePointerPosition(event.pointerType === 'touch' ? null : screen);
-    editor.dispatchEvent({
-      type: 'pointerUp', point: page, screenPoint: screen,
-      shiftKey: event.shiftKey, altKey: event.altKey,
-      pressure: event.pressure, pointerType: event.pointerType,
-    } as any);
+    const reportStroke = strokeDiagnostics.pointerEnded(event.nativeEvent);
+    try {
+      editor.dispatchEvent({
+        type: 'pointerUp', point: page, screenPoint: screen,
+        shiftKey: event.shiftKey, altKey: event.altKey,
+        pressure: event.pressure, pointerType: event.pointerType,
+      } as any);
+    } finally {
+      reportStroke?.('pointerup', event.nativeEvent);
+    }
     if (containerRef.current?.hasPointerCapture?.(event.pointerId)) {
       containerRef.current.releasePointerCapture(event.pointerId);
     }
@@ -1075,47 +1244,17 @@ export function Canvas() {
       const handleId = controller.readOnlySignal.peek() ? null : getHandleAtPagePoint(editor, page.x, page.y);
       containerRef.current.style.cursor = getCanvasToolCursor(editor.currentToolId.peek(), handleId, event.buttons, editor);
     }
-  }, [controller, editor, getPagePoint, updatePointerPosition]);
-
-  const cancelPointerInteraction = useCallback((pointerId?: number, reason: 'interrupted' | 'unmount' = 'interrupted') => {
-    if (pointerId !== undefined && pointerId !== controller.activePointerIdRef.current) return;
-    if (!isPointerDownRef.current && !editor.interactions.active) return;
-    updatePointerPosition(null);
-    isPointerDownRef.current = false;
-    setPointerEditTool(null);
-    controller.isCanvasDraggingRef.current = false;
-    controller.activePointerIdRef.current = null;
-    if (pointerId !== undefined && containerRef.current?.hasPointerCapture?.(pointerId)) {
-      containerRef.current.releasePointerCapture(pointerId);
-    }
-    // Give the active tool a chance to salvage in-progress work on a
-    // browser/OS-initiated cancel (distinct from the user pressing Escape).
-    // Only fall back to the hard-abort Escape path if nothing handled it —
-    // this keeps every tool that hasn't opted into pointerCancel behaving
-    // exactly as before.
-    const handled = editor.dispatchEvent({ type: 'pointerCancel', reason });
-    if (!handled) {
-      editor.dispatchEvent({ type: 'keyDown', key: 'Escape' } as any);
-    }
-    if (editor.interactions.active) editor.interactions.cancel();
-    if (segmentDragCursorRef.current && containerRef.current) {
-      segmentDragCursorRef.current = null;
-      containerRef.current.style.cursor = getCanvasToolCursor(editor.currentToolId.peek(), null);
-    }
-    isMiddleDraggingRef.current = false;
-    originalToolBeforeMiddleDragRef.current = null;
-    controller.deferredToolRestoreRef.current = null;
-  }, [controller, editor, updatePointerPosition]);
+  }, [controller, editor, flushDrawMove, getPagePoint, strokeDiagnostics, updatePointerPosition]);
 
   useEffect(() => {
     const handleWindowBlur = () => {
       updatePointerPosition(null);
-      cancelPointerInteraction();
+      cancelPointerInteraction('window-blur');
     };
     window.addEventListener('blur', handleWindowBlur);
     return () => {
       window.removeEventListener('blur', handleWindowBlur);
-      cancelPointerInteraction(undefined, 'unmount');
+      cancelPointerInteraction('unmount');
     };
   }, [cancelPointerInteraction, updatePointerPosition]);
 
@@ -1135,10 +1274,17 @@ export function Canvas() {
 
   const onKeyDown = useCallback((event: React.KeyboardEvent) => {
     if (shouldIgnoreGlideboardShortcuts(event) || readOnly || editor.editingShapeId.peek()) return;
-    editor.dispatchEvent({ type: 'keyDown', key: event.key } as any);
-  }, [editor, readOnly]);
+    if (event.key === 'Escape') clearPendingDrawMove();
+    const reportStroke = event.key === 'Escape' ? strokeDiagnostics.takeStroke() : undefined;
+    try {
+      editor.dispatchEvent({ type: 'keyDown', key: event.key } as any);
+    } finally {
+      reportStroke?.('escape');
+    }
+  }, [clearPendingDrawMove, editor, readOnly, strokeDiagnostics]);
 
-  const onPointerLeave = useCallback(() => {
+  const onPointerLeave = useCallback((event: React.PointerEvent) => {
+    if (ignoresTouch(event) || (isPointerDownRef.current && event.pointerId !== controller.activePointerIdRef.current)) return;
     updatePointerPosition(null);
     if (!isPointerDownRef.current) editor.clearBindingPreview();
     const awareness = controller.awarenessSignal.peek();
@@ -1150,11 +1296,23 @@ export function Canvas() {
       latestAwarenessCursorRef.current = null;
       awareness.setLocalStateField('canvasCursor', null);
     }
-  }, [controller, editor, updatePointerPosition]);
+  }, [controller, editor, ignoresTouch, updatePointerPosition]);
+
+  const suppressTouchMouseEvent = useCallback((event: React.MouseEvent) => {
+    if (!controller.penModeSignal.peek()) return;
+    const native = event.nativeEvent;
+    // Some browsers dispatch a MouseEvent without a pointerType for a touch double-click or menu.
+    const isTouch = 'pointerType' in native && native.pointerType
+      ? native.pointerType === 'touch' : lastPressWasIgnoredTouchRef.current;
+    if (isTouch) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+  }, [controller]);
 
   const cameraTransform = `matrix(${camera.z}, 0, 0, ${camera.z}, ${-camera.x * camera.z}, ${-camera.y * camera.z})`;
   const assetPlacementArmed = activeTool === 'asset' || undefined;
-  const canvasCursor = getCanvasToolCursor(activeTool, null);
+  const canvasCursor = getCanvasToolCursor(readOnly && activeTool === 'draw' ? undefined : activeTool, null);
 
   const canvas = (
     <div
@@ -1172,13 +1330,26 @@ export function Canvas() {
         outline: 'none',
         cursor: canvasCursor,
       }}
+      onPointerDownCapture={event => {
+        const ignore = ignoresTouch(event);
+        lastPressWasIgnoredTouchRef.current = ignore;
+        if (ignore) {
+          event.preventDefault();
+          event.stopPropagation();
+        }
+      }}
       onPointerDown={onPointerDown}
-      onPointerEnter={event => updatePointerPosition(getPagePoint(event).screen)}
+      onPointerEnter={event => {
+        if (ignoresTouch(event) || (isPointerDownRef.current && event.pointerId !== controller.activePointerIdRef.current)) return;
+        updatePointerPosition(getPagePoint(event).screen);
+      }}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
-      onPointerCancel={event => cancelPointerInteraction(event.pointerId)}
-      onLostPointerCapture={event => cancelPointerInteraction(event.pointerId)}
+      onPointerCancel={event => cancelPointerInteraction('pointercancel', event.pointerId, event.nativeEvent)}
+      onLostPointerCapture={event => cancelPointerInteraction('lostpointercapture', event.pointerId, event.nativeEvent)}
       onPointerLeave={onPointerLeave}
+      onDoubleClickCapture={suppressTouchMouseEvent}
+      onContextMenuCapture={suppressTouchMouseEvent}
       onDoubleClick={onDoubleClick}
       onKeyDown={onKeyDown}
       onMouseDown={event => {
@@ -1236,6 +1407,7 @@ export function Canvas() {
               id={id}
               zIndex={zIndex}
               isEditing={editingId === id}
+              beginStrokeSvgRender={onStrokeDiagnostics ? strokeDiagnostics.beginSvgRender : undefined}
               connectorEdit={editingSession?.shapeId === id && editor.getShape(id)?.type === 'arrow' ? editingSession : undefined}
             />
           ))}
@@ -1250,6 +1422,15 @@ export function Canvas() {
 
       {/* 3. Screen overlay — selection handles, marquee, binding preview */}
       <CanvasOverlays />
+      {showPencilCursor ? (
+        <span ref={pencilCursorRef} data-glideboard-role="pencil-cursor" aria-hidden="true"
+          style={{
+            position: 'absolute', visibility: 'hidden', pointerEvents: 'none',
+            left: 0, top: 0, zIndex: 1_000_000,
+          }}>
+          <LuPencil size={24} color="#222" fill="#fff" style={{ display: 'block' }} />
+        </span>
+      ) : null}
       {showPartialEraserCursor ? (
         <div ref={partialEraserCursorRef} data-glideboard-role="partial-eraser-cursor" aria-hidden="true"
           style={{

@@ -143,12 +143,14 @@ export class YjsDurabilityCoordinator {
             });
         });
         const updateProjectionStatus = (projection: "healthy" | "catching-up" | "quarantined" | "incompatible" | "failed") => {
-            if (projection === "healthy" || projection === "catching-up") return;
+            if (projection === "healthy" || projection === "catching-up" || this.projectionQuarantined) return;
             this.projectionQuarantined = true;
             this.cancelTimer();
+            const detail = source.failureDetail;
+            const message = `Glideboard's Yjs projection is ${projection}.`;
             this.setStatus({
                 phase: "quarantined",
-                error: new DurabilityTargetError(`Glideboard's Yjs projection is ${projection}.`),
+                error: new DurabilityTargetError(detail ? `${message} First failure: ${detail}` : message),
             });
         };
         if (source.status) updateProjectionStatus(source.status.peek());
@@ -167,7 +169,7 @@ export class YjsDurabilityCoordinator {
     acceptProjectedState(state: ProjectedYjsState): Promise<void> {
         this.assertActive();
         if (this.projectionQuarantined) {
-            return Promise.reject(new DurabilityTargetError("Glideboard's Yjs projection is quarantined."));
+            return Promise.reject(this.status.error ?? new DurabilityTargetError("Glideboard's Yjs projection is quarantined."));
         }
         const encodedState = state.encodedState.slice();
         const target = copyTarget(state.target);
@@ -272,7 +274,7 @@ export class YjsDurabilityCoordinator {
     async flush(target: ProjectionTarget): Promise<DurabilityCheckpoint> {
         this.assertActive();
         if (this.projectionQuarantined) {
-            throw new DurabilityTargetError("Cannot flush a quarantined Yjs projection.");
+            throw this.status.error ?? new DurabilityTargetError("Cannot flush a quarantined Yjs projection.");
         }
         this.cancelTimer();
         await this.processing;
@@ -289,7 +291,7 @@ export class YjsDurabilityCoordinator {
         this.assertActive();
         await this.processing;
         this.assertActive();
-        if (this.projectionQuarantined) throw new DurabilityTargetError("Cannot read a quarantined Yjs projection.");
+        if (this.projectionQuarantined) throw this.status.error ?? new DurabilityTargetError("Cannot read a quarantined Yjs projection.");
         const record = this.findRecord(target);
         if (!record) throw new DurabilityTargetError("The requested projection target was not captured in this session.");
         return record.encodedState.slice();

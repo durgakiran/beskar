@@ -1,5 +1,5 @@
 import { closestConnectionAnchor, type ConnectionAnchorMode, type PageConnectionAnchor, type ShapeConnectionAnchor } from './connection-anchors.js';
-import type { Geometry2d } from './geometry/index.js';
+import { Ellipse2d, type Geometry2d } from './geometry/index.js';
 import { STROKE_WIDTHS, type SizeStyle } from './styles.js';
 import { makeBox, type Box2d, type EdgeName, type GlideShape, type PageId, type ShapeId, type Vec2 } from './types.js';
 
@@ -95,15 +95,22 @@ function boundsOfPoints(points: readonly Vec2[]): Box2d {
   return makeBox(minX, minY, maxX - minX, maxY - minY);
 }
 
-function distanceToSegment(point: Vec2, start: Vec2, end: Vec2): number {
+function closestPointOnSegment(point: Vec2, start: Vec2, end: Vec2): Vec2 {
   const lengthSquared = (end.x - start.x) ** 2 + (end.y - start.y) ** 2;
-  if (lengthSquared === 0) return Math.hypot(point.x - start.x, point.y - start.y);
+  if (lengthSquared === 0) return start;
   const ratio = Math.max(0, Math.min(1,
     ((point.x - start.x) * (end.x - start.x) + (point.y - start.y) * (end.y - start.y)) / lengthSquared));
-  return Math.hypot(
-    point.x - (start.x + ratio * (end.x - start.x)),
-    point.y - (start.y + ratio * (end.y - start.y)),
-  );
+  return { x: start.x + ratio * (end.x - start.x), y: start.y + ratio * (end.y - start.y) };
+}
+
+function distanceToSegment(point: Vec2, start: Vec2, end: Vec2): number {
+  const closest = closestPointOnSegment(point, start, end);
+  return Math.hypot(point.x - closest.x, point.y - closest.y);
+}
+
+export function directionToEdge({ x, y }: Vec2): EdgeName {
+  if (Math.abs(x) + 1e-9 >= Math.abs(y)) return x >= 0 ? 'right' : 'left';
+  return y >= 0 ? 'bottom' : 'top';
 }
 
 export class TransformService {
@@ -336,13 +343,68 @@ export class TransformService {
     return closestConnectionAnchor(this.getConnectionAnchors(id), point);
   }
 
+  getClosestOutlineAnchor(id: ShapeId, pagePoint: Vec2): PageConnectionAnchor | undefined {
+    const geometry = this.getLocalGeometry(id);
+    const bounds = geometry.getBounds();
+    if (bounds.w <= 0 || bounds.h <= 0) return;
+    const outline = geometry.getOutline();
+    const point = this.pageToLocal(id, pagePoint);
+    let closest: Vec2 | undefined;
+    let distance = Infinity;
+    for (let i = 0; i < outline.length; i++) {
+      const candidate = closestPointOnSegment(point, outline[i]!, outline[(i + 1) % outline.length]!);
+      const nextDistance = Math.hypot(point.x - candidate.x, point.y - candidate.y);
+      if (nextDistance < distance) {
+        distance = nextDistance;
+        closest = candidate;
+      }
+    }
+    if (!closest) return;
+    const normalizedAnchor = {
+      x: (closest.x - bounds.minX) / bounds.w,
+      y: (closest.y - bounds.minY) / bounds.h,
+    };
+    return { normalizedAnchor, point: this.normalizedAnchorToPage(id, normalizedAnchor) };
+  }
+
   getAnchorPageEdge(id: ShapeId, anchor: Vec2, mode?: ConnectionAnchorMode): EdgeName {
-    const point = this.resolveConnectionAnchor(id, anchor, mode);
-    const center = this.normalizedAnchorToPage(id, { x: 0.5, y: 0.5 });
-    const dx = point.x - center.x;
-    const dy = point.y - center.y;
-    if (Math.abs(dx) >= Math.abs(dy)) return dx >= 0 ? 'right' : 'left';
-    return dy >= 0 ? 'bottom' : 'top';
+    return directionToEdge(this.getConnectionNormal(id, this.resolveConnectionAnchor(id, anchor, mode)));
+  }
+
+  getConnectionNormal(id: ShapeId, pagePoint: Vec2): Vec2 {
+    const geometry = this.getLocalGeometry(id);
+    const worldTransform = this.getWorldTransform(id);
+    const point = applyMatrixToPoint(invertMatrix(worldTransform), pagePoint);
+    let normal = { x: 0, y: 0 };
+    if (geometry instanceof Ellipse2d && geometry.rx > 0 && geometry.ry > 0) {
+      normal = {
+        x: (point.x - geometry.cx) / geometry.rx ** 2,
+        y: (point.y - geometry.cy) / geometry.ry ** 2,
+      };
+    } else {
+      const outline = geometry.getOutline();
+      // Use the polygon winding to point outward and average the incident normals at vertices.
+      const winding = Math.sign(outline.reduce((area, a, i) => {
+        const b = outline[(i + 1) % outline.length]!;
+        return area + a.x * b.y - a.y * b.x;
+      }, 0));
+      let nearest = Infinity;
+      for (let i = 0; i < outline.length; i++) {
+        const a = outline[i]!, b = outline[(i + 1) % outline.length]!;
+        const length = Math.hypot(b.x - a.x, b.y - a.y);
+        if (length === 0) continue;
+        const distance = distanceToSegment(point, a, b);
+        if (distance > nearest + 1e-6) continue;
+        if (distance < nearest - 1e-6) normal = { x: 0, y: 0 };
+        nearest = Math.min(distance, nearest);
+        normal.x += winding * (b.y - a.y) / length;
+        normal.y -= winding * (b.x - a.x) / length;
+      }
+    }
+    const length = Math.hypot(normal.x, normal.y);
+    return applyMatrixToVector(worldTransform, length > 0
+      ? { x: normal.x / length, y: normal.y / length }
+      : { x: 1, y: 0 });
   }
 
   private requireShape(id: ShapeId): GlideShape {

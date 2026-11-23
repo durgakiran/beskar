@@ -15,6 +15,7 @@ import { T } from '../validators.js';
 import { defineMigrations } from '../migrations.js';
 import { makeBox } from '../types.js';
 import type { GlideShape } from '../types.js';
+import type { EditableTextValue } from '../text-edit.js';
 import { Geometry2d, Rectangle2d } from '../geometry/index.js';
 import {
   FONT_SIZES, inlinePatternDefs, STROKE_DASH_ARRAYS, STROKE_WIDTHS, StyleValidators, svgFill,
@@ -107,9 +108,18 @@ export class FrameUtil extends ShapeUtil<FrameShape> {
     return true;
   }
 
+  override getEditableText(shape: FrameShape): EditableTextValue {
+    return { field: 'label', value: shape.name?.trim() || shape.props.label };
+  }
+
+  override getTextCommitPatch(_shape: FrameShape, draft: string): Partial<FrameShape> {
+    const name = draft.trim();
+    return name ? { name } : {};
+  }
+
   override getLabelProps(shape: FrameShape): LabelProps {
     return {
-      text: shape.props.label,
+      text: this.getEditableText(shape).value,
       fontFamily: FONT_FAMILIES[shape.props.font ?? 'sans'],
       fontSize: shape.props.fontSize ? FONT_SIZES[shape.props.fontSize] : 13,
       color: shape.props.color,

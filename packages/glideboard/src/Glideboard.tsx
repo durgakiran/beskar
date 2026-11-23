@@ -3,7 +3,7 @@ import React from 'react';
 import { WhiteboardApp } from './WhiteboardApp.js';
 import { GlideboardController } from './GlideboardController.js';
 import { GlideboardProvider } from './GlideboardContext.js';
-import type { GlideboardHandle, GlideboardProps } from './types.js';
+import type { GlideboardHandle, GlideboardProps, GlideboardStrokeDiagnosticsHandler } from './types.js';
 
 interface GlideboardSessionProps extends GlideboardProps {
   resolvedSessionKey: string;
@@ -15,6 +15,10 @@ interface MountedGlideboardSessionProps extends GlideboardProps {
   forwardedRef: React.ForwardedRef<GlideboardHandle>;
 }
 
+const logStrokeDiagnostics: GlideboardStrokeDiagnosticsHandler = batch => {
+  console.info('[Glideboard stroke diagnostics]', batch);
+};
+
 function MountedGlideboardSession({
   controller,
   forwardedRef,
@@ -23,9 +27,13 @@ function MountedGlideboardSession({
   assetLibraryProvider,
   toolbarLayout = 'split',
   onDocumentChange,
+  onStrokeDiagnostics,
   documentChangeDebounceMs = 500,
   debugApiKey,
 }: MountedGlideboardSessionProps) {
+  const [logStrokes] = React.useState(() => typeof window !== 'undefined'
+    && new URLSearchParams(window.location.search).get('glideboardStrokeDiagnostics') === '1');
+
   React.useImperativeHandle(forwardedRef, () => ({
     get checkpoints() {
       return controller.getCollaborationCheckpoints();
@@ -125,7 +133,11 @@ function MountedGlideboardSession({
 
   return (
     <GlideboardProvider controller={controller}>
-      <WhiteboardApp assetLibraryProvider={assetLibraryProvider} toolbarLayout={toolbarLayout} />
+      <WhiteboardApp
+        assetLibraryProvider={assetLibraryProvider}
+        toolbarLayout={toolbarLayout}
+        onStrokeDiagnostics={onStrokeDiagnostics ?? (logStrokes ? logStrokeDiagnostics : undefined)}
+      />
     </GlideboardProvider>
   );
 }

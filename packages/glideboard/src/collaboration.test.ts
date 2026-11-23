@@ -1,6 +1,12 @@
 import * as Y from 'yjs';
-import { createMutationCapability, isCanonicalOrderKey } from '@durgakiran/glideline';
-import { describe, expect, it } from 'vitest';
+import {
+  buildArrowShapeRecord,
+  createMutationCapability,
+  getOrthoHandles,
+  isCanonicalOrderKey,
+  type ArrowShape,
+} from '@durgakiran/glideline';
+import { describe, expect, it, vi } from 'vitest';
 import { bindGlideboardCollaboration } from './collaboration';
 import { createGlideboardEditorInstance } from './editor';
 
@@ -33,6 +39,39 @@ function createBoxRecord(id: string, x: number, y: number) {
 }
 
 describe('bindGlideboardCollaboration', () => {
+  it('commits the first manual connector route without quarantining the projection', async () => {
+    const capability = createMutationCapability();
+    const editor = createGlideboardEditorInstance([], undefined, capability);
+    const doc = new Y.Doc();
+    const binding = bindGlideboardCollaboration(editor, { doc }, capability);
+    const id = editor.createShapeId('arrow');
+    editor.createShape(buildArrowShapeRecord({
+      id,
+      startWorld: { x: 100, y: 100 },
+      endWorld: { x: 360, y: 100 },
+    }));
+    editor.setSelectedShapeIds([id]);
+
+    const arrow = () => editor.getShape<ArrowShape>(id)!;
+    expect(arrow().props.manualRoute).toBeUndefined();
+    const handle = getOrthoHandles(editor, arrow())[0]!;
+    const point = { x: handle.point.x, y: handle.point.y + 25 };
+    editor.dispatchEvent({
+      type: 'pointerDown', point: handle.point, target: 'handle', handleId: handle.id, shiftKey: false,
+    });
+    editor.dispatchEvent({ type: 'pointerMove', point });
+    editor.dispatchEvent({ type: 'pointerUp', point });
+
+    const route = arrow().props.manualRoute;
+    expect(route).toEqual(expect.arrayContaining([expect.objectContaining({ y: point.y })]));
+    const shared = doc.getMap<Y.Map<unknown>>('glideboard-records-v2').get(id);
+    expect(shared?.toJSON().props.manualRoute).toEqual(route);
+    expect(binding.checkpoints.status.peek()).toBe('healthy');
+    await binding.checkpoints.captureTarget();
+    binding();
+    doc.destroy();
+  });
+
   it('projects grouping as one Yjs transaction and preserves hierarchy remotely', async () => {
     const capabilityA = createMutationCapability();
     const capabilityB = createMutationCapability();
@@ -300,9 +339,33 @@ describe('bindGlideboardCollaboration', () => {
     expect(binding.checkpoints.status.peek()).toBe('quarantined');
     expect(editor.getShape('shape:preserved' as any)).toBeDefined();
     expect(editor.getShape('invalid' as any)).toBeUndefined();
-    await expect(binding.checkpoints.captureTarget()).rejects.toThrow('quarantined');
+    await expect(binding.checkpoints.captureTarget()).rejects.toThrow(
+      /First failure: Apply incoming Yjs state.*Incompatible whole-record collaboration value/,
+    );
 
     binding();
+  });
+
+  it('retains the first failing local command when later actions are blocked', async () => {
+    const capability = createMutationCapability();
+    const editor = createGlideboardEditorInstance([], undefined, capability);
+    const doc = new Y.Doc();
+    const binding = bindGlideboardCollaboration(editor, { doc }, capability);
+    const transact = vi.spyOn(doc, 'transact').mockImplementationOnce(() => {
+      throw new Error('Injected transaction failure');
+    });
+
+    expect(() => editor.createPage('First page')).toThrow(
+      /First failure: Verify local user command "page.create".*Injected transaction failure/,
+    );
+    expect(editor.getPageIds().some(id => editor.getPage(id)?.name === 'First page')).toBe(false);
+    const detail = binding.checkpoints.failureDetail!;
+    expect(() => editor.createPage('Second page')).toThrow(detail);
+    await expect(binding.checkpoints.captureTarget()).rejects.toThrow(detail);
+
+    transact.mockRestore();
+    binding();
+    doc.destroy();
   });
 
   it('merges concurrent edits to different record fields', () => {

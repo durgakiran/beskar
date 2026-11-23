@@ -5,20 +5,22 @@ import type { GlideDocument, GlidePlugin } from '@durgakiran/glideline';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { GlideboardController } from './GlideboardController';
 import { Glideboard } from './Glideboard';
-import type { GlideboardAssetPlacementConfig, GlideboardHandle } from './types';
+import type { GlideboardAssetPlacementConfig, GlideboardHandle, GlideboardStrokeDiagnosticsHandler } from './types';
 
 const capturedControllers = vi.hoisted(() => ({
   bySession: new Map<string, unknown>(),
   all: [] as unknown[],
+  strokeDiagnostics: new Map<string, GlideboardStrokeDiagnosticsHandler | undefined>(),
 }));
 
 vi.mock('./WhiteboardApp', async () => {
   const { useGlideboardController } = await import('./GlideboardContext');
 
   return {
-    WhiteboardApp() {
+    WhiteboardApp({ onStrokeDiagnostics }: { onStrokeDiagnostics?: GlideboardStrokeDiagnosticsHandler }) {
       const controller = useGlideboardController();
       capturedControllers.bySession.set(controller.sessionKey, controller);
+      capturedControllers.strokeDiagnostics.set(controller.sessionKey, onStrokeDiagnostics);
       if (!capturedControllers.all.includes(controller)) {
         capturedControllers.all.push(controller);
       }
@@ -94,7 +96,31 @@ describe('Glideboard board-scoped lifecycle', () => {
     vi.useFakeTimers();
     capturedControllers.bySession.clear();
     capturedControllers.all.length = 0;
+    capturedControllers.strokeDiagnostics.clear();
     delete (window as any)[DEBUG_API_KEY];
+  });
+
+  it('enables local stroke logging from the board URL and gives the host callback precedence', async () => {
+    const previousUrl = window.location.href;
+    const previousState = window.history.state;
+    const log = vi.spyOn(console, 'info').mockImplementation(() => {});
+    try {
+      window.history.replaceState(previousState, '', '?glideboardStrokeDiagnostics=1');
+      const hostHandler = vi.fn();
+      render(<>
+        <Glideboard sessionKey="stroke-console" />
+        <Glideboard sessionKey="stroke-host" onStrokeDiagnostics={hostHandler} />
+      </>);
+      await flushControllerCreation();
+      const batch = [{ type: 'pen-press-blocked', reason: 'another-pointer-active',
+        activePointerType: 'mouse', activePointerElapsedMs: 12 }] as const;
+      capturedControllers.strokeDiagnostics.get('stroke-console')?.(batch);
+      expect(log).toHaveBeenCalledWith('[Glideboard stroke diagnostics]', batch);
+      expect(capturedControllers.strokeDiagnostics.get('stroke-host')).toBe(hostHandler);
+    } finally {
+      log.mockRestore();
+      window.history.replaceState(previousState, '', previousUrl);
+    }
   });
 
   afterEach(() => {

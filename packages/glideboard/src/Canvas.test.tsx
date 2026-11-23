@@ -1,10 +1,12 @@
 import React from 'react';
-import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react';
+import { act, cleanup, createEvent, fireEvent, render, waitFor } from '@testing-library/react';
 import { ArrowUtil, ERASER_RADIUS_PX, type AnyRecord } from '@durgakiran/glideline';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { GlideboardProvider } from './GlideboardContext';
 import { GlideboardController } from './GlideboardController';
 import { Canvas, getCanvasToolCursor } from './Canvas';
+import { LayersPanel } from './LayersPanel';
+import type { GlideboardStrokeDiagnostic, GlideboardStrokeDiagnosticsHandler } from './types';
 
 const overlayMocks = vi.hoisted(() => ({
   getHandleAtPagePoint: vi.fn(() => null as string | null),
@@ -24,7 +26,7 @@ class ResizeObserverStub {
   disconnect() {}
 }
 
-function setupCanvas(controller: GlideboardController) {
+function setupCanvas(controller: GlideboardController, onStrokeDiagnostics?: GlideboardStrokeDiagnosticsHandler) {
   vi.stubGlobal('ResizeObserver', ResizeObserverStub);
   let wheelHandler: EventListener | null = null;
   const nativeAddEventListener = HTMLElement.prototype.addEventListener;
@@ -44,7 +46,7 @@ function setupCanvas(controller: GlideboardController) {
   });
   const view = render(
     <GlideboardProvider controller={controller}>
-      <Canvas />
+      <Canvas onStrokeDiagnostics={onStrokeDiagnostics} />
     </GlideboardProvider>,
   );
   addEventListener.mockRestore();
@@ -89,6 +91,312 @@ describe('Canvas asset cursor policy', () => {
     expect(getCanvasToolCursor('select', 'top-left')).toBe('default');
     expect(getCanvasToolCursor(undefined, null)).toBe('default');
   });
+});
+
+describe('stroke diagnostics', () => {
+  const pen = { pointerId: 11, pointerType: 'pen', button: 0, pressure: 0.5, clientX: 100, clientY: 100 };
+  const touch = { pointerId: 12, pointerType: 'touch', button: 0, clientX: 200, clientY: 200 };
+  const mouse = { ...touch, pointerId: 1, pointerType: 'mouse' };
+
+  it('separates coalesced input, filtered movement and the final committed point', async () => {
+    const controller = new GlideboardController({ sessionKey: 'stroke-diagnostics-samples' });
+    try {
+      const handler = vi.fn<GlideboardStrokeDiagnosticsHandler>();
+      const { canvas } = setupCanvas(controller, handler);
+      act(() => controller.setCurrentTool('draw'));
+
+      const down = createEvent.pointerDown(canvas, pen);
+      Object.defineProperty(down, 'timeStamp', { value: 100 });
+      fireEvent(canvas, down);
+
+      const move = createEvent.pointerMove(canvas, { ...pen, clientX: 110, pressure: 0, buttons: 1 });
+      Object.defineProperties(move, {
+        timeStamp: { value: 114 },
+        getCoalescedEvents: { value: () => [
+          { clientX: 100.5, clientY: 100, pressure: 0.5, timeStamp: 104 },
+          { clientX: 110, clientY: 100, pressure: 0, timeStamp: 114 },
+        ] },
+      });
+      fireEvent(canvas, move);
+
+      const up = createEvent.pointerUp(canvas, { ...pen, clientX: 112 });
+      Object.defineProperty(up, 'timeStamp', { value: 115 });
+      fireEvent(canvas, up);
+
+      await waitFor(() => expect(handler).toHaveBeenCalledTimes(1), { timeout: 1500 });
+      expect(handler).toHaveBeenCalledWith([expect.objectContaining({
+        type: 'stroke-ended', reason: 'pointerup', pointerType: 'pen', outcome: 'committed',
+        moveEventCount: 1, coalescedEventsAvailable: true, coalescedSampleCount: 2,
+        distinctMoveSampleCount: 2, zeroPressureMoveEventCount: 1,
+        maxInputSampleGapMs: 10, maxInputSampleDistancePx: 9.5,
+        acceptedPointCount: 2, committedPointCount: 3,
+        zoomAtStart: 1, strokeStyle: 'solid', strokeWidth: 'medium', pressureSensitive: false,
+        frameTiming: expect.objectContaining({
+          animationFrameCount: 0, synchronousFlushCount: 1,
+          maxAnimationFrameGapMs: null, maxInputToSvgReadyMs: null,
+        }),
+      })]);
+    } finally {
+      await controller.dispose();
+    }
+  });
+
+  it('distinguishes browser interruptions, records the outcome, and deduplicates capture cleanup', async () => {
+    const controller = new GlideboardController({ sessionKey: 'stroke-diagnostics-browser' });
+    try {
+      const diagnostics: GlideboardStrokeDiagnostic[] = [];
+      const handler = vi.fn((batch: readonly GlideboardStrokeDiagnostic[]) => { diagnostics.push(...batch); });
+      const { canvas } = setupCanvas(controller, handler);
+      act(() => controller.setCurrentTool('draw'));
+
+      fireEvent.pointerDown(canvas, pen);
+      fireEvent.pointerDown(canvas, touch);
+      fireEvent.pointerCancel(canvas, touch);
+      fireEvent.lostPointerCapture(canvas, touch);
+      fireEvent.pointerUp(canvas, pen);
+      fireEvent.lostPointerCapture(canvas, pen);
+
+      fireEvent.pointerDown(canvas, pen);
+      fireEvent.pointerCancel(canvas, pen);
+      fireEvent.lostPointerCapture(canvas, pen);
+
+      fireEvent.pointerDown(canvas, pen);
+      fireEvent.pointerMove(canvas, { ...pen, clientX: 120, buttons: 1 });
+      fireEvent.lostPointerCapture(canvas, pen);
+      fireEvent.pointerUp(canvas, pen);
+
+      fireEvent.pointerDown(canvas, touch);
+      fireEvent.pointerDown(canvas, pen);
+      fireEvent.pointerCancel(canvas, touch);
+      fireEvent.pointerUp(canvas, pen);
+
+      fireEvent.pointerDown(canvas, mouse);
+      fireEvent.pointerDown(canvas, pen);
+      fireEvent.pointerCancel(canvas, mouse);
+      fireEvent.pointerUp(canvas, pen);
+
+      expect(handler).not.toHaveBeenCalled();
+      await waitFor(() => expect(diagnostics).toHaveLength(7), { timeout: 1500 });
+      expect(handler).toHaveBeenCalledTimes(1);
+      expect(diagnostics).toMatchObject([
+        { type: 'stroke-ended', reason: 'pointerup', pointerType: 'pen', outcome: 'committed', acceptedPointCount: 1 },
+        { type: 'stroke-ended', reason: 'pointercancel', pointerType: 'pen', outcome: 'discarded', acceptedPointCount: 1 },
+        { type: 'stroke-ended', reason: 'lostpointercapture', pointerType: 'pen', outcome: 'committed', acceptedPointCount: 2 },
+        { type: 'stroke-ended', reason: 'pen-takeover', pointerType: 'touch', outcome: 'discarded', acceptedPointCount: 1 },
+        { type: 'stroke-ended', reason: 'pointerup', pointerType: 'pen', outcome: 'committed', acceptedPointCount: 1 },
+        { type: 'pen-press-blocked', reason: 'another-pointer-active', activePointerType: 'mouse' },
+        { type: 'stroke-ended', reason: 'pointercancel', pointerType: 'mouse', outcome: 'discarded', blockedPenPressCount: 1 },
+      ]);
+      expect(diagnostics.every(diagnostic => !('pointerId' in diagnostic) && !('strokeId' in diagnostic))).toBe(true);
+    } finally {
+      await controller.dispose();
+    }
+  });
+
+  it('records Escape, blur, tool changes, read-only transitions and unmount', async () => {
+    const controller = new GlideboardController({ sessionKey: 'stroke-diagnostics-cleanup' });
+    try {
+      const diagnostics: GlideboardStrokeDiagnostic[] = [];
+      const view = setupCanvas(controller, batch => { diagnostics.push(...batch); });
+      act(() => controller.setCurrentTool('draw'));
+
+      fireEvent.pointerDown(view.canvas, pen);
+      fireEvent.keyDown(view.canvas, { key: 'Escape' });
+      fireEvent.pointerUp(view.canvas, pen);
+
+      fireEvent.pointerDown(view.canvas, pen);
+      fireEvent.blur(window);
+
+      fireEvent.pointerDown(view.canvas, pen);
+      await act(async () => controller.setCurrentTool('hand'));
+      fireEvent.pointerUp(view.canvas, pen);
+      act(() => controller.setCurrentTool('draw'));
+
+      fireEvent.pointerDown(view.canvas, pen);
+      await act(async () => controller.setReadOnly(true));
+      act(() => {
+        controller.setReadOnly(false);
+        controller.setCurrentTool('draw');
+      });
+      fireEvent.blur(window);
+
+      fireEvent.pointerDown(view.canvas, pen);
+      view.unmount();
+
+      await waitFor(() => expect(diagnostics).toHaveLength(5), { timeout: 1500 });
+      expect(diagnostics).toMatchObject([
+        { type: 'stroke-ended', reason: 'escape', outcome: 'discarded', acceptedPointCount: 1 },
+        { type: 'stroke-ended', reason: 'window-blur', outcome: 'discarded', acceptedPointCount: 1 },
+        { type: 'stroke-ended', reason: 'tool-change', outcome: 'discarded' },
+        { type: 'stroke-ended', reason: 'read-only', outcome: 'discarded' },
+        { type: 'stroke-ended', reason: 'unmount', outcome: 'discarded', acceptedPointCount: 1 },
+      ]);
+    } finally {
+      await controller.dispose();
+    }
+  });
+});
+
+it('shows the pencil tip during drawing and updates live ink once per frame without dropping samples', async () => {
+  const controller = new GlideboardController({ sessionKey: 'frame-batched-draw' });
+  const frames = new Map<number, FrameRequestCallback>();
+  let nextFrame = 0;
+  let now = 0;
+  const clock = vi.spyOn(performance, 'now').mockImplementation(() => now);
+  vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+    frames.set(++nextFrame, callback);
+    return nextFrame;
+  });
+  vi.stubGlobal('cancelAnimationFrame', (id: number) => { frames.delete(id); });
+  try {
+    const handler = vi.fn<GlideboardStrokeDiagnosticsHandler>();
+    const { canvas, container } = setupCanvas(controller, handler);
+    const util = controller.editor.getShapeUtil('freehand');
+    const toSvg = util.toSvg.bind(util);
+    vi.spyOn(util, 'toSvg').mockImplementation(shape => {
+      now += 3;
+      return toSvg(shape);
+    });
+    act(() => controller.setCurrentTool('draw'));
+    const cursor = container.querySelector<HTMLElement>('[data-glideboard-role="pencil-cursor"]')!;
+    expect(canvas.style.cursor).toBe('none');
+    expect(cursor.style.visibility).toBe('hidden');
+
+    const pen = { pointerId: 12, pointerType: 'pen', button: 0, clientX: 100, clientY: 100 };
+    fireEvent.pointerOver(canvas, pen);
+    expect(cursor.style.visibility).toBe('visible');
+    fireEvent.pointerDown(canvas, pen);
+    const id = controller.editor.getCurrentPageShapeIdsSignal().peek()[0]!;
+    const dispatchEvent = controller.editor.dispatchEvent.bind(controller.editor);
+    const dispatch = vi.spyOn(controller.editor, 'dispatchEvent').mockImplementation(event => {
+      if (event.type === 'pointerMove') now += 4;
+      return dispatchEvent(event);
+    });
+    const firstMove = createEvent.pointerMove(canvas, { ...pen, clientX: 104, pressure: 0.4, buttons: 1 });
+    Object.defineProperty(firstMove, 'getCoalescedEvents', {
+      value: () => [{ clientX: 102, clientY: 101, pressure: 0.3 }],
+    });
+    now = 10;
+    fireEvent(canvas, firstMove);
+    now = 12;
+    fireEvent.pointerMove(canvas, { ...pen, clientX: 110, clientY: 105, pressure: 0.7, buttons: 1 });
+    expect(cursor.style.transform).toBe('translate3d(98px, 63px, 0)');
+    expect(dispatch).not.toHaveBeenCalled();
+
+    const runFrame = (timestamp: number) => act(() => {
+      const scheduled = [...frames.values()];
+      frames.clear();
+      for (const callback of scheduled) callback(timestamp);
+    });
+    now = 18;
+    runFrame(16);
+    expect(dispatch).toHaveBeenCalledTimes(1);
+    expect(controller.editor.getShape(id)?.props.points).toHaveLength(4);
+
+    now = 36;
+    fireEvent.pointerMove(canvas, { ...pen, clientX: 110, clientY: 105, pressure: 0.7, buttons: 1 });
+    now = 42;
+    runFrame(40);
+    now = 50;
+    fireEvent.pointerMove(canvas, { ...pen, clientX: 115, clientY: 107, pressure: 0.8, buttons: 1 });
+    now = 52;
+    fireEvent.pointerUp(canvas, { ...pen, clientX: 120, clientY: 109 });
+    expect(controller.editor.getShape(id)?.props.points).toMatchObject([
+      { x: 90, y: 80 }, { x: 92, y: 81, pressure: 0.3 }, { x: 94, y: 80, pressure: 0.4 },
+      { x: 100, y: 85, pressure: 0.7 }, { x: 105, y: 87, pressure: 0.8 }, { x: 110, y: 89 },
+    ]);
+    fireEvent.pointerOut(canvas, pen);
+    expect(cursor.style.visibility).toBe('hidden');
+    act(() => controller.setCurrentTool('select'));
+    expect(container.querySelector('[data-glideboard-role="pencil-cursor"]')).toBeNull();
+    await waitFor(() => expect(handler).toHaveBeenCalledTimes(1), { timeout: 1500 });
+    expect(handler).toHaveBeenCalledWith([expect.objectContaining({
+      frameTiming: {
+        animationFrameCount: 2, synchronousFlushCount: 1, maxAnimationFrameGapMs: 24,
+        maxInputQueueMs: 8, maxDrawUpdateMs: 4, maxUpdateToSvgStartMs: 0,
+        svgRenderCount: 1, maxSvgRenderMs: 3, slowestSvgPointCount: 4, maxInputToSvgReadyMs: 15,
+      },
+    })]);
+  } finally {
+    clock.mockRestore();
+    await controller.dispose();
+  }
+});
+
+it.each([false, true])('gives the pen an active touch drawing gesture with touch movement %s', async moved => {
+  const controller = new GlideboardController({ sessionKey: 'draw-pen-takeover' });
+  try {
+    const { canvas } = setupCanvas(controller);
+    act(() => controller.setCurrentTool('draw'));
+    const touch = { pointerId: 21, pointerType: 'touch', button: 0, clientX: 100, clientY: 100 };
+    const pen = { pointerId: 22, pointerType: 'pen', button: 0, clientX: 200, clientY: 200 };
+    const strokes = () => controller.editor.serialize().records.filter(record => record.type === 'freehand');
+    vi.mocked(canvas.releasePointerCapture).mockImplementation(pointerId => {
+      fireEvent.lostPointerCapture(canvas, { pointerId });
+    });
+
+    fireEvent.pointerDown(canvas, touch);
+    if (moved) fireEvent.pointerMove(canvas, { ...touch, clientX: 130, buttons: 1 });
+    fireEvent.pointerDown(canvas, pen);
+    expect(controller.activePointerIdRef.current).toBe(pen.pointerId);
+    expect(controller.penModeSignal.peek()).toBe(false);
+    expect(canvas.releasePointerCapture).toHaveBeenCalledWith(touch.pointerId);
+    expect(canvas.setPointerCapture).toHaveBeenLastCalledWith(pen.pointerId);
+    expect(strokes()).toHaveLength(moved ? 1 : 0);
+
+    fireEvent.pointerCancel(canvas, touch);
+    fireEvent.lostPointerCapture(canvas, touch);
+    fireEvent.pointerMove(canvas, { ...pen, clientX: 230, buttons: 1 });
+    fireEvent.pointerUp(canvas, pen);
+    expect(strokes()).toHaveLength(moved ? 2 : 1);
+
+    fireEvent.pointerDown(canvas, touch);
+    fireEvent.pointerUp(canvas, touch);
+    expect(strokes()).toHaveLength(moved ? 3 : 2);
+  } finally {
+    await controller.dispose();
+  }
+});
+
+it('keeps pen mode active between strokes on touch-capable devices and resumes finger input when exited', async () => {
+  const controller = new GlideboardController({ sessionKey: 'pen-mode-touch-device' });
+  const touchPoints = vi.spyOn(window.navigator, 'maxTouchPoints', 'get').mockReturnValue(5);
+  try {
+    const { canvas } = setupCanvas(controller);
+    act(() => controller.setCurrentTool('draw'));
+    const touch = { pointerId: 21, pointerType: 'touch', button: 0, clientX: 100, clientY: 100 };
+    const pen = { pointerId: 22, pointerType: 'pen', button: 0, clientX: 200, clientY: 200 };
+    const strokes = () => controller.editor.serialize().records.filter(record => record.type === 'freehand');
+
+    fireEvent.pointerDown(canvas, touch);
+    fireEvent.pointerDown(canvas, pen);
+    expect(controller.penModeSignal.peek()).toBe(true);
+    fireEvent.pointerCancel(canvas, touch);
+    fireEvent.lostPointerCapture(canvas, touch);
+    fireEvent.pointerUp(canvas, pen);
+    expect(strokes()).toHaveLength(1);
+
+    fireEvent.pointerDown(canvas, touch);
+    fireEvent.pointerMove(canvas, { ...touch, clientX: 130, buttons: 1 });
+    fireEvent.pointerUp(canvas, touch);
+    expect(strokes()).toHaveLength(1);
+    expect(controller.activePointerIdRef.current).toBeNull();
+
+    act(() => controller.setCurrentTool('select'));
+    fireEvent.doubleClick(canvas, { clientX: 500, clientY: 200 });
+    expect(controller.editor.editingShapeId.peek()).toBeNull();
+
+    act(() => {
+      controller.penModeSignal.value = false;
+      controller.setCurrentTool('draw');
+    });
+    fireEvent.pointerDown(canvas, touch);
+    fireEvent.pointerUp(canvas, touch);
+    expect(strokes()).toHaveLength(2);
+  } finally {
+    touchPoints.mockRestore();
+    await controller.dispose();
+  }
 });
 
 it('shows the partial eraser footprint at the pointer in screen pixels', async () => {
@@ -315,6 +623,40 @@ describe('Canvas navigation', () => {
 });
 
 describe('Canvas text editing overlay', () => {
+  it('keeps the frame name in sync between Layers and the inline canvas editor', async () => {
+    const controller = new GlideboardController({ sessionKey: 'frame-name' });
+    const { editor } = controller;
+    try {
+      const id = editor.createShape({ type: 'frame', x: 50, y: 70, props: { label: 'Original frame' } });
+      const view = setupCanvas(controller);
+      const layers = render(<GlideboardProvider controller={controller}><LayersPanel /></GlideboardProvider>);
+      const name = layers.getByLabelText<HTMLInputElement>('Rename frame');
+      const label = () => view.container.querySelector(`[data-shape-id="${id}"] [data-glideboard-role="shape-label"]`);
+      expect(label()?.textContent).toBe('Original frame');
+
+      name.focus();
+      fireEvent.change(name, { target: { value: 'From Layers' } });
+      fireEvent.keyDown(name, { key: 'Enter' });
+      expect(label()?.textContent).toBe('From Layers');
+
+      fireEvent.doubleClick(view.getByText('From Layers'));
+      const textbox = view.getByRole('textbox', { name: 'Frame name' });
+      expect(textbox.textContent).toBe('From Layers');
+      textbox.textContent = 'From canvas';
+      fireEvent.input(textbox);
+      fireEvent.keyDown(textbox, { key: 'Enter' });
+      expect(label()?.textContent).toBe('From canvas');
+      expect(name.value).toBe('From canvas');
+      expect(editor.getShapes()).toHaveLength(1);
+
+      act(() => editor.undo());
+      expect(label()?.textContent).toBe('From Layers');
+      expect(name.value).toBe('From Layers');
+    } finally {
+      await act(async () => controller.dispose());
+    }
+  });
+
   it('opens a new text edit on a blank double-click in Select mode', async () => {
     const controller = new GlideboardController({ sessionKey: 'double-click-create-text' });
     const { editor } = controller;

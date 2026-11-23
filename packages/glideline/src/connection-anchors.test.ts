@@ -84,6 +84,9 @@ describe('connector binding points', () => {
     });
 
     editor.dispatchEvent({ type: 'pointerDown', point: nearInner, target: 'shape', shapeId: outer, shiftKey: false });
+    editor.dispatchEvent({ type: 'pointerMove', point: { x: 250, y: 180 } });
+    expect(editor.bindingPreview.peek()).toMatchObject({ terminal: 'start', targetId: inner });
+
     const nearOuter = { x: 398, y: 80 };
     editor.dispatchEvent({ type: 'pointerMove', point: nearOuter });
     expect(editor.bindingPreview.peek()).toMatchObject({
@@ -100,6 +103,59 @@ describe('connector binding points', () => {
     expect(editor.bindingPreview.peek()).toBeNull();
   });
 
+  it.each(['box', 'frame'] as const)('keeps a connector free inside an enclosing %s on draw and reconnect', type => {
+    const { editor, shape } = setup();
+    const outer = shape(type, 0, 0, { w: 400, h: 320 });
+    const inner = shape('box', 100, 100, { w: 100, h: 80 });
+    if (type === 'frame') editor.reparentShapes([inner], outer);
+
+    const start = { x: 125, y: 100 };
+    const drop = { x: 250, y: 180 };
+    editor.setCurrentTool('arrow');
+    editor.dispatchEvent({ type: 'pointerDown', point: start, target: 'shape', shapeId: inner, shiftKey: false });
+    editor.dispatchEvent({ type: 'pointerMove', point: drop });
+    editor.dispatchEvent({ type: 'pointerUp', point: drop });
+
+    const arrowId = editor.getSelectedShapeIds()[0]!;
+    const expectFreeEnd = (point: Vec2) => {
+      const arrow = editor.getShape<ArrowShape>(arrowId)!;
+      expect(arrow.props.end.boundShapeId).toBeNull();
+      expect(editor.localToPage(arrowId, arrow.props.end.point)).toEqual(point);
+      expect(editor.getBindingsFromShape(arrowId).map(binding => binding.toId)).toEqual([inner]);
+    };
+    expectFreeEnd(drop);
+
+    const newDrop = { x: 275, y: 200 };
+    editor.dispatchEvent({ type: 'pointerDown', point: drop, target: 'handle', handleId: 'end', shiftKey: false });
+    editor.dispatchEvent({ type: 'pointerMove', point: newDrop });
+    expect(editor.bindingPreview.peek()).toBeNull();
+    editor.dispatchEvent({ type: 'pointerUp', point: newDrop });
+    expectFreeEnd(newDrop);
+
+    // Halfway between the top center and quarter anchors of the outer shape.
+    const nearEdge = { x: 150, y: 6 };
+    editor.dispatchEvent({ type: 'pointerDown', point: newDrop, target: 'handle', handleId: 'end', shiftKey: false });
+    editor.dispatchEvent({ type: 'pointerMove', point: nearEdge });
+    expect(editor.bindingPreview.peek()).toMatchObject({
+      terminal: 'end', targetId: outer, point: { x: 150, y: 0 },
+    });
+    editor.dispatchEvent({ type: 'pointerUp', point: nearEdge });
+    const arrow = editor.getShape<ArrowShape>(arrowId)!;
+    expect(arrow.props.end.boundShapeId).toBe(outer);
+    expect(resolveArrowRoute(editor, arrow).worldPoints.at(-1)).toEqual({ x: 150, y: 0 });
+
+    editor.setCurrentTool('arrow');
+    editor.dispatchEvent({ type: 'pointerDown', point: start, target: 'shape', shapeId: inner, shiftKey: false });
+    editor.dispatchEvent({ type: 'pointerMove', point: { x: 150, y: 14 } });
+    expect(editor.bindingPreview.peek()).toMatchObject({ terminal: 'start', targetId: inner });
+    editor.dispatchEvent({ type: 'pointerMove', point: nearEdge });
+    expect(editor.bindingPreview.peek()).toMatchObject({ terminal: 'end', targetId: outer });
+    editor.dispatchEvent({ type: 'pointerUp', point: nearEdge });
+    const drawn = editor.getShape<ArrowShape>(editor.getSelectedShapeIds()[0]!)!;
+    expect(drawn.props.end.boundShapeId).toBe(outer);
+    expect(resolveArrowRoute(editor, drawn).worldPoints.at(-1)).toEqual({ x: 150, y: 0 });
+  });
+
   it('uses a screen-space snap radius at different zooms', () => {
     const { editor, shape } = setup();
     const id = shape('box', 100, 100, { w: 100, h: 80 });
@@ -112,6 +168,55 @@ describe('connector binding points', () => {
       editor.dispatchEvent({ type: 'pointerMove', point: { x: 150, y: 100 - 14 / z } });
       expect(editor.bindingPreview.peek()).toBeNull();
     }
+  });
+
+  it.each(['ortho', 'smart', 'curve'] as const)('leaves and enters wide boxes across their top edges (%s)', routeStyle => {
+    const { editor, shape } = setup();
+    const source = shape('box', 0, 100, { w: 320, h: 60 });
+    const target = shape('box', 400, 100, { w: 320, h: 60 });
+    const start = { x: 240, y: 100 };
+    const end = { x: 480, y: 100 };
+    const arrowId = editor.createShapeId('arrow');
+    editor.createShape(buildArrowShapeRecord({ id: arrowId, startWorld: start, endWorld: end, routeStyle }) as unknown as AnyRecord);
+    editor.updateShape(arrowId, { props: { bend: 0 } });
+    editor.createBinding(buildArrowBindingRecord({
+      fromId: arrowId, toId: source, terminal: 'start', normalizedAnchor: { x: 0.75, y: 0 }, fromEdge: 'right',
+    }));
+    editor.createBinding(buildArrowBindingRecord({
+      fromId: arrowId, toId: target, terminal: 'end', normalizedAnchor: { x: 0.25, y: 0 }, fromEdge: 'left',
+    }));
+
+    const arrow = editor.getShape<ArrowShape>(arrowId)!;
+    const route = resolveArrowRoute(editor, arrow, { now: () => 0 });
+    expect(route.didFallback).toBeUndefined();
+    expect(route.worldPoints[0]).toEqual(start);
+    expect(route.worldPoints.at(-1)).toEqual(end);
+    for (const [anchor, neighbor] of [[start, route.worldPoints[1]!], [end, route.worldPoints.at(-2)!]] as const) {
+      const outward = anchor.y - neighbor.y;
+      expect(outward).toBeGreaterThan(0);
+      expect(outward).toBeGreaterThan(Math.abs(neighbor.x - anchor.x) * 0.8);
+    }
+  });
+
+  it('adds an approach leg when the ordinary elbow collapses onto a box edge', () => {
+    const { editor, shape } = setup();
+    const source = shape('box', 160, 100, { w: 80, h: 40 });
+    const target = shape('box', 200, 0, { w: 80, h: 40 });
+    const start = { x: 200, y: 100 }, end = { x: 200, y: 20 };
+    const arrowId = editor.createShapeId('arrow');
+    editor.createShape(buildArrowShapeRecord({ id: arrowId, startWorld: start, endWorld: end }) as unknown as AnyRecord);
+    editor.createBinding(buildArrowBindingRecord({
+      fromId: arrowId, toId: source, terminal: 'start', normalizedAnchor: { x: 0.5, y: 0 },
+    }));
+    editor.createBinding(buildArrowBindingRecord({
+      fromId: arrowId, toId: target, terminal: 'end', normalizedAnchor: { x: 0, y: 0.5 },
+    }));
+
+    const { worldPoints } = resolveArrowRoute(editor, editor.getShape<ArrowShape>(arrowId)!);
+    const approach = worldPoints.at(-2)!;
+    expect(worldPoints.at(-1)).toEqual(end);
+    expect(approach.y).toBe(end.y);
+    expect(approach.x).toBeLessThan(end.x);
   });
 
   it('follows a rounded corner during resize, after commit, and after reloading the binding', () => {
@@ -171,6 +276,9 @@ describe('connector binding points', () => {
     const diagonal = editor.transforms.getConnectionAnchors(ellipse).find(a => a.normalizedAnchor.x === 1 && a.normalizedAnchor.y === 0)!;
     expect(diagonal.point.x).toBeCloseTo(100 + 100 * Math.SQRT1_2);
     expect(diagonal.point.y).toBeCloseTo(50 - 50 * Math.SQRT1_2);
+    expect(editor.transforms.getAnchorPageEdge(ellipse, diagonal.normalizedAnchor, diagonal.anchorMode)).toBe('top');
+    editor.updateShape(ellipse, { rotation: Math.PI / 2 });
+    expect(editor.transforms.getAnchorPageEdge(ellipse, diagonal.normalizedAnchor, diagonal.anchorMode)).toBe('right');
 
     const star = shape('star', 100, 200, { w: 100, h: 220 });
     editor.updateShape(star, { rotation: Math.PI / 4 });

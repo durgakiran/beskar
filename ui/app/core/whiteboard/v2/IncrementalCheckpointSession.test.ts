@@ -82,6 +82,28 @@ describe('IncrementalCheckpointSession', () => {
         vi.resetAllMocks();
     });
 
+    it('reports the first failed Glideboard command in the save status and on flush', async () => {
+        const { doc, session } = open();
+        const detail = 'Verify local user command "page.create" at store revision 2. Injected transaction failure';
+        const detach = session.attach({
+            failureDetail: detail,
+            status: { peek: () => 'quarantined', subscribe: () => () => {} },
+            subscribe: () => () => {},
+            captureTarget: vi.fn(),
+        });
+        try {
+            const status = session.getSnapshot();
+            expect(status.phase).toBe('quarantined');
+            expect(status.error?.message).toBe(`Glideboard's Yjs projection is quarantined. First failure: ${detail}`);
+            await expect(session.flush()).rejects.toBe(status.error);
+            expect(postJsonBody).not.toHaveBeenCalled();
+        } finally {
+            detach();
+            await session.dispose();
+            doc.destroy();
+        }
+    });
+
     it('sends worker-encoded JSON and journals the same merged bytes before the request', async () => {
         const terminate = vi.fn();
         const encode = vi.fn(encodeCheckpointBatch);

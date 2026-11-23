@@ -11,9 +11,11 @@ interface SpaceListItem {
     name: string;
     description: string;
     dateUpdated: string;
+    lastActivityAt?: string;
     createdBy: string;
     memberCount: number;
     docCount: number;
+    whiteboardCount: number;
     userRole: "owner" | "admin" | "editor" | "commenter" | "viewer";
 }
 
@@ -199,8 +201,8 @@ export default function Page() {
                                 title={space.name}
                                 description={space.description || "Describe the purpose of this space."}
                                 badge={pluralize(space.memberCount, "member")}
-                                badges={[pluralize(space.docCount, "doc")]}
-                                meta={`${formatRole(space.userRole)} • Updated ${formatRelative(space.dateUpdated)}`}
+                                badges={[pluralize(space.docCount, "doc"), pluralize(space.whiteboardCount, "whiteboard")]}
+                                meta={`${formatRole(space.userRole)} • Updated ${formatRelative(space.lastActivityAt ?? space.dateUpdated)}`}
                                 leadingLabel={space.name.charAt(0).toUpperCase()}
                                 href={`/space/${space.id}`}
                             />

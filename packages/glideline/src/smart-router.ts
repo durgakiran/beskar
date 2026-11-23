@@ -2,6 +2,7 @@ import { makeBox, type Box2d, type EdgeName, type GlideShape, type ShapeId, type
 import type { GlideEditor } from './editor.js';
 import type { ArrowShape } from './shapes/ArrowUtil.js';
 import { computeElbowPath, parseElbowPoints } from './elbow-router.js';
+import { directionToEdge } from './transform.js';
 
 const OBSTACLE_PADDING = 12;
 const DEFAULT_ROUTE_BUDGET_MS = 12;
@@ -34,11 +35,9 @@ interface SmartObstacle {
   expanded: Box2d;
 }
 
-interface CachedRoute {
+interface CachedRoute extends BaseSmartRouteResult {
   layoutRevision: number;
   routeKey: string;
-  basePoints: Vec2[];
-  baseSignature: string;
 }
 
 interface BaseSmartRouteInput {
@@ -56,6 +55,16 @@ interface BaseSmartRouteInput {
 interface BaseSmartRouteResult {
   points: Vec2[];
   baseSignature: string;
+  startAnchor?: Vec2;
+  endAnchor?: Vec2;
+}
+
+function includeTerminalLegs(route: BaseSmartRouteResult, points: Vec2[]): Vec2[] {
+  return [
+    ...(route.startAnchor ? [route.startAnchor] : []),
+    ...points,
+    ...(route.endAnchor ? [route.endAnchor] : []),
+  ];
 }
 
 interface HeapEntry {
@@ -163,30 +172,21 @@ export class SmartRouterCache {
       return this._fallback(editor, args, now() - startedAt, 'ovg-timeout');
     }
 
-    const baseRoute = this._getOrComputeBaseRoute({
-      arrow: args.arrow,
-      startWorld: args.startWorld,
-      endWorld: args.endWorld,
-      fromEdge: args.fromEdge,
-      toEdge: args.toEdge,
-      fromShapeId: args.fromShapeId,
-      toShapeId: args.toShapeId,
-      deadline,
-      now,
-    });
+    const input = { ...args, deadline, now };
+    const baseRoute = this._getOrComputeBaseRoute(input);
 
     if (!baseRoute) {
       return this._fallback(editor, args, now() - startedAt, 'route-timeout');
     }
 
-    const offset = this._getParallelOffset(editor, args.arrow, baseRoute, deadline, now);
+    const offset = this._getParallelOffset(editor, input, baseRoute);
     const nudgedPoints = offset === 0
       ? baseRoute.points
       : offsetOrthogonalPolyline(baseRoute.points, offset);
 
     return {
-      points: nudgedPoints,
-      basePoints: baseRoute.points,
+      points: includeTerminalLegs(baseRoute, nudgedPoints),
+      basePoints: includeTerminalLegs(baseRoute, baseRoute.points),
       baseSignature: baseRoute.baseSignature,
       didFallback: false,
       elapsedMs: now() - startedAt,
@@ -222,42 +222,32 @@ export class SmartRouterCache {
 
   private _getParallelOffset(
     editor: GlideEditor,
-    arrow: ArrowShape,
+    input: BaseSmartRouteInput,
     current: BaseSmartRouteResult,
-    deadline: number,
-    now: () => number,
   ): number {
+    const { arrow, deadline, now } = input;
     const group = [arrow.id as string];
-    const currentParallelKey = getParallelRouteKey({
-      arrow,
-      startWorld: { x: arrow.x + arrow.props.start.point.x, y: arrow.y + arrow.props.start.point.y },
-      endWorld: { x: arrow.x + arrow.props.end.point.x, y: arrow.y + arrow.props.end.point.y },
-      fromEdge: getArrowBindingEdge(editor, arrow.id as ShapeId, 'start', 'right'),
-      toEdge: getArrowBindingEdge(editor, arrow.id as ShapeId, 'end', 'left'),
-      fromShapeId: arrow.props.start.boundShapeId,
-      toShapeId: arrow.props.end.boundShapeId,
-    });
+    const currentParallelKey = getParallelRouteKey(input);
     const smartArrows = editor.getShapes(true).filter(shape =>
       shape.type === 'arrow' &&
       shape.id !== arrow.id &&
       (shape as ArrowShape).props.routeStyle === 'smart',
     ) as ArrowShape[];
 
+    const edgeAt = (id: ShapeId | null, point: Vec2, fallback: EdgeName) => id && editor.getShape(id)
+      ? directionToEdge(editor.transforms.getConnectionNormal(id, point)) : fallback;
     for (const other of smartArrows) {
+      const startWorld = editor.localToPage(other.id as ShapeId, other.props.start.point);
+      const endWorld = editor.localToPage(other.id as ShapeId, other.props.end.point);
+      const fromShapeId = other.props.start.boundShapeId, toShapeId = other.props.end.boundShapeId;
       const otherInput: BaseSmartRouteInput = {
         arrow: other,
-        startWorld: {
-          x: other.x + other.props.start.point.x,
-          y: other.y + other.props.start.point.y,
-        },
-        endWorld: {
-          x: other.x + other.props.end.point.x,
-          y: other.y + other.props.end.point.y,
-        },
-        fromEdge: getArrowBindingEdge(editor, other.id as ShapeId, 'start', 'right'),
-        toEdge: getArrowBindingEdge(editor, other.id as ShapeId, 'end', 'left'),
-        fromShapeId: other.props.start.boundShapeId,
-        toShapeId: other.props.end.boundShapeId,
+        startWorld,
+        endWorld,
+        fromEdge: edgeAt(fromShapeId, startWorld, 'right'),
+        toEdge: edgeAt(toShapeId, endWorld, 'left'),
+        fromShapeId,
+        toShapeId,
         deadline,
         now,
       };
@@ -279,19 +269,24 @@ export class SmartRouterCache {
   }
 
   private _getOrComputeBaseRoute(input: BaseSmartRouteInput): BaseSmartRouteResult | null {
-    const routeKey = getRouteCacheKey(input.arrow);
+    const routeKey = getParallelRouteKey(input);
     const cached = this._routeCache.get(input.arrow.id as string);
     if (
       cached &&
       cached.layoutRevision === this._layoutRevision &&
       cached.routeKey === routeKey
     ) {
-      return { points: cached.basePoints, baseSignature: cached.baseSignature };
+      return cached;
     }
 
     const excluded = new Set<string>();
     if (input.fromShapeId) excluded.add(input.fromShapeId);
     if (input.toShapeId) excluded.add(input.toShapeId);
+    const fromBounds = input.fromShapeId && this._obstacles.find(obstacle => obstacle.id === input.fromShapeId)?.bounds;
+    const toBounds = input.toShapeId && this._obstacles.find(obstacle => obstacle.id === input.toShapeId)?.bounds;
+    // Endpoints inside another terminal need the ordinary route through its bounds.
+    const startBox = fromBounds && !pointInsideBoxInterior(input.endWorld, fromBounds) ? fromBounds : undefined;
+    const endBox = toBounds && !pointInsideBoxInterior(input.startWorld, toBounds) ? toBounds : undefined;
     const routeBox = makeBox(
       Math.min(input.startWorld.x, input.endWorld.x),
       Math.min(input.startWorld.y, input.endWorld.y),
@@ -314,24 +309,27 @@ export class SmartRouterCache {
         relaxObstaclePadding(candidate, input.startWorld, input.endWorld),
       );
 
-      const points = computeOrthogonalRoute({
-        start: input.startWorld,
-        end: input.endWorld,
-        obstacles: routeObstacles,
-        deadline: input.deadline,
-        now: input.now,
-      });
-
-      if (points) {
-        const simplified = simplifyCollinear(points);
-        const baseSignature = routeSignature(simplified);
-        this._routeCache.set(input.arrow.id as string, {
-          layoutRevision: this._layoutRevision,
-          routeKey,
-          basePoints: simplified,
-          baseSignature,
+      for (const padding of startBox || endBox ? [12, 4, 0] : [0]) {
+        const startAnchor = padding && startBox ? input.startWorld : undefined;
+        const endAnchor = padding && endBox ? input.endWorld : undefined;
+        const start = startAnchor ? terminalLead(startAnchor, startBox!, input.fromEdge, padding) : input.startWorld;
+        const end = endAnchor ? terminalLead(endAnchor, endBox!, input.toEdge, padding) : input.endWorld;
+        const obstacles = [...routeObstacles];
+        if (padding && startBox) obstacles.push(startBox);
+        if (padding && endBox) obstacles.push(endBox);
+        if (!segmentClear(input.startWorld, start, routeObstacles) ||
+          !segmentClear(input.endWorld, end, routeObstacles) ||
+          (startAnchor && endBox && !segmentClear(startAnchor, start, [endBox])) ||
+          (endAnchor && startBox && !segmentClear(endAnchor, end, [startBox]))) continue;
+        const points = computeOrthogonalRoute({
+          start, end, obstacles, exactCoordinates: true, deadline: input.deadline, now: input.now,
         });
-        return { points: simplified, baseSignature };
+        if (!points) continue;
+
+        const route = { points: simplifyCollinear(points), baseSignature: '', startAnchor, endAnchor };
+        route.baseSignature = routeSignature(includeTerminalLegs(route, route.points));
+        this._routeCache.set(input.arrow.id as string, { ...route, layoutRevision: this._layoutRevision, routeKey });
+        return route;
       }
     }
 
@@ -352,7 +350,16 @@ export class SmartRouterCache {
     elapsedMs: number,
     fallbackReason: string,
   ): SmartRouteResolution {
-    const points = getFallbackElbowPoints(editor, args.arrow, args.startWorld, args.endWorld, args.fromEdge, args.toEdge);
+    const { arrow, startWorld, endWorld, fromEdge, toEdge, fromShapeId, toShapeId } = args;
+    let points = getFallbackElbowPoints(editor, arrow, startWorld, endWorld, fromEdge, toEdge);
+    if (fromShapeId || toShapeId) {
+      const from = fromShapeId && editor.getShape(fromShapeId);
+      const to = toShapeId && editor.getShape(toShapeId);
+      points = routeAroundConnectorTerminals(points,
+        from ? getWorldBounds(editor, from) : makeBox(startWorld.x, startWorld.y, 0, 0),
+        to ? getWorldBounds(editor, to) : makeBox(endWorld.x, endWorld.y, 0, 0),
+        fromEdge, toEdge);
+    }
     return {
       points,
       basePoints: points,
@@ -505,7 +512,8 @@ export function simplifyCollinear(points: Vec2[]): Vec2[] {
     const next = points[i + 1]!;
     const horizontal = Math.abs(prev.y - curr.y) < EPSILON && Math.abs(curr.y - next.y) < EPSILON;
     const vertical = Math.abs(prev.x - curr.x) < EPSILON && Math.abs(curr.x - next.x) < EPSILON;
-    if (!horizontal && !vertical) {
+    const reverses = (curr.x - prev.x) * (next.x - curr.x) + (curr.y - prev.y) * (next.y - curr.y) < 0;
+    if ((!horizontal && !vertical) || reverses) {
       simplified.push(curr);
     }
   }
@@ -519,27 +527,29 @@ export function routeAroundConnectorTerminals(
   preserveManualRoute = false,
 ): Vec2[] {
   if (from.minX < to.maxX && from.maxX > to.minX && from.minY < to.maxY && from.maxY > to.minY) return points;
+  const start = points[0]!;
+  const end = points[points.length - 1]!;
+  const first = points.find(point => manhattan(start, point) >= EPSILON);
+  const last = points.slice().reverse().find(point => manhattan(end, point) >= EPSILON);
+  const fromBound = from.w > 0 && from.h > 0;
+  const toBound = to.w > 0 && to.h > 0;
+  const startTangent = fromBound && first && !followsTerminalAxis(start, first, fromEdge);
+  const endTangent = toBound && last && !followsTerminalAxis(end, last, toEdge);
   const obstacles = [from, to];
-  if (points.slice(1).every((point, index) => segmentClear(points[index]!, point, obstacles))) return points;
+  if (!startTangent && !endTangent &&
+    points.slice(1).every((point, index) => segmentClear(points[index]!, point, obstacles))) return points;
 
-  const lead = (anchor: Vec2, box: Box2d, edge: EdgeName): Vec2 => {
-    switch (edge) {
-      case 'left': return { x: box.minX, y: anchor.y };
-      case 'right': return { x: box.maxX, y: anchor.y };
-      case 'top': return { x: anchor.x, y: box.minY };
-      case 'bottom': return { x: anchor.x, y: box.maxY };
-    }
-  };
   const connect = (start: Vec2, end: Vec2, atStart: boolean, atEnd: boolean): Vec2[] | null => {
     // Fall back to the outline when a manual vertex or a narrow gap
     // leaves no room for clearance.
-    for (const padding of [12, 0]) {
+    for (const padding of [12, 4, 0]) {
       const bounds = obstacles.map(box => expandBox(box, padding));
-      const startLead = atStart ? lead(start, bounds[0]!, fromEdge) : start;
-      const endLead = atEnd ? lead(end, bounds[1]!, toEdge) : end;
+      const startLead = atStart && fromBound ? terminalLead(start, from, fromEdge, padding) : start;
+      const endLead = atEnd && toBound ? terminalLead(end, to, toEdge, padding) : end;
+      const routeObstacles = bounds.filter((_, i) => i === 0 ? fromBound : toBound);
       if (!segmentClear(start, startLead, [to]) || !segmentClear(end, endLead, [from])) continue;
       const route = computeOrthogonalRoute({
-        start: startLead, end: endLead, obstacles: bounds, exactCoordinates: true,
+        start: startLead, end: endLead, obstacles: routeObstacles, exactCoordinates: true,
         deadline: Infinity, now: () => 0,
       });
       if (route) return simplifyCollinear([start, ...route, end]);
@@ -547,8 +557,6 @@ export function routeAroundConnectorTerminals(
     return null;
   };
 
-  const start = points[0]!;
-  const end = points[points.length - 1]!;
   if (!preserveManualRoute) return connect(start, end, true, true) ?? points;
 
   // Work on the displayed route only. Controls covered by a terminal
@@ -559,7 +567,8 @@ export function routeAroundConnectorTerminals(
   for (let index = 1; index < vertices.length; index++) {
     const a = vertices[index - 1]!, b = vertices[index]!;
     const aligned = Math.abs(a.x - b.x) < EPSILON || Math.abs(a.y - b.y) < EPSILON;
-    if (aligned && segmentClear(a, b, obstacles)) {
+    if (aligned && !(index === 1 && startTangent) &&
+      !(index === vertices.length - 1 && endTangent) && segmentClear(a, b, obstacles)) {
       repaired.push(b);
       continue;
     }
@@ -734,6 +743,20 @@ function boxesIntersect(a: Box2d, b: Box2d): boolean {
   return a.minX <= b.maxX && a.maxX >= b.minX && a.minY <= b.maxY && a.maxY >= b.minY;
 }
 
+function terminalLead(anchor: Vec2, box: Box2d, edge: EdgeName, padding: number): Vec2 {
+  switch (edge) {
+    case 'left': return { x: box.minX - padding, y: anchor.y };
+    case 'right': return { x: box.maxX + padding, y: anchor.y };
+    case 'top': return { x: anchor.x, y: box.minY - padding };
+    case 'bottom': return { x: anchor.x, y: box.maxY + padding };
+  }
+}
+
+function followsTerminalAxis(anchor: Vec2, next: Vec2, edge: EdgeName): boolean {
+  return edge === 'left' || edge === 'right' ? Math.abs(anchor.y - next.y) < EPSILON
+    : Math.abs(anchor.x - next.x) < EPSILON;
+}
+
 function pointInsideBoxInterior(point: Vec2, box: Box2d): boolean {
   return (
     point.x > box.minX + EPSILON &&
@@ -777,22 +800,6 @@ function defaultNow(): number {
   return typeof performance !== 'undefined' && typeof performance.now === 'function'
     ? performance.now()
     : Date.now();
-}
-
-function getRouteCacheKey(arrow: ArrowShape): string {
-  const { start, end, bend, routeStyle } = arrow.props;
-  return [
-    routeStyle,
-    bend,
-    arrow.x,
-    arrow.y,
-    start.boundShapeId ?? '',
-    end.boundShapeId ?? '',
-    start.point.x,
-    start.point.y,
-    end.point.x,
-    end.point.y,
-  ].join('|');
 }
 
 function getParallelRouteKey(input: Omit<BaseSmartRouteInput, 'deadline' | 'now'>): string {

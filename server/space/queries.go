@@ -3,9 +3,32 @@ package space
 import "github.com/durgakiran/beskar/core"
 
 const (
-	GET_SPACE             = `SELECT id, name, description, date_created, date_updated, user_id, archived_at, archived_by, deleted_at, deleted_by FROM core.space WHERE id = $1 AND deleted_at IS NULL`
-	GET_SPACE_SETTINGS    = `SELECT id, name, description, date_created, date_updated, user_id, archived_at, archived_by, deleted_at, deleted_by FROM core.space WHERE id = $1 AND deleted_at IS NULL`
-	GET_SPACES            = `SELECT id, name, description, date_updated, user_id, archived_at FROM core.space WHERE id = ANY($1) AND deleted_at IS NULL ORDER BY date_updated DESC;`
+	GET_SPACE          = `SELECT id, name, description, date_created, date_updated, user_id, archived_at, archived_by, deleted_at, deleted_by FROM core.space WHERE id = $1 AND deleted_at IS NULL`
+	GET_SPACE_SETTINGS = `SELECT id, name, description, date_created, date_updated, user_id, archived_at, archived_by, deleted_at, deleted_by FROM core.space WHERE id = $1 AND deleted_at IS NULL`
+	GET_SPACES         = `
+		SELECT s.id, s.name, s.description, s.date_updated,
+			GREATEST(s.date_created, s.date_updated, activity.latest_at) AS last_activity_at,
+			s.user_id, s.archived_at, activity.doc_count, activity.whiteboard_count
+		FROM core.space s
+		CROSS JOIN LATERAL (
+			SELECT COUNT(*) FILTER (WHERE COALESCE(p.type, 'document') = 'document') AS doc_count,
+				COUNT(*) FILTER (WHERE p.type = 'whiteboard') AS whiteboard_count,
+				MAX(GREATEST(p.date_created, docs.latest_at, draft.updated_at, published.published_at)) AS latest_at
+			FROM core.page p
+			LEFT JOIN LATERAL (
+				SELECT MAX(GREATEST(d.version, legacy.updated_at)) AS latest_at
+				FROM core.page_doc_map d
+				LEFT JOIN core.whiteboard_data legacy ON legacy.doc_id = d.doc_id
+				WHERE d.page_id = p.id
+			) docs ON TRUE
+			LEFT JOIN whiteboard.whiteboard_draft draft ON draft.page_id = p.id
+			LEFT JOIN whiteboard.whiteboard wb ON wb.page_id = p.id
+			LEFT JOIN whiteboard.whiteboard_version published
+				ON published.page_id = p.id AND published.id = wb.published_version_id
+			WHERE p.space_id = s.id
+		) activity
+		WHERE s.id = ANY($1) AND s.deleted_at IS NULL
+		ORDER BY last_activity_at DESC, s.id;`
 	INSERT_SPACE          = `INSERT INTO core.space (name, description, date_created, date_updated, user_id) VALUES ( $1, $2, $3, $4, $5) RETURNING id`
 	UPDATE_SPACE          = `UPDATE core.space SET name = $1, description = $2, date_updated = $3 WHERE id = $4`
 	ARCHIVE_SPACE         = `UPDATE core.space SET archived_at = now(), archived_by = $2, date_updated = now() WHERE id = $1 AND deleted_at IS NULL RETURNING id, name, description, date_created, date_updated, user_id, archived_at, archived_by, deleted_at, deleted_by`
