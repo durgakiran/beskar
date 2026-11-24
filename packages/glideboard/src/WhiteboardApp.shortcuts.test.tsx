@@ -38,6 +38,23 @@ function createPng(width: number, height: number): Uint8Array {
 }
 
 describe('WhiteboardApp shortcut boundaries', () => {
+  it('shows a keyboard-accessible exit control while pen mode is active', async () => {
+    const controller = new GlideboardController({ sessionKey: 'exit-pen-mode' });
+    try {
+      const view = render(<GlideboardProvider controller={controller}><WhiteboardApp /></GlideboardProvider>);
+      expect(view.queryByRole('button', { name: 'Exit pen mode' })).toBeNull();
+
+      act(() => { controller.penModeSignal.value = true; });
+      const exit = view.getByRole('button', { name: 'Exit pen mode' });
+      expect(fireEvent.keyDown(exit, { key: ' ', code: 'Space' })).toBe(true);
+      fireEvent.click(exit);
+      expect(controller.penModeSignal.peek()).toBe(false);
+      expect(view.queryByRole('button', { name: 'Exit pen mode' })).toBeNull();
+    } finally {
+      await controller.dispose();
+    }
+  });
+
   it('pastes copied text as a new node with a selection or another tool active', async () => {
     const controller = new GlideboardController({ sessionKey: 'paste-text-with-active-node' });
     const { editor } = controller;

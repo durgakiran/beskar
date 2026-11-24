@@ -137,7 +137,16 @@ function LayerRow({ shape, depth, expanded, selectedIds, toggleExpanded, locate 
       <input value={name} aria-label={`Rename ${shape.type}`} disabled={shape.isLocked}
         onClick={event => event.stopPropagation()}
         onChange={event => setName(event.target.value)}
-        onBlur={() => { if (name.trim() && name !== shape.name) editor.updateShape(shape.id as ShapeId, { name: name.trim() }); }}
+        onBlur={() => {
+          const nextName = name.trim();
+          if (nextName && nextName !== displayName) editor.updateShape(shape.id as ShapeId, { name: nextName });
+          else setName(displayName);
+        }}
+        onKeyDown={event => {
+          if (event.key !== 'Enter' || event.nativeEvent.isComposing) return;
+          event.preventDefault();
+          event.currentTarget.blur();
+        }}
         style={{ flex: 1, minWidth: 0, border: 0, outline: 0, background: 'transparent',
           color: wbTheme.text, fontSize: 11 }} />
       <button title="Locate" style={iconButton} onClick={event => { event.stopPropagation(); locate(shape); }}><FiCrosshair size={12} /></button>

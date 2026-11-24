@@ -56,10 +56,11 @@ function pendingCommit() {
   return { ...pending, started: started.promise, transaction };
 }
 
-function create(assetStorage?: GlideboardAssetStorage) {
+function create(assetStorage?: GlideboardAssetStorage, documentId?: string) {
   const controller = new GlideboardController({
     sessionKey: `asset-readiness-${controllers.length}`,
     ...(assetStorage ? { assetStorage } : {}),
+    assetResolutionContext: documentId ? { documentId } : undefined,
   });
   controllers.push(controller);
   return controller;
@@ -403,6 +404,40 @@ describe('Glideboard capture preparation', () => {
     expect(() => controller.retryAssetImport(task.id)).toThrow();
     fence.release();
     await expect(controller.retryAssetImport(task.id).result).resolves.toBeTruthy();
+  });
+
+  it('centers cross-board groups in the panned and zoomed viewport and preserves explicit placement', async () => {
+    const portableStorage = {
+      ...storage(persistence()),
+      download: async () => ({ bytes: createPng(), mimeType: 'image/png' }),
+      retainReferences: async () => {},
+      materializePortableAsset: async () => ({ rollback: async () => {} }),
+    };
+    const source = create(portableStorage, 'source-board');
+    const first = source.editor.createShape({ type: 'box', x: -1600, y: 2400, props: { w: 60, h: 40 } });
+    const second = source.editor.createShape({ type: 'box', x: -1450, y: 2460, props: { w: 80, h: 50 } });
+    const group = source.editor.groupShapes([first, second]);
+    const fragment = (await source.createPortableFragment({ shapeIds: [group] }))!;
+
+    const destination = create(portableStorage, 'destination-board');
+    const { editor } = destination;
+    editor.camera.setViewportSize(800, 600);
+    editor.camera.setCamera({ x: 900, y: -700, z: 2 });
+    const [pasted] = await destination.pastePortableFragment(fragment);
+    const bounds = editor.getShapeWorldBounds(pasted!);
+    expect({ x: bounds.minX + bounds.w / 2, y: bounds.minY + bounds.h / 2 }).toEqual({ x: 1100, y: -550 });
+    expect(editor.getChildren(pasted!).map(({ x, y }) => ({ x, y }))).toEqual(
+      source.editor.getChildren(group).map(({ x, y }) => ({ x, y })),
+    );
+
+    const [explicit] = await destination.pastePortableFragment(fragment, { point: { x: 1050, y: -600 } });
+    expect(editor.getShapeWorldBounds(explicit!)).toMatchObject({ minX: 1050, minY: -600 });
+
+    const [sameBoard] = await source.pastePortableFragment(fragment);
+    expect(source.editor.getShapeWorldBounds(sameBoard!)).toMatchObject({
+      minX: fragment.sourceBounds.minX + 20,
+      minY: fragment.sourceBounds.minY + 20,
+    });
   });
 
   it('waits for portable paste insertion and rejects a new paste while draining', async () => {

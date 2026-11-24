@@ -15,6 +15,7 @@ export interface ProjectedYjsState {
 }
 
 export interface CollaborationCheckpointSource {
+    readonly failureDetail?: string;
     readonly status?: {
         peek(): "healthy" | "catching-up" | "quarantined" | "incompatible" | "failed";
         subscribe(listener: (value: "healthy" | "catching-up" | "quarantined" | "incompatible" | "failed") => void): () => void;

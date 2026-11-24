@@ -3,6 +3,7 @@ import type {
   GlideDocument,
   GlidePlugin,
   GlidePage,
+  FreehandShape,
   LoadReport,
   PageId,
   ShapeId,
@@ -243,6 +244,70 @@ export interface GlideboardAssetPlacementState {
 
 export type GlideboardToolbarLayout = 'split' | 'vertical';
 
+export type GlideboardStrokeEndReason = 'pointerup' | 'pointercancel' | 'lostpointercapture'
+  | 'window-blur' | 'unmount' | 'escape' | 'read-only' | 'tool-change' | 'preview-ended' | 'pen-takeover';
+
+export type GlideboardDiagnosticPointerType = 'mouse' | 'pen' | 'touch' | 'unknown';
+
+export interface GlideboardStrokeFrameTiming {
+  readonly animationFrameCount: number;
+  readonly synchronousFlushCount: number;
+  /** Time between draw callbacks. This can include a pause in pen movement. */
+  readonly maxAnimationFrameGapMs: number | null;
+  /** From the first queued pointer move to the start of its draw update. */
+  readonly maxInputQueueMs: number | null;
+  readonly maxDrawUpdateMs: number | null;
+  /** Completed draw update to the start of SVG work for the same preview record. */
+  readonly maxUpdateToSvgStartMs: number | null;
+  readonly svgRenderCount: number;
+  readonly maxSvgRenderMs: number | null;
+  readonly slowestSvgPointCount: number | null;
+  /** From the first queued move to the corresponding live SVG DOM update. */
+  readonly maxInputToSvgReadyMs: number | null;
+}
+
+export type GlideboardStrokeDiagnostic =
+  | {
+    readonly type: 'stroke-ended';
+    /** The observed trigger. Pointer events do not expose an underlying OS or browser cause. */
+    readonly reason: GlideboardStrokeEndReason;
+    readonly pointerType: GlideboardDiagnosticPointerType;
+    readonly outcome: 'committed' | 'discarded' | 'uncommitted';
+    /** Null if the preview was already gone when the interruption was observed. */
+    readonly acceptedPointCount: number | null;
+    readonly committedPointCount: number | null;
+    readonly moveEventCount: number;
+    /** Null when the stroke received no pointer moves. */
+    readonly coalescedEventsAvailable: boolean | null;
+    readonly coalescedSampleCount: number;
+    /** Move samples whose position differs from the immediately preceding sample. */
+    readonly distinctMoveSampleCount: number;
+    readonly zeroPressureMoveEventCount: number;
+    /** Largest gap between consecutive input samples, from pointerdown through pointerup when received. */
+    readonly maxInputSampleGapMs: number;
+    readonly maxInputSampleDistancePx: number;
+    readonly zoomAtStart: number;
+    readonly strokeStyle: FreehandShape['props']['strokeStyle'] | null;
+    readonly strokeWidth: FreehandShape['props']['strokeWidth'] | null;
+    readonly pressureSensitive: boolean | null;
+    readonly elapsedMs: number;
+    readonly frameTiming: GlideboardStrokeFrameTiming;
+    readonly blockedPenPressCount: number;
+    /** Available when the stroke ended in a pointer event. */
+    readonly buttons?: number;
+    readonly isTrusted?: boolean;
+  }
+  | {
+    readonly type: 'pen-press-blocked';
+    readonly reason: 'another-pointer-active';
+    readonly activePointerType: GlideboardDiagnosticPointerType;
+    readonly activePointerElapsedMs: number | null;
+  };
+
+export type GlideboardStrokeDiagnosticsHandler = (
+  diagnostics: readonly GlideboardStrokeDiagnostic[],
+) => void | Promise<void>;
+
 export interface GlideboardProps {
   /** Changing this value starts a new, isolated board session. */
   sessionKey?: string;
@@ -260,6 +325,8 @@ export interface GlideboardProps {
     context: GlideboardDocumentChangeContext,
   ) => void | Promise<void>;
   documentChangeDebounceMs?: number;
+  /** Opt in to bounded, asynchronously batched stroke diagnostics. No document data is included. */
+  onStrokeDiagnostics?: GlideboardStrokeDiagnosticsHandler;
   /** What to do with a dirty standalone snapshot when this board unmounts. */
   pendingSaveOnUnmount?: 'cancel' | 'flush';
   debugApiKey?: string;

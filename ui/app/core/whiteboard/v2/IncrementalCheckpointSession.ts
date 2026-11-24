@@ -75,7 +75,7 @@ export class IncrementalCheckpointSession {
         if (this.disposed || origin === SERVER_REPLAY_ORIGIN) return;
         const stored = this.options.journal.append(bytes);
         void stored.catch(error => {
-            if (!this.disposed) this.setStatus({ phase: 'error', localRecovery: 'error', error: asError(error) });
+            if (!this.disposed && !this.quarantined) this.setStatus({ phase: 'error', localRecovery: 'error', error: asError(error) });
         });
         this.pending.push({ revision: ++this.revision, bytes, stored });
         this.saveAfter ??= Date.now() + AUTOSAVE_INTERVAL_MS;
@@ -95,11 +95,13 @@ export class IncrementalCheckpointSession {
         const unsubscribe = source.subscribe(state => this.captured.set(state.target, state.encodedState));
         const check = (status: string) => {
             if (status === 'healthy') this.schedule();
-            else if (status !== 'catching-up') {
+            else if (status !== 'catching-up' && !this.quarantined) {
                 this.quarantined = true;
                 clearTimeout(this.timer);
                 this.timer = undefined;
-                this.setStatus({ phase: 'quarantined', error: new DurabilityTargetError(`Glideboard's Yjs projection is ${status}.`) });
+                const detail = source.failureDetail;
+                const message = `Glideboard's Yjs projection is ${status}.`;
+                this.setStatus({ phase: 'quarantined', error: new DurabilityTargetError(detail ? `${message} First failure: ${detail}` : message) });
             }
         };
         const stopStatus = source.status?.subscribe(check);
@@ -228,6 +230,7 @@ export class IncrementalCheckpointSession {
 
     private assertReady(): void {
         if (this.disposed || this.options.signal.aborted) throw new DOMException('Whiteboard session closed', 'AbortError');
+        if (this.quarantined && this.status.error) throw this.status.error;
         if (this.quarantined || (this.source?.status && this.source.status.peek() !== 'healthy')) {
             throw new DurabilityTargetError('The whiteboard projection is not ready to save.');
         }

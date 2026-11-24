@@ -1,8 +1,10 @@
 import { avoidRotatedOrthoTerminal, resolveManualOrthoPoints, simplifyOrthoRoute } from './ortho-editing.js';
 import { computeArcPath } from './arc-router.js';
+import { interpolate } from './connection-anchors.js';
 import type { GlideEditor } from './editor.js';
-import { computeFallbackLocalElbowPoints, getArrowBindingEdge, routeAroundConnectorTerminals } from './smart-router.js';
-import type { ArrowBinding, ArrowRouteStyle, ArrowShape } from './shapes/ArrowUtil.js';
+import { computeFallbackLocalElbowPoints, routeAroundConnectorTerminals } from './smart-router.js';
+import type { ArrowRouteStyle, ArrowShape } from './shapes/ArrowUtil.js';
+import { directionToEdge } from './transform.js';
 import { makeBox, type Box2d, type EdgeName, type PageId, type ShapeId, type Vec2 } from './types.js';
 
 const CURVE_SAMPLE_STEPS = 24;
@@ -39,6 +41,7 @@ export interface ArrowRouteResult {
   fallbackReason?: string;
   routeTimeMs?: number;
   offset?: number;
+  curveControls?: [Vec2, Vec2];
   /** Parent-space route including the vertices used by the route editor. */
   orthoPoints?: NonNullable<ReturnType<typeof resolveManualOrthoPoints>>;
 }
@@ -52,37 +55,35 @@ export function resolveArrowRoute(
   const toPage = (point: Vec2) => editor.localToPage(shape.id as any, point);
   const startWorld = toPage(start.point);
   const endWorld = toPage(end.point);
+  const fromShape = start.boundShapeId ? editor.getShape(start.boundShapeId) : undefined;
+  const toShape = end.boundShapeId ? editor.getShape(end.boundShapeId) : undefined;
+  const startNormal = fromShape && editor.transforms.getConnectionNormal(fromShape.id, startWorld);
+  const endNormal = toShape && editor.transforms.getConnectionNormal(toShape.id, endWorld);
+  const inParentDirection = (normal: Vec2) => editor.transforms.pageDeltaToParent(shape.parentId, normal);
 
   if (routeStyle === 'curve') {
-    const localPoints = sampleCurvePoints(start.point, end.point, bend);
+    const curveControls = getCurveControls(start.point, end.point, bend,
+      startNormal && inParentDirection(startNormal), endNormal && inParentDirection(endNormal));
+    const localPoints = curveControls
+      ? sampleCubicPoints(start.point, end.point, curveControls)
+      : sampleCurvePoints(start.point, end.point, bend);
     return {
       routeStyle,
       renderKind: 'curve',
-      path: computeArcPath(start.point, end.point, bend),
+      path: curveControls
+        ? `M ${start.point.x} ${start.point.y} C ${curveControls.map(p => `${p.x} ${p.y}`).join(' ')} ${end.point.x} ${end.point.y}`
+        : computeArcPath(start.point, end.point, bend),
       localPoints,
       worldPoints: localPoints.map(toPage),
+      ...(curveControls && { curveControls }),
     };
   }
 
-  let fromEdge: EdgeName = 'right';
-  let toEdge: EdgeName = 'left';
-  const fromShape = start.boundShapeId ? editor.getShape(start.boundShapeId) : undefined;
-  const toShape = end.boundShapeId ? editor.getShape(end.boundShapeId) : undefined;
+  const routingEdge = (normal: Vec2) => directionToEdge(routeStyle === 'ortho' ? inParentDirection(normal) : normal);
+  let fromEdge: EdgeName = startNormal ? routingEdge(startNormal) : 'right';
+  let toEdge: EdgeName = endNormal ? routingEdge(endNormal) : 'left';
 
   if (routeStyle === 'ortho') {
-    // During a drag the terminal can be positioned before its binding is written.
-    const bindings = editor.getBindingsFromShape(shape.id as ShapeId)
-      .filter((binding): binding is ArrowBinding => binding.type === 'arrow');
-    const edgeFor = (terminal: 'start' | 'end', targetId: ShapeId, fallback: EdgeName) => {
-      const anchor = shape.props[terminal].normalizedAnchor;
-      const binding = bindings.find(binding => binding.toId === targetId && binding.props.terminal === terminal);
-      if (binding && binding.props.normalizedAnchor.x === anchor.x && binding.props.normalizedAnchor.y === anchor.y) {
-        return binding.props.fromEdge ?? fallback;
-      }
-      return editor.transforms.getAnchorPageEdge(targetId, anchor);
-    };
-    if (fromShape) fromEdge = edgeFor('start', fromShape.id, fromEdge);
-    if (toShape) toEdge = edgeFor('end', toShape.id, toEdge);
     const horizontal = fromShape ? fromEdge === 'left' || fromEdge === 'right'
       : toShape ? toEdge === 'left' || toEdge === 'right'
         : Math.abs(end.point.x - start.point.x) >= Math.abs(end.point.y - start.point.y);
@@ -91,9 +92,6 @@ export function resolveArrowRoute(
       ? toEdge : facingEdge(start.point, end.point, horizontal);
     if (!toShape) toEdge = fromShape && sameAxisPosition
       ? fromEdge : facingEdge(end.point, start.point, horizontal);
-  } else {
-    fromEdge = getArrowBindingEdge(editor, shape.id as ShapeId, 'start', fromEdge);
-    toEdge = getArrowBindingEdge(editor, shape.id as ShapeId, 'end', toEdge);
   }
 
   const inParent = (point: Vec2) => ({ x: point.x + shape.x, y: point.y + shape.y });
@@ -166,18 +164,14 @@ export function resolveArrowRoute(
   const aligned = fromEdge === 'left' || fromEdge === 'right'
     ? start.point.y === end.point.y : start.point.x === end.point.x;
   const coincident = start.point.x === end.point.x && start.point.y === end.point.y;
+  const startBounds = fromBounds || makeBox(shape.x + start.point.x, shape.y + start.point.y, 0, 0);
+  const endBounds = toBounds || makeBox(shape.x + end.point.x, shape.y + end.point.y, 0, 0);
   const points = (!fromShape || !toShape) && (coincident || (aligned && fromEdge !== toEdge))
-    ? [start.point, end.point] : computeFallbackLocalElbowPoints(
-    shape,
-    fromBounds || makeBox(shape.x + start.point.x, shape.y + start.point.y, 0, 0),
-    toBounds || makeBox(shape.x + end.point.x, shape.y + end.point.y, 0, 0),
-    fromEdge,
-    toEdge,
-  );
+    ? [start.point, end.point] : computeFallbackLocalElbowPoints(shape, startBounds, endBounds, fromEdge, toEdge);
   let localPoints = protectStart || protectEnd ? protectAnchors(points.map(inParent)).map(inLocal) : points;
-  if (fromBounds && toBounds && !protectStart && !protectEnd) {
+  if ((fromBounds || toBounds) && !protectStart && !protectEnd) {
     const parentPoints = localPoints.map(inParent);
-    const repaired = routeAroundConnectorTerminals(parentPoints, fromBounds, toBounds, fromEdge, toEdge);
+    const repaired = routeAroundConnectorTerminals(parentPoints, startBounds, endBounds, fromEdge, toEdge);
     if (repaired !== parentPoints) localPoints = repaired.map(inLocal);
   }
   const worldPoints = localPoints.map(toPage);
@@ -224,6 +218,46 @@ export function getArrowBendHandlePoint(
 
   const resolved = resolveArrowRoute(editor, shape);
   return polylineMidpoint(resolved.worldPoints);
+}
+
+function getCurveControls(
+  start: Vec2, end: Vec2, bend: number, startNormal?: Vec2, endNormal?: Vec2,
+): [Vec2, Vec2] | undefined {
+  if (!startNormal && !endNormal) return;
+  const dx = end.x - start.x, dy = end.y - start.y;
+  const chord = Math.hypot(dx, dy);
+  if (chord < 1e-9) return;
+  const quadraticControl = {
+    x: (start.x + end.x) / 2 + dy * bend,
+    y: (start.y + end.y) / 2 - dx * bend,
+  };
+  // Start from the equivalent cubic so each terminal can be adjusted independently.
+  const first = interpolate(start, quadraticControl, 2 / 3);
+  const second = interpolate(end, quadraticControl, 2 / 3);
+  const adjust = (anchor: Vec2, control: Vec2, normal?: Vec2) => {
+    if (!normal) return control;
+    const x = control.x - anchor.x, y = control.y - anchor.y;
+    const outward = x * normal.x + y * normal.y;
+    const sideways = Math.abs(x * normal.y - y * normal.x);
+    const correction = Math.max(chord * 0.12, sideways) - outward;
+    return correction > 0
+      ? { x: control.x + correction * normal.x, y: control.y + correction * normal.y }
+      : control;
+  };
+  const startControl = adjust(start, first, startNormal);
+  const endControl = adjust(end, second, endNormal);
+  if (startControl !== first || endControl !== second) return [startControl, endControl];
+}
+
+function sampleCubicPoints(start: Vec2, end: Vec2, [first, second]: [Vec2, Vec2]): Vec2[] {
+  return Array.from({ length: CURVE_SAMPLE_STEPS + 1 }, (_, i) => {
+    const t = i / CURVE_SAMPLE_STEPS;
+    const mt = 1 - t;
+    return {
+      x: mt ** 3 * start.x + 3 * mt * mt * t * first.x + 3 * mt * t * t * second.x + t ** 3 * end.x,
+      y: mt ** 3 * start.y + 3 * mt * mt * t * first.y + 3 * mt * t * t * second.y + t ** 3 * end.y,
+    };
+  });
 }
 
 export function sampleCurvePoints(start: Vec2, end: Vec2, bend: number, steps = CURVE_SAMPLE_STEPS): Vec2[] {

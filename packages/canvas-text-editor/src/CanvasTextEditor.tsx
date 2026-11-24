@@ -135,6 +135,13 @@ export function CanvasTextEditor({
   }, [editable, editor]);
 
   useEffect(() => {
+    // Imported nodes can have a saved document before their first shared edit.
+    if (editor && editable && stableCollaboration?.fragment.length === 0) {
+      editor.commands.setContent(initialDocument.doc, { emitUpdate: false });
+    }
+  }, [editor, editable, stableCollaboration, initialDocument]);
+
+  useEffect(() => {
     if (!editor || !stableCollaboration?.fragment.observeDeep) return;
     const report = () => {
       // Publish the canonical Yjs document before yielding. A blur can unmount

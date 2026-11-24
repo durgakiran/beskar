@@ -20,7 +20,7 @@ import {
 } from './AssetImportPanel.js';
 import { AssetsPanel, hasAssetDragType, readAssetDragData } from './AssetsPanel.js';
 import type { AssetLibraryProvider } from './asset-library.js';
-import type { GlideboardToolbarLayout } from './types.js';
+import type { GlideboardStrokeDiagnosticsHandler, GlideboardToolbarLayout } from './types.js';
 import { AssetPlacementStatus } from './AssetPlacementStatus.js';
 import { getShortcutEventPath, shouldIgnoreGlideboardShortcuts } from './shortcut-guards.js';
 import { PageTabs } from './PageTabs.js';
@@ -47,9 +47,11 @@ const ERASER_SHORTCUTS = new Map([
 export function WhiteboardApp({
   assetLibraryProvider,
   toolbarLayout = 'split',
+  onStrokeDiagnostics,
 }: {
   assetLibraryProvider?: AssetLibraryProvider;
   toolbarLayout?: GlideboardToolbarLayout;
+  onStrokeDiagnostics?: GlideboardStrokeDiagnosticsHandler;
 }) {
   const controller = useGlideboardController();
   const editor = controller.editor;
@@ -62,6 +64,7 @@ export function WhiteboardApp({
   const shapeCount = useSignalValue(editor.getCurrentPageShapeIdsSignal())?.length ?? 0;
   const camera = useSignalValue(editor.camera.signal);
   const readOnly = useSignalValue(controller.readOnlySignal) ?? false;
+  const penMode = useSignalValue(controller.penModeSignal);
   const assetImportJobs = useSignalValue(controller.assetImportJobsSignal) ?? [];
   const assetPlacement = useSignalValue(controller.assetPlacementSignal) ?? null;
   const [contextMenuPosition, setContextMenuPosition] = React.useState<{ x: number; y: number } | null>(null);
@@ -690,7 +693,7 @@ export function WhiteboardApp({
           void importFiles(files).finally(restoreImportFocus);
         }}
       />
-      <Canvas />
+      <Canvas onStrokeDiagnostics={onStrokeDiagnostics} />
       {isFileDragActive ? (
         <div data-glideboard-role="asset-drop-highlight" aria-hidden style={{
           position: 'absolute', inset: 8, zIndex: 90, pointerEvents: 'none',
@@ -774,6 +777,29 @@ export function WhiteboardApp({
         <span data-glideboard-role="status-zoom">{camera && ` · ${Math.round(camera.z * 100)}%`}</span>
         {readOnly ? (
           <span style={{ color: wbTheme.accentText }}> · Read-only</span>
+        ) : penMode ? (
+          <button
+            type="button"
+            data-glideboard-ignore-shortcuts=""
+            onClick={() => {
+              controller.penModeSignal.value = false;
+              controller.getCanvasElement()?.focus();
+            }}
+            style={{
+              marginInlineStart: 8,
+              minHeight: 32,
+              paddingInline: 8,
+              pointerEvents: 'auto',
+              font: 'inherit',
+              color: wbTheme.accentText,
+              background: wbTheme.surface,
+              border: `1px solid ${wbTheme.border}`,
+              borderRadius: 6,
+              cursor: 'pointer',
+            }}
+          >
+            Exit pen mode
+          </button>
         ) : (
           <span data-glideboard-role="status-help" style={{ color: wbTheme.accentText }}> · Double-click to add or edit text</span>
         )}

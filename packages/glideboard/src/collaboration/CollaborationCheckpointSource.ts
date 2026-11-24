@@ -39,6 +39,7 @@ export class GlideboardCollaborationCheckpointSource implements CollaborationChe
 
   private transactionSequence = 0;
   private disposed = false;
+  private firstFailure?: string;
   private latest: Promise<ProjectedYjsState> | null = null;
   private queue: Promise<void> = Promise.resolve();
   private readonly byStoreRevision = new Map<number, Promise<ProjectionTarget>>();
@@ -48,6 +49,10 @@ export class GlideboardCollaborationCheckpointSource implements CollaborationChe
   private readonly listeners = new Set<(state: ProjectedYjsState) => void>();
 
   constructor(private readonly intervalMs = 0, private readonly onDemand = false) {}
+
+  get failureDetail(): string | undefined {
+    return this.firstFailure;
+  }
 
   stage(doc: Y.Doc, revision: number): void {
     if (this.disposed) return;
@@ -100,8 +105,8 @@ export class GlideboardCollaborationCheckpointSource implements CollaborationChe
     try {
       encodedState = Y.encodeStateAsUpdate(doc);
     } catch (error) {
-      this.quarantine();
-      return Promise.reject(error);
+      this.quarantine(`Encode Yjs checkpoint for store revision ${storeRevision}`, error);
+      return Promise.reject(this.projectionError('Glideboard collaboration projection is quarantined.'));
     }
     let resolveState!: (state: ProjectedYjsState) => void;
     let rejectState!: (error: unknown) => void;
@@ -117,6 +122,7 @@ export class GlideboardCollaborationCheckpointSource implements CollaborationChe
     this.byStoreRevision.set(storeRevision, target);
     this.latest = result;
     this.queue = this.queue.then(async () => {
+      let step = 'Hash Yjs checkpoint';
       try {
         const stateDigest = await sha256(encodedState);
         const state: ProjectedYjsState = Object.freeze({
@@ -127,10 +133,11 @@ export class GlideboardCollaborationCheckpointSource implements CollaborationChe
           encodedState,
         });
         resolveState(state);
+        step = 'Deliver Yjs checkpoint';
         this.emit(state);
       } catch (error) {
-        this.status.value = 'quarantined';
-        rejectState(error);
+        this.quarantine(`${step} for store revision ${storeRevision}`, error);
+        rejectState(this.projectionError('Glideboard collaboration projection is quarantined.'));
       }
     });
     return result;
@@ -143,8 +150,14 @@ export class GlideboardCollaborationCheckpointSource implements CollaborationChe
     }
   }
 
-  quarantine(): void {
-    if (!this.disposed) this.status.value = 'quarantined';
+  quarantine(step: string, error?: unknown): void {
+    if (this.disposed) return;
+    this.firstFailure ??= error instanceof Error && error.message ? `${step}. ${error.message}` : step;
+    this.status.value = 'quarantined';
+  }
+
+  projectionError(message: string): Error {
+    return new Error(this.firstFailure ? `${message} First failure: ${this.firstFailure}` : message);
   }
 
   markIncompatible(): void {
@@ -173,7 +186,7 @@ export class GlideboardCollaborationCheckpointSource implements CollaborationChe
 
   async captureTarget(): Promise<ProjectionTarget> {
     if (this.status.peek() !== 'healthy') {
-      throw new Error(`Glideboard collaboration projection is ${this.status.peek()}.`);
+      throw this.projectionError(`Glideboard collaboration projection is ${this.status.peek()}.`);
     }
     this.flushPending();
     const latest = this.latest;
@@ -188,7 +201,7 @@ export class GlideboardCollaborationCheckpointSource implements CollaborationChe
 
   async waitForStoreRevision(storeRevision: number): Promise<ProjectionTarget> {
     if (this.status.peek() !== 'healthy') {
-      throw new Error(`Glideboard collaboration projection is ${this.status.peek()}.`);
+      throw this.projectionError(`Glideboard collaboration projection is ${this.status.peek()}.`);
     }
     if (this.pending?.revision === storeRevision) this.flushPending();
     const checkpoint = this.byStoreRevision.get(storeRevision);

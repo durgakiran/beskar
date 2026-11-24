@@ -701,7 +701,10 @@ class DraggingHandle extends StateNode {
 
   private _resolveTerminal(arrow: ArrowShape, term: 'start' | 'end', pointer: Vec2) {
     const other = term === 'start' ? 'end' : 'start';
-    return resolveBindingCandidate(this.editor, pointer, [this._arrowId, arrow.props[other].boundShapeId]);
+    return resolveBindingCandidate(this.editor, pointer, {
+      oppositeTargetId: arrow.props[other].boundShapeId,
+      connectorId: this._arrowId,
+    });
   }
 
   private _positionTerminal(arrow: ArrowShape, term: 'start' | 'end', pointer: Vec2, candidate: BindingPreviewCandidate | null): void {

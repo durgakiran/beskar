@@ -13,6 +13,7 @@ interface SpaceDetails {
     name: string;
     description?: string;
     docCount?: number;
+    whiteboardCount?: number;
     memberCount?: number;
     userRole?: string;
     archivedAt?: string | null;
@@ -224,6 +225,11 @@ export default function Page() {
                     <SpaceSummaryStat
                         label="Documents"
                         value={space?.docCount ?? 0}
+                        className="flex-row justify-between items-center md:flex-col md:items-start md:justify-start"
+                    />
+                    <SpaceSummaryStat
+                        label="Whiteboards"
+                        value={space?.whiteboardCount ?? 0}
                         className="flex-row justify-between items-center md:flex-col md:items-start md:justify-start"
                     />
                     <SpaceSummaryStat

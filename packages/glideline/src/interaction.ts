@@ -342,7 +342,8 @@ export class InteractionManager {
       this._baselineGenerations.set(id, this._store.getRecordGeneration(id));
     }
     const baseline = this._baselines.get(id) ?? null;
-    if (jsonEqual(baseline, value)) {
+    // A newly created preview (such as live ink) has no baseline to compare.
+    if (baseline === value || (baseline !== null && value !== null && jsonEqual(baseline, value))) {
       this._overlay.delete(id);
       this._baselines.delete(id);
       this._baselineGenerations.delete(id);

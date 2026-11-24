@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { Doc } from 'yjs';
 import { CanvasTextEditor } from './CanvasTextEditor.js';
 import { createCanvasRichTextDocument } from './model.js';
 
@@ -25,6 +26,28 @@ describe('CanvasTextEditor', () => {
     await screen.findByRole('toolbar', { name: 'Text formatting' });
     fireEvent.click(screen.getByRole('button', { name: 'Link' }));
     expect(await screen.findByRole('textbox', { name: 'Link URL' })).toBeTruthy();
+  });
+
+  it('opens pasted formatted text in a fresh collaboration fragment and reuses it on reopen', async () => {
+    const fragment = new Doc().getXmlFragment('pasted-note');
+    const value = createCanvasRichTextDocument('One session per teacher.');
+    const formatted = {
+      ...value,
+      doc: { type: 'doc', content: [{ type: 'paragraph', content: [
+        { type: 'text', text: 'One session per teacher.', marks: [{ type: 'bold' }] },
+      ] }] },
+    };
+    const renderNote = (snapshot: unknown) => render(
+      <CanvasTextEditor value={snapshot} collaboration={{ fragment }} syncExternalValue={false} />,
+    );
+    const view = renderNote(formatted);
+    await waitFor(() => expect(screen.getByRole('textbox').querySelector('strong')?.textContent)
+      .toBe('One session per teacher.'));
+    expect(fragment.length).toBe(1);
+    view.unmount();
+
+    renderNote(createCanvasRichTextDocument('Stale snapshot'));
+    await waitFor(() => expect(screen.getByRole('textbox').textContent).toBe('One session per teacher.'));
   });
 
   it('does not replay live host value echoes into the active editor', async () => {

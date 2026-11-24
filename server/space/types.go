@@ -30,6 +30,7 @@ type SpaceListItem struct {
 	Name            string     `json:"name" db:"name"`
 	Description     string     `json:"description" db:"description"`
 	DateUpdated     time.Time  `json:"dateUpdated" db:"date_updated"`
+	LastActivityAt  time.Time  `json:"lastActivityAt" db:"last_activity_at"`
 	CreatedBy       uuid.UUID  `json:"createdBy" db:"user_id"`
 	ArchivedAt      *time.Time `json:"archivedAt,omitempty" db:"archived_at"`
 	MemberCount     int        `json:"memberCount"`

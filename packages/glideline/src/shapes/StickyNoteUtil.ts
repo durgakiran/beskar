@@ -14,7 +14,8 @@ import { createSvgLabel } from './TextUtil.js';
  *
  * getGeometry  → AABB
  * hitTestPoint → AABB (default)
- * toSvg        → <rect> background + <text> with <tspan> line wrapping
+ * toSvg        → paper silhouette and curled corner
+ * toSvgExport  → paper and wrapped SVG text
  *
  * Note: toSvg produces pure SVG so it is export-safe (no foreignObject).
  * Inline editing is handled by InlineEditor.tsx in the demo layer via a
@@ -144,6 +145,10 @@ export function wrapText(text: string, maxWidth: number, fontSize: number): stri
 
 /** Inner padding (px) between the sticky-note border and text. */
 const PAD = 12;
+const SHADOW_BLUR = 3;
+const SHADOW_OFFSET_Y = 3;
+const SHADOW_PADDING = SHADOW_BLUR * 3;
+const SVG_NS = 'http://www.w3.org/2000/svg';
 
 export class StickyNoteUtil extends ShapeUtil<StickyNoteShape> {
   static override readonly type = 'sticky-note';
@@ -202,31 +207,48 @@ export class StickyNoteUtil extends ShapeUtil<StickyNoteShape> {
     return new Rectangle2d(0, 0, shape.props.w, shape.props.h);
   }
 
-  /** Geometry-only SVG — background rect only, no text. For interactive canvas rendering. */
+  override getVisualBounds(shape: StickyNoteShape) {
+    const { w, h } = shape.props;
+    return makeBox(
+      -SHADOW_PADDING,
+      SHADOW_OFFSET_Y - SHADOW_PADDING,
+      w + SHADOW_PADDING * 2,
+      h + SHADOW_PADDING * 2,
+    );
+  }
+
+  /** Paint the paper separately from the canvas text overlay. */
   toSvg(shape: StickyNoteShape): SVGElement {
-    const { props } = shape;
-    const bgColor = STICKY_COLORS[props.color] ?? resolveColor(props.color);
+    const { w, h, color, opacity } = shape.props;
+    const curlDepth = Math.min(24, h / 4, w / 8);
+    const curlWidth = curlDepth * 1.75;
+    const curlTop = h - curlDepth;
+    const curlLeft = w - curlWidth;
+    const curledEdge = `Q ${w - curlDepth / 2} ${h} ${curlLeft} ${h}`;
 
-    const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-    if (props.opacity < 1) g.setAttribute('opacity', String(props.opacity));
+    const g = document.createElementNS(SVG_NS, 'g');
+    if (opacity < 1) g.setAttribute('opacity', String(opacity));
 
-    const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-    rect.setAttribute('x',      '0');
-    rect.setAttribute('y',      '0');
-    rect.setAttribute('width',  String(props.w));
-    rect.setAttribute('height', String(props.h));
-    rect.setAttribute('fill',   bgColor);
-    rect.setAttribute('rx',     '4');
-    rect.setAttribute('stroke', 'rgba(0,0,0,0.08)');
-    rect.setAttribute('stroke-width', '1');
-    g.appendChild(rect);
+    const paper = document.createElementNS(SVG_NS, 'path');
+    paper.setAttribute('d', `M 0 0 H ${w} V ${curlTop} ${curledEdge} H 0 Z`);
+    paper.setAttribute('fill', STICKY_COLORS[color] ?? resolveColor(color));
+    paper.setAttribute('filter', `drop-shadow(0px ${SHADOW_OFFSET_Y}px ${SHADOW_BLUR}px rgba(15,23,42,0.24))`);
+
+    const curl = document.createElementNS(SVG_NS, 'path');
+    curl.setAttribute('d', `M ${w} ${curlTop} ${curledEdge} Q ${curlLeft + curlDepth / 2} ${h - curlDepth} ${w} ${curlTop} Z`);
+    curl.setAttribute('fill', '#fff');
+    curl.setAttribute('fill-opacity', '0.65');
+    curl.setAttribute('stroke', '#0f172a');
+    curl.setAttribute('stroke-opacity', '0.22');
+    curl.setAttribute('stroke-width', String(curlDepth / 20));
+
+    g.append(paper, curl);
     return g;
   }
 
-  /** CSS label properties for the HTML overlay div — includes sticky background color. */
+  /** CSS label properties for the transparent HTML overlay. */
   override getLabelProps(shape: StickyNoteShape): LabelProps | null {
     const { props } = shape;
-    const bgColor = STICKY_COLORS[props.color] ?? resolveColor(props.color);
     return {
       text:          props.text,
       fontFamily:    FONT_FAMILIES[props.font] ?? FONT_FAMILIES.sans,
@@ -235,7 +257,6 @@ export class StickyNoteUtil extends ShapeUtil<StickyNoteShape> {
       textAlign:     props.textAlign,
       verticalAlign: 'top',
       padding:       PAD,
-      background:    bgColor,
     };
   }
 

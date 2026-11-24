@@ -174,13 +174,24 @@ function materializeRecords(records: Y.Map<Y.Map<unknown>>): AnyRecord[] {
   return result;
 }
 
-function changesMatchSharedState(records: Y.Map<Y.Map<unknown>>, changes: StoreChangeSet): boolean {
+function jsonValuesEqual(left: unknown, right: unknown): boolean {
+  if (left === right) return true;
+  if (Array.isArray(left) && Array.isArray(right)) {
+    return left.length === right.length && left.every((item, index) => jsonValuesEqual(item, right[index]));
+  }
+  if (!isPlainObject(left) || !isPlainObject(right)) return false;
+
+  const keys = Object.keys(left);
+  return keys.length === Object.keys(right).length && keys.every(key =>
+    Object.prototype.hasOwnProperty.call(right, key) && jsonValuesEqual(left[key], right[key]));
+}
+
+function firstMismatchedRecord(records: Y.Map<Y.Map<unknown>>, changes: StoreChangeSet): string | undefined {
   for (const delta of changes.deltas) {
     const shared = records.get(delta.id);
     const actual = shared instanceof Y.Map ? materializeRecord(shared) : null;
-    if (JSON.stringify(actual) !== JSON.stringify(delta.after)) return false;
+    if (!jsonValuesEqual(actual, delta.after)) return delta.id;
   }
-  return true;
 }
 
 function applyFullProjection(
@@ -266,7 +277,7 @@ export function bindGlideboardCollaboration(
     return true;
   };
 
-  const projectCurrentSharedState = (): boolean => {
+  const projectCurrentSharedState = (step: string): boolean => {
     if (!validateMetadata()) return false;
     applyingRemote = true;
     try {
@@ -274,7 +285,7 @@ export function bindGlideboardCollaboration(
       recordCheckpoint(editor.store.revision);
       if (ready) checkpoints.markHealthy();
       return true;
-    } catch {
+    } catch (error) {
       // Retry from the complete Y.Doc once; a transient observer/projection
       // failure must not leave a partial store projection.
       try {
@@ -283,7 +294,7 @@ export function bindGlideboardCollaboration(
         if (ready) checkpoints.markHealthy();
         return true;
       } catch {
-        checkpoints.quarantine();
+        checkpoints.quarantine(`${step} after store revision ${editor.store.revision}`, error);
         return false;
       }
     } finally {
@@ -330,12 +341,12 @@ export function bindGlideboardCollaboration(
         metadata.set('documentSchema', localDocumentSchema);
       }
     }, BOOTSTRAP_ORIGIN);
-    projectCurrentSharedState();
+    projectCurrentSharedState('Project Yjs bootstrap state');
   };
 
   const handleSharedChange = (_events: readonly unknown[], transaction: Y.Transaction) => {
     if (disposed || transaction.origin === LOCAL_COMMAND_ORIGIN || transaction.origin === BOOTSTRAP_ORIGIN) return;
-    projectCurrentSharedState();
+    projectCurrentSharedState('Apply incoming Yjs state');
   };
   records.observeDeep(handleSharedChange);
   metadata.observeDeep(handleSharedChange);
@@ -358,7 +369,7 @@ export function bindGlideboardCollaboration(
   const stopAtomicLocalProjection = editor.participateInCommitsWithCapability(capability, changes => {
     if (applyingRemote || changes.origin === 'remote' || changes.scope === 'ephemeral') return null;
     if (checkpoints.status.peek() !== 'healthy') {
-      throw new Error(`Cannot edit while collaboration projection is ${checkpoints.status.peek()}.`);
+      throw checkpoints.projectionError(`Cannot edit while collaboration projection is ${checkpoints.status.peek()}.`);
     }
     let observerError: unknown;
     try {
@@ -366,9 +377,18 @@ export function bindGlideboardCollaboration(
     } catch (error) {
       observerError = error;
     }
-    if (!changesMatchSharedState(records, changes)) {
-      checkpoints.quarantine();
-      throw observerError ?? new Error('Yjs did not reflect the prepared Glideline command.');
+    let failedRecord: string | undefined;
+    const verificationStep = () =>
+      `Verify local ${changes.origin} command "${changes.commandId ?? changes.label ?? changes.origin}" at store revision ${changes.revision}`;
+    try {
+      failedRecord = firstMismatchedRecord(records, changes);
+    } catch (error) {
+      checkpoints.quarantine(verificationStep(), error);
+      throw checkpoints.projectionError('Glideboard collaboration projection is quarantined.');
+    }
+    if (failedRecord !== undefined) {
+      checkpoints.quarantine(`${verificationStep()}. Shared record "${failedRecord}" differs from the commit`, observerError);
+      throw checkpoints.projectionError('Glideboard collaboration projection is quarantined.');
     }
     recordCheckpoint(changes.revision);
     return { publish() {} };
@@ -382,7 +402,7 @@ export function bindGlideboardCollaboration(
   config.provider?.on?.('sync', handleProviderReady);
   config.provider?.on?.('synced', handleProviderReady);
 
-  if (records.size > 0) projectCurrentSharedState();
+  if (records.size > 0) projectCurrentSharedState('Project initial Yjs state');
   if (ready) seedOrMigrate();
 
   const cleanup = () => {

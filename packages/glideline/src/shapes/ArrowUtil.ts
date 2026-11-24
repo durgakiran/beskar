@@ -438,8 +438,6 @@ export class ArrowUtil extends ShapeUtil<ArrowShape> {
     } = shape.props;
     const route = resolveArrowRoute(this.editor as any, shape);
     const pathStr = route.path;
-    const start = shape.props.start;
-    const end = shape.props.end;
 
     const strokeW = STROKE_WIDTHS[strokeWidth] ?? 2;
     const strokeC = resolveColor(color) ?? color;
@@ -492,9 +490,11 @@ export class ArrowUtil extends ShapeUtil<ArrowShape> {
     }
     g.appendChild(path);
 
+    const quadraticControl = route.renderKind === 'curve' && !route.curveControls
+      ? getQuadraticControl(pathStr) : undefined;
     if (arrowheadStart === 'arrow') {
-      const startPt = arrowStartPoint(pathStr, start.point);
-      const tangentTo = arrowTangentTo(pathStr, end.point);
+      const startPt = route.localPoints[0] ?? shape.props.start.point;
+      const tangentTo = route.curveControls?.[0] ?? quadraticControl ?? getTerminalNeighbor(route.localPoints, startPt, 1);
       const pts = getArrowheadPoints(tangentTo, startPt);
       if (pts) {
         const polygon = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
@@ -505,8 +505,8 @@ export class ArrowUtil extends ShapeUtil<ArrowShape> {
     }
 
     if (arrowheadEnd === 'arrow') {
-      const endPt = arrowEndPoint(pathStr, end.point);
-      const tangentFrom = arrowTangentFrom(pathStr, start.point);
+      const endPt = route.localPoints.at(-1) ?? shape.props.end.point;
+      const tangentFrom = route.curveControls?.[1] ?? quadraticControl ?? getTerminalNeighbor(route.localPoints, endPt, -1);
       const pts = getArrowheadPoints(tangentFrom, endPt);
       if (pts) {
         const polygon = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
@@ -617,54 +617,19 @@ function nearestPositionAlongPolyline(points: readonly Vec2[], point: Vec2): num
 // Arrow SVG Export Helpers
 // ─────────────────────────────────────────────────────────────
 
-function arrowStartPoint(pathStr: string, fallback: { x: number; y: number }): { x: number; y: number } {
-  const match = pathStr.match(/^M\s+([\d.\-eE+]+)\s+([\d.\-eE+]+)/);
+function getQuadraticControl(pathStr: string): Vec2 | undefined {
+  const match = pathStr.match(/Q\s+([\d.\-eE+]+)\s+([\d.\-eE+]+)/);
   const x = match?.[1];
   const y = match?.[2];
   if (x !== undefined && y !== undefined) return { x: parseFloat(x), y: parseFloat(y) };
-  return fallback;
 }
 
-function arrowTangentTo(pathStr: string, fallback: { x: number; y: number }): { x: number; y: number } {
-  const qMatch = pathStr.match(/^M\s+[\d.\-eE+]+\s+[\d.\-eE+]+\s+Q\s+([\d.\-eE+]+)\s+([\d.\-eE+]+)/);
-  const qx = qMatch?.[1];
-  const qy = qMatch?.[2];
-  if (qx !== undefined && qy !== undefined) return { x: parseFloat(qx), y: parseFloat(qy) };
-  const pts = getPathPoints(pathStr);
-  if (pts.length >= 2) return pts[1]!;
-  return fallback;
-}
-
-function arrowEndPoint(pathStr: string, fallback: { x: number; y: number }): { x: number; y: number } {
-  const match = pathStr.match(/(?:Q\s+[\d.\-eE+]+\s+[\d.\-eE+]+\s+|L\s+)([\d.\-eE+]+)\s+([\d.\-eE+]+)$/);
-  const x = match?.[1];
-  const y = match?.[2];
-  if (x !== undefined && y !== undefined) return { x: parseFloat(x), y: parseFloat(y) };
-  return fallback;
-}
-
-function arrowTangentFrom(pathStr: string, fallback: { x: number; y: number }): { x: number; y: number } {
-  const qMatch = pathStr.match(/Q\s+([\d.\-eE+]+)\s+([\d.\-eE+]+)\s+[\d.\-eE+]+\s+[\d.\-eE+]+/);
-  const qx = qMatch?.[1];
-  const qy = qMatch?.[2];
-  if (qx !== undefined && qy !== undefined) return { x: parseFloat(qx), y: parseFloat(qy) };
-  const pts = getPathPoints(pathStr);
-  if (pts.length >= 2) return pts[pts.length - 2]!;
-  return fallback;
-}
-
-function getPathPoints(pathStr: string): { x: number; y: number }[] {
-  const pts: { x: number; y: number }[] = [];
-  const re = /[ML]\s+([\d.\-eE+]+)\s+([\d.\-eE+]+)/g;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(pathStr)) !== null) {
-    const x = m[1];
-    const y = m[2];
-    if (x !== undefined && y !== undefined) {
-      pts.push({ x: parseFloat(x), y: parseFloat(y) });
-    }
+function getTerminalNeighbor(points: readonly Vec2[], tip: Vec2, step: 1 | -1): Vec2 {
+  for (let i = step === 1 ? 1 : points.length - 2; i >= 0 && i < points.length; i += step) {
+    const point = points[i]!;
+    if (Math.hypot(point.x - tip.x, point.y - tip.y) > 1e-6) return point;
   }
-  return pts;
+  return tip;
 }
 
 function getArrowheadPoints(tangentFrom: Vec2, tip: Vec2) {
