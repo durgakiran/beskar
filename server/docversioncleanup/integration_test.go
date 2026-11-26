@@ -26,52 +26,70 @@ type documentCleanupFixture struct {
 }
 
 func TestIntegrationPruneOldNonLatestPublishedVersion(t *testing.T) {
-	pool := integrationPool(t)
-	ctx := context.Background()
-	fixture := createDocumentCleanupFixture(t, ctx, pool, 7)
-	jobRunID := uuid.New()
-
-	prunedDocID := insertDocumentVersion(t, ctx, pool, fixture.PageID, fixture.OwnerID, "old-pruned", 100*365*24*time.Hour, false)
-	latestDocID := insertDocumentVersion(t, ctx, pool, fixture.PageID, fixture.OwnerID, "old-latest", 99*365*24*time.Hour, false)
-	recentDocID := insertDocumentVersion(t, ctx, pool, fixture.PageID, fixture.OwnerID, "recent", 24*time.Hour, false)
-	draftDocID := insertDocumentVersion(t, ctx, pool, fixture.PageID, fixture.OwnerID, "draft", 40*24*time.Hour, true)
-	insertContentWithTextNode(t, ctx, pool, prunedDocID)
-	insertAssetReference(t, ctx, pool, fixture.PageID, prunedDocID, "published_doc", prunedDocID)
-	insertAssetReference(t, ctx, pool, fixture.PageID, prunedDocID, "comment_reply", 999999)
-	insertAssetReference(t, ctx, pool, fixture.PageID, latestDocID, "published_doc", latestDocID)
-
-	candidates, err := ListCandidateVersions(ctx, 7, 10)
-	if err != nil {
-		t.Fatalf("list candidates: %v", err)
-	}
-	if !containsCandidate(candidates, prunedDocID) {
-		t.Fatalf("expected old non-latest doc %d to be a cleanup candidate", prunedDocID)
-	}
-	for _, docID := range []int64{latestDocID, recentDocID, draftDocID} {
-		if containsCandidate(candidates, docID) {
-			t.Fatalf("doc %d should not be a cleanup candidate", docID)
+	for _, coverageRow := range []bool{false, true} {
+		name := "missing coverage row"
+		if coverageRow {
+			name = "null published backfill marker"
 		}
-	}
+		t.Run(name, func(t *testing.T) {
+			pool := integrationPool(t)
+			ctx := context.Background()
+			fixture := createDocumentCleanupFixture(t, ctx, pool, 7)
+			if coverageRow {
+				if _, err := pool.Exec(ctx, `INSERT INTO core.asset_reference_coverage (page_id) VALUES ($1)`, fixture.PageID); err != nil {
+					t.Fatalf("insert incomplete coverage: %v", err)
+				}
+			}
 
-	result, err := PruneNextPageBatch(ctx, 7, 10, jobRunID)
-	if err != nil {
-		t.Fatalf("prune batch: %v", err)
-	}
-	if result.PrunedVersionCount != 1 {
-		t.Fatalf("expected 1 pruned version, got %d", result.PrunedVersionCount)
-	}
-	if result.AssetReferenceRowsDeleted != 1 {
-		t.Fatalf("expected 1 published-doc asset reference delete, got %d", result.AssetReferenceRowsDeleted)
-	}
+			prunedDocID := insertDocumentVersion(t, ctx, pool, fixture.PageID, fixture.OwnerID, "old-pruned", 100*365*24*time.Hour, false)
+			latestDocID := insertDocumentVersion(t, ctx, pool, fixture.PageID, fixture.OwnerID, "old-latest", 99*365*24*time.Hour, false)
+			recentDocID := insertDocumentVersion(t, ctx, pool, fixture.PageID, fixture.OwnerID, "recent", 24*time.Hour, false)
+			draftDocID := insertDocumentVersion(t, ctx, pool, fixture.PageID, fixture.OwnerID, "draft", 40*24*time.Hour, true)
+			insertContentWithTextNode(t, ctx, pool, prunedDocID)
+			insertAssetReference(t, ctx, pool, fixture.PageID, prunedDocID, "published_doc", prunedDocID)
+			insertAssetReference(t, ctx, pool, fixture.PageID, prunedDocID, "comment_reply", 999999)
+			insertAssetReference(t, ctx, pool, fixture.PageID, latestDocID, "published_doc", latestDocID)
 
-	assertDocumentDeleted(t, ctx, pool, prunedDocID)
-	assertDocumentExists(t, ctx, pool, latestDocID)
-	assertDocumentExists(t, ctx, pool, recentDocID)
-	assertDocumentExists(t, ctx, pool, draftDocID)
-	assertContentDeleted(t, ctx, pool, prunedDocID)
-	assertAssetReferenceMissing(t, ctx, pool, "published_doc", prunedDocID)
-	assertAssetReferenceExists(t, ctx, pool, "comment_reply", 999999)
-	assertCleanupLog(t, ctx, pool, fixture, prunedDocID, jobRunID)
+			candidates, err := ListCandidateVersions(ctx, 7, 10)
+			if err != nil {
+				t.Fatalf("list candidates: %v", err)
+			}
+			if !containsCandidate(candidates, prunedDocID) {
+				t.Fatalf("expected old non-latest doc %d to be a cleanup candidate", prunedDocID)
+			}
+			for _, docID := range []int64{latestDocID, recentDocID, draftDocID} {
+				if containsCandidate(candidates, docID) {
+					t.Fatalf("doc %d should not be a cleanup candidate", docID)
+				}
+			}
+
+			worker := NewWorker(Config{DefaultRetentionDays: 7, BatchSize: 10, MaxDocsPerRun: 1})
+			if _, err := worker.RunDryRunOnce(ctx); err != nil {
+				t.Fatalf("dry run without published coverage: %v", err)
+			}
+			assertDocumentExists(t, ctx, pool, prunedDocID)
+			result, err := worker.RunCleanupOnce(ctx)
+			if err != nil {
+				t.Fatalf("cleanup run: %v", err)
+			}
+			if result.PrunedVersionCount != 1 {
+				t.Fatalf("expected 1 pruned version, got %d", result.PrunedVersionCount)
+			}
+			if result.AssetReferenceRowsDeleted != 1 {
+				t.Fatalf("expected 1 published-doc asset reference delete, got %d", result.AssetReferenceRowsDeleted)
+			}
+
+			assertDocumentDeleted(t, ctx, pool, prunedDocID)
+			assertDocumentExists(t, ctx, pool, latestDocID)
+			assertDocumentExists(t, ctx, pool, recentDocID)
+			assertDocumentExists(t, ctx, pool, draftDocID)
+			assertContentDeleted(t, ctx, pool, prunedDocID)
+			assertAssetReferenceMissing(t, ctx, pool, "published_doc", prunedDocID)
+			assertAssetReferenceExists(t, ctx, pool, "published_doc", latestDocID)
+			assertAssetReferenceExists(t, ctx, pool, "comment_reply", 999999)
+			assertCleanupLog(t, ctx, pool, fixture, prunedDocID, result.JobRunID)
+		})
+	}
 }
 
 func TestIntegrationRetentionUsesActivePlanAndFallback(t *testing.T) {
@@ -172,14 +190,6 @@ RETURNING id`,
 	).Scan(&fixture.PageID)
 	if err != nil {
 		t.Fatalf("insert page: %v", err)
-	}
-	_, err = pool.Exec(ctx, `
-INSERT INTO core.asset_reference_coverage (page_id, published_backfilled_at, draft_status, cleanup_eligible)
-VALUES ($1, now(), 'indexed', true)`,
-		fixture.PageID,
-	)
-	if err != nil {
-		t.Fatalf("insert asset reference coverage: %v", err)
 	}
 
 	t.Cleanup(func() {

@@ -1,7 +1,6 @@
 package docversioncleanup
 
 import (
-	"errors"
 	"net/http"
 
 	"github.com/durgakiran/beskar/core"
@@ -44,11 +43,6 @@ func (a *AdminController) status(w http.ResponseWriter, r *http.Request) {
 	if !a.ensureEnabled(w, r) {
 		return
 	}
-	preflight, err := CheckPublishedDocCoveragePreflight(r.Context())
-	if err != nil {
-		core.SendFailedReponse(w, r, http.StatusInternalServerError, "document version cleanup status failed")
-		return
-	}
 	core.SendSuccessResponse(w, r, http.StatusOK, map[string]any{
 		"config": map[string]any{
 			"enabled":              a.config.Enabled,
@@ -58,8 +52,7 @@ func (a *AdminController) status(w http.ResponseWriter, r *http.Request) {
 			"maxDocsPerRun":        a.config.MaxDocsPerRun,
 			"interval":             a.config.Interval.String(),
 		},
-		"preflight": preflight,
-		"stats":     a.worker.Status(),
+		"stats": a.worker.Status(),
 	})
 }
 
@@ -80,10 +73,6 @@ func (a *AdminController) runCleanup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	result, err := a.worker.RunCleanupOnce(r.Context())
-	if errors.Is(err, ErrPublishedDocCoveragePreflightFailed) {
-		core.SendSuccessResponse(w, r, http.StatusOK, result)
-		return
-	}
 	if err != nil {
 		core.SendFailedReponse(w, r, http.StatusInternalServerError, "document version cleanup run failed")
 		return

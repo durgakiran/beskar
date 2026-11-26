@@ -61,24 +61,17 @@ func (w *Worker) Start(ctx context.Context) {
 }
 
 func (w *Worker) RunDryRunOnce(ctx context.Context) (DryRunResult, error) {
-	preflight, err := CheckPublishedDocCoveragePreflight(ctx)
+	impact, err := EstimateDryRunImpact(ctx, w.config.DefaultRetentionDays, w.config.BatchSize)
 	if err != nil {
 		return DryRunResult{}, err
 	}
 
-	impact, err := EstimateDryRunImpact(ctx, w.config.DefaultRetentionDays, w.config.BatchSize)
-	if err != nil {
-		return DryRunResult{Preflight: preflight}, err
-	}
-
 	result := DryRunResult{
-		Preflight:   preflight,
 		Impact:      impact,
 		CompletedAt: time.Now().UTC(),
 	}
 	w.setLastDryRun(result)
 	core.Logger.Info("document version cleanup: dry run completed",
-		zap.Bool("preflight_passed", preflight.Passed),
 		zap.Int64("candidate_count", impact.CandidateVersionCount),
 		zap.Int64("affected_page_count", impact.AffectedPageCount),
 		zap.Int64("affected_account_count", impact.AffectedAccountCount),
@@ -93,33 +86,15 @@ func (w *Worker) RunCleanupOnce(ctx context.Context) (CleanupRunResult, error) {
 		DryRun:   w.config.DryRun,
 	}
 
-	preflight, err := CheckPublishedDocCoveragePreflight(ctx)
-	if err != nil {
-		return result, err
-	}
-	result.Preflight = preflight
-
 	if w.config.DryRun {
 		dryRun, err := w.RunDryRunOnce(ctx)
 		if err != nil {
 			return result, err
 		}
-		result.Preflight = dryRun.Preflight
 		result.DryRunImpact = &dryRun.Impact
 		result.CompletedAt = dryRun.CompletedAt
 		w.setLastCleanup(result)
 		return result, nil
-	}
-
-	if !preflight.Passed {
-		result.CompletedAt = time.Now().UTC()
-		w.setLastCleanup(result)
-		core.Logger.Warn("document version cleanup: preflight failed",
-			zap.Int64("checked_page_count", preflight.CheckedPageCount),
-			zap.Int64("missing_page_count", preflight.MissingPageCount),
-			zap.String("job_run_id", jobRunID.String()),
-		)
-		return result, ErrPublishedDocCoveragePreflightFailed
 	}
 
 	for result.PrunedVersionCount < w.config.MaxDocsPerRun {

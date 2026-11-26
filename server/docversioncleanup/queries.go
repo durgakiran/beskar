@@ -1,23 +1,5 @@
 package docversioncleanup
 
-const publishedDocCoveragePreflightQuery = `WITH published_pages AS (
-    SELECT DISTINCT d.page_id
-    FROM core.page_doc_map d
-    JOIN core.page p ON p.id = d.page_id
-    JOIN core.space s ON s.id = p.space_id
-    WHERE d.draft = 0
-      AND s.deleted_at IS NULL
-      AND COALESCE(p.type, 'document') = 'document'
-)
-SELECT
-    COUNT(*) AS checked_page_count,
-    COUNT(*) FILTER (
-        WHERE c.page_id IS NULL
-           OR c.published_backfilled_at IS NULL
-    ) AS missing_page_count
-FROM published_pages pp
-LEFT JOIN core.asset_reference_coverage c ON c.page_id = pp.page_id`
-
 const listCandidateVersionsQuery = `WITH latest_published AS (
     SELECT DISTINCT ON (page_id)
         doc_id,
