@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -136,6 +137,136 @@ func TestBrowserRedisConcurrentReplicaRefresh(t *testing.T) {
 	saved, err := second.Get("session")
 	if err != nil || saved.Tokens.RefreshToken != "new-refresh" {
 		t.Fatal("rotation not persisted")
+	}
+}
+
+func TestBrowserRedisConcurrentIntrospection(t *testing.T) {
+	f, second := redisFixture(t)
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	if err := f.store.backend.withSession(ctx, "session", f.store, func(e *browserSession, _ func() error) error {
+		e.session.Tokens.Expiry = f.now.Add(time.Hour)
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	const requests = 5
+	started := make(chan struct{}, requests)
+	release := make(chan struct{})
+	var revoked atomic.Bool
+	f.onIntrospect = func(string) bool {
+		if revoked.Load() {
+			return false
+		}
+		started <- struct{}{}
+		select {
+		case <-release:
+		case <-ctx.Done():
+		}
+		return true
+	}
+	results := make(chan error, requests)
+	for i := range requests {
+		store := f.store
+		if i%2 == 1 {
+			store = second
+		}
+		go func() {
+			_, err := f.validator.prepareSession(ctx, store, "session")
+			results <- err
+		}()
+	}
+	for range requests {
+		select {
+		case <-started:
+		case <-ctx.Done():
+			t.Fatal("same-session requests did not reach introspection concurrently")
+		}
+	}
+	close(release)
+	for range requests {
+		if err := <-results; err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := f.inspections.Load(); got != requests {
+		t.Fatalf("introspection calls = %d, want %d", got, requests)
+	}
+	revoked.Store(true)
+	if _, err := f.validator.prepareSession(ctx, second, "session"); !errors.Is(err, errBrowserTokenInvalid) {
+		t.Fatalf("revoked token accepted: %v", err)
+	}
+	if _, err := f.store.Get("session"); !errors.Is(err, authentication.ErrNoSession) {
+		t.Fatalf("revoked session was not cleared: %v", err)
+	}
+}
+
+func TestBrowserRedisSessionChangesDuringIntrospection(t *testing.T) {
+	for _, change := range []string{"logout", "rotation"} {
+		t.Run(change, func(t *testing.T) {
+			f, second := redisFixture(t)
+			ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+			defer cancel()
+			err := f.store.backend.withSession(ctx, "session", f.store, func(e *browserSession, _ func() error) error {
+				e.session.Tokens.Expiry = f.now.Add(time.Hour)
+				return nil
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			started := make(chan struct{}, 1)
+			release := make(chan struct{})
+			f.onIntrospect = func(token string) bool {
+				if token == "old-access" {
+					started <- struct{}{}
+					select {
+					case <-release:
+					case <-ctx.Done():
+					}
+					// An earlier response can be active before logout or inactive
+					// after rotation. Neither result applies to the current session.
+					return change == "logout"
+				}
+				return true
+			}
+			done := make(chan error, 1)
+			go func() {
+				session, err := f.validator.prepareSession(ctx, f.store, "session")
+				if change == "rotation" && err == nil && session.Tokens.AccessToken != "new-access" {
+					err = errors.New("request authorized with the old access token")
+				}
+				done <- err
+			}()
+			select {
+			case <-started:
+			case <-ctx.Done():
+				t.Fatal("introspection did not start")
+			}
+			if change == "logout" {
+				revokeFailed := errors.New("test revocation unavailable")
+				if err := second.endSession(ctx, "session", func(context.Context, *browserAuthContext) error { return revokeFailed }); !errors.Is(err, revokeFailed) {
+					t.Fatalf("logout did not record its marker: %v", err)
+				}
+				close(release)
+				if err := <-done; !errors.Is(err, errBrowserTokenInvalid) {
+					t.Fatalf("request accepted after logout started: %v", err)
+				}
+				return
+			}
+			if err := second.backend.withSession(ctx, "session", second, func(e *browserSession, _ func() error) error {
+				e.session.Tokens.AccessToken = "new-access"
+				return nil
+			}); err != nil {
+				t.Fatal(err)
+			}
+			close(release)
+			if err := <-done; err != nil {
+				t.Fatal(err)
+			}
+			if got := f.inspections.Load(); got != 2 {
+				t.Fatalf("introspection calls = %d, want one per token", got)
+			}
+		})
 	}
 }
 func TestBrowserRedisLogoutDuringRefresh(t *testing.T) {

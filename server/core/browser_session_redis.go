@@ -20,6 +20,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/zitadel/oidc/v3/pkg/oidc"
 	"github.com/zitadel/zitadel-go/v3/pkg/authentication"
+	"go.opentelemetry.io/otel"
 	"golang.org/x/oauth2"
 )
 
@@ -196,17 +197,9 @@ func (b *redisBrowserSessions) create(id string, e *browserSession, s *browserSe
 	return nil
 }
 func (b *redisBrowserSessions) get(id string, s *browserSessionStore) (*browserAuthContext, error) {
-	key, _ := browserRedisKeys(id)
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	value, err := b.client.Get(ctx, key).Result()
-	if errors.Is(err, redis.Nil) {
-		return nil, authentication.ErrNoSession
-	}
-	if err != nil {
-		return nil, errBrowserStoreUnavailable
-	}
-	e, err := b.open(key, value)
+	e, err := b.readSession(ctx, id)
 	if err != nil {
 		return nil, err
 	}
@@ -214,6 +207,18 @@ func (b *redisBrowserSessions) get(id string, s *browserSessionStore) (*browserA
 		return nil, authentication.ErrNoSession
 	}
 	return e.session, nil
+}
+
+func (b *redisBrowserSessions) readSession(ctx context.Context, id string) (*browserSession, error) {
+	key, _ := browserRedisKeys(id)
+	value, err := b.client.Get(ctx, key).Result()
+	if errors.Is(err, redis.Nil) {
+		return nil, authentication.ErrNoSession
+	}
+	if err != nil {
+		return nil, errBrowserStoreUnavailable
+	}
+	return b.open(key, value)
 }
 func (b *redisBrowserSessions) delete(id string) error {
 	key, _ := browserRedisKeys(id)
@@ -247,19 +252,8 @@ func (b *redisBrowserSessions) withSession(ctx context.Context, id string, s *br
 	owner := hex.EncodeToString(ownerBytes)
 	waitCtx, cancel := context.WithTimeout(ctx, 25*time.Second)
 	defer cancel()
-	for {
-		acquired, err := b.client.SetNX(waitCtx, lock, owner, b.lease).Result()
-		if err != nil {
-			return errBrowserStoreUnavailable
-		}
-		if acquired {
-			break
-		}
-		select {
-		case <-waitCtx.Done():
-			return errBrowserStoreUnavailable
-		case <-time.After(25 * time.Millisecond):
-		}
+	if err := b.acquireSessionLease(waitCtx, lock, owner); err != nil {
+		return err
 	}
 	defer func() {
 		releaseCtx, done := context.WithTimeout(context.Background(), 3*time.Second)
@@ -308,4 +302,23 @@ func (b *redisBrowserSessions) withSession(ctx context.Context, id string, s *br
 		return err
 	}
 	return result
+}
+
+func (b *redisBrowserSessions) acquireSessionLease(ctx context.Context, lock, owner string) error {
+	ctx, span := otel.Tracer("beskar/core").Start(ctx, "browser session lease wait")
+	defer span.End()
+	for {
+		acquired, err := b.client.SetNX(ctx, lock, owner, b.lease).Result()
+		if err != nil {
+			return errBrowserStoreUnavailable
+		}
+		if acquired {
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return errBrowserStoreUnavailable
+		case <-time.After(25 * time.Millisecond):
+		}
+	}
 }

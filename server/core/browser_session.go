@@ -36,6 +36,8 @@ func newBrowserSessionStore() *browserSessionStore {
 
 var browserSessions *browserSessionStore
 
+var errBrowserSessionChanged = errors.New("browser session changed during validation")
+
 func cloneBrowserSession(s *browserAuthContext) *browserAuthContext {
 	if s == nil {
 		return nil
@@ -153,17 +155,9 @@ func browserSessionID(r *http.Request) string {
 	return id
 }
 
-// Serialize refresh per session, not globally. Publish replacement tokens before
-// introspection so a transient introspection failure cannot lose a rotated token.
 func (v *BrowserAccessTokenValidator) prepareSession(ctx context.Context, store *browserSessionStore, id string) (*browserAuthContext, error) {
 	if store.backend != nil {
-		var result *browserAuthContext
-		err := store.backend.withSession(ctx, id, store, func(e *browserSession, checkpoint func() error) error {
-			var err error
-			result, err = v.prepareSessionEntry(ctx, store, e, checkpoint)
-			return err
-		})
-		return result, err
+		return v.prepareRedisSession(ctx, store, id)
 	}
 	e := store.entry(id)
 	if e == nil {
@@ -173,6 +167,80 @@ func (v *BrowserAccessTokenValidator) prepareSession(ctx context.Context, store 
 	defer e.mu.Unlock()
 	return v.prepareSessionEntry(ctx, store, e, func() error { return nil })
 }
+
+func (v *BrowserAccessTokenValidator) prepareRedisSession(ctx context.Context, store *browserSessionStore, id string) (*browserAuthContext, error) {
+	// A token rotation during introspection warrants one fresh attempt.
+	for range 2 {
+		snapshot, err := store.backend.readSession(ctx, id)
+		if errors.Is(err, authentication.ErrNoSession) {
+			return nil, errBrowserTokenInvalid
+		}
+		if err != nil {
+			return nil, err
+		}
+		if snapshot.loggingOut {
+			return nil, errBrowserTokenInvalid
+		}
+
+		if snapshot.refreshing || store.expired(snapshot, store.now()) || !snapshot.session.Tokens.Expiry.After(v.now()) {
+			var prepared *browserAuthContext
+			err := store.backend.withSession(ctx, id, store, func(current *browserSession, checkpoint func() error) error {
+				if !current.loggingOut && !current.refreshing && !store.expired(current, store.now()) && current.session.Tokens.Expiry.After(v.now()) {
+					// Another request finished refreshing while we waited for the lease.
+					snapshot = current
+					return nil
+				}
+				var err error
+				prepared, err = v.prepareSessionEntry(ctx, store, current, checkpoint)
+				return err
+			})
+			if err != nil || prepared != nil {
+				return prepared, err
+			}
+		}
+
+		// Healthy requests only take the lease after their independent provider call.
+		validation := v.validate(ctx, snapshot.session)
+		if validation != nil && !errors.Is(validation, errBrowserTokenInvalid) {
+			return nil, validation
+		}
+		var result *browserAuthContext
+		err = store.backend.withSession(ctx, id, store, func(current *browserSession, _ func() error) error {
+			if current.loggingOut || !snapshot.created.Equal(current.created) {
+				return errBrowserTokenInvalid
+			}
+			if current.refreshing {
+				return errBrowserSessionChanged
+			}
+			if store.expired(current, store.now()) {
+				current.session = nil
+				return errBrowserTokenInvalid
+			}
+			checked, latest := snapshot.session.Tokens.Token, current.session.Tokens.Token
+			if checked.AccessToken != latest.AccessToken || checked.RefreshToken != latest.RefreshToken ||
+				!checked.Expiry.Equal(latest.Expiry) || checked.TokenType != latest.TokenType ||
+				snapshot.session.UserInfo.Subject != current.session.UserInfo.Subject {
+				return errBrowserSessionChanged
+			}
+			if validation != nil {
+				current.session = nil
+				return validation
+			}
+			if !latest.Expiry.After(v.now()) {
+				return errBrowserSessionChanged
+			}
+			current.lastSeen = store.now()
+			result = current.session
+			return nil
+		})
+		if !errors.Is(err, errBrowserSessionChanged) {
+			return result, err
+		}
+	}
+	return nil, errBrowserSessionChanged
+}
+
+// Publish replacement tokens before introspection so an outage cannot lose a rotation.
 func (v *BrowserAccessTokenValidator) prepareSessionEntry(ctx context.Context, store *browserSessionStore, e *browserSession, checkpoint func() error) (*browserAuthContext, error) {
 	now := store.now()
 	if e.loggingOut {
