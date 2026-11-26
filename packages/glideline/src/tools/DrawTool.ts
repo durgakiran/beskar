@@ -1,5 +1,5 @@
 /**
- * DrawTool — freehand pencil strokes (Phase B)
+ * Draw and Highlighter share a freehand stroke interaction.
  *
  * FSM: Idle → Drawing
  *
@@ -29,6 +29,7 @@ import { StateNode } from '../state-node.js';
 import type { PointerDownEvent, PointerMoveEvent, PointerUpEvent, KeyDownEvent } from '../state-node.js';
 import type { ShapeId, Vec2 } from '../types.js';
 import type { FreehandPoint } from '../shapes/FreehandUtil.js';
+import { HIGHLIGHTER_COLORS, HIGHLIGHTER_DEFAULT_WIDTH } from '../styles.js';
 
 /** Minimum spacing in CSS pixels, independent of canvas zoom. */
 const MIN_SCREEN_DISTANCE = 0.75;
@@ -63,11 +64,20 @@ class Drawing extends StateNode {
   private _simulatePressure = false;
 
   private get strokeStyle() {
-    return this.editor.activeStyles.peek().strokeStyle ?? 'solid';
+    return this.isHighlighter ? 'solid' : this.editor.activeStyles.peek().strokeStyle ?? 'solid';
+  }
+
+  private get isHighlighter(): boolean {
+    return this.parent instanceof HighlighterTool;
+  }
+
+  private get strokeWidth() {
+    const styles = this.editor.activeStyles.peek();
+    return this.isHighlighter ? styles.highlighterStrokeWidth ?? HIGHLIGHTER_DEFAULT_WIDTH : styles.strokeWidth ?? 'medium';
   }
 
   override onEnter(info: PointerDownEvent): void {
-    this._pressureSensitive = this.editor.activeStyles.value.pressureSensitive === true;
+    this._pressureSensitive = !this.isHighlighter && this.editor.activeStyles.value.pressureSensitive === true;
     this._simulatePressure = this._pressureSensitive && info.pointerType !== 'pen';
     const firstPt: FreehandPoint = {
       x:        info.point.x,
@@ -88,8 +98,13 @@ class Drawing extends StateNode {
         rotation: 0,
         meta:     {},
         props: {
+          ...(this.isHighlighter && {
+            isHighlighter: true,
+            color: this.editor.activeStyles.peek().highlighterColor ?? HIGHLIGHTER_COLORS.yellow,
+            opacity: 0.32,
+          }),
           points:     [firstPt],
-          strokeWidth: this.editor.activeStyles.value.strokeWidth ?? 'medium',
+          strokeWidth: this.strokeWidth,
           strokeStyle: this.strokeStyle,
           pressureSensitive: this._pressureSensitive,
           simulatePressure: this._simulatePressure,
@@ -117,7 +132,7 @@ class Drawing extends StateNode {
       this.editor.updateShape(this._id, {
         props: {
           points:     this._points,
-          strokeWidth: this.editor.activeStyles.value.strokeWidth ?? 'medium',
+          strokeWidth: this.strokeWidth,
           strokeStyle: this.strokeStyle,
           pressureSensitive: this._pressureSensitive,
           simulatePressure: this._simulatePressure,
@@ -179,7 +194,7 @@ class Drawing extends StateNode {
         y: minY,
         props: {
           points:     pts,
-          strokeWidth: this.editor.activeStyles.value.strokeWidth ?? 'medium',
+          strokeWidth: this.strokeWidth,
           strokeStyle: this.strokeStyle,
           pressureSensitive: this._pressureSensitive,
           simulatePressure: this._simulatePressure,
@@ -207,7 +222,14 @@ class Drawing extends StateNode {
 // DrawTool (root)
 // ─────────────────────────────────────────────────────────────
 
-export class DrawTool extends StateNode {
-  static override readonly id = 'draw';
+class FreehandTool extends StateNode {
   static override children = () => [Idle, Drawing];
+}
+
+export class DrawTool extends FreehandTool {
+  static override readonly id = 'draw';
+}
+
+export class HighlighterTool extends FreehandTool {
+  static override readonly id = 'highlighter';
 }

@@ -3,7 +3,7 @@ import { AREA_ERASE_META_KEY, areaEraseBoundsTransform, getAreaEraseCuts } from 
 import { invertMatrix, multiplyMatrices, translationMatrix } from '../transform.js';
 import type { KeyDownEvent, PointerCancelEvent, PointerDownEvent, PointerMoveEvent, PointerUpEvent } from '../state-node.js';
 import { STROKE_WIDTHS } from '../styles.js';
-import type { FreehandPoint, FreehandShape } from '../shapes/FreehandUtil.js';
+import { getFreehandStrokeWidth, type FreehandPoint, type FreehandShape } from '../shapes/FreehandUtil.js';
 import type { PartialErasePreview } from '../editor.js';
 import type { PageId, ShapeId, Vec2 } from '../types.js';
 import { boxInterval, interpolate, splitFreehandStroke, type EraserSweep } from './erase-freehand.js';
@@ -208,7 +208,7 @@ class Erasing extends StateNode {
     return {
       from: this.editor.pageToLocal(id, interpolate(sweep.from, sweep.to, start)),
       to: this.editor.pageToLocal(id, interpolate(sweep.from, sweep.to, end)),
-      radius: sweep.radius + STROKE_WIDTHS[shape.props.strokeWidth] / 2,
+      radius: sweep.radius + getFreehandStrokeWidth(shape.props) / 2,
     };
   }
 

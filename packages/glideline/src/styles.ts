@@ -31,6 +31,17 @@ export const TLDRAW_COLORS = {
   pink:     '#d6336c',
 } as const;
 
+export const HIGHLIGHTER_COLORS = {
+  yellow: '#facc15',
+  orange: '#fb923c',
+  lime: '#84cc16',
+  cyan: '#22d3ee',
+  pink: '#f472b6',
+  lavender: '#a78bfa',
+} as const;
+
+export const HIGHLIGHTER_DEFAULT_WIDTH = 'thick';
+
 export type TldrawColor = keyof typeof TLDRAW_COLORS;
 
 /** Fallback hex for a color key (returns the hex or the key itself if it's already a hex). */
@@ -140,6 +151,15 @@ const creationStyleValidators = {
   fillStyle: StyleValidators.fillStyle,
   strokeStyle: StyleValidators.strokeStyle,
   strokeWidth: StyleValidators.strokeWidth,
+  highlighterStrokeWidth: StyleValidators.strokeWidth,
+  highlighterColor: {
+    validate(value: unknown): string {
+      if (typeof value !== 'string' || !Object.values<string>(HIGHLIGHTER_COLORS).includes(value)) {
+        throw new Error('Invalid highlighter color');
+      }
+      return value;
+    },
+  },
   pressureSensitive: {
     validate(value: unknown): boolean {
       if (typeof value !== 'boolean') throw new Error('pressureSensitive must be a boolean');

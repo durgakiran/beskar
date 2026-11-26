@@ -33,6 +33,7 @@ const TOOL_KEYS: Record<string, string> = {
   t: 'text',
   s: 'sticky-note',
   d: 'draw',
+  m: 'highlighter',
   a: 'arrow',
   f: 'frame',
 };

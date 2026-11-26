@@ -46,11 +46,16 @@ export interface FreehandProps {
   pressureSensitive: boolean;
   simulatePressure: boolean;
   opacity:     number;
+  isHighlighter?: true;
   isClosed:    boolean;
   isComplete:  boolean;
 }
 
 export type FreehandShape = GlideShape<FreehandProps>;
+
+export function getFreehandStrokeWidth(props: FreehandProps): number {
+  return STROKE_WIDTHS[props.strokeWidth] * (props.isHighlighter ? 4 : 1);
+}
 
 // ─────────────────────────────────────────────────────────────
 // Validators
@@ -152,6 +157,7 @@ export class FreehandUtil extends ShapeUtil<FreehandShape> {
     pressureSensitive: T.boolean,
     simulatePressure: T.boolean,
     opacity:     T.number,
+    isHighlighter: T.optional(T.literal(true)),
     isClosed:    T.boolean,
     isComplete:  T.boolean,
   };
@@ -224,18 +230,20 @@ export class FreehandUtil extends ShapeUtil<FreehandShape> {
   getGeometry(shape: FreehandShape): Geometry2d {
     const { points } = shape.props;
     const localPoints = points.map(pt => ({ x: pt.x - shape.x, y: pt.y - shape.y }));
+    const radius = getFreehandStrokeWidth(shape.props) / 2;
     return new Polyline2d(localPoints, {
-      boundsPadding: points.length === 1 ? STROKE_WIDTHS[shape.props.strokeWidth] / 2 : 0,
+      boundsPadding: shape.props.isHighlighter || points.length === 1 ? radius : 0,
+      hitThreshold: shape.props.isHighlighter ? Math.max(5, radius) : undefined,
     });
   }
 
   toSvg(shape: FreehandShape): SVGElement {
     const { props } = shape;
     const {
-      points, color, strokeWidth, strokeStyle, pressureSensitive, simulatePressure, opacity, isClosed,
+      points, color, strokeStyle, pressureSensitive, simulatePressure, opacity, isClosed,
       isComplete,
     } = props;
-    const strokeW = STROKE_WIDTHS[strokeWidth];
+    const strokeW = getFreehandStrokeWidth(props);
     const strokeColor = resolveColor(color);
     const dashArray = STROKE_DASH_ARRAYS[strokeStyle];
 

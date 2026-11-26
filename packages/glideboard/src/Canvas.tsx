@@ -43,7 +43,7 @@ const LazyCanvasTextEditor = React.lazy(async () => {
 export function getCanvasToolCursor(tool: string | undefined, handleId: string | null, buttons = 0, editor?: GlideEditor): string {
   if (tool === 'hand') return buttons === 1 ? 'grabbing' : 'grab';
   if (tool === 'draw') return 'none';
-  if (tool === 'asset' || tool === 'line' || tool === 'eraser'
+  if (tool === 'highlighter' || tool === 'asset' || tool === 'line' || tool === 'eraser'
     || tool === 'whole-stroke-eraser' || tool === 'partial-eraser' || tool === 'area-eraser') return 'crosshair';
   return handleId ? getCursorForHandle(handleId, editor) : 'default';
 }
@@ -51,6 +51,10 @@ export function getCanvasToolCursor(tool: string | undefined, handleId: string |
 // ─────────────────────────────────────────────────────────────
 // Shared helpers
 // ─────────────────────────────────────────────────────────────
+
+function isFreehandTool(tool: string): boolean {
+  return tool === 'draw' || tool === 'highlighter';
+}
 
 function pointsToSvgPath(points: Vec2[], closed = false): string {
   if (points.length === 0) return '';
@@ -112,7 +116,7 @@ function useViewportShapeEntries(
         // A new freehand stroke is already pinned in the shape layer. Its
         // growing bounds do not change which records need to be mounted.
         const sameNewStroke = ids.length === 1 && ids[0] === previousPreviewIds[0]
-          && editor.currentToolId.peek() === 'draw' && !editor.store.has(ids[0]!)
+          && isFreehandTool(editor.currentToolId.peek()) && !editor.store.has(ids[0]!)
           && editor.getShape(ids[0] as ShapeId)?.type === 'freehand';
         previousPreviewIds = ids;
         if (!sameNewStroke) schedule();
@@ -870,7 +874,7 @@ export function Canvas({ onStrokeDiagnostics }: { onStrokeDiagnostics?: Glideboa
 
   const flushDrawMove = useCallback((frameAt?: number) => {
     const move = clearPendingDrawMove();
-    if (move && editor.currentToolId.peek() === 'draw' && !controller.readOnlySignal.peek()) {
+    if (move && isFreehandTool(editor.currentToolId.peek()) && !controller.readOnlySignal.peek()) {
       const finishDrawUpdate = strokeDiagnostics.beginDrawUpdate(frameAt);
       try {
         editor.dispatchEvent(move);
@@ -1043,7 +1047,7 @@ export function Canvas({ onStrokeDiagnostics }: { onStrokeDiagnostics?: Glideboa
       || view?.matchMedia?.('(any-pointer: coarse)').matches === true;
     const activePointerId = controller.activePointerIdRef.current;
     if (isPointerDownRef.current && event.pointerId !== activePointerId) {
-      const isPenDrawing = isPenPress && editor.currentToolId.peek() === 'draw';
+      const isPenDrawing = isPenPress && isFreehandTool(editor.currentToolId.peek());
       if ((activatesPenMode || isPenDrawing) && activePointerId !== null && activePointerTypeRef.current === 'touch') {
         // A touch can reach the canvas before the digitizer classifies it as a palm.
         // Finish that interaction before assigning capture to the incoming pen.
@@ -1128,7 +1132,7 @@ export function Canvas({ onStrokeDiagnostics }: { onStrokeDiagnostics?: Glideboa
       target: (hit && event.button === 0) ? 'shape' : 'canvas',
       shapeId: (hit && event.button === 0) ? (hit.id as ShapeId) : undefined,
     } as any);
-    if (tool === 'draw') strokeDiagnostics.strokeStarted();
+    if (isFreehandTool(tool)) strokeDiagnostics.strokeStarted();
     if (!readOnly && editor.editingShapeId.peek() !== editingBefore) {
       preventFocusStealRef.current = true;
     }
@@ -1144,7 +1148,7 @@ export function Canvas({ onStrokeDiagnostics }: { onStrokeDiagnostics?: Glideboa
     const { screen, page, rect } = getPagePoint(event);
     updatePointerPosition(screen);
     const currentTool = editor.currentToolId.peek();
-    const drawing = isPointerDownRef.current && currentTool === 'draw';
+    const drawing = isPointerDownRef.current && isFreehandTool(currentTool);
     const coalesced = drawing ? event.nativeEvent.getCoalescedEvents?.() : undefined;
     if (drawing) strokeDiagnostics.pointerMove(event.nativeEvent, coalesced);
     const samples = coalesced?.map(sample => ({

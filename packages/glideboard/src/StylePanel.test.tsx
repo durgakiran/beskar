@@ -1,7 +1,7 @@
 import React from 'react';
 import { act, cleanup, fireEvent, render, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ArrowUtil, type AnyRecord } from '@durgakiran/glideline';
+import { ArrowUtil, type AnyRecord, type ShapeId } from '@durgakiran/glideline';
 import { GlideboardProvider } from './GlideboardContext';
 import { GlideboardController } from './GlideboardController';
 import { PositionSizeBar, StylePanel } from './StylePanel';
@@ -45,6 +45,76 @@ function importTestAsset(controller: GlideboardController, type: 'raster-image' 
   const report = controller.editor.importRecords([record]);
   return report.idMap[id] ?? id;
 }
+
+it('keeps highlighter settings separate and saves an editable translucent stroke', () => {
+  const controller = new GlideboardController({ sessionKey: 'highlighter-styles' });
+  const { editor } = controller;
+  try {
+    const view = renderPanel(controller);
+    act(() => {
+      controller.setCreationStyleDefaults({ color: 'blue', strokeWidth: 'thin', pressureSensitive: true });
+      controller.setCurrentTool('highlighter');
+    });
+
+    expect(view.getByRole('button', { name: 'yellow' }).getAttribute('aria-pressed')).toBe('true');
+    expect(view.queryByRole('button', { name: 'black' })).toBeNull();
+    fireEvent.click(view.getByRole('button', { name: 'cyan' }));
+    fireEvent.click(view.getByRole('button', { name: 'Extra large stroke width' }));
+    act(() => {
+      editor.dispatchEvent({ type: 'pointerDown', point: { x: 100, y: 100 }, target: 'canvas', shiftKey: false });
+      editor.dispatchEvent({ type: 'pointerMove', point: { x: 150, y: 100 } });
+      editor.dispatchEvent({ type: 'pointerUp', point: { x: 200, y: 100 } });
+    });
+
+    const stroke = editor.getShapes()[0]!;
+    expect(stroke.props).toMatchObject({
+      isHighlighter: true, color: '#22d3ee', opacity: 0.32, strokeWidth: 'xl',
+      pressureSensitive: false, isComplete: true,
+    });
+    const util = editor.getShapeUtil(stroke);
+    expect(util.hitTestPoint(stroke, { x: 50, y: 9 })).toBe(true);
+    const markup = editor.exportToSvg([stroke.id as ShapeId]);
+    expect(markup).toContain('stroke-width="20"');
+    expect(markup).toContain('opacity="0.32"');
+
+    act(() => controller.setCurrentTool('draw'));
+    expect(view.getByRole('button', { name: 'blue' }).getAttribute('aria-pressed')).toBe('true');
+    expect(view.getByRole('button', { name: 'Thin stroke width' }).getAttribute('aria-pressed')).toBe('true');
+    act(() => controller.setCurrentTool('highlighter'));
+    expect(view.getByRole('button', { name: 'cyan' }).getAttribute('aria-pressed')).toBe('true');
+
+    act(() => {
+      editor.undo();
+      expect(editor.getShapes()).toHaveLength(0);
+      editor.redo();
+    });
+    act(() => {
+      controller.setCurrentTool('select');
+      editor.setSelectedShapeIds([stroke.id as ShapeId]);
+    });
+    fireEvent.click(view.getByRole('button', { name: 'pink' }));
+    expect(editor.activeStyles.peek().color).toBe('blue');
+    expect(editor.activeStyles.peek().highlighterColor).toBe('#22d3ee');
+
+    const reopened = new GlideboardController({
+      sessionKey: 'highlighter-reopened',
+      initialDocument: editor.serialize(),
+      initialDocumentDisposition: { kind: 'new-unsaved-seed' },
+    });
+    try {
+      expect(reopened.editor.getShape(stroke.id as ShapeId)?.props).toMatchObject({
+        isHighlighter: true, color: '#f472b6', strokeWidth: 'xl',
+      });
+      expect(reopened.editor.activeStyles.peek()).toMatchObject({
+        highlighterColor: '#22d3ee', highlighterStrokeWidth: 'xl',
+      });
+    } finally {
+      reopened.dispose();
+    }
+  } finally {
+    controller.dispose();
+  }
+});
 
 describe('StylePanel text targeting', () => {
   it('keeps creation defaults across tools, existing-node edits, and reopening the board', async () => {
