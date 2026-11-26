@@ -31,8 +31,8 @@
     "license": "ISC",
     "dependencies": {
         "@durgakiran/editor": "0.1.10-alpha.5",
-        "@durgakiran/glideboard": "0.0.12-alpha.5",
-        "@durgakiran/glideline": "0.0.10-alpha.5",
+        "@durgakiran/glideboard": "0.0.12-alpha.6",
+        "@durgakiran/glideline": "0.0.10-alpha.6",
         "@floating-ui/react": "^0.26.16",
         "@hocuspocus/provider": "^3.0.8-rc.0",
         "@hocuspocus/transformer": "^3.0.8-rc.0",
