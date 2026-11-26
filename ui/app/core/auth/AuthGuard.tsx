@@ -10,17 +10,26 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const controller = new AbortController();
+    let retryTimer: ReturnType<typeof setTimeout> | undefined;
     setStatus('loading');
-    fetch('/api/v1/authenticated', { credentials: 'include', cache: 'no-store', signal: controller.signal })
-      .then(res => {
-        if (!controller.signal.aborted) {
+    const verifySession = async (canRetry: boolean) => {
+      try {
+        const res = await fetch('/api/v1/authenticated', { credentials: 'include', cache: 'no-store', signal: controller.signal });
+        if (controller.signal.aborted) return;
+        if (res.status === 503 && canRetry) {
+          retryTimer = setTimeout(() => void verifySession(false), 500);
+        } else {
           setStatus(res.status === 401 ? 'unauthenticated' : res.status === 200 ? 'ok' : 'unavailable');
         }
-      })
-      .catch(() => {
+      } catch {
         if (!controller.signal.aborted) setStatus('unavailable');
-      });
-    return () => controller.abort();
+      }
+    };
+    void verifySession(true);
+    return () => {
+      clearTimeout(retryTimer);
+      controller.abort();
+    };
   }, [location.pathname, attempt]);
 
   if (status === 'loading') return (

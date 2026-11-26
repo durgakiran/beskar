@@ -10,8 +10,8 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/zitadel/oidc/v3/pkg/client/rp"
 	"github.com/zitadel/oidc/v3/pkg/oidc"
+	"github.com/zitadel/zitadel-go/v3/pkg/authentication"
 	"golang.org/x/oauth2"
 )
 
@@ -19,9 +19,10 @@ func TestConfidentialBrowserExchangeUsesSecretAndPKCE(t *testing.T) {
 	for _, rejected := range []bool{false, true} {
 		t.Run(map[bool]string{false: "accepted", true: "rejected without fallback"}[rejected], func(t *testing.T) {
 			const secret = "test+secret:/="
+			const key = "01234567890123456789012345678901"
 			t.Setenv("ZITADEL_CLIENT_ID", "browser-client")
 			t.Setenv("ZITADEL_CLIENT_SECRET", secret)
-			t.Setenv("KEY", "01234567890123456789012345678901")
+			t.Setenv("KEY", key)
 			t.Setenv("SERVER_URL", "https://app.example")
 			var issuer, challenge string
 			var exchanges atomic.Int32
@@ -65,25 +66,35 @@ func TestConfidentialBrowserExchangeUsesSecretAndPKCE(t *testing.T) {
 			}))
 			defer provider.Close()
 			issuer = provider.URL
-			party, err := zitadelClientAuthenticationWithHTTPClient(provider.Client())(context.Background(), issuer)
+			t.Setenv("ISSUER_URL", issuer)
+			clientAuthentication := zitadelClientAuthenticationWithHTTPClient(provider.Client())
+			party, err := clientAuthentication(context.Background(), issuer)
 			if err != nil {
 				t.Fatal(err)
 			}
 			if !party.IsPKCE() || party.OAuthConfig().Endpoint.AuthStyle != oauth2.AuthStyleInHeader {
 				t.Fatal("PKCE and confidential authentication must both be enabled")
 			}
-			login := httptest.NewRecorder()
-			rp.AuthURLHandler(func() string { return "test-state" }, party)(login, httptest.NewRequest("GET", "/auth/login", nil))
-			location, err := url.Parse(login.Header().Get("Location"))
+			registration := httptest.NewRecorder()
+			zitadelRegisterHandler(clientAuthentication).ServeHTTP(registration, httptest.NewRequest("GET", "/auth/register", nil))
+			location, err := url.Parse(registration.Header().Get("Location"))
 			if err != nil {
 				t.Fatal(err)
 			}
-			challenge = location.Query().Get("code_challenge")
-			if challenge == "" || location.Query().Get("code_challenge_method") != "S256" || strings.Contains(location.String(), "secret") {
-				t.Fatal("login must expose a PKCE challenge but no client secret")
+			query := location.Query()
+			state, err := authentication.DecryptState(query.Get("state"), key)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if registration.Code != http.StatusFound || query.Get("prompt") != "create" || state.RequestedURI != "/" {
+				t.Fatalf("registration must request account creation and return to the app root, got status %d, prompt %q, path %q", registration.Code, query.Get("prompt"), state.RequestedURI)
+			}
+			challenge = query.Get("code_challenge")
+			if challenge == "" || query.Get("code_challenge_method") != "S256" || strings.Contains(location.String(), "secret") {
+				t.Fatal("registration must expose a PKCE challenge but no client secret")
 			}
 			callback := httptest.NewRequest("GET", "/auth/callback", nil)
-			for _, cookie := range login.Result().Cookies() {
+			for _, cookie := range registration.Result().Cookies() {
 				callback.AddCookie(cookie)
 			}
 			verifier, err := party.CookieHandler().CheckCookie(callback, "pkce")

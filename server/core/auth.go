@@ -116,15 +116,15 @@ func ZitadelAuthenticator() *authentication.Authenticator[*openid.UserInfoContex
 	return authN
 }
 
-func ZitadelRegisterHandler() http.HandlerFunc {
+func zitadelRegisterHandler(clientAuthentication openid.ClientAuthentication) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		stateParam, err := (&authentication.State{RequestedURI: ""}).Encrypt(os.Getenv("KEY"))
+		stateParam, err := (&authentication.State{RequestedURI: "/"}).Encrypt(os.Getenv("KEY"))
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 
-		relyingParty, err := zitadelClientAuthentication()(r.Context(), zitadel.New(IssuerHost()).Origin())
+		relyingParty, err := clientAuthentication(r.Context(), zitadel.New(IssuerHost()).Origin())
 		if err != nil {
 			Logger.Error("registration failed while creating relying party: " + err.Error())
 			http.Error(w, "failed to initialize registration", http.StatusInternalServerError)
@@ -165,7 +165,7 @@ func ZitadelLoginHandler() http.HandlerFunc {
 
 func ZitadelAuthRouter(validator *BrowserAccessTokenValidator, csrf *BrowserCSRF) http.Handler {
 	r := chi.NewRouter()
-	r.Get("/register", ZitadelRegisterHandler())
+	r.Get("/register", zitadelRegisterHandler(zitadelClientAuthentication()))
 	r.Get("/login", ZitadelLoginHandler())
 	r.Get("/csrf", csrf.TokenHandler)
 	r.Method(http.MethodPost, "/logout", csrf.Middleware(browserLogoutHandler(browserSessions, ZitadelAuthenticator().Logout, validator.revokeSessionTokens)))
