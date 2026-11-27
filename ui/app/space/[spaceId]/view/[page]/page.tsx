@@ -7,14 +7,15 @@ import ReadOnlyContentMain, { type ReadOnlyBreadcrumb, type ReadOnlyCapabilities
 import ToastComponent from "@components/ui/ToastComponent";
 import { lazy, Suspense } from "react";
 import WhiteboardPreviewV2 from "@components/WhiteboardPreviewV2";
-import type { PageNavigation } from "app/core/whiteboard/v2/api";
+import type { PageNavigation, PublishedBoard } from "app/core/whiteboard/v2/api";
+import { downloadPublishedWhiteboard, type WhiteboardDownloadFormat } from "app/core/whiteboard/v2/download";
 const WhiteboardEditor = lazy(() => import("@components/WhiteboardEditor"));
 import { TipTap, AttachmentPanel } from "@editor";
 import type { AttachmentRef } from "@durgakiran/editor";
 import { useGet, useDelete } from "@http/hooks";
 import { Button, Spinner, Flex, Box, Text, Dialog } from "@radix-ui/themes";
 import {  useNavigate , useParams } from "react-router-dom";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 interface ViewSpaceState {
     name: string;
@@ -47,7 +48,9 @@ export default function Page() {
     const [content, setContent] = useState();
     const [pdfOpen, setPdfOpen] = useState(false);
     const [pdfEditor, setPdfEditor] = useState<Editor | null>(null);
-    const [publishedTitle, setPublishedTitle] = useState("");
+    const [publication, setPublication] = useState<{ key: string; board: PublishedBoard }>();
+    const downloadRequest = useRef<AbortController | null>(null);
+    const [downloadStatus, setDownloadStatus] = useState<{ format: WhiteboardDownloadFormat; failed: boolean }>();
     const [isSidePanelOpen, setIsSidePanelOpen] = useState(false);
     const [showDeleteDialog, setShowDeleteDialog] = useState(false);
     const [isMobileViewport, setIsMobileViewport] = useState(false);
@@ -60,7 +63,11 @@ export default function Page() {
 
     const pageType = metadata?.data?.type;
     const viewData = documentData?.data ?? null;
-    const title = publishedTitle || viewData?.title || viewData?.document?.title || "";
+    const boardKey = `${spaceId}:${page}`;
+    const isPublishedWhiteboardView = pageType === "whiteboard" && metadata?.data.contentApiVersion === 2;
+    const publishedBoard = isPublishedWhiteboardView && publication?.key === boardKey ? publication.board : undefined;
+    const title = publishedBoard?.snapshot.title || viewData?.title || viewData?.document?.title || "";
+    const onPublished = useCallback((board: PublishedBoard) => setPublication({ key: boardKey, board }), [boardKey]);
     const attachments = viewData?.attachments ?? [];
     const commentPresentation = isMobileViewport || isTabletViewport ? "bottom-sheet" : "docked";
     const shellCapabilities = useMemo<ReadOnlyCapabilities | null>(() => {
@@ -118,9 +125,16 @@ export default function Page() {
     }, [pageType]);
 
     useEffect(() => {
-        setPublishedTitle("");
         getMetadata();
     }, [getMetadata]);
+
+    useEffect(() => {
+        setDownloadStatus(undefined);
+        return () => {
+            downloadRequest.current?.abort();
+            downloadRequest.current = null;
+        };
+    }, [boardKey]);
 
     useEffect(() => {
         if (!pageType) return;
@@ -158,6 +172,26 @@ export default function Page() {
         setShowDeleteDialog(false);
         deletePageRequest(null);
     };
+
+    const onDownloadWhiteboard = async (format: WhiteboardDownloadFormat) => {
+        if (!publishedBoard || downloadRequest.current) return;
+        const request = new AbortController();
+        downloadRequest.current = request;
+        setDownloadStatus({ format, failed: false });
+        try {
+            await downloadPublishedWhiteboard(spaceId, page, publishedBoard, format, request.signal);
+            if (!request.signal.aborted) setDownloadStatus(undefined);
+        } catch {
+            if (!request.signal.aborted) setDownloadStatus({ format, failed: true });
+        } finally {
+            if (downloadRequest.current === request) downloadRequest.current = null;
+        }
+    };
+    const downloadActions = publishedBoard ? (["svg", "png"] as const).map(format => ({
+        label: `Download as ${format.toUpperCase()}`,
+        disabled: Boolean(downloadStatus && !downloadStatus.failed) || (format === "png" && !publishedBoard.preview),
+        onSelect: () => void onDownloadWhiteboard(format),
+    })) : undefined;
 
     const hasMainErrors = Boolean(metaErrors || documentErrors);
     const isPageLoading = pageType === "document" ? (!workerInitiated || loadingDocument) : loadingDocument;
@@ -226,6 +260,7 @@ export default function Page() {
                 <ReadOnlyContentMain
                     onExportPdf={pageType === "document" && content ? () => setPdfOpen(true) : undefined}
                     exportDisabled={!pdfEditor || pdfEditor.isDestroyed}
+                    downloadActions={downloadActions}
                     spaceId={spaceId}
                     pageId={page}
                     title={title}
@@ -245,7 +280,7 @@ export default function Page() {
                         ) : undefined
                     }
                     layout={pageType === "whiteboard" ? "whiteboard" : "document"}
-                    toolbarAction={pageType === "whiteboard" && metadata?.data.contentApiVersion === 2 ? (
+                    toolbarAction={isPublishedWhiteboardView ? (
                         <WhiteboardHistoryV2 key={`${spaceId}:${page}`} spaceId={spaceId} pageId={page} canRestore={Boolean(shellCapabilities?.canEdit && !viewData.space?.archivedAt)} onRestored={onEdit} />
                     ) : undefined}
                     isCommentsOpen={pageType === "document" ? isSidePanelOpen : false}
@@ -259,8 +294,8 @@ export default function Page() {
                     onDelete={onDelete}
                 >
                     {pageType === "whiteboard" ? (
-                        metadata?.data.contentApiVersion === 2
-                            ? <WhiteboardPreviewV2 key={`${spaceId}:${page}`} spaceId={spaceId} pageId={page} onTitle={setPublishedTitle} />
+                        isPublishedWhiteboardView
+                            ? <WhiteboardPreviewV2 key={boardKey} spaceId={spaceId} pageId={page} onPublished={onPublished} />
                             : <Suspense fallback={<Flex align="center" justify="center" height="100%"><Spinner /></Flex>}>
                                 <WhiteboardEditor key={page} slug={[spaceId, page]} readOnly fillParent />
                             </Suspense>
@@ -274,6 +309,14 @@ export default function Page() {
                 </ReadOnlyContentMain>
             ) : null}
 
+            {downloadStatus && (downloadStatus.failed ? (
+                <div role="alert"><ToastComponent icon="AlertTriangle" type="warning" toggle={true}
+                    message={`Could not download the ${downloadStatus.format.toUpperCase()} file. Try again.`} /></div>
+            ) : (
+                <Text role="status" size="2" className="fixed bottom-5 left-5 z-50 rounded-lg border border-[var(--gray-6)] bg-[var(--color-panel-solid)] px-3 py-2 shadow-sm">
+                    Preparing {downloadStatus.format.toUpperCase()} download…
+                </Text>
+            ))}
             {(deleteErrors) && !loadingDelete && <ToastComponent icon="AlertTriangle" type="warning" toggle={true} message="Unable to delete page" />}
             {deleteData && !loadingDelete && <ToastComponent icon="Check" type="success" toggle={true} message="Page deleted successfully" />}
 

@@ -27,6 +27,12 @@ export interface ReadOnlyMeta {
     publishedAt?: string | null;
 }
 
+interface DownloadAction {
+    label: string;
+    disabled?: boolean;
+    onSelect: () => void;
+}
+
 interface ReadOnlyContentMainProps {
     spaceId: string;
     spaceName?: string | null;
@@ -47,6 +53,20 @@ interface ReadOnlyContentMainProps {
     attachments?: ReactNode;
     onExportPdf?: () => void;
     exportDisabled?: boolean;
+    downloadActions?: DownloadAction[];
+}
+
+function DownloadMenuItems({ actions, className, close }: {
+    actions?: DownloadAction[];
+    className: string;
+    close: () => void;
+}) {
+    return actions?.map(action => (
+        <button key={action.label} type="button" disabled={action.disabled} className={className}
+            onClick={() => { close(); action.onSelect(); }}>
+            <FiDownload size={14} aria-hidden="true" /> {action.label}
+        </button>
+    ));
 }
 
 function KebabMenu({
@@ -57,6 +77,7 @@ function KebabMenu({
     onDelete,
     onExportPdf,
     exportDisabled,
+    downloadActions,
 }: {
     canComment: boolean;
     canDelete: boolean;
@@ -65,6 +86,7 @@ function KebabMenu({
     onExportPdf?: () => void;
     exportDisabled?: boolean;
     onDelete: () => void;
+    downloadActions?: DownloadAction[];
 }) {
     const [open, setOpen] = useState(false);
     const ref = useRef<HTMLDivElement>(null);
@@ -89,6 +111,7 @@ function KebabMenu({
                 size="2"
                 onClick={() => setOpen((current) => !current)}
                 aria-label="More actions"
+                aria-expanded={open}
                 className="!h-[34px] !w-[34px] !bg-[#f5f4f6] !text-[#605c67]"
             >
                 <FiMoreHorizontal size={16} />
@@ -115,6 +138,8 @@ function KebabMenu({
                             <FiDownload size={14} /> Export PDF
                         </button>
                     ) : null}
+                    <DownloadMenuItems actions={downloadActions} close={() => setOpen(false)}
+                        className="flex w-full items-center gap-2 rounded-[8px] px-3 py-2 text-left text-[13px] font-medium text-[#605c67] transition-colors hover:bg-[#f5f4f6] disabled:opacity-50" />
                     {canDelete ? (
                         <button
                             type="button"
@@ -144,6 +169,7 @@ function MobileActionDock({
     onShare,
     onExportPdf,
     exportDisabled,
+    downloadActions,
 }: {
     capabilities: ReadOnlyCapabilities;
     linkCopied: boolean;
@@ -154,6 +180,7 @@ function MobileActionDock({
     onShare: () => void;
     onExportPdf?: () => void;
     exportDisabled?: boolean;
+    downloadActions?: DownloadAction[];
 }) {
     const [actionsOpen, setActionsOpen] = useState(false);
     const ref = useRef<HTMLDivElement>(null);
@@ -203,6 +230,8 @@ function MobileActionDock({
                             <FiDownload size={15} /> Export PDF
                         </button>
                     ) : null}
+                    <DownloadMenuItems actions={downloadActions} close={() => setActionsOpen(false)}
+                        className="readonly-action-menu-item disabled:opacity-50" />
                     {capabilities.canDelete ? (
                         <button type="button" className="readonly-action-menu-item readonly-action-menu-item--danger" onClick={() => selectAction(onDelete)}>
                             <FiTrash2 size={15} />
@@ -215,6 +244,7 @@ function MobileActionDock({
             <button
                 type="button"
                 aria-label={actionsOpen ? "Close actions" : "Open actions"}
+                aria-expanded={actionsOpen}
                 title={actionsOpen ? "Close actions" : "Open actions"}
                 className="readonly-dock-btn"
                 onClick={() => setActionsOpen((current) => !current)}
@@ -270,6 +300,7 @@ export default function ReadOnlyContentMain({
     attachments,
     onExportPdf,
     exportDisabled,
+    downloadActions,
 }: ReadOnlyContentMainProps) {
     const [linkCopied, setLinkCopied] = useState(false);
     const resetCopiedTimer = useRef<number | null>(null);
@@ -329,7 +360,7 @@ export default function ReadOnlyContentMain({
                     Edit
                 </button>
             ) : null}
-            {(capabilities.canDelete || capabilities.canComment || onExportPdf) ? (
+            {(capabilities.canDelete || capabilities.canComment || onExportPdf || Boolean(downloadActions?.length)) ? (
                 <KebabMenu
                     canComment={capabilities.canComment}
                     canDelete={capabilities.canDelete}
@@ -338,6 +369,7 @@ export default function ReadOnlyContentMain({
                     onDelete={onDelete}
                     onExportPdf={onExportPdf}
                     exportDisabled={exportDisabled}
+                    downloadActions={downloadActions}
                 />
             ) : null}
         </div>
@@ -424,6 +456,7 @@ export default function ReadOnlyContentMain({
                 onShare={copyPageLink}
                 onExportPdf={onExportPdf}
                 exportDisabled={exportDisabled}
+                downloadActions={downloadActions}
             />
 
             <style>{`
