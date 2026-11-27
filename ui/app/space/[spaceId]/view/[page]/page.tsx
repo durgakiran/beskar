@@ -16,6 +16,7 @@ import { useGet, useDelete } from "@http/hooks";
 import { Button, Spinner, Flex, Box, Text, Dialog } from "@radix-ui/themes";
 import {  useNavigate , useParams } from "react-router-dom";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useBrowserTabTitle } from "app/core/hooks/useBrowserTabTitle";
 
 interface ViewSpaceState {
     name: string;
@@ -67,6 +68,7 @@ export default function Page() {
     const isPublishedWhiteboardView = pageType === "whiteboard" && metadata?.data.contentApiVersion === 2;
     const publishedBoard = isPublishedWhiteboardView && publication?.key === boardKey ? publication.board : undefined;
     const title = publishedBoard?.snapshot.title || viewData?.title || viewData?.document?.title || "";
+    useBrowserTabTitle(title, viewData ? "Untitled" : "Page");
     const onPublished = useCallback((board: PublishedBoard) => setPublication({ key: boardKey, board }), [boardKey]);
     const attachments = viewData?.attachments ?? [];
     const commentPresentation = isMobileViewport || isTabletViewport ? "bottom-sheet" : "docked";

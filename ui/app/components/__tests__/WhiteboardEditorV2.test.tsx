@@ -306,6 +306,7 @@ describe('WhiteboardEditorV2 capture preparation', () => {
 
     it('shows live remote title edits and relative cursors while hiding the local cursor', async () => {
         await renderEditor();
+        expect(document.title).toBe('Board | Teddox');
         mocks.post.mockResolvedValue({ sequence: '2' });
         const { doc } = mocks.glideboardProps.mock.lastCall![0].collaboration;
         const { awareness } = mocks.providerConstruct.mock.lastCall![0];
@@ -320,6 +321,7 @@ describe('WhiteboardEditorV2 capture preparation', () => {
             });
             const input = screen.getByLabelText('Whiteboard title') as HTMLInputElement;
             expect(input.value).toBe('Remote Board');
+            expect(document.title).toBe('Remote Board | Teddox');
             act(() => {
                 remoteAwareness.setLocalState({ user: { id: 'remote', name: 'Remote editor', color: '#aabbcc' }, titleSelection: {
                     anchor: Y.createRelativePositionFromTypeIndex(remoteText, 1),

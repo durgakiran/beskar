@@ -20,6 +20,7 @@ import { useEditorPageEvents, type PageEventV1 } from "app/core/editor/useEditor
 import { IndexedDbYjsRecoveryAdapter } from "app/core/whiteboard/durability/IndexedDbYjsRecoveryAdapter";
 import { DocumentDraftSession } from "app/core/editor/DocumentDraftSession";
 import { useDocumentCollaboration } from "app/core/editor/useDocumentCollaboration";
+import { useBrowserTabTitle } from "app/core/hooks/useBrowserTabTitle";
 
 interface User {
     name: string;
@@ -101,6 +102,7 @@ function DocumentEditorSession({ slug }: { slug: string[] }) {
     const [{ data: documentData, errors: documentErrors }, fetchData] = useGet<Response<EditDataDTO>>(`editor/space/${slug[0]}/page/${slug[1]}/edit`);
     const [editorContext, setEditorContext] = useState<Editor>();
     const [title, setTitle] = useState<string>();
+    useBrowserTabTitle(title ?? documentData?.data?.title, documentData?.data ? "Untitled" : "Edit Document");
     const [titleTextProvider, setTitleTextProvider] = useState<y.Text>();
     const [docId, setDocId] = useState<number>();
     const [parentId, setParentId] = useState<number>();

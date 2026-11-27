@@ -23,6 +23,7 @@ import { YjsDurabilityCoordinator } from "app/core/whiteboard/durability/YjsDura
 import type { DurabilityStatus, YjsRecoveryAdapter } from "app/core/whiteboard/durability/types";
 import { getApiV1Base } from "app/core/http/apiBase";
 import { useWhiteboardSwipeGuard } from "app/core/whiteboard/useWhiteboardSwipeGuard";
+import { useBrowserTabTitle } from "app/core/hooks/useBrowserTabTitle";
 
 const USER_URI = (import.meta.env.VITE_USER_SERVER_URL || "").replace(/\/+$/, "");
 const INITIAL_DATABASE_LOAD = Symbol('whiteboard-initial-database-load');
@@ -249,6 +250,7 @@ export default function WhiteboardEditor({
     const fetching = currentBoardLoad.status === 'loading';
     const fetchErr = currentBoardLoad.status === 'error' ? currentBoardLoad.error : null;
     const boardData = currentBoardLoad.status === 'ready' ? currentBoardLoad.data : null;
+    useBrowserTabTitle(readOnly ? undefined : boardData?.title || 'Untitled Whiteboard');
     const isDbLoaded = currentBoardLoad.status === 'ready';
     const provider = !readOnly && providerSession?.sessionKey === documentSessionKey
         ? providerSession.provider
