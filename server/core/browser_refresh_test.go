@@ -24,6 +24,7 @@ import (
 
 type refreshFixture struct {
 	onRefresh              func()
+	onIntrospect           func(string) bool
 	validator              *BrowserAccessTokenValidator
 	store                  *browserSessionStore
 	refreshes, inspections atomic.Int32
@@ -73,10 +74,15 @@ func newRefreshFixture(t *testing.T) *refreshFixture {
 				w.WriteHeader(f.introspectStatus)
 				return
 			}
-			if r.FormValue("token") != "new-access" && r.FormValue("token") != "old-access" {
+			token := r.FormValue("token")
+			if token != "new-access" && token != "old-access" {
 				t.Error("unexpected introspected token")
 			}
-			_ = json.NewEncoder(w).Encode(&oidc.IntrospectionResponse{Active: f.active, Subject: "user", ClientID: "web@app", Issuer: issuer, Audience: []string{"project"}, TokenType: "Bearer", Expiration: oidc.FromTime(f.now.Add(time.Hour))})
+			active := f.active
+			if f.onIntrospect != nil {
+				active = f.onIntrospect(token)
+			}
+			_ = json.NewEncoder(w).Encode(&oidc.IntrospectionResponse{Active: active, Subject: "user", ClientID: "web@app", Issuer: issuer, Audience: []string{"project"}, TokenType: "Bearer", Expiration: oidc.FromTime(f.now.Add(time.Hour))})
 		default:
 			t.Error("unexpected endpoint")
 			w.WriteHeader(404)
