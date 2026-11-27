@@ -116,6 +116,74 @@ it('keeps highlighter settings separate and saves an editable translucent stroke
   }
 });
 
+it('draws a lighter sketch with Pencil and keeps its settings independent', () => {
+  const controller = new GlideboardController({ sessionKey: 'pencil-styles' });
+  const { editor } = controller;
+  const drawStroke = () => act(() => {
+    editor.dispatchEvent({
+      type: 'pointerDown', point: { x: 100, y: 100 }, target: 'canvas',
+      shiftKey: false, pointerType: 'pen', pressure: 0.2,
+    });
+    editor.dispatchEvent({ type: 'pointerMove', point: { x: 150, y: 100 }, pointerType: 'pen', pressure: 0.8, tilt: 0.75 });
+    editor.dispatchEvent({ type: 'pointerUp', point: { x: 200, y: 100 }, pointerType: 'pen', pressure: 0.2 });
+  });
+  try {
+    const view = renderPanel(controller);
+    act(() => {
+      controller.setCreationStyleDefaults({ color: 'blue', strokeWidth: 'thin', opacity: 1, pressureSensitive: true });
+      controller.setCurrentTool('draw');
+    });
+    drawStroke();
+    const draw = editor.getShapes()[0]!;
+    expect(draw.props).toMatchObject({ color: 'blue', opacity: 1, pressureSensitive: true });
+    expect(draw.props['isPencil']).toBeUndefined();
+
+    act(() => controller.setCurrentTool('pencil'));
+    expect(view.getByRole('button', { name: 'black' }).getAttribute('aria-pressed')).toBe('true');
+    expect(view.getByRole('button', { name: 'Medium stroke width' }).getAttribute('aria-pressed')).toBe('true');
+    fireEvent.click(view.getByRole('button', { name: 'Thin stroke width' }));
+    fireEvent.click(view.getByRole('button', { name: 'blue' }));
+    drawStroke();
+    const pencil = editor.getShapes().find(shape => shape.props['isPencil'] === true)!;
+    expect(pencil.props).toMatchObject({
+      color: 'blue', strokeWidth: 'thin', strokeStyle: 'solid', opacity: 0.78,
+      pressureSensitive: false, isComplete: true,
+    });
+    expect(pencil.props['points']).toEqual(expect.arrayContaining([expect.objectContaining({ pressure: 0.8, tilt: 0.75 })]));
+    const exported = editor.exportToSvg([pencil.id as ShapeId]);
+    expect(exported).toContain('glideline-pencil-paper');
+    expect(exported).toContain('feTurbulence');
+
+    fireEvent.click(view.getByRole('button', { name: 'Thick stroke width' }));
+    act(() => {
+      controller.setCurrentTool('select');
+      editor.setSelectedShapeIds([pencil.id as ShapeId]);
+    });
+    fireEvent.click(view.getByRole('button', { name: 'tomato' }));
+    expect(editor.getShape(pencil.id as ShapeId)?.props['color']).toBe('tomato');
+    act(() => controller.setCurrentTool('draw'));
+    expect(view.getByRole('button', { name: 'blue' }).getAttribute('aria-pressed')).toBe('true');
+    expect(view.getByRole('button', { name: 'Thin stroke width' }).getAttribute('aria-pressed')).toBe('true');
+    expect(editor.activeStyles.peek().opacity).toBe(1);
+
+    const reopened = new GlideboardController({
+      sessionKey: 'pencil-reopened',
+      initialDocument: editor.serialize(),
+      initialDocumentDisposition: { kind: 'new-unsaved-seed' },
+    });
+    try {
+      expect(reopened.editor.activeStyles.peek()).toMatchObject({ pencilColor: 'blue', pencilStrokeWidth: 'thick' });
+      expect(reopened.editor.getShape(pencil.id as ShapeId)?.props).toMatchObject({
+        isPencil: true, color: 'tomato', strokeStyle: 'solid', opacity: 0.78,
+      });
+    } finally {
+      reopened.dispose();
+    }
+  } finally {
+    controller.dispose();
+  }
+});
+
 describe('StylePanel text targeting', () => {
   it('keeps creation defaults across tools, existing-node edits, and reopening the board', async () => {
     const controller = new GlideboardController({ sessionKey: 'persistent-creation-styles' });

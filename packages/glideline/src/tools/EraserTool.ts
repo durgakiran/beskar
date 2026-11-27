@@ -1,3 +1,4 @@
+import { pencilStrokeRadius } from '../pencil-stroke.js';
 import { StateNode } from '../state-node.js';
 import { AREA_ERASE_META_KEY, areaEraseBoundsTransform, getAreaEraseCuts } from '../area-erase-mask.js';
 import { invertMatrix, multiplyMatrices, translationMatrix } from '../transform.js';
@@ -185,7 +186,7 @@ class Erasing extends StateNode {
       return changed ? fragments : null;
     }
     const points = shape.props.points.map(point => ({
-      x: point.x - shape.x, y: point.y - shape.y, pressure: point.pressure ?? 0.5,
+      ...point, x: point.x - shape.x, y: point.y - shape.y, pressure: point.pressure ?? 0.5,
     }));
     return splitFreehandStroke(points, localSweep, shape.props.isClosed);
   }
@@ -205,10 +206,11 @@ class Erasing extends StateNode {
       end = Math.min(end, interval[1]);
       if (end <= start) return null;
     }
+    const width = getFreehandStrokeWidth(shape.props);
     return {
       from: this.editor.pageToLocal(id, interpolate(sweep.from, sweep.to, start)),
       to: this.editor.pageToLocal(id, interpolate(sweep.from, sweep.to, end)),
-      radius: sweep.radius + getFreehandStrokeWidth(shape.props) / 2,
+      radius: sweep.radius + (shape.props.isPencil ? pencilStrokeRadius(width) : width / 2),
     };
   }
 
@@ -223,8 +225,8 @@ class Erasing extends StateNode {
       // Flatten the old shape's rotation into the points before deriving new bounds.
       // Otherwise a fragment would rotate around its own, different center.
       const points = fragment.map(point => ({
+        ...point,
         ...this.editor.pageToParent(shape.parentId, this.editor.localToPage(id, point)),
-        pressure: point.pressure,
       }));
       let x = Infinity;
       let y = Infinity;

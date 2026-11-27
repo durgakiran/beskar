@@ -14,6 +14,7 @@ import {
   TLDRAW_COLORS,
   HIGHLIGHTER_COLORS,
   HIGHLIGHTER_DEFAULT_WIDTH,
+  PENCIL_DEFAULT_WIDTH,
   STROKE_STYLES,
   FONT_FAMILIES,
   boardFontStyle,
@@ -931,8 +932,17 @@ export function StylePanel() {
   const toolArrowheadEnd = useSignalValue(controller.arrowheadEndSignal);
   const isDefault = shapes.length === 0;
   const creatingHighlight = isDefault && activeTool === 'highlighter';
+  const creatingPencil = isDefault && activeTool === 'pencil';
   const highlighting = creatingHighlight || (shapes.length > 0
     && shapes.every(shape => shape.type === 'freehand' && shape.props['isHighlighter'] === true));
+  const pencilStroke = creatingPencil || (shapes.length > 0
+    && shapes.every(shape => shape.type === 'freehand' && shape.props['isPencil'] === true));
+  const freehandDefaults = creatingPencil
+    ? { colorKey: 'pencilColor', color: 'black', widthKey: 'pencilStrokeWidth', width: PENCIL_DEFAULT_WIDTH }
+    : creatingHighlight
+      ? { colorKey: 'highlighterColor', color: HIGHLIGHTER_COLORS.yellow,
+          widthKey: 'highlighterStrokeWidth', width: HIGHLIGHTER_DEFAULT_WIDTH }
+      : null;
   const creationType = isDefault ? creationShapeType(activeTool) : null;
   const creationUtil = creationType ? editor.getShapeUtil(creationType) : null;
   const creationDefaults = creationUtil?.getDefaultProps() ?? {};
@@ -977,7 +987,7 @@ export function StylePanel() {
       for (const shape of shapes) editor.updateShape(shape.id as ShapeId, { props });
     });
     const selectionStyles = Object.entries(props).filter(([key]) =>
-      !isCreationStyleKey(key) && !(highlighting && key === 'color'));
+      !isCreationStyleKey(key) && !((highlighting || pencilStroke) && key === 'color'));
     if (selectionStyles.length > 0) {
       editor.activeStyles.value = { ...editor.activeStyles.peek(), ...Object.fromEntries(selectionStyles) };
     }
@@ -1002,13 +1012,13 @@ export function StylePanel() {
   const bodyColorDefault = targetType === 'sticky-note' ? 'stickyNoteColor'
     : targetType === 'frame' ? 'frameColor'
     : 'color';
-  const bodyColor = creatingHighlight ? activeStyles?.['highlighterColor'] ?? HIGHLIGHTER_COLORS.yellow
+  const bodyColor = freehandDefaults ? activeStyles?.[freehandDefaults.colorKey] ?? freehandDefaults.color
     : isDefault ? activeStyles?.[bodyColorDefault] ?? creationDefaults['color'] : getCommonValue('color');
-  const strokeWidth = creatingHighlight ? activeStyles?.['highlighterStrokeWidth'] ?? HIGHLIGHTER_DEFAULT_WIDTH
+  const strokeWidth = freehandDefaults ? activeStyles?.[freehandDefaults.widthKey] ?? freehandDefaults.width
     : getCommonValue('strokeWidth');
   const updateBodyColor = (value: string) => {
-    if (creatingHighlight) {
-      controller.setCreationStyleDefaults({ highlighterColor: value });
+    if (freehandDefaults) {
+      controller.setCreationStyleDefaults({ [freehandDefaults.colorKey]: value });
       return;
     }
     if (!isDefault || bodyColorDefault === 'color') updateProp('color', value);
@@ -1076,7 +1086,7 @@ export function StylePanel() {
 
   if (isDefault && !creationType) return null;
   const targetSuffix = labelTarget ? selected?.type === 'frame' ? ' title' : ' label' : '';
-  const title = selected ? boardObjectName(selected.type) + targetSuffix
+  const title = selected ? (pencilStroke ? 'Pencil' : highlighting ? 'Highlighter' : boardObjectName(selected.type)) + targetSuffix
     : isDefault ? boardObjectName(activeTool) + ' defaults' : shapes.length + ' selected';
 
   return (
@@ -1169,7 +1179,7 @@ export function StylePanel() {
       ) : null}
 
       <CoreStyleControls
-        colorLabel={highlighting ? 'Highlighter color' : textOnly ? 'Text color'
+        colorLabel={highlighting ? 'Highlighter color' : pencilStroke ? 'Pencil color' : textOnly ? 'Text color'
           : targetType === 'sticky-note' ? 'Background' : 'Color'}
         colorPalette={highlighting ? HIGHLIGHTER_COLORS : undefined}
         color={textOnly ? textColor : bodyColor}
@@ -1181,9 +1191,9 @@ export function StylePanel() {
         fontSize={getCommonValue('fontSize')}
         textAlign={creationType === 'text' ? activeStyles?.['standaloneTextAlign'] ?? 'left' : getCommonValue('textAlign')}
         showColor={textOnly ? supportsTextColor : supports('color') && !shapes.some(shape => shape.type === 'text')}
-        showOpacity={!highlighting && !labelTarget && supports('opacity')}
+        showOpacity={!highlighting && !pencilStroke && !labelTarget && supports('opacity')}
         showFill={!textOnly && supports('fillStyle')}
-        showStrokeStyle={!highlighting && !textOnly && supports('strokeStyle')}
+        showStrokeStyle={!highlighting && !pencilStroke && !textOnly && supports('strokeStyle')}
         showSketch={showSketch}
         showStrokeWidth={!textOnly && supports('strokeWidth')}
         showPressure={supportsPressure}
@@ -1198,7 +1208,7 @@ export function StylePanel() {
         onFill={value => updateProp('fillStyle', value)}
         onStrokePresentation={updateStrokePresentation}
         onStrokeWidth={value => {
-          if (creatingHighlight) controller.setCreationStyleDefaults({ highlighterStrokeWidth: value });
+          if (freehandDefaults) controller.setCreationStyleDefaults({ [freehandDefaults.widthKey]: value });
           else updateProp('strokeWidth', value);
         }}
         onFont={value => updateTypographyProp('font', value)}

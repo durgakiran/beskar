@@ -474,8 +474,10 @@ export class GlideEditor {
       if (set.size === 1) {
         const shapeId = Array.from(set)[0]!;
         const shape = this.getShape(shapeId);
-        // Highlight styles must not become the defaults for Pen or other tools.
-        if (shape && !(shape.type === 'freehand' && shape.props['isHighlighter'] === true)) {
+        // Pencil and Highlighter have independent tool defaults.
+        const hasSeparateStyles = shape?.type === 'freehand'
+          && (shape.props['isPencil'] === true || shape.props['isHighlighter'] === true);
+        if (shape && !hasSeparateStyles) {
           const nextActive = { ...this.activeStyles.peek() };
           let changed = false;
           for (const key of Object.keys(nextActive)) {

@@ -181,7 +181,7 @@ export { BOARD_MONO_FEATURES, boardFontStyle, loadBoardFonts } from './board-fon
 
 // Phase A — Style system
 export {
-  TLDRAW_COLORS, HIGHLIGHTER_COLORS, HIGHLIGHTER_DEFAULT_WIDTH, resolveColor, hexWithOpacity, svgFill,
+  TLDRAW_COLORS, HIGHLIGHTER_COLORS, HIGHLIGHTER_DEFAULT_WIDTH, PENCIL_DEFAULT_WIDTH, resolveColor, hexWithOpacity, svgFill,
   STROKE_WIDTHS, FONT_SIZES, FONT_FAMILIES,
   STROKE_STYLES, STROKE_DASH_ARRAYS, FILL_OPACITIES,
   inlinePatternDefs, getPatternId, getShapePatternId,
@@ -221,7 +221,7 @@ export { HandTool } from './tools/HandTool.js';
 export { EllipseTool } from './tools/EllipseTool.js';
 export { TextTool } from './tools/TextTool.js';
 export { StickyNoteTool } from './tools/StickyNoteTool.js';
-export { DrawTool, HighlighterTool } from './tools/DrawTool.js';
+export { DrawTool, PencilTool, HighlighterTool } from './tools/DrawTool.js';
 export { ERASER_RADIUS_PX, EraserTool, WholeStrokeEraserTool, PartialEraserTool } from './tools/EraserTool.js';
 export { AreaEraserTool } from './tools/AreaEraserTool.js';
 export { getAreaEraseCuts, getAreaEraseMaskBounds, getAreaEraseMaskPaths } from './area-erase-mask.js';

@@ -20,6 +20,7 @@ import { STROKE_WIDTHS, STROKE_DASH_ARRAYS, resolveColor, StyleValidators } from
 import type { SizeStyle, StrokeStyle } from '../styles.js';
 import { Geometry2d, Polyline2d } from '../geometry/index.js';
 import { getStroke } from 'perfect-freehand';
+import { pencilStrokeRadius, renderPencilStroke } from '../pencil-stroke.js';
 import { addSketchOutline, sketchOutlinePath } from '../sketch-stroke.js';
 
 // ─────────────────────────────────────────────────────────────
@@ -31,6 +32,8 @@ export interface FreehandPoint {
   y: number;
   /** Pointer pressure, 0–1. Defaults to 0.5 for mouse input. */
   pressure: number;
+  tilt?: number;
+  tiltDirection?: Vec2;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -47,6 +50,7 @@ export interface FreehandProps {
   simulatePressure: boolean;
   opacity:     number;
   isHighlighter?: true;
+  isPencil?: true;
   isClosed:    boolean;
   isComplete:  boolean;
 }
@@ -158,6 +162,7 @@ export class FreehandUtil extends ShapeUtil<FreehandShape> {
     simulatePressure: T.boolean,
     opacity:     T.number,
     isHighlighter: T.optional(T.literal(true)),
+    isPencil:    T.optional(T.literal(true)),
     isClosed:    T.boolean,
     isComplete:  T.boolean,
   };
@@ -230,10 +235,11 @@ export class FreehandUtil extends ShapeUtil<FreehandShape> {
   getGeometry(shape: FreehandShape): Geometry2d {
     const { points } = shape.props;
     const localPoints = points.map(pt => ({ x: pt.x - shape.x, y: pt.y - shape.y }));
-    const radius = getFreehandStrokeWidth(shape.props) / 2;
+    const width = getFreehandStrokeWidth(shape.props);
+    const radius = shape.props.isPencil ? pencilStrokeRadius(width) : width / 2;
     return new Polyline2d(localPoints, {
-      boundsPadding: shape.props.isHighlighter || points.length === 1 ? radius : 0,
-      hitThreshold: shape.props.isHighlighter ? Math.max(5, radius) : undefined,
+      boundsPadding: shape.props.isHighlighter || shape.props.isPencil || points.length === 1 ? radius : 0,
+      hitThreshold: shape.props.isHighlighter || shape.props.isPencil ? Math.max(5, radius) : undefined,
     });
   }
 
@@ -251,6 +257,10 @@ export class FreehandUtil extends ShapeUtil<FreehandShape> {
     if (opacity < 1) g.setAttribute('opacity', String(opacity));
 
     if (points.length === 0) return g;
+    if (props.isPencil) {
+      renderPencilStroke(g, points, shape, strokeW, strokeColor);
+      return g;
+    }
 
     // Freehand points are in world space; offset by -shape.x, -shape.y to draw in local space.
     if (points.length === 1) {

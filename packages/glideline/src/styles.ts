@@ -41,6 +41,7 @@ export const HIGHLIGHTER_COLORS = {
 } as const;
 
 export const HIGHLIGHTER_DEFAULT_WIDTH = 'thick';
+export const PENCIL_DEFAULT_WIDTH = 'medium';
 
 export type TldrawColor = keyof typeof TLDRAW_COLORS;
 
@@ -151,6 +152,15 @@ const creationStyleValidators = {
   fillStyle: StyleValidators.fillStyle,
   strokeStyle: StyleValidators.strokeStyle,
   strokeWidth: StyleValidators.strokeWidth,
+  pencilStrokeWidth: StyleValidators.strokeWidth,
+  pencilColor: {
+    validate(value: unknown): TldrawColor {
+      if (typeof value !== 'string' || !Object.hasOwn(TLDRAW_COLORS, value)) {
+        throw new Error('Invalid pencil color');
+      }
+      return value as TldrawColor;
+    },
+  },
   highlighterStrokeWidth: StyleValidators.strokeWidth,
   highlighterColor: {
     validate(value: unknown): string {
