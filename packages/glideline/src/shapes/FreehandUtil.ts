@@ -20,6 +20,7 @@ import { STROKE_WIDTHS, STROKE_DASH_ARRAYS, resolveColor, StyleValidators } from
 import type { SizeStyle, StrokeStyle } from '../styles.js';
 import { Geometry2d, Polyline2d } from '../geometry/index.js';
 import { getStroke } from 'perfect-freehand';
+import { pencilStrokeRadius, renderPencilStroke } from '../pencil-stroke.js';
 import { addSketchOutline, sketchOutlinePath } from '../sketch-stroke.js';
 
 // ─────────────────────────────────────────────────────────────
@@ -31,6 +32,8 @@ export interface FreehandPoint {
   y: number;
   /** Pointer pressure, 0–1. Defaults to 0.5 for mouse input. */
   pressure: number;
+  tilt?: number;
+  tiltDirection?: Vec2;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -46,11 +49,17 @@ export interface FreehandProps {
   pressureSensitive: boolean;
   simulatePressure: boolean;
   opacity:     number;
+  isHighlighter?: true;
+  isPencil?: true;
   isClosed:    boolean;
   isComplete:  boolean;
 }
 
 export type FreehandShape = GlideShape<FreehandProps>;
+
+export function getFreehandStrokeWidth(props: FreehandProps): number {
+  return STROKE_WIDTHS[props.strokeWidth] * (props.isHighlighter ? 4 : 1);
+}
 
 // ─────────────────────────────────────────────────────────────
 // Validators
@@ -152,6 +161,8 @@ export class FreehandUtil extends ShapeUtil<FreehandShape> {
     pressureSensitive: T.boolean,
     simulatePressure: T.boolean,
     opacity:     T.number,
+    isHighlighter: T.optional(T.literal(true)),
+    isPencil:    T.optional(T.literal(true)),
     isClosed:    T.boolean,
     isComplete:  T.boolean,
   };
@@ -224,18 +235,21 @@ export class FreehandUtil extends ShapeUtil<FreehandShape> {
   getGeometry(shape: FreehandShape): Geometry2d {
     const { points } = shape.props;
     const localPoints = points.map(pt => ({ x: pt.x - shape.x, y: pt.y - shape.y }));
+    const width = getFreehandStrokeWidth(shape.props);
+    const radius = shape.props.isPencil ? pencilStrokeRadius(width) : width / 2;
     return new Polyline2d(localPoints, {
-      boundsPadding: points.length === 1 ? STROKE_WIDTHS[shape.props.strokeWidth] / 2 : 0,
+      boundsPadding: shape.props.isHighlighter || shape.props.isPencil || points.length === 1 ? radius : 0,
+      hitThreshold: shape.props.isHighlighter || shape.props.isPencil ? Math.max(5, radius) : undefined,
     });
   }
 
   toSvg(shape: FreehandShape): SVGElement {
     const { props } = shape;
     const {
-      points, color, strokeWidth, strokeStyle, pressureSensitive, simulatePressure, opacity, isClosed,
+      points, color, strokeStyle, pressureSensitive, simulatePressure, opacity, isClosed,
       isComplete,
     } = props;
-    const strokeW = STROKE_WIDTHS[strokeWidth];
+    const strokeW = getFreehandStrokeWidth(props);
     const strokeColor = resolveColor(color);
     const dashArray = STROKE_DASH_ARRAYS[strokeStyle];
 
@@ -243,6 +257,10 @@ export class FreehandUtil extends ShapeUtil<FreehandShape> {
     if (opacity < 1) g.setAttribute('opacity', String(opacity));
 
     if (points.length === 0) return g;
+    if (props.isPencil) {
+      renderPencilStroke(g, points, shape, strokeW, strokeColor);
+      return g;
+    }
 
     // Freehand points are in world space; offset by -shape.x, -shape.y to draw in local space.
     if (points.length === 1) {

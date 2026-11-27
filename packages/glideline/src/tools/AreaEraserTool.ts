@@ -1,5 +1,7 @@
 import { AREA_ERASE_META_KEY, areaEraseBoundsTransform, getAreaEraseCuts, type AreaEraseCut } from '../area-erase-mask.js';
+import { pencilStrokeRadius } from '../pencil-stroke.js';
 import type { GlideEditor } from '../editor.js';
+import { getFreehandStrokeWidth, type FreehandShape } from '../shapes/FreehandUtil.js';
 import { getPlainLabelLayout } from '../shapes/TextUtil.js';
 import { StateNode, type KeyDownEvent, type PointerCancelEvent, type PointerDownEvent, type PointerMoveEvent, type PointerUpEvent } from '../state-node.js';
 import { measurePlainTextWidth, STROKE_WIDTHS, type LabelProps, type SizeStyle } from '../styles.js';
@@ -110,8 +112,9 @@ function createTarget(editor: GlideEditor, shape: GlideShape, gridToPage: Matrix
       : createPlainLabelHitTest(label, geometry.getBounds())
   ) : undefined;
   const vectorHitTest = createVectorHitTest(svg, editor, shape);
-  const strokeWidth = STROKE_WIDTHS[shape.props['strokeWidth'] as SizeStyle] ?? 0;
-  const strokeRadius = strokeWidth / 2;
+  const strokeWidth = shape.type === 'freehand' ? getFreehandStrokeWidth((shape as FreehandShape).props)
+    : STROKE_WIDTHS[shape.props['strokeWidth'] as SizeStyle] ?? 0;
+  const strokeRadius = shape.props['isPencil'] === true ? pencilStrokeRadius(strokeWidth) : strokeWidth / 2;
   const segmentCount = open ? outline.length - 1 : outline.length;
   const rows = new Map<number, Set<number>>();
 

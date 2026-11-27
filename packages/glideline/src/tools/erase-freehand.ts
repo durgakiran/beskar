@@ -51,6 +51,12 @@ function sample(from: FreehandPoint, to: FreehandPoint, t: number): FreehandPoin
   return {
     ...interpolate(from, to, t),
     pressure: from.pressure + (to.pressure - from.pressure) * t,
+    ...(from.tilt !== undefined || to.tilt !== undefined
+      ? { tilt: (from.tilt ?? 0) + ((to.tilt ?? 0) - (from.tilt ?? 0)) * t }
+      : {}),
+    ...(from.tiltDirection || to.tiltDirection
+      ? { tiltDirection: interpolate(from.tiltDirection ?? { x: 0, y: 0 }, to.tiltDirection ?? { x: 0, y: 0 }, t) }
+      : {}),
   };
 }
 

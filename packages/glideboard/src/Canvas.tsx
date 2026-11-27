@@ -1,6 +1,6 @@
 import React, { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { computed } from '@preact/signals';
-import { LuPencil } from 'react-icons/lu';
+import { LuPen, LuPencil } from 'react-icons/lu';
 import { CanvasTextView } from '@durgakiran/canvas-text-editor/view';
 import type { CanvasRichTextDocument } from '@durgakiran/canvas-text-editor/model';
 import { projectCanvasRichTextToPlainText } from '@durgakiran/canvas-text-editor/model';
@@ -42,8 +42,8 @@ const LazyCanvasTextEditor = React.lazy(async () => {
 
 export function getCanvasToolCursor(tool: string | undefined, handleId: string | null, buttons = 0, editor?: GlideEditor): string {
   if (tool === 'hand') return buttons === 1 ? 'grabbing' : 'grab';
-  if (tool === 'draw') return 'none';
-  if (tool === 'asset' || tool === 'line' || tool === 'eraser'
+  if (tool === 'draw' || tool === 'pencil') return 'none';
+  if (tool === 'highlighter' || tool === 'asset' || tool === 'line' || tool === 'eraser'
     || tool === 'whole-stroke-eraser' || tool === 'partial-eraser' || tool === 'area-eraser') return 'crosshair';
   return handleId ? getCursorForHandle(handleId, editor) : 'default';
 }
@@ -51,6 +51,19 @@ export function getCanvasToolCursor(tool: string | undefined, handleId: string |
 // ─────────────────────────────────────────────────────────────
 // Shared helpers
 // ─────────────────────────────────────────────────────────────
+
+function stylusTilt(event: Pick<PointerEvent, 'pointerType' | 'tiltX' | 'tiltY'>) {
+  if (event.pointerType !== 'pen') return {};
+  const x = event.tiltX || 0;
+  const y = event.tiltY || 0;
+  const magnitude = Math.hypot(x, y);
+  const cap = Math.max(90, magnitude);
+  return { tilt: Math.min(1, magnitude / 90), tiltDirection: { x: x / cap, y: y / cap } };
+}
+
+function isFreehandTool(tool: string): boolean {
+  return tool === 'draw' || tool === 'pencil' || tool === 'highlighter';
+}
 
 function pointsToSvgPath(points: Vec2[], closed = false): string {
   if (points.length === 0) return '';
@@ -112,7 +125,7 @@ function useViewportShapeEntries(
         // A new freehand stroke is already pinned in the shape layer. Its
         // growing bounds do not change which records need to be mounted.
         const sameNewStroke = ids.length === 1 && ids[0] === previousPreviewIds[0]
-          && editor.currentToolId.peek() === 'draw' && !editor.store.has(ids[0]!)
+          && isFreehandTool(editor.currentToolId.peek()) && !editor.store.has(ids[0]!)
           && editor.getShape(ids[0] as ShapeId)?.type === 'freehand';
         previousPreviewIds = ids;
         if (!sameNewStroke) schedule();
@@ -823,7 +836,7 @@ export function Canvas({ onStrokeDiagnostics }: { onStrokeDiagnostics?: Glideboa
   const partialEraserCursorRef = useRef<HTMLDivElement>(null);
   const pencilCursorRef = useRef<HTMLSpanElement>(null);
   const drawFrameRef = useRef<number | null>(null);
-  const pendingDrawMoveRef = useRef<(PointerMoveEvent & { samples: (Vec2 & { pressure: number })[] }) | null>(null);
+  const pendingDrawMoveRef = useRef<(PointerMoveEvent & { samples: (Vec2 & { pressure: number; tilt?: number; tiltDirection?: Vec2 })[] }) | null>(null);
   const pointerScreenRef = useRef<Vec2 | null>(null);
   const preventFocusStealRef = useRef(false);
   const isMiddleDraggingRef = useRef(false);
@@ -835,7 +848,7 @@ export function Canvas({ onStrokeDiagnostics }: { onStrokeDiagnostics?: Glideboa
   const awarenessCursorFrameRef = useRef<number | null>(null);
   const latestAwarenessCursorRef = useRef<Vec2 | null>(null);
   const activeTool = useSignalValue(editor.currentToolId);
-  const showPencilCursor = activeTool === 'draw' && !readOnly;
+  const showPencilCursor = (activeTool === 'draw' || activeTool === 'pencil') && !readOnly;
   const showPartialEraserCursor = (activeTool === 'partial-eraser' || activeTool === 'area-eraser') && !readOnly;
 
   const updatePointerPosition = useCallback((screen: Vec2 | null) => {
@@ -870,7 +883,7 @@ export function Canvas({ onStrokeDiagnostics }: { onStrokeDiagnostics?: Glideboa
 
   const flushDrawMove = useCallback((frameAt?: number) => {
     const move = clearPendingDrawMove();
-    if (move && editor.currentToolId.peek() === 'draw' && !controller.readOnlySignal.peek()) {
+    if (move && isFreehandTool(editor.currentToolId.peek()) && !controller.readOnlySignal.peek()) {
       const finishDrawUpdate = strokeDiagnostics.beginDrawUpdate(frameAt);
       try {
         editor.dispatchEvent(move);
@@ -883,7 +896,9 @@ export function Canvas({ onStrokeDiagnostics }: { onStrokeDiagnostics?: Glideboa
   const queueDrawMove = useCallback((move: PointerMoveEvent) => {
     const pending = pendingDrawMoveRef.current;
     const samples = pending?.samples ?? [];
-    if (pending) samples.push({ ...pending.point, pressure: pending.pressure ?? 0.5 });
+    if (pending) samples.push({
+      ...pending.point, pressure: pending.pressure ?? 0.5, tilt: pending.tilt, tiltDirection: pending.tiltDirection,
+    });
     for (const sample of move.samples ?? []) samples.push(sample);
     pendingDrawMoveRef.current = { ...move, samples };
     if (drawFrameRef.current === null) {
@@ -1043,7 +1058,7 @@ export function Canvas({ onStrokeDiagnostics }: { onStrokeDiagnostics?: Glideboa
       || view?.matchMedia?.('(any-pointer: coarse)').matches === true;
     const activePointerId = controller.activePointerIdRef.current;
     if (isPointerDownRef.current && event.pointerId !== activePointerId) {
-      const isPenDrawing = isPenPress && editor.currentToolId.peek() === 'draw';
+      const isPenDrawing = isPenPress && isFreehandTool(editor.currentToolId.peek());
       if ((activatesPenMode || isPenDrawing) && activePointerId !== null && activePointerTypeRef.current === 'touch') {
         // A touch can reach the canvas before the digitizer classifies it as a palm.
         // Finish that interaction before assigning capture to the incoming pen.
@@ -1124,11 +1139,12 @@ export function Canvas({ onStrokeDiagnostics }: { onStrokeDiagnostics?: Glideboa
       screenPoint: screen,
       shiftKey: event.shiftKey,
       pressure: event.pressure,
+      ...stylusTilt(event),
       pointerType: event.pointerType,
       target: (hit && event.button === 0) ? 'shape' : 'canvas',
       shapeId: (hit && event.button === 0) ? (hit.id as ShapeId) : undefined,
     } as any);
-    if (tool === 'draw') strokeDiagnostics.strokeStarted();
+    if (isFreehandTool(tool)) strokeDiagnostics.strokeStarted();
     if (!readOnly && editor.editingShapeId.peek() !== editingBefore) {
       preventFocusStealRef.current = true;
     }
@@ -1144,12 +1160,13 @@ export function Canvas({ onStrokeDiagnostics }: { onStrokeDiagnostics?: Glideboa
     const { screen, page, rect } = getPagePoint(event);
     updatePointerPosition(screen);
     const currentTool = editor.currentToolId.peek();
-    const drawing = isPointerDownRef.current && currentTool === 'draw';
+    const drawing = isPointerDownRef.current && isFreehandTool(currentTool);
     const coalesced = drawing ? event.nativeEvent.getCoalescedEvents?.() : undefined;
     if (drawing) strokeDiagnostics.pointerMove(event.nativeEvent, coalesced);
     const samples = coalesced?.map(sample => ({
       ...editor.screenToPage({ x: sample.clientX - rect.left, y: sample.clientY - rect.top }),
       pressure: sample.pressure,
+      ...stylusTilt(sample),
     }));
     const handleId = drawing || controller.readOnlySignal.peek()
       ? null
@@ -1164,7 +1181,7 @@ export function Canvas({ onStrokeDiagnostics }: { onStrokeDiagnostics?: Glideboa
     const move: PointerMoveEvent = {
       type: 'pointerMove', point: page, screenPoint: screen, samples,
       shiftKey: event.shiftKey, altKey: event.altKey,
-      pressure: event.pressure, pointerType: event.pointerType,
+      pressure: event.pressure, ...stylusTilt(event), pointerType: event.pointerType,
     };
     if (drawing) queueDrawMove(move);
     else editor.dispatchEvent(move);
@@ -1213,7 +1230,7 @@ export function Canvas({ onStrokeDiagnostics }: { onStrokeDiagnostics?: Glideboa
       editor.dispatchEvent({
         type: 'pointerUp', point: page, screenPoint: screen,
         shiftKey: event.shiftKey, altKey: event.altKey,
-        pressure: event.pressure, pointerType: event.pointerType,
+        pressure: event.pressure, ...stylusTilt(event), pointerType: event.pointerType,
       } as any);
     } finally {
       reportStroke?.('pointerup', event.nativeEvent);

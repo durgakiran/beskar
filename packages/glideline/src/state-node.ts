@@ -15,9 +15,9 @@ import type { Vec2, ShapeId } from './types.js';
 // ─────────────────────────────────────────────────────────────
 
 export type GlideEvent =
-  | { type: 'pointerDown'; point: Vec2; screenPoint?: Vec2; shiftKey: boolean; pressure?: number; pointerType?: string; target: 'shape' | 'canvas' | 'handle'; shapeId?: ShapeId; handleId?: string }
-  | { type: 'pointerMove'; point: Vec2; samples?: readonly (Vec2 & { pressure: number })[]; screenPoint?: Vec2; shiftKey?: boolean; altKey?: boolean; pressure?: number; pointerType?: string }
-  | { type: 'pointerUp';   point: Vec2; screenPoint?: Vec2; shiftKey?: boolean; altKey?: boolean; pressure?: number; pointerType?: string }
+  | { type: 'pointerDown'; point: Vec2; screenPoint?: Vec2; shiftKey: boolean; pressure?: number; tilt?: number; tiltDirection?: Vec2; pointerType?: string; target: 'shape' | 'canvas' | 'handle'; shapeId?: ShapeId; handleId?: string }
+  | { type: 'pointerMove'; point: Vec2; samples?: readonly (Vec2 & { pressure: number; tilt?: number; tiltDirection?: Vec2 })[]; screenPoint?: Vec2; shiftKey?: boolean; altKey?: boolean; pressure?: number; tilt?: number; tiltDirection?: Vec2; pointerType?: string }
+  | { type: 'pointerUp';   point: Vec2; screenPoint?: Vec2; shiftKey?: boolean; altKey?: boolean; pressure?: number; tilt?: number; tiltDirection?: Vec2; pointerType?: string }
   // Browser/OS-initiated abort of an in-progress pointer sequence (e.g. a
   // trackpad disambiguating a fast short drag as a scroll gesture instead of
   // firing pointerUp). No point: the browser doesn't guarantee one is

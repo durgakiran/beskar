@@ -22,7 +22,9 @@ import {
 import {
   LuEraser,
   LuHand,
+  LuPen,
   LuPencil,
+  LuHighlighter,
   LuDiamond,
   LuRectangleHorizontal,
   LuDatabase,
@@ -128,13 +130,15 @@ const TOOLS: ToolDef[] = [
   { id: 'text', label: 'Text', shortcut: 'T', icon: FiType },
   { id: 'sticky-note', label: 'Sticky', shortcut: 'S', icon: LuStickyNote },
   { id: 'frame', label: 'Frame', shortcut: 'F', icon: FiLayout },
-  { id: 'draw', label: 'Draw', shortcut: 'D', icon: LuPencil },
+  { id: 'draw', label: 'Draw', shortcut: 'D', icon: LuPen },
+  { id: 'pencil', label: 'Pencil', shortcut: 'P', icon: LuPencil },
+  { id: 'highlighter', label: 'Highlighter', shortcut: 'M', icon: LuHighlighter },
   { id: 'eraser', label: 'Eraser', shortcut: 'X', icon: LuEraser },
   { id: 'arrow-picker', label: 'Arrow', shortcut: 'A', icon: FiArrowRight },
 ];
 
 export function creationShapeType(tool: string): string | null {
-  if (tool === 'draw') return 'freehand';
+  if (tool === 'draw' || tool === 'pencil' || tool === 'highlighter') return 'freehand';
   if (SHAPE_TOOL_IDS.has(tool) || ['arrow', 'text', 'sticky-note', 'frame'].includes(tool)) return tool;
   return null;
 }

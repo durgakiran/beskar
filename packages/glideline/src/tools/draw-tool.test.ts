@@ -1,7 +1,8 @@
+// @vitest-environment happy-dom
 import { describe, it, expect } from 'vitest';
 import { createEditor } from '../editor';
 import { FreehandUtil, pressureStrokePath } from '../shapes/FreehandUtil';
-import { DrawTool } from './DrawTool';
+import { DrawTool, PencilTool } from './DrawTool';
 import type { GlidePlugin } from '../editor';
 
 const FreehandPlugin: GlidePlugin = { id: 'freehand', shapes: [FreehandUtil as any] };
@@ -27,6 +28,49 @@ function pu(editor: ReturnType<typeof makeEditor>, x: number, y: number) {
 function pc(editor: ReturnType<typeof makeEditor>) {
   editor.dispatchEvent({ type: 'pointerCancel' });
 }
+
+it('widens the graphite band with pressure and feathers toward the projected tilt', () => {
+  const editor = createEditor({ plugins: [FreehandPlugin], tools: [PencilTool] });
+  const draw = (pressure: number, tilt: number, tiltDirection?: { x: number; y: number }) => {
+    editor.dispatchEvent({
+      type: 'pointerDown', point: { x: 10, y: 10 }, shiftKey: false,
+      target: 'canvas', pointerType: 'pen', pressure, tilt, tiltDirection,
+    });
+    editor.dispatchEvent({ type: 'pointerUp', point: { x: 90, y: 10 }, pressure, tilt, tiltDirection });
+    const shape = editor.getShapes().at(-1)!;
+    const svg = editor.getShapeUtil(shape).toSvg(shape);
+    const shade = [...svg.querySelectorAll('path.glideline-pencil-shade')].at(-1)!.getAttribute('d')!;
+    const core = svg.querySelector('path.glideline-pencil-core')!.getAttribute('d')!;
+    const yRange = (path: string) => {
+      const edgeY = Array.from(path.matchAll(/[MLQ]-?[\d.]+ (-?[\d.]+)/g), match => Number(match[1]));
+      return { min: Math.min(...edgeY), max: Math.max(...edgeY) };
+    };
+    const shadeRange = yRange(shade);
+    const coreRange = yRange(core);
+    return {
+      contactCenter: (coreRange.min + coreRange.max) / 2,
+      span: shadeRange.max - shadeRange.min,
+      layers: svg.querySelectorAll('path.glideline-pencil-shade').length,
+      firmPaint: svg.querySelector('path.glideline-pencil-firm')?.getAttribute('fill'),
+      corePaint: svg.querySelector('path.glideline-pencil-core')?.getAttribute('fill'),
+    };
+  };
+
+  const light = draw(0.1, 0);
+  const steady = draw(0.5, 0);
+  const firm = draw(0.9, 0);
+  const down = draw(0.9, 0.9, { x: 0, y: 0.9 });
+  const up = draw(0.9, 0.9, { x: 0, y: -0.9 });
+  const along = draw(0.9, 0.9, { x: 0.9, y: 0 });
+  expect(firm.span).toBeGreaterThan(light.span);
+  expect(steady.span).toBeLessThan(10.2);
+  expect(firm.layers).toBeGreaterThan(1);
+  expect(light.firmPaint).toBeUndefined();
+  expect(firm.firmPaint).toBe(firm.corePaint);
+  expect(firm.firmPaint).toMatch(/^url\(#glideline-pencil-paper-/);
+  expect(down.contactCenter).toBeLessThan(up.contactCenter - 2);
+  expect(along.span).toBeLessThan(down.span);
+});
 
 describe('DrawTool FSM', () => {
   it('updates the live stroke without invalidating the page shape lists on each point', () => {
