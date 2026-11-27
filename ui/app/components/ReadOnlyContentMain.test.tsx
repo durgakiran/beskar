@@ -44,3 +44,35 @@ it("keeps info collapsed in the shared view shell and refreshes relative time", 
     fireEvent.click(summary);
     expect(details.open).toBe(false);
 });
+
+it("offers image downloads through the desktop and mobile ellipsis for viewers", () => {
+    const downloadSvg = vi.fn();
+    const downloadPng = vi.fn();
+    render(
+        <Theme><MemoryRouter>
+            <ReadOnlyContentMain
+                spaceId="space" pageId="1" title="Published board" breadcrumbs={[]} archived={false}
+                capabilities={{ canEdit: false, canDelete: false, canComment: false, canShare: false }}
+                meta={{}} layout="whiteboard" isCommentsOpen={false} commentPresentation="docked"
+                onOpenComments={() => {}} onEdit={() => {}} onDelete={() => {}}
+                downloadActions={[
+                    { label: "Download as SVG", onSelect: downloadSvg },
+                    { label: "Download as PNG", onSelect: downloadPng },
+                ]}
+            >
+                <div>Published whiteboard</div>
+            </ReadOnlyContentMain>
+        </MemoryRouter></Theme>,
+    );
+
+    expect(screen.queryByRole("button", { name: "Download as SVG" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "More actions" }));
+    expect(screen.getByRole("button", { name: "Download as PNG" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Download as SVG" }));
+    expect(downloadSvg).toHaveBeenCalledOnce();
+
+    fireEvent.click(screen.getByRole("button", { name: "Open actions" }));
+    expect(screen.getByRole("button", { name: "Download as SVG" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Download as PNG" }));
+    expect(downloadPng).toHaveBeenCalledOnce();
+});
