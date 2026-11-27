@@ -5,6 +5,7 @@ import { Glideboard, type GlideboardHandle } from '@durgakiran/glideboard';
 import { boardUrl, jsonRequest, post, WhiteboardApiError } from 'app/core/whiteboard/v2/api';
 import { hasLegacyRecovery, loadMigrationDocument, prepareMigration, type MigrationRequest, type MigrationSource } from 'app/core/whiteboard/v2/migration';
 import { WhiteboardMigrationAssetStorage } from 'app/core/whiteboard/v2/WhiteboardMigrationAssetStorage';
+import { useBrowserTabTitle } from 'app/core/hooks/useBrowserTabTitle';
 
 const LegacyEditor = lazy(() => import('./WhiteboardEditor'));
 const V2Editor = lazy(() => import('./WhiteboardEditorV2'));
@@ -28,6 +29,7 @@ function MigrationSession({ slug }: { slug: string[] }) {
     const [session, setSession] = useState<Session | null>(null);
     const [binding, setBinding] = useState<{ session: Session; board: GlideboardHandle } | null>(null);
     const [mode, setMode] = useState<'migration' | 'v2' | 'legacy'>('migration');
+    useBrowserTabTitle(mode === 'migration' ? session?.source.title || 'Whiteboard' : undefined);
     const [error, setError] = useState('');
     const [phase, setPhase] = useState('Preparing whiteboard migration…');
     const [loadAttempt, setLoadAttempt] = useState(0);

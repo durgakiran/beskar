@@ -7,6 +7,7 @@ import { SpaceSummaryStat, StatusNotice, PageTree, PageTreeNode, InlineEditable 
 import { FiHome, FiSettings, FiPlus } from "react-icons/fi";
 import { Link, useParams, useLocation, useNavigate } from "react-router-dom";
 import { useSpaceAddPage } from "./SpaceAddPageContext";
+import { useBrowserTabTitle } from "app/core/hooks/useBrowserTabTitle";
 
 interface SpaceDetails {
     id: string;
@@ -83,6 +84,7 @@ export default function Page() {
     }, [data]);
 
     const space = data?.data;
+    useBrowserTabTitle(localName || space?.name, "Space");
     const pages = useMemo(
         () => (pagesData?.data || []),
         [pagesData?.data],

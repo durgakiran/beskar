@@ -16,6 +16,7 @@ import { Glideboard, createPublishPreview, safeAwarenessEntries, type Glideboard
 import { getSignalingUrl } from 'app/core/signaling';
 import { getApiV1Base } from 'app/core/http/apiBase';
 import { useWhiteboardSwipeGuard } from 'app/core/whiteboard/useWhiteboardSwipeGuard';
+import { useBrowserTabTitle } from 'app/core/hooks/useBrowserTabTitle';
 import { IncrementalCheckpointSession, SERVER_REPLAY_ORIGIN } from 'app/core/whiteboard/v2/IncrementalCheckpointSession';
 import { IncrementalRecoveryJournal } from 'app/core/whiteboard/v2/IncrementalRecoveryJournal';
 import { IndexedDbYjsRecoveryAdapter } from 'app/core/whiteboard/durability/IndexedDbYjsRecoveryAdapter';
@@ -43,6 +44,8 @@ export default function WhiteboardEditorV2({ slug }: { slug: string[] }) {
     const navigate = useNavigate();
     const [session, setSession] = useState<Session | null>(null);
     const [titleText, setTitleText] = useState<Y.Text | null>(null);
+    const [title, setTitle] = useState('');
+    useBrowserTabTitle(session?.signal.aborted === false ? title : undefined, session ? 'Untitled Whiteboard' : 'Edit Whiteboard');
     const activeSession = useRef<Session | null>(null);
     const swipeGuardRef = useWhiteboardSwipeGuard();
     const [board, setBoard] = useState<GlideboardHandle | null>(null);
@@ -125,11 +128,13 @@ export default function WhiteboardEditorV2({ slug }: { slug: string[] }) {
             let sharedTitle = whiteboardTitle(doc, loaded.manifest.title, `${room}:${loaded.manifest.baseSnapshot?.id ?? loaded.manifest.headSequence}`);
             if (pendingTitle.current) updateTitle(sharedTitle, pendingTitle.current.title, 'whiteboard-title-recovery');
             setTitleText(sharedTitle);
+            setTitle(sharedTitle.toString());
             const onTitleChange = () => {
                 // A peer's bootstrap may replace the nested map entry. Never
                 // save edits/removal events from the superseded text object.
                 if (!active || metadata.get(WHITEBOARD_TITLE_KEY) !== sharedTitle) return;
                 const title = sharedTitle.toString();
+                setTitle(title);
                 pendingTitle.current = { title, key: crypto.randomUUID() };
                 setTitlePending(true);
                 try { localStorage.setItem(titleStorage.current, JSON.stringify(pendingTitle.current)); }

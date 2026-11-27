@@ -1,5 +1,5 @@
 import React from "react";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import Page from "./page";
@@ -123,6 +123,7 @@ describe("whiteboard view page", () => {
 
         await waitFor(() => expect(screen.getByTestId("readonly-shell")).not.toBeNull());
         expect(screen.getByText("Sprint board")).not.toBeNull();
+        expect(document.title).toBe("Sprint board | Teddox");
 
         const whiteboard = screen.getByTestId("whiteboard-editor");
         expect(whiteboard.getAttribute("data-slug")).toBe("space-1/42");
@@ -136,6 +137,9 @@ describe("whiteboard view page", () => {
 
         fireEvent.click(screen.getByText("Delete page"));
         expect(screen.getAllByText("Delete Page").length).toBeGreaterThan(0);
+
+        cleanup();
+        expect(document.title).toBe("Teddox");
     });
     it("routes v2 deletion through the v2 API and exposes version history", async () => {
         contentApiVersion = 2;
