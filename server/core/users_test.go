@@ -1,9 +1,37 @@
 package core
 
 import (
+	"context"
 	"encoding/json"
+	"os"
 	"testing"
+
+	"github.com/google/uuid"
 )
+
+func TestGetBeskarUserCreatesMappingOnFirstRequest(t *testing.T) {
+	if os.Getenv("USER_MAPPING_INTEGRATION_TEST") != "true" {
+		t.Skip("set USER_MAPPING_INTEGRATION_TEST=true with PG_* for an isolated test database")
+	}
+	subject := "signup-" + uuid.NewString()[:23]
+	t.Cleanup(func() {
+		if _, err := GetPool().Exec(context.Background(), "DELETE FROM core.user_id_map WHERE zita_id = $1", subject); err != nil {
+			t.Errorf("delete test mapping: %v", err)
+		}
+	})
+
+	id, err := GetBeskarUser(subject)
+	if err != nil {
+		t.Fatalf("create first user mapping: %v", err)
+	}
+	if _, err := uuid.Parse(id); err != nil {
+		t.Fatalf("first request returned an invalid user ID: %v", err)
+	}
+	existingID, err := GetBeskarUser(subject)
+	if err != nil || existingID != id {
+		t.Fatalf("second request returned (%q, %v), want (%q, nil)", existingID, err, id)
+	}
+}
 
 func TestUserSearchResponseAcceptsListDetailsObject(t *testing.T) {
 	var response UserSearchResponse

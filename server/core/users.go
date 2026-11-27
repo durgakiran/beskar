@@ -18,7 +18,7 @@ import (
 )
 
 const (
-	createUserId = "INSERT INTO core.user_id_map (zita_id, user_id) VALUES ($1, $2);"
+	createUserId = "INSERT INTO core.user_id_map (zita_id, user_id) VALUES ($1, $2) ON CONFLICT (zita_id) DO NOTHING;"
 	getUserId    = "SELECT user_id FROM core.user_id_map WHERE zita_id = $1;"
 	getZitaIds   = "SELECT user_id, zita_id FROM core.user_id_map WHERE user_id = ANY($1);"
 )
@@ -374,21 +374,15 @@ func GetBeskarUser(zitadelId string) (string, error) {
 	}
 	defer conn.Release()
 	err = conn.QueryRow(ctx, getUserId, zitadelId).Scan(&userId)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			// create new user id
-			_, err = conn.Exec(ctx, createUserId, zitadelId, uuid.New().String())
-			if err != nil {
-				Logger.Error("Unable to create new user id: " + err.Error())
-				return userId, err
-			}
-			// get new user id
-			err = conn.QueryRow(ctx, getUserId, zitadelId).Scan(&userId)
-			if err != nil {
-				Logger.Error("Unable to get user id: " + err.Error())
-				return userId, err
-			}
+	if errors.Is(err, pgx.ErrNoRows) {
+		if _, err = conn.Exec(ctx, createUserId, zitadelId, uuid.New().String()); err != nil {
+			Logger.Error("Unable to create new user id: " + err.Error())
+			return userId, err
 		}
+		// Another request may have created the mapping first.
+		err = conn.QueryRow(ctx, getUserId, zitadelId).Scan(&userId)
+	}
+	if err != nil {
 		Logger.Error("Unable to get user id: " + err.Error())
 	}
 	return userId, err

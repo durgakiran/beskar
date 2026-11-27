@@ -22,15 +22,16 @@ it.each([403, 500, 503])('does not authorize or redirect on HTTP %s', async stat
   expect(location.href).toBe('');
 });
 
-it('recovers from a validation outage without forcing a new login', async () => {
+it('offers a manual retry when validation remains unavailable', async () => {
   const fetchMock = vi.fn()
+    .mockResolvedValueOnce(new Response('{}', { status: 503 }))
     .mockResolvedValueOnce(new Response('{}', { status: 503 }))
     .mockResolvedValueOnce(new Response('{}', { status: 200 }));
   vi.stubGlobal('fetch', fetchMock);
   renderGuard();
   fireEvent.click(await screen.findByRole('button', { name: 'Try again' }));
   await screen.findByText('Protected workspace');
-  expect(fetchMock).toHaveBeenCalledTimes(2);
+  expect(fetchMock).toHaveBeenCalledTimes(3);
 });
 
 it('shows a retry state on a network error', async () => {
@@ -40,8 +41,9 @@ it('shows a retry state on a network error', async () => {
   expect(screen.queryByText('Protected workspace')).toBeNull();
 });
 
-it('has the CSRF token ready when the protected workspace becomes interactive', async () => {
+it('recovers from a temporary validation failure and caches the CSRF token before opening the workspace', async () => {
   const fetchMock = vi.fn()
+    .mockResolvedValueOnce(new Response('{}', { status: 503 }))
     .mockResolvedValueOnce(new Response(JSON.stringify({ data: { csrfToken: 'login-token' } })))
     .mockResolvedValueOnce(new Response(null, { status: 204 }));
   vi.stubGlobal('fetch', fetchMock);
@@ -49,9 +51,10 @@ it('has the CSRF token ready when the protected workspace becomes interactive', 
   renderGuard();
   await screen.findByText('Protected workspace');
   await fetch('/api/v1/save', { method: 'POST', credentials: 'include' });
-  expect(fetchMock).toHaveBeenCalledTimes(2);
-  expect(fetchMock.mock.calls[1][0]).toBe('/api/v1/save');
-  expect(fetchMock.mock.calls[1][1].headers.get('X-CSRF-Token')).toBe('login-token');
+  expect(fetchMock).toHaveBeenCalledTimes(3);
+  expect(fetchMock.mock.calls[1][0]).toBe('/api/v1/authenticated');
+  expect(fetchMock.mock.calls[2][0]).toBe('/api/v1/save');
+  expect(fetchMock.mock.calls[2][1].headers.get('X-CSRF-Token')).toBe('login-token');
 });
 
 it('offers retry rather than mounting the workspace without a session token', async () => {
