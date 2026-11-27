@@ -61,34 +61,18 @@ Target end state:
 
 ## Phase 0: Preconditions And Schema
 
-## Story 0.1 - Confirm asset-reference backfill is complete
+## Story 0.1 - Keep asset cleanup coverage independent
 
-**Goal**
-
-Prevent document-version pruning from racing the asset-reference backfill.
-
-**Files**
-
-- rollout runbook or release checklist
-- `server/docversioncleanup/repository.go`
-- `server/docversioncleanup/worker.go`
-- `server/docversioncleanup/admin.go`
-
-**Implementation**
-
-- Confirm `core.asset_reference` exists and is populated for retained published history.
-- Confirm `core.asset_reference_coverage` is healthy for pages expected to participate in asset cleanup.
-- Keep `DOCUMENT_VERSION_CLEANUP_ENABLED=false` until published-doc asset reference backfill is complete.
-- Document that this cleanup can run independently after backfill because it owns deleting only pruned `published_doc` references.
-- Add a preflight query that verifies every active document page with published versions has a `core.asset_reference_coverage` row with `published_backfilled_at IS NOT NULL`.
-- Admin status and dry-run responses must include the preflight result.
-- Destructive cleanup must refuse to prune when the preflight fails.
+Document-version cleanup does not require asset-reference backfill or consult
+`core.asset_reference_coverage`. Status, dry-run, and cleanup run independently
+of published coverage. Pruning still deletes only the pruned version's
+`published_doc` references in the same transaction as the version itself.
+Asset cleanup retains its existing coverage requirements before deleting assets.
 
 **Verification**
 
-- Backfill status queries return no unexpected missing published-doc reference coverage.
-- Destructive cleanup returns a clear preflight failure when published-doc reference coverage is incomplete.
-- Asset cleanup can still identify live assets from latest published, draft, and comment references.
+- Dry-run and cleanup work with missing coverage rows and NULL published backfill markers.
+- References for pruned versions are deleted; retained versions and comment references survive.
 
 ## Story 0.2 - Seed `document_history_retention_days` for plans
 
@@ -472,7 +456,6 @@ Emit metrics:
 - `document_version_cleanup_deleted_total`
 - `document_version_cleanup_skipped_latest_total`
 - `document_version_cleanup_skipped_page_total`
-- `document_version_cleanup_preflight_failed_total`
 - `document_version_cleanup_errors_total`
 - `document_version_cleanup_duration_seconds`
 - `document_versions_retained_total`
@@ -485,7 +468,7 @@ Emit metrics:
 - Cleanup worker respects batch size.
 - Cleanup worker respects max docs per run.
 - Failed batch does not stop earlier committed batches from remaining valid.
-- Metrics are emitted for dry-run, successful cleanup, skipped pages, and preflight failure.
+- Metrics are emitted for dry-run, successful cleanup, and skipped pages.
 
 ## Story 3.2 - Add admin endpoints
 
@@ -507,7 +490,7 @@ Allow controlled manual dry-run, cleanup, and status checks.
 - Use `DOCUMENT_VERSION_CLEANUP_ADMIN_ENABLED`.
 - Use `DOCUMENT_VERSION_CLEANUP_ADMIN_TOKEN`.
 - Return dry-run and cleanup result payloads with counts and `job_run_id`.
-- Include preflight status in all admin responses.
+- Admin responses do not query asset-reference coverage.
 - Mount routes in `server/main.go` only when admin config is enabled and token is present.
 
 **Verification**
@@ -515,7 +498,7 @@ Allow controlled manual dry-run, cleanup, and status checks.
 - Admin routes return 404 when disabled.
 - Admin routes return 403 with wrong token.
 - Dry-run endpoint returns estimates without mutation.
-- Run endpoint refuses destructive cleanup when preflight fails.
+- Run endpoint operates independently of asset-reference coverage.
 - Run endpoint respects `DOCUMENT_VERSION_CLEANUP_DRY_RUN`.
 
 ## Story 3.3 - Add environment documentation
@@ -690,7 +673,7 @@ Prove the job is safe under realistic runtime conditions.
 **Verification**
 
 - Dry-run returns counts without deleting rows.
-- Destructive cleanup is blocked when published-doc asset reference preflight fails.
+- Cleanup succeeds without published-doc asset-reference coverage.
 - Re-running cleanup is idempotent.
 - Two concurrent cleanup workers do not delete latest versions.
 - Concurrent publish and cleanup leave a latest published version available.
@@ -746,8 +729,8 @@ Step 1 complete. Step 2 is next.
    - `DOCUMENT_VERSION_CLEANUP_ENABLED=false`
    - `DOCUMENT_VERSION_CLEANUP_DRY_RUN=true`
    - `DOCUMENT_VERSION_CLEANUP_ADMIN_ENABLED=true`
-6. Confirm asset-reference backfill is complete.
-   - Admin status must report published-doc reference preflight success before cleanup is enabled.
+6. Confirm asset cleanup independently enforces its coverage checks.
+   - Document-version cleanup does not require asset-reference backfill.
 7. Run admin dry-run in dev.
    - Use `POST /api/v1/admin/document-versions/cleanup/dry-run`.
    - Include `X-Document-Version-Cleanup-Admin-Token`.
@@ -764,7 +747,6 @@ Step 1 complete. Step 2 is next.
 **How to verify dry-run in dev**
 
 The admin dry-run endpoint returns aggregate impact only. Use it for:
-- preflight pass/fail
 - candidate version count
 - affected account count
 - affected page count
@@ -938,14 +920,13 @@ Step 1 complete locally. Step 2 is next.
 5. Wait for at least one scheduled interval and inspect server logs.
    - Look for:
      - `document version cleanup: dry run completed`
-     - `preflight_passed`
      - `candidate_count`
      - `affected_page_count`
      - `affected_account_count`
 6. Review counts for at least one retention decision cycle.
 7. Alert on unexpected candidate spikes or errors.
 8. Confirm no `page_doc_map` or `asset_reference` rows are deleted by comparing against the baseline.
-9. Confirm metrics/logs are emitted for candidates, duration, preflight status, and errors.
+9. Confirm metrics/logs are emitted for candidates, duration, and errors.
 
 **How to verify scheduled dry-run in dev**
 
@@ -1083,5 +1064,5 @@ Enable controlled production pruning only after dev read-only, dev scheduled dry
 - Cleanup deletes `published_doc` asset references for pruned versions in the same transaction.
 - Cleanup does not delete attachment/image asset rows or blobs.
 - Admin endpoints and worker are disabled by default and dry-run first.
-- Destructive cleanup refuses to run until published-doc asset-reference preflight passes.
+- Document-version cleanup runs independently of asset-reference backfill; asset cleanup retains coverage checks.
 - Unit and integration tests cover plan resolution, safety rules, audit rows, and asset-reference handoff.

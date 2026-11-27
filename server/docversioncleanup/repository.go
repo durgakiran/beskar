@@ -15,19 +15,6 @@ import (
 
 const cleanupReasonRetentionExpired = "retention_expired"
 
-func CheckPublishedDocCoveragePreflight(ctx context.Context) (PublishedDocCoveragePreflight, error) {
-	result := PublishedDocCoveragePreflight{}
-	err := core.GetPool().QueryRow(ctx, publishedDocCoveragePreflightQuery).Scan(
-		&result.CheckedPageCount,
-		&result.MissingPageCount,
-	)
-	if err != nil {
-		return result, err
-	}
-	result.Passed = result.MissingPageCount == 0
-	return result, nil
-}
-
 func ListCandidateVersions(ctx context.Context, defaultRetentionDays int, limit int) ([]CandidateVersion, error) {
 	if defaultRetentionDays <= 0 {
 		defaultRetentionDays = 7

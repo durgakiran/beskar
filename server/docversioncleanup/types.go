@@ -1,19 +1,10 @@
 package docversioncleanup
 
 import (
-	"errors"
 	"time"
 
 	"github.com/google/uuid"
 )
-
-var ErrPublishedDocCoveragePreflightFailed = errors.New("published document asset reference coverage preflight failed")
-
-type PublishedDocCoveragePreflight struct {
-	CheckedPageCount int64 `json:"checkedPageCount"`
-	MissingPageCount int64 `json:"missingPageCount"`
-	Passed           bool  `json:"passed"`
-}
 
 type CandidateVersion struct {
 	DocID           int64
@@ -51,24 +42,22 @@ type PruneBatchResult struct {
 }
 
 type DryRunResult struct {
-	Preflight   PublishedDocCoveragePreflight `json:"preflight"`
-	Impact      DryRunImpact                  `json:"impact"`
-	CompletedAt time.Time                     `json:"completedAt"`
+	Impact      DryRunImpact `json:"impact"`
+	CompletedAt time.Time    `json:"completedAt"`
 }
 
 type CleanupRunResult struct {
-	JobRunID                  uuid.UUID                     `json:"jobRunId"`
-	DryRun                    bool                          `json:"dryRun"`
-	Preflight                 PublishedDocCoveragePreflight `json:"preflight"`
-	DryRunImpact              *DryRunImpact                 `json:"dryRunImpact,omitempty"`
-	Batches                   []PruneBatchResult            `json:"batches,omitempty"`
-	PrunedVersionCount        int                           `json:"prunedVersionCount"`
-	SkippedAfterRelock        int                           `json:"skippedAfterRelock"`
-	ContentRowsDeleted        int64                         `json:"contentRowsDeleted"`
-	TextNodeRowsDeleted       int64                         `json:"textNodeRowsDeleted"`
-	AssetReferenceRowsDeleted int64                         `json:"assetReferenceRowsDeleted"`
-	ReachedRunCap             bool                          `json:"reachedRunCap"`
-	CompletedAt               time.Time                     `json:"completedAt"`
+	JobRunID                  uuid.UUID          `json:"jobRunId"`
+	DryRun                    bool               `json:"dryRun"`
+	DryRunImpact              *DryRunImpact      `json:"dryRunImpact,omitempty"`
+	Batches                   []PruneBatchResult `json:"batches,omitempty"`
+	PrunedVersionCount        int                `json:"prunedVersionCount"`
+	SkippedAfterRelock        int                `json:"skippedAfterRelock"`
+	ContentRowsDeleted        int64              `json:"contentRowsDeleted"`
+	TextNodeRowsDeleted       int64              `json:"textNodeRowsDeleted"`
+	AssetReferenceRowsDeleted int64              `json:"assetReferenceRowsDeleted"`
+	ReachedRunCap             bool               `json:"reachedRunCap"`
+	CompletedAt               time.Time          `json:"completedAt"`
 }
 
 type runtimeStats struct {
